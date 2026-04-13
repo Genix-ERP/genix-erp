@@ -116,17 +116,52 @@ export default function WebsiteScript() {
             </Button>
           </div>
 
-          {/* Instructions */}
-          <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
-            <h4 className="font-medium text-blue-900 mb-2">
-              {language === 'uz' ? 'Qanday o\'rnatish:' : 'How to install:'}
+          {/* Platform-specific instructions */}
+          <div className="space-y-3">
+            <h4 className="font-medium text-slate-900">
+              {language === 'uz' ? 'Platformaga qarab o\'rnatish:' : 'Installation by platform:'}
             </h4>
-            <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
-              <li>{language === 'uz' ? 'Yuqoridagi kodni nusxalang' : 'Copy the code above'}</li>
-              <li>{language === 'uz' ? 'Veb-saytingizning HTML sahifasiga </body> tegidan oldin qo\'ying' : 'Paste it before the </body> tag in your website HTML'}</li>
-              <li>{language === 'uz' ? 'Saytingizni yangilang - pastda chat tugmasi paydo bo\'ladi' : 'Refresh your site - a chat button will appear at the bottom'}</li>
-              <li>{language === 'uz' ? 'Mijozlar formani to\'ldirsa, CRM da yangi lead yaratiladi' : 'When visitors fill the form, a new lead is created in your CRM'}</li>
-            </ol>
+
+            {[
+              {
+                name: 'HTML / WordPress / Tilda',
+                icon: '🌐',
+                steps: language === 'uz'
+                  ? ['index.html faylini oching', 'Skriptni </body> tegidan oldin qo\'ying', 'Saqlang va yangilang']
+                  : ['Open index.html', 'Paste script before </body>', 'Save and refresh']
+              },
+              {
+                name: 'React / Next.js',
+                icon: '⚛️',
+                code: `// useEffect ichida qo'shing:\nuseEffect(() => {\n  const s = document.createElement('script');\n  s.src = '${appBase}/embed/lead-form.js';\n  s.setAttribute('data-tenant', '${tenantCode}');\n  s.setAttribute('data-color', '${color}');\n  s.setAttribute('data-lang', '${lang}');\n  s.setAttribute('data-api', '${apiBase}');\n  document.body.appendChild(s);\n  return () => document.body.removeChild(s);\n}, []);`,
+                steps: language === 'uz'
+                  ? ['App.jsx yoki Layout komponentiga useEffect qo\'shing']
+                  : ['Add useEffect to App.jsx or Layout component']
+              },
+              {
+                name: 'Vue.js / Nuxt',
+                icon: '💚',
+                code: `// App.vue yoki layout faylida:\nmounted() {\n  const s = document.createElement('script');\n  s.src = '${appBase}/embed/lead-form.js';\n  s.setAttribute('data-tenant', '${tenantCode}');\n  s.setAttribute('data-color', '${color}');\n  s.setAttribute('data-lang', '${lang}');\n  s.setAttribute('data-api', '${apiBase}');\n  document.body.appendChild(s);\n}`,
+                steps: language === 'uz'
+                  ? ['App.vue ning mounted() ga qo\'shing']
+                  : ['Add to mounted() in App.vue']
+              }
+            ].map((platform, idx) => (
+              <details key={idx} className="border border-slate-200 rounded-lg overflow-hidden">
+                <summary className="flex items-center gap-2 p-3 bg-slate-50 cursor-pointer hover:bg-slate-100 font-medium text-sm">
+                  <span>{platform.icon}</span>
+                  <span>{platform.name}</span>
+                </summary>
+                <div className="p-3 space-y-2">
+                  <ol className="text-sm text-slate-600 space-y-1 list-decimal list-inside">
+                    {platform.steps.map((step, i) => <li key={i}>{step}</li>)}
+                  </ol>
+                  {platform.code && (
+                    <pre className="bg-slate-900 text-green-400 p-3 rounded-lg text-xs overflow-x-auto font-mono">{platform.code}</pre>
+                  )}
+                </div>
+              </details>
+            ))}
           </div>
         </CardContent>
       </Card>
