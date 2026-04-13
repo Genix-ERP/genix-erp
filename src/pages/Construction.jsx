@@ -674,7 +674,6 @@ const ProjectDetailView = ({
       { key: 'financial', label: t('nav_analysis') || 'Tahlil' },
     ]},
     { key: 'materiallar', label: t('nav_materials') || 'Materiallar', icon: Package, subs: [
-      { key: 'materials', label: t('nav_materials') || 'Materiallar' },
       { key: 'forms', label: 'Forma' },
       { key: 'material_usage', label: t('nav_material_usage') || 'Material sarfi' },
     ]},
@@ -1958,8 +1957,8 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
           </Card>
         )}
 
-        {/* Materials Tab */}
-        {activeTab === 'materials' && (
+        {/* Materials Tab - Removed: reservations now handled via Inventory */}
+        {false && activeTab === 'materials' && (
           <div className="space-y-6">
           <div className="grid gap-6 lg:grid-cols-2">
             <Card>

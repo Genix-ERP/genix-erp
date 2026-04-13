@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { constructionService } from '@/api/services/construction';
+import inventoryService from '@/api/services/inventory';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -10,7 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Plus, Trash2, ChevronDown, ChevronRight, Package, Wrench, Edit, TrendingUp, TrendingDown, Minus, AlertTriangle, Download, Clock, Printer } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, ChevronRight, Package, Wrench, Edit, TrendingUp, TrendingDown, Minus, AlertTriangle, Download, Clock, Printer, ShieldCheck, Users, Truck } from 'lucide-react';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -48,7 +49,7 @@ const RejaFaktTab = ({ project }) => {
   const [editMaterial, setEditMaterial] = useState(null);
   const [editEquipment, setEditEquipment] = useState(null);
   const [targetSubStageId, setTargetSubStageId] = useState(null);
-  const [materialForm, setMaterialForm] = useState({ product_name: '', uom: 'шт', plan_quantity: '', fact_quantity: '', unit_cost: '', note: '' });
+  const [materialForm, setMaterialForm] = useState({ product_id: '', product_name: '', uom: 'шт', plan_quantity: '', fact_quantity: '', unit_cost: '', note: '' });
   const [equipmentForm, setEquipmentForm] = useState({ name: '', work_unit: 'soat', plan_quantity: '', fact_quantity: '', unit_price: '', note: '' });
   const [deleteItem, setDeleteItem] = useState(null);
 
@@ -60,17 +61,49 @@ const RejaFaktTab = ({ project }) => {
   // Budget warnings shown flag
   const [budgetWarningsShown, setBudgetWarningsShown] = useState(false);
 
-  // Products for material dropdown
-  const [products, setProducts] = useState([]);
+  // Inventory products for material dropdown
+  const [inventoryProducts, setInventoryProducts] = useState([]);
+  // Reservations for current project
+  const [reservations, setReservations] = useState([]);
+  // Estimate resources by type (from Ресурс tab)
+  const [estimateEquipmentResources, setEstimateEquipmentResources] = useState([]);
+  const [estimateLaborResources, setEstimateLaborResources] = useState([]);
+  // Unified modal tab: 'materials' | 'equipment' | 'employee'
+  const [modalTab, setModalTab] = useState('materials');
 
   useEffect(() => {
     if (!project?.id) return;
-    constructionService.listProjectMaterials(project.id)
-      .then(d => setProducts(d || []))
-      .catch(() => setProducts([]));
+    // Load inventory products (deduplicate by product_id, aggregate stock)
+    inventoryService.listInventory({ limit: 500 })
+      .then(d => {
+        const map = {};
+        (d || []).forEach(item => {
+          if (map[item.product_id]) {
+            map[item.product_id].quantity_on_hand += item.quantity_on_hand || 0;
+            map[item.product_id].quantity_available += item.quantity_available || 0;
+            map[item.product_id].quantity_reserved += item.quantity_reserved || 0;
+          } else {
+            map[item.product_id] = { ...item };
+          }
+        });
+        setInventoryProducts(Object.values(map));
+      })
+      .catch(() => setInventoryProducts([]));
+    // Load stages
     constructionService.listStages(project.id)
       .then(d => setAllStages(d || []))
       .catch(() => setAllStages([]));
+    // Load reservations for this project
+    inventoryService.listReservations({ project_id: project.id })
+      .then(d => setReservations(d || []))
+      .catch(() => setReservations([]));
+    // Load estimate resources by type for equipment/employee dropdowns
+    constructionService.listEstimateResources(project.id, 'equipment')
+      .then(d => setEstimateEquipmentResources(d || []))
+      .catch(() => setEstimateEquipmentResources([]));
+    constructionService.listEstimateResources(project.id, 'labor')
+      .then(d => setEstimateLaborResources(d || []))
+      .catch(() => setEstimateLaborResources([]));
   }, [project?.id]);
 
   const load = useCallback(async () => {
@@ -122,15 +155,23 @@ const RejaFaktTab = ({ project }) => {
 
   // ── Material CRUD ────────────────────────────────────────
 
-  const openAddMaterial = (subStageId) => {
+  // Track which stage the target substage belongs to
+  const [targetStageId, setTargetStageId] = useState(null);
+
+  const openAddMaterial = (subStageId, stageId, tab = 'materials') => {
     setTargetSubStageId(subStageId);
+    setTargetStageId(stageId);
     setEditMaterial(null);
-    setMaterialForm({ product_name: '', uom: 'шт', plan_quantity: '', fact_quantity: '', unit_cost: '', note: '' });
+    setEditEquipment(null);
+    setMaterialForm({ product_id: '', product_name: '', uom: 'шт', plan_quantity: '', fact_quantity: '', unit_cost: '', note: '' });
+    setEquipmentForm({ name: '', work_unit: 'soat', plan_quantity: '', fact_quantity: '', unit_price: '', note: '' });
+    setModalTab(tab);
     setShowMaterialModal(true);
   };
 
   const openEditMaterial = (mat) => {
     setTargetSubStageId(mat.sub_stage_id);
+    setEditEquipment(null);
     setEditMaterial(mat);
     setMaterialForm({
       product_name: mat.product_name,
@@ -140,6 +181,7 @@ const RejaFaktTab = ({ project }) => {
       unit_cost: String(mat.unit_cost || 0),
       note: mat.note || '',
     });
+    setModalTab('materials');
     setShowMaterialModal(true);
   };
 
@@ -156,10 +198,35 @@ const RejaFaktTab = ({ project }) => {
       } else {
         await constructionService.createSubStageMaterial(targetSubStageId, {
           product_name: materialForm.product_name,
+          product_id: materialForm.product_id || undefined,
           uom: materialForm.uom || 'шт',
           quantity: parseFloat(materialForm.plan_quantity) || 0,
           unit_cost: parseFloat(parsePriceInput(materialForm.unit_cost)) || 0,
         });
+
+        // Create reservation if product is from inventory
+        if (materialForm.product_id && project?.id && targetStageId) {
+          try {
+            await inventoryService.createReservation({
+              project_id: project.id,
+              stage_id: targetStageId,
+              substage_id: targetSubStageId,
+              product_id: materialForm.product_id,
+              quantity: parseFloat(materialForm.plan_quantity) || 0,
+              unit: materialForm.uom || '',
+              unit_cost: parseFloat(parsePriceInput(materialForm.unit_cost)) || 0,
+              notes: materialForm.note || '',
+            });
+            toast.success(t('reservation_created') || 'Reservation created');
+            // Refresh reservations
+            inventoryService.listReservations({ project_id: project.id })
+              .then(d => setReservations(d || []))
+              .catch(() => {});
+          } catch (re) {
+            console.error('Failed to create reservation', re);
+            toast.error(t('reservation_failed') || 'Failed to create reservation');
+          }
+        }
       }
       setShowMaterialModal(false);
       load();
@@ -179,6 +246,7 @@ const RejaFaktTab = ({ project }) => {
 
   const openEditEquipment = (eq) => {
     setTargetSubStageId(eq.sub_stage_id);
+    setEditMaterial(null);
     setEditEquipment(eq);
     setEquipmentForm({
       name: eq.name,
@@ -188,7 +256,8 @@ const RejaFaktTab = ({ project }) => {
       unit_price: String(eq.unit_price || 0),
       note: eq.note || '',
     });
-    setShowEquipmentModal(true);
+    setModalTab('equipment');
+    setShowMaterialModal(true);
   };
 
   const handleSaveEquipment = async () => {
@@ -618,7 +687,7 @@ const RejaFaktTab = ({ project }) => {
                                   </span>
                                 )}
                               </h4>
-                              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => openAddMaterial(sub.id)}>
+                              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => openAddMaterial(sub.id, stage.id)}>
                                 <Plus className="w-3 h-3 mr-1" />
                                 {t('add')}
                               </Button>
@@ -637,6 +706,7 @@ const RejaFaktTab = ({ project }) => {
                                       <th className="text-right px-2 py-2 text-blue-600">{t('rf_plan_sum')}</th>
                                       <th className="text-right px-2 py-2">{t('rf_fact_sum')}</th>
                                       <th className="text-right px-2 py-2">{t('rf_diff')}</th>
+                                      <th className="text-center px-2 py-2">{t('status')}</th>
                                       <th className="text-left px-2 py-2">{t('rf_note')}</th>
                                       <th className="w-16"></th>
                                     </tr>
@@ -653,6 +723,23 @@ const RejaFaktTab = ({ project }) => {
                                         <td className="px-2 py-2 text-right">{formatCurrency(mat.fact_amount)}</td>
                                         <td className={`px-2 py-2 text-right font-medium ${diffColor(mat.difference)}`}>
                                           {formatCurrency(Math.abs(mat.difference))}
+                                        </td>
+                                        <td className="px-2 py-2 text-center">
+                                          {(() => {
+                                            const res = reservations.find(r => r.substage_id === sub.id && r.product_name === mat.product_name);
+                                            if (!res) return <span className="text-slate-300 text-[10px]">—</span>;
+                                            const colors = {
+                                              pending: 'bg-amber-100 text-amber-700',
+                                              approved: 'bg-green-100 text-green-700',
+                                              rejected: 'bg-red-100 text-red-700',
+                                              cancelled: 'bg-slate-100 text-slate-500',
+                                            };
+                                            return (
+                                              <Badge className={`text-[10px] px-1.5 py-0.5 ${colors[res.status] || 'bg-slate-100'}`}>
+                                                {t(res.status) || res.status}
+                                              </Badge>
+                                            );
+                                          })()}
                                         </td>
                                         <td className="px-2 py-2 text-slate-400 max-w-[120px] truncate" title={mat.note || ''}>{mat.note || '—'}</td>
                                         <td className="px-2 py-2 text-center">
@@ -679,7 +766,7 @@ const RejaFaktTab = ({ project }) => {
                                       <td className={`px-2 py-2 text-right ${diffColor(sub.material_plan_total - sub.material_fact_total)}`}>
                                         {formatCurrency(Math.abs(sub.material_plan_total - sub.material_fact_total))}
                                       </td>
-                                      <td colSpan={2}></td>
+                                      <td colSpan={3}></td>
                                     </tr>
                                   </tfoot>
                                 </table>
@@ -701,7 +788,7 @@ const RejaFaktTab = ({ project }) => {
                                   </span>
                                 )}
                               </h4>
-                              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => openAddEquipment(sub.id)}>
+                              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => openAddMaterial(sub.id, stage.id, 'equipment')}>
                                 <Plus className="w-3 h-3 mr-1" />
                                 {t('add')}
                               </Button>
@@ -869,200 +956,320 @@ const RejaFaktTab = ({ project }) => {
         </div>
       )}
 
-      {/* Add/Edit Material Modal */}
+      {/* Unified Add/Edit Modal with 3 Tabs: Materials, Equipment, Employee */}
       <Dialog open={showMaterialModal} onOpenChange={setShowMaterialModal}>
-        <DialogContent aria-describedby={undefined}>
+        <DialogContent aria-describedby={undefined} className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>{editMaterial ? t('rf_edit_material') : t('rf_add_material')}</DialogTitle>
-            <DialogDescription className="sr-only">{editMaterial ? t('rf_edit_material') : t('rf_add_material')}</DialogDescription>
+            <DialogTitle>
+              {editMaterial ? t('rf_edit_material') : editEquipment ? t('rf_edit_equipment') : (t('add') || 'Qo\'shish')}
+            </DialogTitle>
+            <DialogDescription className="sr-only">{t('add')}</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            {!editMaterial && (
-              <div>
-                <Label>{t('name')}</Label>
-                {products.length > 0 ? (
+
+          {/* Tab Switcher — only show when not editing */}
+          {!editMaterial && !editEquipment && (
+            <div className="flex border-b border-slate-200 -mx-6 px-6">
+              {[
+                { key: 'materials', label: t('rf_materials') || 'Materiallar', icon: Package, color: 'amber' },
+                { key: 'equipment', label: t('rf_equipment') || 'Texnika', icon: Truck, color: 'blue' },
+                { key: 'employee', label: t('rf_employee') || 'Ishchi kuchi', icon: Users, color: 'green' },
+              ].map(tab => (
+                <button
+                  key={tab.key}
+                  onClick={() => setModalTab(tab.key)}
+                  className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                    modalTab === tab.key
+                      ? `border-${tab.color}-500 text-${tab.color}-600`
+                      : 'border-transparent text-slate-500 hover:text-slate-700'
+                  }`}
+                  style={modalTab === tab.key ? {
+                    borderBottomColor: tab.color === 'amber' ? '#f59e0b' : tab.color === 'blue' ? '#3b82f6' : '#22c55e',
+                    color: tab.color === 'amber' ? '#d97706' : tab.color === 'blue' ? '#2563eb' : '#16a34a',
+                  } : {}}
+                >
+                  <tab.icon className="w-4 h-4" />
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* ─── Materials Tab ─── */}
+          {(modalTab === 'materials' || editMaterial) && (
+            <div className="space-y-4">
+              {!editMaterial && (
+                <div>
+                  <Label>{t('select_product') || 'Mahsulot tanlang'}</Label>
                   <Select
-                    value={materialForm.product_name || 'custom'}
+                    value={materialForm.product_id || undefined}
                     onValueChange={(val) => {
-                      if (val === 'custom') {
-                        setMaterialForm(f => ({ ...f, product_name: '', uom: 'шт', unit_cost: '' }));
-                      } else {
-                        const p = products.find(pr => pr.product_name === val);
-                        if (p) {
-                          setMaterialForm(f => ({
-                            ...f,
-                            product_name: p.product_name,
-                            uom: p.uom || 'шт',
-                            unit_cost: p.unit_cost ? String(p.unit_cost) : '',
-                          }));
-                        }
+                      const p = inventoryProducts.find(ip => ip.product_id === val);
+                      if (p) {
+                        setMaterialForm(f => ({
+                          ...f,
+                          product_id: p.product_id,
+                          product_name: p.product_name,
+                          uom: 'шт',
+                          unit_cost: p.unit_cost ? String(p.unit_cost) : '',
+                        }));
                       }
                     }}
                   >
-                    <SelectTrigger><SelectValue placeholder={t('select_product')} /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="custom">{t('other')}</SelectItem>
-                      {products.map(p => (
-                        <SelectItem key={p.product_id || p.id} value={p.product_name}>
-                          {p.product_name}{p.uom ? ` (${p.uom})` : ''}
+                    <SelectTrigger><SelectValue placeholder={t('select_product') || 'Mahsulot tanlang'} /></SelectTrigger>
+                    <SelectContent className="max-h-[300px]">
+                      {inventoryProducts.map(p => (
+                        <SelectItem key={`${p.product_id}-${p.warehouse_id}`} value={p.product_id}>
+                          {p.product_name} — {t('stock')}: {p.quantity_available ?? p.quantity_on_hand ?? 0}
+                          {p.unit_cost ? ` (${formatCurrency(p.unit_cost)})` : ''}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                ) : null}
-                {(products.length === 0 || !products.some(p => p.product_name === materialForm.product_name)) && (
-                  <Input
-                    className={products.length > 0 ? 'mt-2' : ''}
-                    value={materialForm.product_name}
-                    onChange={e => setMaterialForm(f => ({ ...f, product_name: e.target.value }))}
-                    placeholder={t('product_name')}
-                  />
+                  {materialForm.product_id && (
+                    <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                      <ShieldCheck className="w-3 h-3" />
+                      {t('from_inventory') || 'Inventorydan — zaxira so\'rovi yaratiladi'}
+                    </p>
+                  )}
+                </div>
+              )}
+              {editMaterial && (
+                <div>
+                  <Label>{t('name')}</Label>
+                  <Input value={materialForm.product_name} disabled className="bg-slate-50" />
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>{t('rf_plan_qty')}</Label>
+                  <Input type="number" step="0.0001" min="0" value={materialForm.plan_quantity}
+                    onChange={e => setMaterialForm(f => ({ ...f, plan_quantity: e.target.value }))} />
+                </div>
+                <div>
+                  <Label>{t('rf_fact_qty')}</Label>
+                  <Input type="number" step="0.0001" min="0" value={materialForm.fact_quantity}
+                    onChange={e => setMaterialForm(f => ({ ...f, fact_quantity: e.target.value }))} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>{t('unit')}</Label>
+                  <Input value={materialForm.uom} onChange={e => setMaterialForm(f => ({ ...f, uom: e.target.value }))}
+                    disabled={!!editMaterial} />
+                </div>
+                <div>
+                  <Label>{t('rf_unit_price')}</Label>
+                  <Input value={materialForm.unit_cost}
+                    onChange={e => setMaterialForm(f => ({ ...f, unit_cost: formatPriceInput(e.target.value) }))} placeholder="0" />
+                </div>
+              </div>
+              <div>
+                <Label>{t('rf_note')}</Label>
+                <Textarea value={materialForm.note} onChange={e => setMaterialForm(f => ({ ...f, note: e.target.value }))}
+                  rows={2} placeholder={t('rf_note_placeholder')} />
+              </div>
+              {(materialForm.plan_quantity || materialForm.fact_quantity) && materialForm.unit_cost && (
+                <div className="flex justify-between items-center pt-2 border-t text-sm">
+                  <span className="text-blue-600">{t('rf_plan')}: {formatCurrency((parseFloat(materialForm.plan_quantity) || 0) * (parseFloat(parsePriceInput(materialForm.unit_cost)) || 0))}</span>
+                  <span>{t('rf_fact')}: {formatCurrency((parseFloat(materialForm.fact_quantity) || 0) * (parseFloat(parsePriceInput(materialForm.unit_cost)) || 0))}</span>
+                </div>
+              )}
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowMaterialModal(false)}>{t('cancel')}</Button>
+                <Button onClick={handleSaveMaterial} disabled={!materialForm.product_id}>{t('save')}</Button>
+              </DialogFooter>
+            </div>
+          )}
+
+          {/* ─── Equipment Tab (МАШ.-Ч from estimates) ─── */}
+          {modalTab === 'equipment' && !editMaterial && !editEquipment && (
+            <div className="space-y-4">
+              <div>
+                <Label>{t('select_equipment') || 'Texnika tanlang'}</Label>
+                {estimateEquipmentResources.length > 0 ? (
+                  <Select
+                    value={equipmentForm.name || undefined}
+                    onValueChange={(val) => {
+                      const r = estimateEquipmentResources.find(res => res.name === val);
+                      if (r) {
+                        setEquipmentForm(f => ({
+                          ...f,
+                          name: r.name,
+                          work_unit: 'soat',
+                          unit_price: r.equipment_rate ? String(r.equipment_rate) : r.unit_rate ? String(r.unit_rate) : '',
+                        }));
+                      }
+                    }}
+                  >
+                    <SelectTrigger><SelectValue placeholder={t('select_equipment') || 'Texnika tanlang'} /></SelectTrigger>
+                    <SelectContent className="max-h-[300px] max-w-[450px]">
+                      {estimateEquipmentResources.map(r => (
+                        <SelectItem key={r.id} value={r.name} title={r.name}>
+                          <span className="truncate block max-w-[380px]">{r.name}</span>
+                          <span className="text-xs text-slate-400 ml-1">{r.unit_rate ? formatCurrency(r.unit_rate) : ''}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p className="text-sm text-slate-500 py-2">{t('no_equipment_resources') || 'Smeta resurslarida texnika topilmadi'}</p>
                 )}
               </div>
-            )}
-            {editMaterial && (
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <Label>{t('rf_work_unit') || 'Birlik'}</Label>
+                  <Select value={equipmentForm.work_unit} onValueChange={v => setEquipmentForm(f => ({ ...f, work_unit: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="soat">{t('rf_hour') || 'Soat'}</SelectItem>
+                      <SelectItem value="kun">{t('rf_day') || 'Kun'}</SelectItem>
+                      <SelectItem value="smena">{t('rf_shift') || 'Smena'}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>{t('quantity') || 'Miqdor'}</Label>
+                  <Input type="number" step="0.01" min="0" value={equipmentForm.plan_quantity}
+                    onChange={e => setEquipmentForm(f => ({ ...f, plan_quantity: e.target.value }))} />
+                </div>
+                <div>
+                  <Label>{t('rf_unit_price') || 'Narxi'}</Label>
+                  <Input value={equipmentForm.unit_price}
+                    onChange={e => setEquipmentForm(f => ({ ...f, unit_price: formatPriceInput(e.target.value) }))} placeholder="0" />
+                </div>
+              </div>
+              <div>
+                <Label>{t('rf_note')}</Label>
+                <Textarea value={equipmentForm.note} onChange={e => setEquipmentForm(f => ({ ...f, note: e.target.value }))}
+                  rows={2} placeholder={t('rf_note_placeholder')} />
+              </div>
+              {equipmentForm.plan_quantity && equipmentForm.unit_price && (
+                <div className="flex justify-between items-center pt-2 border-t text-sm">
+                  <span className="text-blue-600">{t('total')}: {formatCurrency((parseFloat(equipmentForm.plan_quantity) || 0) * (parseFloat(parsePriceInput(equipmentForm.unit_price)) || 0))}</span>
+                </div>
+              )}
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowMaterialModal(false)}>{t('cancel')}</Button>
+                <Button onClick={handleSaveEquipment} disabled={!equipmentForm.name.trim()}>{t('save')}</Button>
+              </DialogFooter>
+            </div>
+          )}
+
+          {/* ─── Employee Tab (ЧЕЛ.-Ч from estimates) ─── */}
+          {modalTab === 'employee' && !editMaterial && !editEquipment && (
+            <div className="space-y-4">
+              <div>
+                <Label>{t('select_employee_resource') || 'Ishchi kuchi tanlang'}</Label>
+                {estimateLaborResources.length > 0 ? (
+                  <Select
+                    value={equipmentForm.name || undefined}
+                    onValueChange={(val) => {
+                      const r = estimateLaborResources.find(res => res.name === val);
+                      if (r) {
+                        setEquipmentForm(f => ({
+                          ...f,
+                          name: r.name,
+                          work_unit: 'soat',
+                          unit_price: r.labor_rate ? String(r.labor_rate) : r.unit_rate ? String(r.unit_rate) : '',
+                        }));
+                      }
+                    }}
+                  >
+                    <SelectTrigger><SelectValue placeholder={t('select_employee_resource') || 'Ishchi kuchi tanlang'} /></SelectTrigger>
+                    <SelectContent className="max-h-[300px] max-w-[450px]">
+                      {estimateLaborResources.map(r => (
+                        <SelectItem key={r.id} value={r.name} title={r.name}>
+                          <span className="truncate block max-w-[380px]">{r.name}</span>
+                          <span className="text-xs text-slate-400 ml-1">{r.unit_rate ? formatCurrency(r.unit_rate) : ''}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p className="text-sm text-slate-500 py-2">{t('no_labor_resources') || 'Smeta resurslarida ishchi kuchi topilmadi'}</p>
+                )}
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <Label>{t('rf_work_unit') || 'Birlik'}</Label>
+                  <Select value={equipmentForm.work_unit} onValueChange={v => setEquipmentForm(f => ({ ...f, work_unit: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="soat">{t('rf_hour') || 'Soat'}</SelectItem>
+                      <SelectItem value="kun">{t('rf_day') || 'Kun'}</SelectItem>
+                      <SelectItem value="smena">{t('rf_shift') || 'Smena'}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>{t('quantity') || 'Miqdor'}</Label>
+                  <Input type="number" step="0.01" min="0" value={equipmentForm.plan_quantity}
+                    onChange={e => setEquipmentForm(f => ({ ...f, plan_quantity: e.target.value }))} />
+                </div>
+                <div>
+                  <Label>{t('rf_unit_price') || 'Narxi'}</Label>
+                  <Input value={equipmentForm.unit_price}
+                    onChange={e => setEquipmentForm(f => ({ ...f, unit_price: formatPriceInput(e.target.value) }))} placeholder="0" />
+                </div>
+              </div>
+              <div>
+                <Label>{t('rf_note')}</Label>
+                <Textarea value={equipmentForm.note} onChange={e => setEquipmentForm(f => ({ ...f, note: e.target.value }))}
+                  rows={2} placeholder={t('rf_note_placeholder')} />
+              </div>
+              {equipmentForm.plan_quantity && equipmentForm.unit_price && (
+                <div className="flex justify-between items-center pt-2 border-t text-sm">
+                  <span className="text-green-600">{t('total')}: {formatCurrency((parseFloat(equipmentForm.plan_quantity) || 0) * (parseFloat(parsePriceInput(equipmentForm.unit_price)) || 0))}</span>
+                </div>
+              )}
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowMaterialModal(false)}>{t('cancel')}</Button>
+                <Button onClick={handleSaveEquipment} disabled={!equipmentForm.name.trim()}>{t('save')}</Button>
+              </DialogFooter>
+            </div>
+          )}
+
+          {/* ─── Edit Equipment (opened from equipment table edit button) ─── */}
+          {editEquipment && (
+            <div className="space-y-4">
               <div>
                 <Label>{t('name')}</Label>
-                <Input value={materialForm.product_name} disabled className="bg-slate-50" />
+                <Input value={equipmentForm.name} disabled className="bg-slate-50" />
               </div>
-            )}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>{t('rf_plan_qty')}</Label>
-                <Input
-                  type="number" step="0.0001" min="0"
-                  value={materialForm.plan_quantity}
-                  onChange={e => setMaterialForm(f => ({ ...f, plan_quantity: e.target.value }))}
-                />
-              </div>
-              <div>
-                <Label>{t('rf_fact_qty')}</Label>
-                <Input
-                  type="number" step="0.0001" min="0"
-                  value={materialForm.fact_quantity}
-                  onChange={e => setMaterialForm(f => ({ ...f, fact_quantity: e.target.value }))}
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>{t('unit')}</Label>
-                <Input
-                  value={materialForm.uom}
-                  onChange={e => setMaterialForm(f => ({ ...f, uom: e.target.value }))}
-                  disabled={!!editMaterial}
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>{t('rf_plan_qty')}</Label>
+                  <Input type="number" step="0.01" min="0" value={equipmentForm.plan_quantity}
+                    onChange={e => setEquipmentForm(f => ({ ...f, plan_quantity: e.target.value }))} />
+                </div>
+                <div>
+                  <Label>{t('rf_fact_qty')}</Label>
+                  <Input type="number" step="0.01" min="0" value={equipmentForm.fact_quantity}
+                    onChange={e => setEquipmentForm(f => ({ ...f, fact_quantity: e.target.value }))} />
+                </div>
               </div>
               <div>
                 <Label>{t('rf_unit_price')}</Label>
-                <Input
-                  value={materialForm.unit_cost}
-                  onChange={e => setMaterialForm(f => ({ ...f, unit_cost: formatPriceInput(e.target.value) }))}
-                  placeholder="0"
-                />
-              </div>
-            </div>
-            <div>
-              <Label>{t('rf_note')}</Label>
-              <Textarea
-                value={materialForm.note}
-                onChange={e => setMaterialForm(f => ({ ...f, note: e.target.value }))}
-                rows={2}
-                placeholder={t('rf_note_placeholder')}
-              />
-            </div>
-            {(materialForm.plan_quantity || materialForm.fact_quantity) && materialForm.unit_cost && (
-              <div className="flex justify-between items-center pt-2 border-t text-sm">
-                <span className="text-blue-600">{t('rf_plan')}: {formatCurrency((parseFloat(materialForm.plan_quantity) || 0) * (parseFloat(parsePriceInput(materialForm.unit_cost)) || 0))}</span>
-                <span>{t('rf_fact')}: {formatCurrency((parseFloat(materialForm.fact_quantity) || 0) * (parseFloat(parsePriceInput(materialForm.unit_cost)) || 0))}</span>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowMaterialModal(false)}>{t('cancel')}</Button>
-            <Button onClick={handleSaveMaterial} disabled={!materialForm.product_name.trim()}>
-              {t('save')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Add/Edit Equipment Modal */}
-      <Dialog open={showEquipmentModal} onOpenChange={setShowEquipmentModal}>
-        <DialogContent aria-describedby={undefined}>
-          <DialogHeader>
-            <DialogTitle>{editEquipment ? t('rf_edit_equipment') : t('rf_add_equipment')}</DialogTitle>
-            <DialogDescription className="sr-only">{editEquipment ? t('rf_edit_equipment') : t('rf_add_equipment')}</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label>{t('name')}</Label>
-              <Input
-                value={equipmentForm.name}
-                onChange={e => setEquipmentForm(f => ({ ...f, name: e.target.value }))}
-                placeholder={t('rf_equipment_name_placeholder')}
-                disabled={!!editEquipment}
-              />
-            </div>
-            <div>
-              <Label>{t('rf_work_unit')}</Label>
-              <Select value={equipmentForm.work_unit} onValueChange={v => setEquipmentForm(f => ({ ...f, work_unit: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="soat">{t('rf_hour')}</SelectItem>
-                  <SelectItem value="kun">{t('rf_day')}</SelectItem>
-                  <SelectItem value="smena">{t('rf_shift')}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>{t('rf_plan_qty')}</Label>
-                <Input
-                  type="number" step="0.01" min="0"
-                  value={equipmentForm.plan_quantity}
-                  onChange={e => setEquipmentForm(f => ({ ...f, plan_quantity: e.target.value }))}
-                />
+                <Input value={equipmentForm.unit_price}
+                  onChange={e => setEquipmentForm(f => ({ ...f, unit_price: formatPriceInput(e.target.value) }))} placeholder="0" />
               </div>
               <div>
-                <Label>{t('rf_fact_qty')}</Label>
-                <Input
-                  type="number" step="0.01" min="0"
-                  value={equipmentForm.fact_quantity}
-                  onChange={e => setEquipmentForm(f => ({ ...f, fact_quantity: e.target.value }))}
-                />
+                <Label>{t('rf_note')}</Label>
+                <Textarea value={equipmentForm.note} onChange={e => setEquipmentForm(f => ({ ...f, note: e.target.value }))}
+                  rows={2} placeholder={t('rf_note_placeholder')} />
               </div>
+              {(equipmentForm.plan_quantity || equipmentForm.fact_quantity) && equipmentForm.unit_price && (
+                <div className="flex justify-between items-center pt-2 border-t text-sm">
+                  <span className="text-blue-600">{t('rf_plan')}: {formatCurrency((parseFloat(equipmentForm.plan_quantity) || 0) * (parseFloat(parsePriceInput(equipmentForm.unit_price)) || 0))}</span>
+                  <span>{t('rf_fact')}: {formatCurrency((parseFloat(equipmentForm.fact_quantity) || 0) * (parseFloat(parsePriceInput(equipmentForm.unit_price)) || 0))}</span>
+                </div>
+              )}
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowMaterialModal(false)}>{t('cancel')}</Button>
+                <Button onClick={handleSaveEquipment} disabled={!equipmentForm.name.trim()}>{t('save')}</Button>
+              </DialogFooter>
             </div>
-            <div>
-              <Label>{t('rf_unit_price')}</Label>
-              <Input
-                value={equipmentForm.unit_price}
-                onChange={e => setEquipmentForm(f => ({ ...f, unit_price: formatPriceInput(e.target.value) }))}
-                placeholder="0"
-              />
-            </div>
-            <div>
-              <Label>{t('rf_note')}</Label>
-              <Textarea
-                value={equipmentForm.note}
-                onChange={e => setEquipmentForm(f => ({ ...f, note: e.target.value }))}
-                rows={2}
-                placeholder={t('rf_note_placeholder')}
-              />
-            </div>
-            {(equipmentForm.plan_quantity || equipmentForm.fact_quantity) && equipmentForm.unit_price && (
-              <div className="flex justify-between items-center pt-2 border-t text-sm">
-                <span className="text-blue-600">{t('rf_plan')}: {formatCurrency((parseFloat(equipmentForm.plan_quantity) || 0) * (parseFloat(parsePriceInput(equipmentForm.unit_price)) || 0))}</span>
-                <span>{t('rf_fact')}: {formatCurrency((parseFloat(equipmentForm.fact_quantity) || 0) * (parseFloat(parsePriceInput(equipmentForm.unit_price)) || 0))}</span>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowEquipmentModal(false)}>{t('cancel')}</Button>
-            <Button onClick={handleSaveEquipment} disabled={!equipmentForm.name.trim()}>
-              {t('save')}
-            </Button>
-          </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
 
