@@ -75,7 +75,7 @@ export default function WebsiteScript() {
             <div className="space-y-2">
               <label className="text-sm font-medium flex items-center gap-1">
                 <Palette className="w-3.5 h-3.5" />
-                {language === 'uz' ? 'Rang' : 'Color'}
+                {language === 'uz' ? 'Rang' : language === 'ru' ? 'Цвет' : 'Color'}
               </label>
               <div className="flex gap-2">
                 <Input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="w-12 h-10 p-1 cursor-pointer" />
@@ -85,7 +85,7 @@ export default function WebsiteScript() {
             <div className="space-y-2">
               <label className="text-sm font-medium flex items-center gap-1">
                 <Globe className="w-3.5 h-3.5" />
-                {language === 'uz' ? 'Til' : 'Language'}
+                {language === 'uz' ? 'Til' : language === 'ru' ? 'Язык' : 'Language'}
               </label>
               <Select value={lang} onValueChange={setLang}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
@@ -99,13 +99,13 @@ export default function WebsiteScript() {
             <div className="space-y-2">
               <label className="text-sm font-medium flex items-center gap-1">
                 <MessageSquare className="w-3.5 h-3.5" />
-                {language === 'uz' ? 'Joylashuv' : 'Position'}
+                {language === 'uz' ? 'Joylashuv' : language === 'ru' ? 'Позиция' : 'Position'}
               </label>
               <Select value={position} onValueChange={setPosition}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="bottom-right">{language === 'uz' ? 'Pastda o\'ngda' : 'Bottom Right'}</SelectItem>
-                  <SelectItem value="bottom-left">{language === 'uz' ? 'Pastda chapda' : 'Bottom Left'}</SelectItem>
+                  <SelectItem value="bottom-right">{language === 'uz' ? 'Pastda o\'ngda' : language === 'ru' ? 'Снизу справа' : 'Bottom Right'}</SelectItem>
+                  <SelectItem value="bottom-left">{language === 'uz' ? 'Pastda chapda' : language === 'ru' ? 'Снизу слева' : 'Bottom Left'}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -113,7 +113,7 @@ export default function WebsiteScript() {
 
           {/* Tenant Code */}
           <div className="flex items-center gap-2 p-3 bg-slate-50 rounded-lg">
-            <span className="text-sm text-slate-500">{language === 'uz' ? 'Sizning kodingiz:' : 'Your code:'}</span>
+            <span className="text-sm text-slate-500">{language === 'uz' ? 'Sizning kodingiz:' : language === 'ru' ? 'Ваш код:' : 'Your code:'}</span>
             <Badge variant="outline" className="text-sm font-mono">{tenantCode || '—'}</Badge>
           </div>
 
@@ -128,14 +128,14 @@ export default function WebsiteScript() {
               className="absolute top-3 right-3 bg-white/10 hover:bg-white/20 text-white"
             >
               {copied ? <Check className="w-4 h-4 mr-1" /> : <Copy className="w-4 h-4 mr-1" />}
-              {copied ? (language === 'uz' ? 'Nusxalandi' : 'Copied') : (language === 'uz' ? 'Nusxalash' : 'Copy')}
+              {copied ? (language === 'uz' ? 'Nusxalandi' : language === 'ru' ? 'Скопировано' : 'Copied') : (language === 'uz' ? 'Nusxalash' : language === 'ru' ? 'Копировать' : 'Copy')}
             </Button>
           </div>
 
           {/* Platform-specific instructions */}
           <div className="space-y-3">
             <h4 className="font-medium text-slate-900">
-              {language === 'uz' ? 'Platformaga qarab o\'rnatish:' : 'Installation by platform:'}
+              {language === 'uz' ? 'Platformaga qarab o\'rnatish:' : language === 'ru' ? 'Установка по платформам:' : 'Installation by platform:'}
             </h4>
 
             {[
@@ -144,6 +144,8 @@ export default function WebsiteScript() {
                 icon: '🌐',
                 steps: language === 'uz'
                   ? ['index.html faylini oching', 'Skriptni </body> tegidan oldin qo\'ying', 'Saqlang va yangilang']
+                  : language === 'ru'
+                  ? ['Откройте index.html', 'Вставьте скрипт перед </body>', 'Сохраните и обновите']
                   : ['Open index.html', 'Paste script before </body>', 'Save and refresh']
               },
               {
@@ -152,6 +154,8 @@ export default function WebsiteScript() {
                 code: `// useEffect ichida qo'shing:\nuseEffect(() => {\n  const s = document.createElement('script');\n  s.src = '${appBase}/embed/lead-form.js';\n  s.setAttribute('data-tenant', '${tenantCode}');\n  s.setAttribute('data-color', '${color}');\n  s.setAttribute('data-lang', '${lang}');\n  s.setAttribute('data-api', '${apiBase}');\n  document.body.appendChild(s);\n  return () => document.body.removeChild(s);\n}, []);`,
                 steps: language === 'uz'
                   ? ['App.jsx yoki Layout komponentiga useEffect qo\'shing']
+                  : language === 'ru'
+                  ? ['Добавьте useEffect в App.jsx или Layout компонент']
                   : ['Add useEffect to App.jsx or Layout component']
               },
               {
@@ -160,6 +164,8 @@ export default function WebsiteScript() {
                 code: `// App.vue yoki layout faylida:\nmounted() {\n  const s = document.createElement('script');\n  s.src = '${appBase}/embed/lead-form.js';\n  s.setAttribute('data-tenant', '${tenantCode}');\n  s.setAttribute('data-color', '${color}');\n  s.setAttribute('data-lang', '${lang}');\n  s.setAttribute('data-api', '${apiBase}');\n  document.body.appendChild(s);\n}`,
                 steps: language === 'uz'
                   ? ['App.vue ning mounted() ga qo\'shing']
+                  : language === 'ru'
+                  ? ['Добавьте в mounted() в App.vue']
                   : ['Add to mounted() in App.vue']
               }
             ].map((platform, idx) => (
