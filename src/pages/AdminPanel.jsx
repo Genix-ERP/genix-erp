@@ -655,7 +655,6 @@ export default function AdminPanel() {
                           <TableHead>{language === 'uz' ? 'Kompaniya' : 'Company'}</TableHead>
                           <TableHead>{language === 'uz' ? 'Egasi' : 'Owner'}</TableHead>
                           <TableHead>{language === 'uz' ? 'Foydalanuvchilar' : 'Users'}</TableHead>
-                          <TableHead>{language === 'uz' ? 'Obuna' : 'Subscription'}</TableHead>
                           <TableHead>{language === 'uz' ? 'Holat' : 'Status'}</TableHead>
                           <TableHead>{language === 'uz' ? 'Ro\'yxatdan o\'tgan' : 'Registered'}</TableHead>
                           <TableHead>{language === 'uz' ? 'Amallar' : 'Actions'}</TableHead>
@@ -704,19 +703,33 @@ export default function AdminPanel() {
                                 </div>
                               </TableCell>
                               <TableCell>
-                                <Badge className={tenant.subscription_plan === 'free' ? 'bg-slate-100 text-slate-600' : 'bg-purple-100 text-purple-700'}>
-                                  {tenant.subscription_plan || 'free'}
-                                </Badge>
-                              </TableCell>
-                              <TableCell>
-                                <Badge className={statusColors[tenant.subscription_status] || 'bg-slate-100 text-slate-600'}>
-                                  {statusLabels[tenant.subscription_status] || tenant.subscription_status}
-                                </Badge>
-                                {tenant.trial_ends_at && tenant.subscription_status === 'trialing' && (
-                                  <p className="text-xs text-slate-500 mt-1">
-                                    {differenceInDays(new Date(tenant.trial_ends_at), new Date())} {language === 'uz' ? 'kun qoldi' : 'days left'}
-                                  </p>
-                                )}
+                                {(() => {
+                                  let status = tenant.subscription_status;
+                                  let daysLeft = null;
+                                  // Check if trial actually expired
+                                  if (status === 'trialing' && tenant.trial_ends_at) {
+                                    daysLeft = differenceInDays(new Date(tenant.trial_ends_at), new Date());
+                                    if (daysLeft < 0) status = 'expired';
+                                  }
+                                  if (status === 'active' && tenant.account_clear_at) {
+                                    daysLeft = differenceInDays(new Date(tenant.account_clear_at), new Date());
+                                    if (daysLeft < 0) status = 'expired';
+                                  }
+                                  return (
+                                    <>
+                                      <Badge className={statusColors[status] || 'bg-slate-100 text-slate-600'}>
+                                        {statusLabels[status] || status}
+                                      </Badge>
+                                      {daysLeft !== null && (
+                                        <p className={`text-xs mt-1 ${daysLeft < 0 ? 'text-red-500' : daysLeft < 7 ? 'text-orange-500' : 'text-slate-500'}`}>
+                                          {daysLeft > 0
+                                            ? `${daysLeft} ${language === 'uz' ? 'kun qoldi' : 'days left'}`
+                                            : `${Math.abs(daysLeft)} ${language === 'uz' ? 'kun oldin tugagan' : 'days ago'}`}
+                                        </p>
+                                      )}
+                                    </>
+                                  );
+                                })()}
                               </TableCell>
                               <TableCell>
                                 <p className="text-sm">{format(new Date(tenant.created_at), 'dd.MM.yyyy')}</p>
