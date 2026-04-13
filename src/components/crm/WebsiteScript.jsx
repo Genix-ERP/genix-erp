@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,12 +7,28 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Code, Copy, Check, Globe, MessageSquare, Palette } from 'lucide-react';
 import { useAuth } from '@/components/contexts/AuthContext';
 import { useLanguage } from '@/components/contexts/LanguageContext';
+import apiClient from '@/api/client';
 import { toast } from 'sonner';
 
 export default function WebsiteScript() {
   const { language } = useLanguage();
   const { user } = useAuth();
-  const tenantCode = localStorage.getItem('genix_tenant_code') || user?.tenant_code || '';
+  const [tenantCode, setTenantCode] = useState('');
+
+  useEffect(() => {
+    // Fetch tenant code from organizations API
+    apiClient.get('/auth/me/organizations').then(res => {
+      const orgs = res.data?.data || [];
+      if (orgs.length > 0 && orgs[0].tenant_code) {
+        setTenantCode(orgs[0].tenant_code);
+      }
+    }).catch(() => {});
+    // Also try from subscription status
+    apiClient.get('/subscription/status').then(res => {
+      const code = res.data?.data?.tenant_code;
+      if (code) setTenantCode(code);
+    }).catch(() => {});
+  }, []);
 
   const [color, setColor] = useState('#6366f1');
   const [lang, setLang] = useState('uz');
