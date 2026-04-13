@@ -1504,47 +1504,50 @@ export default function AdminPanel() {
                     />
                   </div>
                   <div>
-                    <label className="text-sm font-medium">{language === 'uz' ? 'To\'lov muddati' : 'Billing Period'}</label>
+                    <label className="text-sm font-medium">{language === 'uz' ? 'Muddat' : 'Duration'}</label>
                     <Select value={checkoutData.billing} onValueChange={(v) => setCheckoutData(prev => ({ ...prev, billing: v }))}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="monthly">{language === 'uz' ? 'Oylik' : 'Monthly'}</SelectItem>
-                        <SelectItem value="yearly">{language === 'uz' ? 'Yillik' : 'Yearly'}</SelectItem>
+                        <SelectItem value="monthly">{language === 'uz' ? '1 oy' : '1 Month'}</SelectItem>
+                        <SelectItem value="3months">{language === 'uz' ? '3 oy' : '3 Months'}</SelectItem>
+                        <SelectItem value="6months">{language === 'uz' ? '6 oy' : '6 Months'}</SelectItem>
+                        <SelectItem value="yearly">{language === 'uz' ? '12 oy (1 yil)' : '12 Months (1 Year)'}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                 </div>
 
                 <div className="p-4 bg-purple-50 rounded-lg space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span>{language === 'uz' ? 'Narx (1 foydalanuvchi)' : 'Price per user'}</span>
-                    <span className="font-medium">
-                      {checkoutData.billing === 'yearly'
-                        ? `${(pricing.price_per_user_yearly || 0).toLocaleString()} so'm/oy`
-                        : `${(pricing.price_per_user_monthly || 0).toLocaleString()} so'm/oy`}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span>{language === 'uz' ? 'Foydalanuvchilar' : 'Users'}</span>
-                    <span>x {checkoutData.users}</span>
-                  </div>
-                  {checkoutData.billing === 'yearly' && (
-                    <div className="flex justify-between text-sm">
-                      <span>{language === 'uz' ? 'Muddat' : 'Period'}</span>
-                      <span>x 12 {language === 'uz' ? 'oy' : 'months'}</span>
-                    </div>
-                  )}
-                  <div className="border-t pt-2 flex justify-between font-bold text-lg">
-                    <span>{language === 'uz' ? 'Jami' : 'Total'}</span>
-                    <span className="text-purple-700">
-                      {(checkoutData.billing === 'yearly'
-                        ? (pricing.price_per_user_yearly || 0) * 12 * checkoutData.users
-                        : (pricing.price_per_user_monthly || 0) * checkoutData.users
-                      ).toLocaleString()} so'm
-                    </span>
-                  </div>
+                  {(() => {
+                    const monthsMap = { monthly: 1, '3months': 3, '6months': 6, yearly: 12 };
+                    const months = monthsMap[checkoutData.billing] || 1;
+                    const pricePerUser = checkoutData.billing === 'yearly'
+                      ? (pricing.price_per_user_yearly || 0)
+                      : (pricing.price_per_user_monthly || 0);
+                    const total = pricePerUser * months * checkoutData.users;
+                    return (
+                      <>
+                        <div className="flex justify-between text-sm">
+                          <span>{language === 'uz' ? 'Narx (1 foydalanuvchi/oy)' : 'Price per user/month'}</span>
+                          <span className="font-medium">{pricePerUser.toLocaleString()} so'm</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span>{language === 'uz' ? 'Foydalanuvchilar' : 'Users'}</span>
+                          <span>x {checkoutData.users}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span>{language === 'uz' ? 'Muddat' : 'Duration'}</span>
+                          <span>x {months} {language === 'uz' ? 'oy' : 'months'}</span>
+                        </div>
+                        <div className="border-t pt-2 flex justify-between font-bold text-lg">
+                          <span>{language === 'uz' ? 'Jami' : 'Total'}</span>
+                          <span className="text-purple-700">{total.toLocaleString()} so'm</span>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
 
                 {checkoutUrl && (
@@ -1556,11 +1559,34 @@ export default function AdminPanel() {
                   </div>
                 )}
 
-                <div className="flex gap-3">
-                  <Button variant="outline" onClick={() => setShowSubscriptionModal(false)} className="flex-1">
-                    {language === 'uz' ? 'Bekor qilish' : 'Cancel'}
+                <div className="flex flex-col gap-2">
+                  <Button
+                    onClick={async () => {
+                      setCheckoutLoading(true);
+                      try {
+                        // Manual activation: set tenant as active with paid_users and duration
+                        const monthsMap = { monthly: 1, '3months': 3, '6months': 6, yearly: 12 };
+                        const months = monthsMap[checkoutData.billing] || 1;
+                        await apiClient.put(`/admin/tenants/${selectedTenant.id}/activate`, {
+                          paid_users: checkoutData.users,
+                          months: months,
+                        });
+                        toast({ title: language === 'uz' ? 'Obuna faollashtirildi!' : 'Subscription activated!' });
+                        setShowSubscriptionModal(false);
+                        loadData();
+                      } catch (err) {
+                        toast({ title: err.response?.data?.error?.message || 'Error', variant: 'destructive' });
+                      }
+                      setCheckoutLoading(false);
+                    }}
+                    disabled={checkoutLoading || checkoutData.users < 1}
+                    className="w-full bg-gradient-to-r from-green-600 to-emerald-600"
+                  >
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    {language === 'uz' ? 'Qo\'lda faollashtirish (naqd to\'lov)' : 'Manual Activate (cash payment)'}
                   </Button>
                   <Button
+                    variant="outline"
                     onClick={async () => {
                       setCheckoutLoading(true);
                       try {
@@ -1582,11 +1608,13 @@ export default function AdminPanel() {
                       setCheckoutLoading(false);
                     }}
                     disabled={checkoutLoading || checkoutData.users < 1}
-                    className="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600"
+                    className="w-full"
                   >
-                    {checkoutLoading
-                      ? (language === 'uz' ? 'Yuklanmoqda...' : 'Loading...')
-                      : (language === 'uz' ? 'To\'lov havolasini yaratish' : 'Generate Payment Link')}
+                    <CreditCard className="w-4 h-4 mr-2" />
+                    {language === 'uz' ? 'To\'lov havolasini yaratish (Multicard)' : 'Generate Payment Link (Multicard)'}
+                  </Button>
+                  <Button variant="ghost" onClick={() => setShowSubscriptionModal(false)} className="w-full text-slate-500">
+                    {language === 'uz' ? 'Bekor qilish' : 'Cancel'}
                   </Button>
                 </div>
               </div>
