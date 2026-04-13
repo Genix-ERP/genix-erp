@@ -1200,7 +1200,7 @@ export default function Customers() {
             />
           </TabsContent>
 
-          <TabsContent value="website-script">
+          <TabsContent value="website-script" className="space-y-6">
             <WebsiteScript />
           </TabsContent>
         </Tabs>
