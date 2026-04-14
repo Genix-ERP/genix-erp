@@ -6955,6 +6955,24 @@ export const translations = {
 
     // Currency
     "uzs": "UZS",
+
+    // Construction - auto-creation messages
+    "products_auto_created": "products auto-created in inventory",
+    "products_created_success": "products created",
+    "all_products_already_exist": "All products already exist",
+    "forma2_auto_created": "Forma 2 (KS-2) auto-created",
+    "forma2_auto_created_desc": "Draft Forma 2 created with all lines from the estimate",
+
+    // Estimate import
+    "import_in_progress": "Import in progress...",
+    "import_success": "Import successful!",
+    "import_error": "Import error",
+    "categories_imported": "categories imported",
+    "lines_imported": "lines imported",
+    "retry": "Retry",
+
+    // Construction forms
+    "submit_for_signing": "Submit for signing",
   },
 
   uz: {
@@ -14120,6 +14138,24 @@ export const translations = {
     "enter_vendor_id": "Yetkazib beruvchi IDni kiriting",
     "enter_product_id": "Mahsulot IDni kiriting",
     "notification_email": "Bildirishnoma emaili",
+
+    // Construction - auto-creation messages
+    "products_auto_created": "ta mahsulot avtomatik yaratildi",
+    "products_created_success": "ta mahsulot yaratildi",
+    "all_products_already_exist": "Barcha mahsulotlar allaqachon mavjud",
+    "forma2_auto_created": "Forma 2 (KS-2) avtomatik yaratildi",
+    "forma2_auto_created_desc": "Smetadan barcha qatorlar bilan qoralama Forma 2 yaratildi",
+
+    // Estimate import
+    "import_in_progress": "Import jarayoni...",
+    "import_success": "Import muvaffaqiyatli!",
+    "import_error": "Import xatolik",
+    "categories_imported": "kategoriya import qilindi",
+    "lines_imported": "qator import qilindi",
+    "retry": "Qayta urinish",
+
+    // Construction forms
+    "submit_for_signing": "Imzolashga yuborish",
   },
 
   ru: {
@@ -21322,7 +21358,25 @@ export const translations = {
     "budget_exceeded_warning": "Бюджет превысил порог предупреждения!",
 
     // Валюта
-    "uzs": "сум"
+    "uzs": "сум",
+
+    // Строительство - сообщения автосоздания
+    "products_auto_created": "товаров автоматически создано на складе",
+    "products_created_success": "товаров создано",
+    "all_products_already_exist": "Все товары уже существуют",
+    "forma2_auto_created": "Форма 2 (КС-2) автоматически создана",
+    "forma2_auto_created_desc": "Черновая Форма 2 создана со всеми строками из сметы",
+
+    // Импорт сметы
+    "import_in_progress": "Импорт выполняется...",
+    "import_success": "Импорт завершён успешно!",
+    "import_error": "Ошибка импорта",
+    "categories_imported": "категорий импортировано",
+    "lines_imported": "строк импортировано",
+    "retry": "Повторить",
+
+    // Строительные формы
+    "submit_for_signing": "Отправить на подписание"
   }
 };
 

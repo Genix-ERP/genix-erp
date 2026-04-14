@@ -6,6 +6,10 @@ export const inventoryService = {
     const response = await apiClient.get('/products', { params });
     return response.data.data;
   },
+  async listProductsPaginated(params = {}) {
+    const response = await apiClient.get('/products', { params });
+    return { data: response.data.data, meta: response.data.meta };
+  },
 
   async getProduct(id) {
     const response = await apiClient.get(`/products/${id}`);
