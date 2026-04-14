@@ -79,8 +79,9 @@ const StagesTab = ({ project }) => {
   const [modalTab, setModalTab] = useState('materials');
   // Equipment/Employee form (shared)
   const [equipmentForm, setEquipmentForm] = useState({ name: '', work_unit: 'soat', quantity: '', unit_price: '' });
-  // Sub-stage equipment data
+  // Sub-stage equipment data (includes both equipment and employee/labor entries)
   const [subStageEquipment, setSubStageEquipment] = useState({});
+  const [equipmentLoading, setEquipmentLoading] = useState(null);
 
   // Load inventory products + estimate resources for dropdowns
   useEffect(() => {
@@ -161,6 +162,31 @@ const StagesTab = ({ project }) => {
     }
   };
 
+  const loadSubStageEquipment = async (subStageId) => {
+    setEquipmentLoading(subStageId);
+    try {
+      const data = await constructionService.listSubStageEquipment(subStageId);
+      setSubStageEquipment(prev => ({ ...prev, [subStageId]: data || [] }));
+    } catch (e) {
+      console.error('Failed to load sub-stage equipment:', e);
+      setSubStageEquipment(prev => ({ ...prev, [subStageId]: [] }));
+    } finally {
+      setEquipmentLoading(null);
+    }
+  };
+
+  const handleDeleteEquipment = async (equipmentId, subStageId) => {
+    try {
+      await constructionService.deleteSubStageEquipment(equipmentId);
+      await loadSubStageEquipment(subStageId);
+      const stageId = findStageForSubStage(subStageId);
+      if (stageId) await reloadSubStages(stageId);
+    } catch (e) {
+      console.error('Failed to delete equipment:', e);
+      toast.error(t('error_occurred'));
+    }
+  };
+
   const toggleSubStageMaterials = (subStageId) => {
     if (expandedSubStage === subStageId) {
       setExpandedSubStage(null);
@@ -168,6 +194,9 @@ const StagesTab = ({ project }) => {
       setExpandedSubStage(subStageId);
       if (!subStageMaterials[subStageId]) {
         loadSubStageMaterials(subStageId);
+      }
+      if (!subStageEquipment[subStageId]) {
+        loadSubStageEquipment(subStageId);
       }
     }
   };
@@ -220,15 +249,19 @@ const StagesTab = ({ project }) => {
   const handleAddEquipment = async () => {
     if (!equipmentForm.name.trim() || !materialSubStageId) return;
     try {
+      const qty = parseFloat(equipmentForm.quantity) || 0;
+      const price = parseFloat(parsePriceInput(equipmentForm.unit_price)) || 0;
       await constructionService.createSubStageEquipment(materialSubStageId, {
         name: equipmentForm.name,
         type: modalTab === 'employee' ? 'employee' : 'equipment',
         work_unit: equipmentForm.work_unit || 'soat',
-        quantity: parseFloat(equipmentForm.quantity) || 0,
-        unit_price: parseFloat(parsePriceInput(equipmentForm.unit_price)) || 0,
+        quantity: qty,
+        plan_quantity: qty,
+        unit_price: price,
       });
       setShowMaterialModal(false);
       await loadSubStageMaterials(materialSubStageId);
+      await loadSubStageEquipment(materialSubStageId);
       const stageId = findStageForSubStage(materialSubStageId);
       if (stageId) await reloadSubStages(stageId);
       const data = await constructionService.listStages(project.id);
@@ -520,13 +553,33 @@ const StagesTab = ({ project }) => {
                               </span>
                             )}
                           </div>
-                          {/* Material total for stage */}
-                          {stage.material_total > 0 && (
-                            <div className="flex items-center gap-2 mb-3 text-sm">
-                              <Package className="w-4 h-4 text-amber-500" />
-                              <span className="text-amber-700 font-medium">
-                                {t('materials')}: {formatCurrency(stage.material_total)}
-                              </span>
+                          {/* Material / equipment / labor totals for stage */}
+                          {(stage.material_total > 0 || stage.equipment_total > 0 || stage.labor_total > 0) && (
+                            <div className="flex items-center flex-wrap gap-x-4 gap-y-1 mb-3 text-sm">
+                              {stage.material_total > 0 && (
+                                <div className="flex items-center gap-1.5">
+                                  <Package className="w-4 h-4 text-amber-500" />
+                                  <span className="text-amber-700 font-medium">
+                                    {t('materials')}: {formatCurrency(stage.material_total)}
+                                  </span>
+                                </div>
+                              )}
+                              {stage.equipment_total > 0 && (
+                                <div className="flex items-center gap-1.5">
+                                  <Truck className="w-4 h-4 text-blue-500" />
+                                  <span className="text-blue-700 font-medium">
+                                    {t('equipment') || 'Texnika'}: {formatCurrency(stage.equipment_total)}
+                                  </span>
+                                </div>
+                              )}
+                              {stage.labor_total > 0 && (
+                                <div className="flex items-center gap-1.5">
+                                  <Users className="w-4 h-4 text-green-500" />
+                                  <span className="text-green-700 font-medium">
+                                    {t('labor') || 'Ishchi kuchi'}: {formatCurrency(stage.labor_total)}
+                                  </span>
+                                </div>
+                              )}
                             </div>
                           )}
                           {/* Progress bar */}
@@ -592,6 +645,17 @@ const StagesTab = ({ project }) => {
                           const isExpanded = expandedSubStage === sub.id;
                           const materials = subStageMaterials[sub.id] || [];
                           const isLoadingMats = materialsLoading === sub.id;
+                          const allEquipment = subStageEquipment[sub.id] || [];
+                          const equipmentItems = allEquipment.filter(e => e.type !== 'employee');
+                          const laborItems = allEquipment.filter(e => e.type === 'employee');
+                          const isLoadingEquip = equipmentLoading === sub.id;
+                          const equipmentTotalLocal = equipmentItems.reduce((s, e) => s + (e.total_cost || (e.quantity || e.plan_quantity || 0) * (e.unit_price || 0)), 0);
+                          const laborTotalLocal = laborItems.reduce((s, e) => s + (e.total_cost || (e.quantity || e.plan_quantity || 0) * (e.unit_price || 0)), 0);
+                          // Prefer backend-provided aggregates (shown without needing to expand); fall back to client values after loading
+                          const equipmentCountDisplay = equipmentItems.length > 0 ? equipmentItems.length : (sub.equipment_count || 0);
+                          const equipmentTotalDisplay = equipmentItems.length > 0 ? equipmentTotalLocal : (sub.equipment_total || 0);
+                          const laborCountDisplay = laborItems.length > 0 ? laborItems.length : (sub.labor_count || 0);
+                          const laborTotalDisplay = laborItems.length > 0 ? laborTotalLocal : (sub.labor_total || 0);
 
                           return (
                             <div key={sub.id}>
@@ -616,11 +680,23 @@ const StagesTab = ({ project }) => {
                                     </Select>
                                   </div>
                                   <span className="text-sm">{sub.name}</span>
-                                  {sub.material_total > 0 && (
-                                    <span className="text-xs text-amber-600 font-medium ml-auto mr-2">
-                                      {sub.material_count} mat. &middot; {formatCurrency(sub.material_total)}
-                                    </span>
-                                  )}
+                                  <div className="flex items-center gap-2 ml-auto mr-2 text-xs font-medium">
+                                    {sub.material_total > 0 && (
+                                      <span className="text-amber-600">
+                                        {sub.material_count} mat. &middot; {formatCurrency(sub.material_total)}
+                                      </span>
+                                    )}
+                                    {equipmentTotalDisplay > 0 && (
+                                      <span className="text-blue-600">
+                                        {equipmentCountDisplay} tex. &middot; {formatCurrency(equipmentTotalDisplay)}
+                                      </span>
+                                    )}
+                                    {laborTotalDisplay > 0 && (
+                                      <span className="text-green-600">
+                                        {laborCountDisplay} ish. &middot; {formatCurrency(laborTotalDisplay)}
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                                 <div className="flex items-center gap-1">
                                   <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isExpanded ? 'rotate-0' : '-rotate-90'}`} />
@@ -634,47 +710,155 @@ const StagesTab = ({ project }) => {
                                 </div>
                               </div>
 
-                              {/* Expanded materials list */}
+                              {/* Expanded materials/equipment/labor list */}
                               {isExpanded && (
-                                <div className="ml-4 mt-1 mb-2 border rounded bg-white p-2 space-y-1">
-                                  {isLoadingMats ? (
-                                    <p className="text-xs text-slate-400 py-2 text-center">{t('loading')}</p>
-                                  ) : materials.length === 0 ? (
-                                    <p className="text-xs text-slate-400 py-2 text-center">{t('no_items')}</p>
-                                  ) : (
-                                    <table className="w-full text-xs">
-                                      <thead>
-                                        <tr className="border-b text-slate-500">
-                                          <th className="text-left py-1 px-1">{t('name')}</th>
-                                          <th className="text-right py-1 px-1">{t('unit')}</th>
-                                          <th className="text-right py-1 px-1">{t('quantity')}</th>
-                                          <th className="text-right py-1 px-1">{t('unit_cost')}</th>
-                                          <th className="text-right py-1 px-1">{t('total')}</th>
-                                          <th className="w-8"></th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {materials.map(mat => (
-                                          <tr key={mat.id} className="border-b border-slate-50 hover:bg-slate-50 group">
-                                            <td className="py-1 px-1">{mat.product_name}</td>
-                                            <td className="py-1 px-1 text-right text-slate-500">{mat.uom}</td>
-                                            <td className="py-1 px-1 text-right">{mat.quantity}</td>
-                                            <td className="py-1 px-1 text-right">{formatCurrency(mat.unit_cost)}</td>
-                                            <td className="py-1 px-1 text-right font-medium">{formatCurrency(mat.total_cost)}</td>
-                                            <td className="py-1 px-1 text-center">
-                                              <Button
-                                                variant="ghost" size="sm"
-                                                className="h-5 w-5 p-0 text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100"
-                                                onClick={() => handleDeleteMaterial(mat.id, sub.id)}
-                                              >
-                                                <Trash2 className="w-3 h-3" />
-                                              </Button>
-                                            </td>
+                                <div className="ml-4 mt-1 mb-2 border rounded bg-white p-2 space-y-3">
+                                  {/* Materials section */}
+                                  <div>
+                                    <div className="text-xs font-semibold text-amber-700 mb-1 flex items-center gap-1">
+                                      <Package className="w-3 h-3" />
+                                      {t('materials') || 'Materiallar'}
+                                    </div>
+                                    {isLoadingMats ? (
+                                      <p className="text-xs text-slate-400 py-2 text-center">{t('loading')}</p>
+                                    ) : materials.length === 0 ? (
+                                      <p className="text-xs text-slate-400 py-2 text-center">{t('no_items')}</p>
+                                    ) : (
+                                      <table className="w-full text-xs">
+                                        <thead>
+                                          <tr className="border-b text-slate-500">
+                                            <th className="text-left py-1 px-1">{t('name')}</th>
+                                            <th className="text-right py-1 px-1">{t('unit')}</th>
+                                            <th className="text-right py-1 px-1">{t('quantity')}</th>
+                                            <th className="text-right py-1 px-1">{t('unit_cost')}</th>
+                                            <th className="text-right py-1 px-1">{t('total')}</th>
+                                            <th className="w-8"></th>
                                           </tr>
-                                        ))}
-                                      </tbody>
-                                    </table>
-                                  )}
+                                        </thead>
+                                        <tbody>
+                                          {materials.map(mat => (
+                                            <tr key={mat.id} className="border-b border-slate-50 hover:bg-slate-50 group">
+                                              <td className="py-1 px-1">{mat.product_name}</td>
+                                              <td className="py-1 px-1 text-right text-slate-500">{mat.uom}</td>
+                                              <td className="py-1 px-1 text-right">{mat.quantity}</td>
+                                              <td className="py-1 px-1 text-right">{formatCurrency(mat.unit_cost)}</td>
+                                              <td className="py-1 px-1 text-right font-medium">{formatCurrency(mat.total_cost)}</td>
+                                              <td className="py-1 px-1 text-center">
+                                                <Button
+                                                  variant="ghost" size="sm"
+                                                  className="h-5 w-5 p-0 text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100"
+                                                  onClick={() => handleDeleteMaterial(mat.id, sub.id)}
+                                                >
+                                                  <Trash2 className="w-3 h-3" />
+                                                </Button>
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    )}
+                                  </div>
+
+                                  {/* Equipment section */}
+                                  <div>
+                                    <div className="text-xs font-semibold text-blue-700 mb-1 flex items-center gap-1">
+                                      <Truck className="w-3 h-3" />
+                                      {t('rf_equipment') || 'Texnika'}
+                                    </div>
+                                    {isLoadingEquip ? (
+                                      <p className="text-xs text-slate-400 py-2 text-center">{t('loading')}</p>
+                                    ) : equipmentItems.length === 0 ? (
+                                      <p className="text-xs text-slate-400 py-2 text-center">{t('no_items')}</p>
+                                    ) : (
+                                      <table className="w-full text-xs">
+                                        <thead>
+                                          <tr className="border-b text-slate-500">
+                                            <th className="text-left py-1 px-1">{t('name')}</th>
+                                            <th className="text-right py-1 px-1">{t('unit')}</th>
+                                            <th className="text-right py-1 px-1">{t('quantity')}</th>
+                                            <th className="text-right py-1 px-1">{t('unit_cost')}</th>
+                                            <th className="text-right py-1 px-1">{t('total')}</th>
+                                            <th className="w-8"></th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {equipmentItems.map(eq => {
+                                            const qty = eq.quantity || eq.plan_quantity || 0;
+                                            const total = eq.total_cost || qty * (eq.unit_price || 0);
+                                            return (
+                                              <tr key={eq.id} className="border-b border-slate-50 hover:bg-slate-50 group">
+                                                <td className="py-1 px-1">{eq.name}</td>
+                                                <td className="py-1 px-1 text-right text-slate-500">{eq.work_unit}</td>
+                                                <td className="py-1 px-1 text-right">{qty}</td>
+                                                <td className="py-1 px-1 text-right">{formatCurrency(eq.unit_price)}</td>
+                                                <td className="py-1 px-1 text-right font-medium">{formatCurrency(total)}</td>
+                                                <td className="py-1 px-1 text-center">
+                                                  <Button
+                                                    variant="ghost" size="sm"
+                                                    className="h-5 w-5 p-0 text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100"
+                                                    onClick={() => handleDeleteEquipment(eq.id, sub.id)}
+                                                  >
+                                                    <Trash2 className="w-3 h-3" />
+                                                  </Button>
+                                                </td>
+                                              </tr>
+                                            );
+                                          })}
+                                        </tbody>
+                                      </table>
+                                    )}
+                                  </div>
+
+                                  {/* Labor section */}
+                                  <div>
+                                    <div className="text-xs font-semibold text-green-700 mb-1 flex items-center gap-1">
+                                      <Users className="w-3 h-3" />
+                                      {t('rf_employee') || 'Ishchi kuchi'}
+                                    </div>
+                                    {isLoadingEquip ? (
+                                      <p className="text-xs text-slate-400 py-2 text-center">{t('loading')}</p>
+                                    ) : laborItems.length === 0 ? (
+                                      <p className="text-xs text-slate-400 py-2 text-center">{t('no_items')}</p>
+                                    ) : (
+                                      <table className="w-full text-xs">
+                                        <thead>
+                                          <tr className="border-b text-slate-500">
+                                            <th className="text-left py-1 px-1">{t('name')}</th>
+                                            <th className="text-right py-1 px-1">{t('unit')}</th>
+                                            <th className="text-right py-1 px-1">{t('quantity')}</th>
+                                            <th className="text-right py-1 px-1">{t('unit_cost')}</th>
+                                            <th className="text-right py-1 px-1">{t('total')}</th>
+                                            <th className="w-8"></th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {laborItems.map(lb => {
+                                            const qty = lb.quantity || lb.plan_quantity || 0;
+                                            const total = lb.total_cost || qty * (lb.unit_price || 0);
+                                            return (
+                                              <tr key={lb.id} className="border-b border-slate-50 hover:bg-slate-50 group">
+                                                <td className="py-1 px-1">{lb.name}</td>
+                                                <td className="py-1 px-1 text-right text-slate-500">{lb.work_unit}</td>
+                                                <td className="py-1 px-1 text-right">{qty}</td>
+                                                <td className="py-1 px-1 text-right">{formatCurrency(lb.unit_price)}</td>
+                                                <td className="py-1 px-1 text-right font-medium">{formatCurrency(total)}</td>
+                                                <td className="py-1 px-1 text-center">
+                                                  <Button
+                                                    variant="ghost" size="sm"
+                                                    className="h-5 w-5 p-0 text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100"
+                                                    onClick={() => handleDeleteEquipment(lb.id, sub.id)}
+                                                  >
+                                                    <Trash2 className="w-3 h-3" />
+                                                  </Button>
+                                                </td>
+                                              </tr>
+                                            );
+                                          })}
+                                        </tbody>
+                                      </table>
+                                    )}
+                                  </div>
+
                                   <Button
                                     variant="outline" size="sm"
                                     className="h-7 text-xs w-full mt-1"
@@ -898,23 +1082,28 @@ const StagesTab = ({ project }) => {
                     onValueChange={(val) => {
                       const r = estimateEquipmentResources.find(res => res.name === val);
                       if (r) {
+                        // Prefer equipment_rate, fall back to unit_rate, then labor/material rate
+                        const rate = r.equipment_rate || r.unit_rate || r.labor_rate || r.material_rate || 0;
                         setEquipmentForm(f => ({
                           ...f,
                           name: r.name,
                           work_unit: 'soat',
-                          unit_price: r.equipment_rate ? String(r.equipment_rate) : r.unit_rate ? String(r.unit_rate) : '',
+                          unit_price: rate ? formatPriceInput(String(rate)) : '',
                         }));
                       }
                     }}
                   >
                     <SelectTrigger><SelectValue placeholder={t('select_equipment') || 'Texnika tanlang'} /></SelectTrigger>
                     <SelectContent className="max-h-[300px] max-w-[450px]">
-                      {estimateEquipmentResources.map(r => (
-                        <SelectItem key={r.id} value={r.name} title={r.name}>
-                          <span className="truncate block max-w-[380px]">{r.name}</span>
-                          <span className="text-xs text-slate-400 ml-1">{r.unit_rate ? formatCurrency(r.unit_rate) : ''}</span>
-                        </SelectItem>
-                      ))}
+                      {estimateEquipmentResources.map(r => {
+                        const rate = r.equipment_rate || r.unit_rate || r.labor_rate || r.material_rate || 0;
+                        return (
+                          <SelectItem key={r.id} value={r.name} title={r.name}>
+                            <span className="truncate block max-w-[380px]">{r.name}</span>
+                            <span className="text-xs text-slate-400 ml-1">{rate ? formatCurrency(rate) : ''}</span>
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                 ) : (
@@ -969,23 +1158,28 @@ const StagesTab = ({ project }) => {
                     onValueChange={(val) => {
                       const r = estimateLaborResources.find(res => res.name === val);
                       if (r) {
+                        // Prefer labor_rate, fall back to unit_rate, then equipment/material rate
+                        const rate = r.labor_rate || r.unit_rate || r.equipment_rate || r.material_rate || 0;
                         setEquipmentForm(f => ({
                           ...f,
                           name: r.name,
                           work_unit: 'soat',
-                          unit_price: r.labor_rate ? String(r.labor_rate) : r.unit_rate ? String(r.unit_rate) : '',
+                          unit_price: rate ? formatPriceInput(String(rate)) : '',
                         }));
                       }
                     }}
                   >
                     <SelectTrigger><SelectValue placeholder={t('select_employee_resource') || 'Ishchi kuchi tanlang'} /></SelectTrigger>
                     <SelectContent className="max-h-[300px] max-w-[450px]">
-                      {estimateLaborResources.map(r => (
-                        <SelectItem key={r.id} value={r.name} title={r.name}>
-                          <span className="truncate block max-w-[380px]">{r.name}</span>
-                          <span className="text-xs text-slate-400 ml-1">{r.unit_rate ? formatCurrency(r.unit_rate) : ''}</span>
-                        </SelectItem>
-                      ))}
+                      {estimateLaborResources.map(r => {
+                        const rate = r.labor_rate || r.unit_rate || r.equipment_rate || r.material_rate || 0;
+                        return (
+                          <SelectItem key={r.id} value={r.name} title={r.name}>
+                            <span className="truncate block max-w-[380px]">{r.name}</span>
+                            <span className="text-xs text-slate-400 ml-1">{rate ? formatCurrency(rate) : ''}</span>
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                 ) : (

@@ -76,6 +76,24 @@ export const constructionService = {
   },
 
   // =====================================================
+  // PROJECT FILES
+  // =====================================================
+
+  async listProjectFiles(projectId) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/files`);
+    return response.data.data;
+  },
+
+  async createProjectFile(projectId, data) {
+    const response = await apiClient.post(`/construction/projects/${projectId}/files`, data);
+    return response.data.data;
+  },
+
+  async deleteProjectFile(projectId, fileId) {
+    await apiClient.delete(`/construction/projects/${projectId}/files/${fileId}`);
+  },
+
+  // =====================================================
   // SMETA SECTIONS
   // =====================================================
 
@@ -831,6 +849,11 @@ export const constructionService = {
     await apiClient.delete(`/construction/acts/${id}`);
   },
 
+  async previewAutoGenerateKS2(projectId, data) {
+    const response = await apiClient.post(`/construction/projects/${projectId}/acts/generate-ks2/preview`, data);
+    return response.data.data;
+  },
+
   async autoGenerateKS2(projectId, data) {
     const response = await apiClient.post(`/construction/projects/${projectId}/acts/generate-ks2`, data);
     return response.data.data;
@@ -941,6 +964,10 @@ export const constructionService = {
     const response = await apiClient.get(`/construction/acts/${f3Id}/export?format=pdf`, { responseType: 'blob' });
     return response.data;
   },
+  async exportF3XLSX(projectId, f3Id) {
+    const response = await apiClient.get(`/construction/acts/${f3Id}/export?format=xlsx`, { responseType: 'blob' });
+    return response.data;
+  },
 
   // =====================================================
   // FORMA 19 — Material Consumption Tracking
@@ -973,6 +1000,14 @@ export const constructionService = {
   async deleteF19(projectId, actId) {
     const response = await apiClient.delete(`/construction/projects/${projectId}/f19/${actId}`);
     return response.data.data;
+  },
+  async exportF19PDF(projectId, f19Id) {
+    const response = await apiClient.get(`/construction/acts/${f19Id}/export?format=pdf`, { responseType: 'blob' });
+    return response.data;
+  },
+  async exportF19XLSX(projectId, f19Id) {
+    const response = await apiClient.get(`/construction/acts/${f19Id}/export?format=xlsx`, { responseType: 'blob' });
+    return response.data;
   },
 
   // =====================================================

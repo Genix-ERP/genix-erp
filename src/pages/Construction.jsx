@@ -5,6 +5,7 @@ import { constructionService } from '@/api/services/construction';
 import { hrService } from '@/api/services/hr';
 import { inventoryService } from '@/api/services/inventory';
 import { Core as Integrations } from '@/api/integrations';
+import apiClient from '@/api/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 // Tabs import kept for potential sub-component usage
 // import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -62,6 +63,7 @@ import {
   LayoutDashboard,
   Columns3,
   Upload,
+  Download,
   X,
   Image,
   Layers,
@@ -494,6 +496,7 @@ const ProjectsTab = ({
   onEditProject,
   onDeleteProject,
   onViewProject,
+  onOpenFiles,
   onStatusChange,
   getStatusBadge,
   formatCurrency,
@@ -629,6 +632,15 @@ const ProjectsTab = ({
                     <Button variant="outline" size="sm" className="flex-1" onClick={(e) => { e.stopPropagation(); onEditProject(project); }}>
                       <Edit className="w-3 h-3 mr-1" />
                       {t('edit') || 'Tahrirlash'}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-green-600 hover:bg-green-50 border-green-200"
+                      onClick={(e) => { e.stopPropagation(); onOpenFiles && onOpenFiles(project); }}
+                      title={t('files') || 'Fayllar'}
+                    >
+                      <FileText className="w-3 h-3" />
                     </Button>
                     <Button variant="outline" size="sm" className="text-red-600 hover:bg-red-50" onClick={(e) => { e.stopPropagation(); onDeleteProject(project.id); }}>
                       <Trash2 className="w-3 h-3" />
@@ -1522,10 +1534,6 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
           items={[]}
           buildings={buildings}
         />
-        <Button variant="outline">
-          <Settings className="w-4 h-4 mr-2" />
-          {t('settings') || 'Sozlamalar'}
-        </Button>
       </div>
 
       {/* Navigation Pills - Row 1: Group selector */}
@@ -3528,7 +3536,21 @@ export default function Construction() {
     contract_amount: '',
     planned_start_date: '',
     planned_end_date: '',
-    status: 'draft'
+    status: 'draft',
+    // Forma 2 / Forma 3 client (Заказчик) identity
+    client_name: '',
+    client_phone: '',
+    client_contact: '',
+    client_address: '',
+    client_bank_name: '',
+    client_bank_account: '',
+    client_mfo: '',
+    client_stir: '',
+    client_okonh: '',
+    contract_number: '',
+    object_full_name: '',
+    client_director_name: '',
+    client_chief_accountant_name: '',
   });
 
   useEffect(() => {
@@ -3579,7 +3601,12 @@ export default function Construction() {
       name: '', description: '', address: '', city: '', region: '',
       project_type: '', building_type: '',
       total_area: '', floors_count: '', contract_amount: '', planned_start_date: '', planned_end_date: '',
-      status: 'draft'
+      status: 'draft',
+      client_name: '', client_phone: '', client_contact: '',
+      client_address: '', client_bank_name: '', client_bank_account: '',
+      client_mfo: '', client_stir: '', client_okonh: '',
+      contract_number: '', object_full_name: '',
+      client_director_name: '', client_chief_accountant_name: '',
     });
     setEditingProject(null);
   };
@@ -3599,12 +3626,144 @@ export default function Construction() {
       contract_amount: project.contract_amount || '',
       planned_start_date: project.planned_start_date ? format(new Date(project.planned_start_date), 'yyyy-MM-dd') : '',
       planned_end_date: project.planned_end_date ? format(new Date(project.planned_end_date), 'yyyy-MM-dd') : '',
-      status: project.status || 'draft'
+      status: project.status || 'draft',
+      client_name: project.client_name || '',
+      client_phone: project.client_phone || '',
+      client_contact: project.client_contact || '',
+      client_address: project.client_address || '',
+      client_bank_name: project.client_bank_name || '',
+      client_bank_account: project.client_bank_account || '',
+      client_mfo: project.client_mfo || '',
+      client_stir: project.client_stir || '',
+      client_okonh: project.client_okonh || '',
+      contract_number: project.contract_number || '',
+      object_full_name: project.object_full_name || '',
+      client_director_name: project.client_director_name || '',
+      client_chief_accountant_name: project.client_chief_accountant_name || '',
     });
     setShowProjectModal(true);
   };
 
   const [confirmDeleteProject, setConfirmDeleteProject] = useState({ open: false, id: null });
+
+  // Project Files modal state
+  const [showProjectFilesModal, setShowProjectFilesModal] = useState(false);
+  const [projectFilesTarget, setProjectFilesTarget] = useState(null); // { id, name }
+  const [projectFiles, setProjectFiles] = useState([]);
+  const [projectFilesLoading, setProjectFilesLoading] = useState(false);
+  const [uploadingProjectFile, setUploadingProjectFile] = useState(false);
+  const [projectFileCustomName, setProjectFileCustomName] = useState('');
+  const [projectFileDescription, setProjectFileDescription] = useState('');
+  const [pendingProjectFile, setPendingProjectFile] = useState(null); // File object awaiting upload after name entry
+
+  const openProjectFiles = async (project) => {
+    setProjectFilesTarget({ id: project.id, name: project.name });
+    setShowProjectFilesModal(true);
+    setProjectFilesLoading(true);
+    setProjectFileCustomName('');
+    setProjectFileDescription('');
+    setPendingProjectFile(null);
+    try {
+      const data = await constructionService.listProjectFiles(project.id);
+      setProjectFiles(data || []);
+    } catch (e) {
+      console.error('Error loading project files:', e);
+      setProjectFiles([]);
+    } finally {
+      setProjectFilesLoading(false);
+    }
+  };
+
+  const handleSelectProjectFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPendingProjectFile(file);
+    // Pre-fill with file name (without extension) as default
+    const baseName = file.name.replace(/\.[^/.]+$/, '');
+    setProjectFileCustomName(baseName);
+    e.target.value = '';
+  };
+
+  const handleUploadProjectFile = async () => {
+    if (!pendingProjectFile || !projectFilesTarget) return;
+    if (!projectFileCustomName.trim()) {
+      toast.error(t('name_required') || "Nom kiritish shart");
+      return;
+    }
+    setUploadingProjectFile(true);
+    try {
+      const uploaded = await Integrations.UploadFile(pendingProjectFile);
+      // Preserve original extension in saved filename
+      const originalExt = pendingProjectFile.name.match(/\.[^/.]+$/)?.[0] || '';
+      const finalName = projectFileCustomName.trim().endsWith(originalExt)
+        ? projectFileCustomName.trim()
+        : projectFileCustomName.trim() + originalExt;
+      await constructionService.createProjectFile(projectFilesTarget.id, {
+        file_id: uploaded.id,
+        file_url: uploaded.url,
+        filename: finalName,
+        file_size: uploaded.size || pendingProjectFile.size,
+        mime_type: uploaded.mime_type || pendingProjectFile.type,
+        description: projectFileDescription,
+      });
+      const data = await constructionService.listProjectFiles(projectFilesTarget.id);
+      setProjectFiles(data || []);
+      setPendingProjectFile(null);
+      setProjectFileCustomName('');
+      setProjectFileDescription('');
+      toast.success(t('file_uploaded') || 'Fayl yuklandi');
+    } catch (err) {
+      console.error('Error uploading project file:', err);
+      toast.error(t('error_occurred') || 'Xatolik yuz berdi');
+    } finally {
+      setUploadingProjectFile(false);
+    }
+  };
+
+  const handleDeleteProjectFile = async (fileId) => {
+    if (!projectFilesTarget) return;
+    try {
+      await constructionService.deleteProjectFile(projectFilesTarget.id, fileId);
+      setProjectFiles(prev => prev.filter(f => f.id !== fileId));
+      toast.success(t('deleted') || "O'chirildi");
+    } catch (err) {
+      console.error('Error deleting project file:', err);
+      toast.error(t('error_occurred') || 'Xatolik yuz berdi');
+    }
+  };
+
+  // Download a project file: fetches through the authenticated API client
+  // and triggers a browser download with the custom filename preserved.
+  const handleDownloadProjectFile = async (file) => {
+    try {
+      // file.file_url is typically "/api/v1/files/{id}" — strip the "/api/v1" prefix
+      // because apiClient already has it in its baseURL
+      const url = (file.file_url || '').replace(/^\/?api\/v1\/?/, '/');
+      const response = await apiClient.get(url, { responseType: 'blob' });
+      const blob = new Blob([response.data], {
+        type: file.mime_type || response.headers?.['content-type'] || 'application/octet-stream',
+      });
+      const objectUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = file.filename || 'download';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // Revoke after a tick so Safari can finish streaming
+      setTimeout(() => window.URL.revokeObjectURL(objectUrl), 1000);
+    } catch (err) {
+      console.error('Error downloading project file:', err);
+      toast.error(t('error_occurred') || 'Xatolik yuz berdi');
+    }
+  };
+
+  const formatProjectFileSize = (bytes) => {
+    if (!bytes) return '';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
 
   const handleDeleteProject = (id) => {
     setConfirmDeleteProject({ open: true, id });
@@ -3748,6 +3907,7 @@ export default function Construction() {
           onEditProject={handleEditProject}
           onDeleteProject={handleDeleteProject}
           onViewProject={handleViewProject}
+          onOpenFiles={openProjectFiles}
           onStatusChange={handleStatusChange}
           getStatusBadge={getStatusBadge}
           formatCurrency={formatCurrency}
@@ -3879,6 +4039,119 @@ export default function Construction() {
               </div>
             )}
 
+            {/* Forma 2 / Forma 3 client (Заказчик) banking & legal identity */}
+            <div className="border rounded-md p-3 bg-slate-50 space-y-3">
+              <div className="text-sm font-semibold text-slate-700">
+                Реквизиты Заказчика (для Формы 2 / Формы 3)
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>{t('client_name') || 'Наименование заказчика'}</Label>
+                  <Input
+                    value={projectForm.client_name}
+                    onChange={(e) => setProjectForm({ ...projectForm, client_name: e.target.value })}
+                    placeholder='ООО "..."'
+                  />
+                </div>
+                <div>
+                  <Label>{t('client_phone') || 'Телефон заказчика'}</Label>
+                  <Input
+                    value={projectForm.client_phone}
+                    onChange={(e) => setProjectForm({ ...projectForm, client_phone: e.target.value })}
+                    placeholder="+998 XX XXX XXXX"
+                  />
+                </div>
+              </div>
+              <div>
+                <Label>Юридический адрес заказчика</Label>
+                <Input
+                  value={projectForm.client_address}
+                  onChange={(e) => setProjectForm({ ...projectForm, client_address: e.target.value })}
+                  placeholder="г. Ташкент, ..."
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Название банка</Label>
+                  <Input
+                    value={projectForm.client_bank_name}
+                    onChange={(e) => setProjectForm({ ...projectForm, client_bank_name: e.target.value })}
+                    placeholder='АКБ "..."'
+                  />
+                </div>
+                <div>
+                  <Label>Расчётный счёт</Label>
+                  <Input
+                    value={projectForm.client_bank_account}
+                    onChange={(e) => setProjectForm({ ...projectForm, client_bank_account: e.target.value })}
+                    placeholder="2020 8000 ..."
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <Label>МФО</Label>
+                  <Input
+                    value={projectForm.client_mfo}
+                    onChange={(e) => setProjectForm({ ...projectForm, client_mfo: e.target.value })}
+                    placeholder="00440"
+                  />
+                </div>
+                <div>
+                  <Label>СТИР (ИНН)</Label>
+                  <Input
+                    value={projectForm.client_stir}
+                    onChange={(e) => setProjectForm({ ...projectForm, client_stir: e.target.value })}
+                    placeholder="123456789"
+                  />
+                </div>
+                <div>
+                  <Label>ОКОНХ</Label>
+                  <Input
+                    value={projectForm.client_okonh}
+                    onChange={(e) => setProjectForm({ ...projectForm, client_okonh: e.target.value })}
+                    placeholder="61124"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Номер договора</Label>
+                  <Input
+                    value={projectForm.contract_number}
+                    onChange={(e) => setProjectForm({ ...projectForm, contract_number: e.target.value })}
+                    placeholder="№ 12/2025"
+                  />
+                </div>
+                <div>
+                  <Label>Полное название объекта</Label>
+                  <Input
+                    value={projectForm.object_full_name}
+                    onChange={(e) => setProjectForm({ ...projectForm, object_full_name: e.target.value })}
+                    placeholder="ЛЭП-10кВ и ТП-..."
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Руководитель заказчика</Label>
+                  <Input
+                    value={projectForm.client_director_name}
+                    onChange={(e) => setProjectForm({ ...projectForm, client_director_name: e.target.value })}
+                    placeholder="Ф.И.О"
+                  />
+                </div>
+                <div>
+                  <Label>Главный бухгалтер заказчика</Label>
+                  <Input
+                    value={projectForm.client_chief_accountant_name}
+                    onChange={(e) => setProjectForm({ ...projectForm, client_chief_accountant_name: e.target.value })}
+                    placeholder="Ф.И.О"
+                  />
+                </div>
+              </div>
+            </div>
+
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setShowProjectModal(false)}>
                 {t('cancel') || 'Bekor qilish'}
@@ -3888,6 +4161,157 @@ export default function Construction() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Project Files Modal */}
+      <Dialog open={showProjectFilesModal} onOpenChange={(open) => {
+        setShowProjectFilesModal(open);
+        if (!open) {
+          setPendingProjectFile(null);
+          setProjectFileCustomName('');
+          setProjectFileDescription('');
+        }
+      }}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5 text-green-600" />
+              {projectFilesTarget?.name} — {t('files') || 'Fayllar'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {/* Upload area */}
+            <div className="border rounded-lg p-3 bg-slate-50 space-y-2">
+              {!pendingProjectFile ? (
+                <>
+                  <input
+                    id="project-file-upload"
+                    type="file"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.zip,.rar,.txt"
+                    className="hidden"
+                    onChange={handleSelectProjectFile}
+                  />
+                  <Button
+                    variant="outline" size="sm" className="w-full border-green-200 text-green-700 hover:bg-green-50"
+                    onClick={() => document.getElementById('project-file-upload')?.click()}
+                  >
+                    <Upload className="w-4 h-4 mr-2" />
+                    {t('select_file') || 'Fayl tanlash'}
+                  </Button>
+                </>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-sm text-slate-700">
+                    <FileText className="w-4 h-4 text-slate-500 shrink-0" />
+                    <span className="truncate flex-1">{pendingProjectFile.name}</span>
+                    <span className="text-xs text-slate-400 shrink-0">{formatProjectFileSize(pendingProjectFile.size)}</span>
+                  </div>
+                  <div>
+                    <Label htmlFor="project-file-name" className="text-xs text-slate-600">
+                      {t('file_name') || 'Fayl nomi'} <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="project-file-name"
+                      value={projectFileCustomName}
+                      onChange={(e) => setProjectFileCustomName(e.target.value)}
+                      placeholder={t('enter_file_name') || 'Fayl nomini kiriting'}
+                      className="h-9"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="project-file-desc" className="text-xs text-slate-600">
+                      {t('description') || 'Izoh'}
+                    </Label>
+                    <Input
+                      id="project-file-desc"
+                      value={projectFileDescription}
+                      onChange={(e) => setProjectFileDescription(e.target.value)}
+                      placeholder={t('optional') || "Ixtiyoriy"}
+                      className="h-9"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm" className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                      disabled={uploadingProjectFile || !projectFileCustomName.trim()}
+                      onClick={handleUploadProjectFile}
+                    >
+                      <Upload className="w-4 h-4 mr-2" />
+                      {uploadingProjectFile ? (t('uploading') || 'Yuklanmoqda...') : (t('upload') || 'Yuklash')}
+                    </Button>
+                    <Button
+                      size="sm" variant="outline"
+                      disabled={uploadingProjectFile}
+                      onClick={() => {
+                        setPendingProjectFile(null);
+                        setProjectFileCustomName('');
+                        setProjectFileDescription('');
+                      }}
+                    >
+                      {t('cancel') || 'Bekor qilish'}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Files list */}
+            {projectFilesLoading ? (
+              <div className="text-center py-8 text-slate-400">{t('loading') || 'Yuklanmoqda...'}</div>
+            ) : projectFiles.length === 0 ? (
+              <div className="text-center py-8">
+                <FileText className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                <p className="text-sm text-slate-400">{t('no_files') || "Fayllar yo'q"}</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {projectFiles.map(file => (
+                  <div key={file.id} className="flex items-center justify-between border rounded-lg p-3 hover:bg-slate-50 transition-colors">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className="shrink-0">
+                        {file.mime_type?.includes('pdf') ? (
+                          <FileText className="w-8 h-8 text-red-500" />
+                        ) : file.mime_type?.includes('image') ? (
+                          <Image className="w-8 h-8 text-blue-500" />
+                        ) : file.mime_type?.includes('spreadsheet') || file.mime_type?.includes('excel') ? (
+                          <FileSpreadsheet className="w-8 h-8 text-green-500" />
+                        ) : (
+                          <FileText className="w-8 h-8 text-slate-400" />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium truncate">{file.filename}</p>
+                        {file.description && (
+                          <p className="text-xs text-slate-500 truncate">{file.description}</p>
+                        )}
+                        <p className="text-xs text-slate-400">
+                          {formatProjectFileSize(file.file_size)}
+                          {file.created_at && ` · ${format(new Date(file.created_at), 'dd.MM.yyyy HH:mm')}`}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0 ml-2">
+                      <Button
+                        variant="ghost" size="sm" className="h-8 w-8 p-0"
+                        onClick={() => handleDownloadProjectFile(file)}
+                        title={t('download') || 'Yuklab olish'}
+                      >
+                        <Download className="w-4 h-4 text-slate-500" />
+                      </Button>
+                      <Button
+                        variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-400 hover:text-red-600"
+                        onClick={() => handleDeleteProjectFile(file.id)}
+                        title={t('delete') || "O'chirish"}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
 
