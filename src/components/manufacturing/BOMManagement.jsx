@@ -35,9 +35,11 @@ export default function BOMManagement() {
 
   const [products, setProducts] = useState([]);
   const [workCenters, setWorkCenters] = useState([]);
+  const [warehouses, setWarehouses] = useState([]);
   const [newBom, setNewBom] = useState({
     name: '',
     product_id: '',
+    warehouse_id: '',
     quantity: 1,
     bom_type: 'manufacturing',
     lines: [],
@@ -62,12 +64,14 @@ export default function BOMManagement() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [productsData, workCentersData] = await Promise.all([
+        const [productsData, workCentersData, warehousesData] = await Promise.all([
           inventoryService.listProducts(),
-          workCentersService.list()
+          workCentersService.list(),
+          inventoryService.listWarehouses().catch(() => [])
         ]);
         setProducts(productsData || []);
         setWorkCenters(workCentersData || []);
+        setWarehouses(warehousesData || []);
 
       } catch (error) {
         console.error('Failed to load data:', error);
@@ -616,6 +620,24 @@ export default function BOMManagement() {
                   </Select>
                 </div>
               </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">{language === 'uz' ? 'Tayyor mahsulot ombori' : language === 'ru' ? 'Склад готовой продукции' : 'Finished Goods Warehouse'}</label>
+                <Select
+                  value={newBom.warehouse_id || ''}
+                  onValueChange={(value) => setNewBom({...newBom, warehouse_id: value})}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={language === 'uz' ? 'Omborni tanlang' : language === 'ru' ? 'Выберите склад' : 'Select warehouse'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {warehouses.map((wh) => (
+                      <SelectItem key={wh.id} value={wh.id}>
+                        {wh.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             {/* Tabs for Components and Operations */}
@@ -882,6 +904,24 @@ export default function BOMManagement() {
                       </SelectContent>
                     </Select>
                   </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-1 block">{language === 'uz' ? 'Tayyor mahsulot ombori' : language === 'ru' ? 'Склад готовой продукции' : 'Finished Goods Warehouse'}</label>
+                  <Select
+                    value={editBom.warehouse_id || ''}
+                    onValueChange={(value) => setEditBom({...editBom, warehouse_id: value})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={language === 'uz' ? 'Omborni tanlang' : language === 'ru' ? 'Выберите склад' : 'Select warehouse'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {warehouses.map((wh) => (
+                        <SelectItem key={wh.id} value={wh.id}>
+                          {wh.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
