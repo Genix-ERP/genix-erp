@@ -203,7 +203,7 @@ function KanbanColumn({ title, count, headerColor, titleColor, countColor, workO
 export default function ShopFloorControl({ isActive }) {
   const { language } = useLanguage();
   const { workOrders, workCenters, productionOrders, manufacturingCategories, startWorkOrder, pauseWorkOrder, completeWorkOrder, refreshData } = useManufacturing();
-  const { refreshData: refreshInventory, products } = useInventory();
+  const { refreshData: refreshInventory, products, warehouses } = useInventory();
 
   const [selectedWorkCenter, setSelectedWorkCenter] = useState('all');
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -1230,12 +1230,16 @@ export default function ShopFloorControl({ isActive }) {
                 </div>
                 <div className="col-span-3 space-y-1">
                   <Label className="text-xs">{language === 'uz' ? 'Sklad' : language === 'ru' ? 'Склад' : 'Warehouse'}</Label>
-                  <Input
-                    placeholder="optional ID"
+                  <select
+                    className="w-full border border-slate-200 rounded-md px-2 py-1.5 text-sm bg-white"
                     value={item.warehouse_id}
                     onChange={(e) => updateSplitItem(idx, 'warehouse_id', e.target.value)}
-                    className="text-xs"
-                  />
+                  >
+                    <option value="">{language === 'uz' ? 'Tanlang' : language === 'ru' ? 'Выбрать' : 'Select'}</option>
+                    {(warehouses || []).map(w => (
+                      <option key={w.id} value={w.id}>{w.name}</option>
+                    ))}
+                  </select>
                 </div>
                 <div className="col-span-1 flex justify-center">
                   {splitItems.length > 1 && (

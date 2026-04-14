@@ -39,7 +39,7 @@ export default function ProductionOrders() {
     refreshData,
     manufacturingCategories
   } = useManufacturing();
-  const { refreshData: refreshInventory, products: inventoryProducts } = useInventory();
+  const { refreshData: refreshInventory, products: inventoryProducts, warehouses } = useInventory();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -1014,12 +1014,16 @@ export default function ProductionOrders() {
                 </div>
                 <div className="col-span-3 space-y-1">
                   <label className="text-xs font-medium">{language === 'uz' ? 'Sklad' : language === 'ru' ? 'Склад' : 'Warehouse'}</label>
-                  <Input
-                    placeholder={language === 'uz' ? 'ixtiyoriy' : 'optional'}
+                  <select
+                    className="w-full border border-slate-200 rounded-md px-2 py-1.5 text-sm bg-white"
                     value={item.warehouse_id}
                     onChange={(e) => updateSplitItem(idx, 'warehouse_id', e.target.value)}
-                    className="text-xs"
-                  />
+                  >
+                    <option value="">{language === 'uz' ? 'Tanlang' : language === 'ru' ? 'Выбрать' : 'Select'}</option>
+                    {(warehouses || []).map(w => (
+                      <option key={w.id} value={w.id}>{w.name}</option>
+                    ))}
+                  </select>
                 </div>
                 <div className="col-span-1 flex justify-center">
                   {splitItems.length > 1 && (
