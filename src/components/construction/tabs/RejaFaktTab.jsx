@@ -1076,7 +1076,7 @@ const RejaFaktTab = ({ project }) => {
               )}
               <DialogFooter>
                 <Button variant="outline" onClick={() => setShowMaterialModal(false)}>{t('cancel')}</Button>
-                <Button onClick={handleSaveMaterial} disabled={!materialForm.product_id}>{t('save')}</Button>
+                <Button onClick={handleSaveMaterial} disabled={!editMaterial && !materialForm.product_id}>{t('save')}</Button>
               </DialogFooter>
             </div>
           )}
@@ -1324,15 +1324,27 @@ const RejaFaktTab = ({ project }) => {
                   )}
                   {entry.changes && Object.keys(entry.changes).length > 0 && (
                     <div className="mt-1 space-y-1">
-                      {Object.entries(entry.changes).map(([field, change]) => (
-                        <div key={field} className="text-xs bg-slate-50 rounded px-2 py-1 flex items-center gap-2">
-                          <span className="font-medium">{field}</span>
-                          <span className="text-slate-400">{t('rf_field_changed')}</span>
-                          <span className="text-red-500 line-through">{String(change.old ?? '')}</span>
-                          <span>→</span>
-                          <span className="text-green-600">{String(change.new ?? '')}</span>
-                        </div>
-                      ))}
+                      {Object.entries(entry.changes).map(([field, change]) => {
+                        const fieldKey = `rf_field_${field}`;
+                        const translatedField = t(fieldKey);
+                        // If translation not found (falls back to the key), show a readable label
+                        const fieldLabel = translatedField === fieldKey
+                          ? field.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+                          : translatedField;
+                        return (
+                          <div key={field} className="text-xs bg-slate-50 rounded px-2 py-1 flex items-center gap-2 flex-wrap">
+                            <span className="font-medium">{fieldLabel}</span>
+                            <span className="text-slate-400">{t('rf_field_changed')}</span>
+                            {change.old !== undefined && change.old !== null && String(change.old) !== '' && (
+                              <span className="text-red-500 line-through">{String(change.old)}</span>
+                            )}
+                            <span>→</span>
+                            {change.new !== undefined && change.new !== null && String(change.new) !== '' && (
+                              <span className="text-green-600">{String(change.new)}</span>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
