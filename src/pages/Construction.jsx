@@ -1798,50 +1798,6 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                           <Progress value={building.progress_percent || 0} className="h-2" />
                           <p className="text-xs text-right mt-1">{building.progress_percent || 0}%</p>
                         </div>
-                        <div className="mt-3 flex gap-2 border-t pt-3">
-                          <Button
-                            variant="outline" size="sm" className="flex-1 text-xs"
-                            onClick={() => {
-                              const input = document.createElement('input');
-                              input.type = 'file';
-                              input.multiple = true;
-                              input.accept = '.pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.zip,.rar';
-                              input.onchange = async (e) => {
-                                setBuildingFilesTarget({ id: building.id, name: building.name });
-                                setUploadingBuildingFile(true);
-                                try {
-                                  for (const file of e.target.files) {
-                                    const uploaded = await Integrations.UploadFile(file);
-                                    await constructionService.createBuildingFile(project.id, building.id, {
-                                      file_id: uploaded.id,
-                                      file_url: uploaded.url,
-                                      filename: uploaded.filename || file.name,
-                                      file_size: uploaded.size || file.size,
-                                      mime_type: uploaded.mime_type || file.type,
-                                    });
-                                  }
-                                  toast.success(t('file_uploaded') || 'Fayl yuklandi');
-                                } catch (err) {
-                                  console.error(err);
-                                  toast.error(t('error_occurred') || 'Xatolik yuz berdi');
-                                } finally {
-                                  setUploadingBuildingFile(false);
-                                }
-                              };
-                              input.click();
-                            }}
-                          >
-                            <Upload className="w-3.5 h-3.5 mr-1.5" />
-                            {t('upload_file') || 'Fayl yuklash'}
-                          </Button>
-                          <Button
-                            variant="outline" size="sm" className="flex-1 text-xs"
-                            onClick={() => openBuildingFiles(building)}
-                          >
-                            <FileText className="w-3.5 h-3.5 mr-1.5" />
-                            {t('files') || 'Fayllar'}
-                          </Button>
-                        </div>
                       </CardContent>
                     </Card>
                   ))}

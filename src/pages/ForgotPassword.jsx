@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { authService } from '@/api/services/auth';
+import { useAuth } from '@/components/contexts/AuthContext';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import LanguageSelector from '@/components/ui/language-selector';
@@ -18,6 +19,7 @@ export default function ForgotPassword() {
   const [countdown, setCountdown] = useState(0);
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { login } = useAuth();
   const navigate = useNavigate();
   const otpInputRef = useRef(null);
 
@@ -78,7 +80,16 @@ export default function ForgotPassword() {
 
     try {
       await authService.resetPasswordWithPhone(phone, otpCode, newPassword);
-      setStep('success');
+      // Auto-login after successful password reset
+      try {
+        await login(phone, newPassword);
+        navigate('/', { replace: true });
+        return;
+      } catch (loginErr) {
+        // If auto-login fails, fall back to success page
+        console.error('Auto-login after password reset failed:', loginErr);
+        setStep('success');
+      }
     } catch (err) {
       setError(err.response?.data?.error?.message || t('something_went_wrong') || 'Something went wrong');
     } finally {

@@ -499,6 +499,11 @@ export const constructionService = {
     return response.data.data;
   },
 
+  async createProductsFromEstimate(estimateId) {
+    const response = await apiClient.post(`/construction/estimates/${estimateId}/create-products`);
+    return response.data.data;
+  },
+
   async updateEstimateLine(estimateId, lineId, data) {
     const response = await apiClient.put(`/construction/estimates/${estimateId}/lines/${lineId}`, data);
     return response.data.data;
@@ -927,6 +932,10 @@ export const constructionService = {
     const response = await apiClient.put(`/construction/acts/${f2Id}/lines/${lineId}`, data);
     return response.data.data;
   },
+  async submitF2(projectId, f2Id) {
+    const response = await apiClient.post(`/construction/projects/${projectId}/f2/${f2Id}/submit`);
+    return response.data.data;
+  },
   async exportF2PDF(projectId, f2Id) {
     const response = await apiClient.get(`/construction/acts/${f2Id}/export?format=pdf`, { responseType: 'blob' });
     return response.data;
@@ -994,6 +1003,10 @@ export const constructionService = {
     return response.data.data;
   },
   async approveF19(projectId, actId) {
+    const response = await apiClient.post(`/construction/projects/${projectId}/f19/${actId}/approve`);
+    return response.data.data;
+  },
+  async submitF19(projectId, actId) {
     const response = await apiClient.post(`/construction/projects/${projectId}/f19/${actId}/approve`);
     return response.data.data;
   },

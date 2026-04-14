@@ -39,6 +39,7 @@ import {
   ChevronDown,
   ChevronRight,
   FolderOpen,
+  Package,
 } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -122,7 +123,14 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
 
       // Show toast if products were auto-created from resource lines
       if (bulkResult?.products_created > 0) {
-        toast.success(`${bulkResult.products_created} ta mahsulot avtomatik yaratildi`);
+        toast.success(`${bulkResult.products_created} ${t('products_auto_created') || "ta mahsulot avtomatik yaratildi"}`);
+      }
+
+      // Show toast if Forma 2 was auto-created from VOR/Edinich estimate
+      if (bulkResult?.forma2_created) {
+        toast.success(t('forma2_auto_created') || "Forma 2 (KS-2) avtomatik yaratildi", {
+          description: t('forma2_auto_created_desc') || "Smetadan barcha qatorlar bilan qoralama Forma 2 yaratildi",
+        });
       }
 
       // Auto-create construction stages from BOP section headers
@@ -678,6 +686,24 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                   <DropdownMenuItem onClick={() => handleApprove(est)}>
                                     <CheckCircle className="w-4 h-4 mr-2 text-green-600" />
                                     {t('approve') || 'Tasdiqlash'}
+                                  </DropdownMenuItem>
+                                )}
+                                {est.source_type === 'resurs' && (
+                                  <DropdownMenuItem onClick={async () => {
+                                    try {
+                                      const result = await constructionService.createProductsFromEstimate(est.id);
+                                      if (result?.products_created > 0) {
+                                        toast.success(`${result.products_created} ${t('products_created_success') || "ta mahsulot yaratildi"}`);
+                                      } else {
+                                        toast.info(t('all_products_already_exist') || "Barcha mahsulotlar allaqachon mavjud");
+                                      }
+                                    } catch (err) {
+                                      console.error(err);
+                                      toast.error(t('error_occurred') || 'Xatolik yuz berdi');
+                                    }
+                                  }}>
+                                    <Package className="w-4 h-4 mr-2 text-green-600" />
+                                    {t('create_products') || "Mahsulotlar yaratish"}
                                   </DropdownMenuItem>
                                 )}
                                 <DropdownMenuItem onClick={() => handleDuplicate(est)}>
