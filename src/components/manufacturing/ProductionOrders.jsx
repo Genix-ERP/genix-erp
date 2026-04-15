@@ -1031,7 +1031,7 @@ export default function ProductionOrders() {
                     onChange={(e) => updateSplitItem(idx, 'product_id', e.target.value)}
                   >
                     <option value="">— {language === 'uz' ? 'tanlang' : language === 'ru' ? 'выбрать' : 'select'} —</option>
-                    {(inventoryProducts || products || []).map(p => (
+                    {(inventoryProducts || products || []).filter(p => p.can_be_sold || p.is_sellable).map(p => (
                       <option key={p.id} value={p.id}>{p.name} {p.weight ? `(${p.weight} kg)` : ''}</option>
                     ))}
                   </select>
