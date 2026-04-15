@@ -53,24 +53,26 @@ export default function TopClientsList({ customers, salesOrders, customerInvoice
         const cust = (customers || []).find(
           (c) => c.id === cid || c._id === cid || String(c.id) === String(cid)
         );
+        // Skip entries where customer is not found
+        if (!cust) return null;
         return {
           id: cid,
-          name: cust?.company_name || cust?.name || cust?.contact_name || `Mijoz #${String(cid).slice(-4)}`,
+          name: cust.company_name || cust.name || cust.contact_name || `${t("customer") || "Customer"} #${String(cid).slice(-4)}`,
           revenue: data.total,
           orderCount: data.orders.length,
           percentage: totalRev > 0 ? ((data.total / totalRev) * 100).toFixed(1) : 0,
-          initial: (cust?.company_name || cust?.name || "M").charAt(0).toUpperCase(),
+          initial: (cust.company_name || cust.name || "C").charAt(0).toUpperCase(),
         };
       });
 
-    return ranked;
+    return ranked.filter(Boolean);
   }, [customers, salesOrders, customerInvoices]);
 
   return (
     <div className="glass-card rounded-2xl p-5 h-full transition-all duration-300">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold text-slate-900">
-          Top mijozlar
+          {t("top_clients") || "Top Clients"}
         </h3>
         <Crown className="w-4 h-4 text-amber-500" />
       </div>
@@ -92,7 +94,7 @@ export default function TopClientsList({ customers, salesOrders, customerInvoice
                   {client.name}
                 </p>
                 <p className="text-[11px] text-slate-400">
-                  {formatCurrency(client.revenue)} &middot; {client.orderCount} ta buyurtma
+                  {formatCurrency(client.revenue)} &middot; {client.orderCount} {t("orders_lc") || "orders"}
                 </p>
               </div>
               <span className="text-[10px] font-semibold text-slate-500 bg-slate-50 px-1.5 py-0.5 rounded w-10 text-center shrink-0">
@@ -103,7 +105,7 @@ export default function TopClientsList({ customers, salesOrders, customerInvoice
         </div>
       ) : (
         <div className="h-[180px] flex flex-col items-center justify-center">
-          <p className="text-sm text-slate-500">Ma'lumot yo'q</p>
+          <p className="text-sm text-slate-500">{t("no_data") || "No data"}</p>
         </div>
       )}
     </div>

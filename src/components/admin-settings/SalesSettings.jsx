@@ -252,6 +252,16 @@ export default function SalesSettings() {
           </SettingsRow>
         )}
       </SettingsSection>
+
+      {/* Dropshipping */}
+      <SettingsSection title={t('dropshipping') || 'Dropshipping'} description={t('dropshipping_settings_desc') || 'Configure dropshipping features'} icon={Receipt} onReset={() => resetSection('sales.dropshipping')}>
+        <SettingsToggle
+          label={t('enable_dropshipping') || 'Enable Dropshipping'}
+          description={t('enable_dropshipping_desc') || 'Show dropshipping tab in Sales Orders'}
+          checked={sales.dropshipping?.enabled ?? false}
+          onChange={(v) => updateSetting('sales.dropshipping.enabled', v)}
+        />
+      </SettingsSection>
     </div>
   );
 }

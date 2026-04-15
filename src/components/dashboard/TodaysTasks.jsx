@@ -34,8 +34,8 @@ export default function TodaysTasks({ salesOrders, inventory, employees, custome
     if (pendingOrders.length > 0) {
       result.push({
         icon: "sales",
-        title: `${pendingOrders.length} ta buyurtma tasdiqlash kerak`,
-        time: "Bugun",
+        title: `${pendingOrders.length} ${t("orders_need_approval") || "orders need approval"}`,
+        time: t("today") || "Today",
         overdue: false,
         assignee: null,
       });
@@ -48,8 +48,8 @@ export default function TodaysTasks({ salesOrders, inventory, employees, custome
     if (lowStock.length > 0) {
       result.push({
         icon: "inventory",
-        title: `${lowStock.length} ta mahsulotni qayta buyurtma qilish`,
-        time: "Shoshilinch",
+        title: `${lowStock.length} ${t("products_need_reorder") || "products need reorder"}`,
+        time: t("urgent") || "Urgent",
         overdue: true,
         assignee: null,
       });
@@ -63,8 +63,8 @@ export default function TodaysTasks({ salesOrders, inventory, employees, custome
     if (overdue.length > 0) {
       result.push({
         icon: "finance",
-        title: `${overdue.length} ta to'lanmagan hisob-faktura`,
-        time: "Muddati o'tgan",
+        title: `${overdue.length} ${t("unpaid_invoices") || "unpaid invoices"}`,
+        time: t("overdue") || "Overdue",
         overdue: true,
         assignee: null,
       });
@@ -79,8 +79,8 @@ export default function TodaysTasks({ salesOrders, inventory, employees, custome
     if (expiringContracts.length > 0) {
       result.push({
         icon: "hr",
-        title: `${expiringContracts.length} ta shartnoma muddati tugayapti`,
-        time: "30 kun ichida",
+        title: `${expiringContracts.length} ${t("contracts_expiring") || "contracts expiring"}`,
+        time: t("within_30_days") || "Within 30 days",
         overdue: false,
         assignee: null,
       });
@@ -89,8 +89,8 @@ export default function TodaysTasks({ salesOrders, inventory, employees, custome
     if (result.length === 0) {
       result.push({
         icon: "default",
-        title: "Barcha vazifalar bajarilgan",
-        time: "Bugun",
+        title: t("all_tasks_done") || "All tasks completed",
+        time: t("today") || "Today",
         overdue: false,
         assignee: null,
       });
@@ -103,7 +103,7 @@ export default function TodaysTasks({ salesOrders, inventory, employees, custome
     <div className="glass-card rounded-2xl p-5 h-full transition-all duration-300">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold text-slate-900">
-          Bugungi vazifalar
+          {t("todays_tasks") || "Today's Tasks"}
         </h3>
         <span className="text-[10px] font-semibold text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full">
           {tasks.length} ta

@@ -65,11 +65,11 @@ export default function SalesFunnel({ leads, opportunities, salesOrders }) {
     const leadValue = leadCount * avgOppValue;
 
     const data = [
-      { name: "Lead", count: leadCount, value: leadValue },
-      { name: "Taklif", count: offerCount, value: offerValue },
-      { name: "Muzokara", count: negotiationCount, value: negotiationValue },
-      { name: "Shartnoma", count: contractCount, value: contractValue },
-      { name: "To'lov", count: paidCount, value: paidValue },
+      { name: t("lead") || "Lead", count: leadCount, value: leadValue },
+      { name: t("offer") || "Offer", count: offerCount, value: offerValue },
+      { name: t("negotiation") || "Negotiation", count: negotiationCount, value: negotiationValue },
+      { name: t("contract") || "Contract", count: contractCount, value: contractValue },
+      { name: t("payment") || "Payment", count: paidCount, value: paidValue },
     ];
 
     return data.map((stage, i) => ({
@@ -90,10 +90,10 @@ export default function SalesFunnel({ leads, opportunities, salesOrders }) {
       <div className="flex items-center justify-between mb-5">
         <div>
           <h3 className="text-sm font-semibold text-slate-900">
-            Savdo bosqichlari
+            {t("sales_funnel") || "Sales Funnel"}
           </h3>
           <p className="text-xs text-slate-400 mt-0.5">
-            Lead → To'lov
+            {t("lead_to_payment") || "Lead → Payment"}
           </p>
         </div>
       </div>
