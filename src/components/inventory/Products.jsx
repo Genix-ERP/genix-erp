@@ -2444,7 +2444,7 @@ export default function Products() {
                     type="checkbox"
                     id="can_be_sold"
                     checked={formData.can_be_sold}
-                    onChange={(e) => setFormData({...formData, can_be_sold: e.target.checked})}
+                    onChange={(e) => setFormData({...formData, can_be_sold: e.target.checked, is_sellable: e.target.checked})}
                     className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
                   />
                   <label htmlFor="can_be_sold" className="text-sm text-slate-700 flex items-center cursor-pointer">
@@ -2458,7 +2458,7 @@ export default function Products() {
                     type="checkbox"
                     id="can_be_purchased"
                     checked={formData.can_be_purchased}
-                    onChange={(e) => setFormData({...formData, can_be_purchased: e.target.checked})}
+                    onChange={(e) => setFormData({...formData, can_be_purchased: e.target.checked, is_purchasable: e.target.checked})}
                     className="w-4 h-4 text-green-600 rounded border-slate-300 focus:ring-green-500"
                   />
                   <label htmlFor="can_be_purchased" className="text-sm text-slate-700 flex items-center cursor-pointer">
