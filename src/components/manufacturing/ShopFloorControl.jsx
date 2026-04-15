@@ -1212,7 +1212,7 @@ export default function ShopFloorControl({ isActive }) {
                     onChange={(e) => updateSplitItem(idx, 'product_id', e.target.value)}
                   >
                     <option value="">— {language === 'uz' ? 'tanlang' : language === 'ru' ? 'выбрать' : 'select'} —</option>
-                    {(products || []).map(p => (
+                    {(products || []).filter(p => p.can_be_sold || p.is_sellable).map(p => (
                       <option key={p.id} value={p.id}>{p.name} {p.weight ? `(${p.weight} kg)` : ''}</option>
                     ))}
                   </select>
