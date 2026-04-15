@@ -1056,11 +1056,17 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
         }
 
         if (allLines.length > 0) {
+          // Collect section names for auto-creating stages
+          const sectionNames = parsedData.sections
+            .filter(s => s.items.length > 0 && s.name)
+            .map(s => s.name);
+
           await onImport({
             estimateName: estimateName || parsedData.objectName || parsedData.sections[0]?.name || 'Imported',
             buildingId,
             sourceType: selectedType,
             lines: allLines,
+            sectionNames,
             subcontractId: selectedSubcontractId ? parseInt(selectedSubcontractId) : undefined,
           });
         }
@@ -1479,31 +1485,31 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
             {isProcessing ? (
               <div className="text-center space-y-3">
                 <Loader2 className="w-12 h-12 text-blue-500 animate-spin mx-auto" />
-                <p className="text-sm text-slate-600">Import jarayoni...</p>
+                <p className="text-sm text-slate-600">{t('import_in_progress') || "Import jarayoni..."}</p>
               </div>
             ) : importResult?.success ? (
               <div className="text-center space-y-3">
                 <CheckCircle className="w-12 h-12 text-green-500 mx-auto" />
-                <p className="text-lg font-medium text-slate-800">Import muvaffaqiyatli!</p>
+                <p className="text-lg font-medium text-slate-800">{t('import_success') || "Import muvaffaqiyatli!"}</p>
                 <p className="text-sm text-slate-600">
                   {importResult.isSvod
-                    ? `${importResult.count} kategoriya import qilindi`
-                    : `${importResult.count} qator, ${importResult.sections} smeta import qilindi`
+                    ? `${importResult.count} ${t('categories_imported') || "kategoriya import qilindi"}`
+                    : `${importResult.count} ${t('lines_imported') || "qator import qilindi"}`
                   }
                 </p>
                 <Button onClick={handleClose} className="mt-4">
-                  Yopish
+                  {t('close') || "Yopish"}
                 </Button>
               </div>
             ) : (
               <div className="text-center space-y-3">
                 <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
-                <p className="text-lg font-medium text-slate-800">Import xatolik</p>
+                <p className="text-lg font-medium text-slate-800">{t('import_error') || "Import xatolik"}</p>
                 <div className="flex gap-2 mt-4">
                   <Button variant="outline" onClick={() => setStep(3)}>
-                    Orqaga
+                    {t('back') || "Orqaga"}
                   </Button>
-                  <Button onClick={handleImport}>Qayta urinish</Button>
+                  <Button onClick={handleImport}>{t('retry') || "Qayta urinish"}</Button>
                 </div>
               </div>
             )}

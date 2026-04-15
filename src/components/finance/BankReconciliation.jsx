@@ -7,7 +7,7 @@ import {
   Plus, Search, Building2, CreditCard, CheckCircle, Clock, AlertCircle,
   ArrowUpRight, ArrowDownLeft, RefreshCw, FileText, Upload, Download,
   MoreHorizontal, Eye, Check, X, Landmark, Wallet, TrendingUp, TrendingDown, Globe,
-  Calendar, Target, Scale, Trash2, Pencil, Lock
+  Calendar, Target, Scale, Trash2, Pencil, Lock, FileSpreadsheet
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -26,6 +26,7 @@ import BudgetManagement from "./BudgetManagement";
 import ReconciliationWorkflow from "./ReconciliationWorkflow";
 import BankStatementImport from "./BankStatementImport";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 
 export default function BankReconciliation() {
   const { language } = useLanguage();
@@ -54,6 +55,9 @@ export default function BankReconciliation() {
   const [activeTab, setActiveTab] = useState("accounts");
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [codeFilter, setCodeFilter] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [deleteAccountId, setDeleteAccountId] = useState(null);
   const [editAccount, setEditAccount] = useState(null);
@@ -176,6 +180,9 @@ export default function BankReconciliation() {
     }
   };
 
+  const bankActiveFilterCount = (dateFrom ? 1 : 0) + (dateTo ? 1 : 0) + (codeFilter ? 1 : 0);
+  const clearBankFilters = () => { setDateFrom(''); setDateTo(''); setCodeFilter(''); setSearchQuery(''); setFilterStatus('all'); };
+
   const getFilteredTransactions = () => {
     if (!selectedBankAccount) return [];
     let transactions = getBankTransactionsByAccount(selectedBankAccount.id);
@@ -187,6 +194,26 @@ export default function BankReconciliation() {
       );
     }
 
+    if (codeFilter) {
+      const cf = codeFilter.toLowerCase();
+      transactions = transactions.filter(t =>
+        t.reference?.toLowerCase().includes(cf)
+      );
+    }
+
+    if (dateFrom) {
+      transactions = transactions.filter(t => {
+        const d = t.transaction_date?.split('T')[0];
+        return d && d >= dateFrom;
+      });
+    }
+    if (dateTo) {
+      transactions = transactions.filter(t => {
+        const d = t.transaction_date?.split('T')[0];
+        return d && d <= dateTo;
+      });
+    }
+
     if (filterStatus === 'reconciled') {
       transactions = transactions.filter(t => t.is_reconciled);
     } else if (filterStatus === 'unreconciled') {
@@ -194,6 +221,94 @@ export default function BankReconciliation() {
     }
 
     return transactions.sort((a, b) => new Date(b.transaction_date) - new Date(a.transaction_date));
+  };
+
+  // Export bank transactions to Excel
+  const handleExportBankExcel = async () => {
+    const ExcelJS = await import('exceljs');
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'GenixERP';
+    wb.created = new Date();
+    const sheetName = (t('bank_transactions') || 'Bank tranzaksiyalari').substring(0, 31);
+    const ws = wb.addWorksheet(sheetName, {
+      pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
+    });
+    const HEADER_BG = '1E3A5F';
+    const HEADER_FG = 'FFFFFF';
+    const BORDER_CLR = 'CBD5E1';
+    const STRIPE_BG = 'F8FAFC';
+    const TOTAL_BG = 'EEF2FF';
+    const BRAND_BLUE = '4F46E5';
+    const thin = { style: 'thin', color: { argb: BORDER_CLR } };
+    const borders = { top: thin, bottom: thin, left: thin, right: thin };
+    const thickTop = { style: 'medium', color: { argb: BRAND_BLUE } };
+    ws.columns = [
+      { width: 5.5 }, { width: 14 }, { width: 40 }, { width: 24 },
+      { width: 14 }, { width: 20 }, { width: 16 },
+    ];
+    const data = getFilteredTransactions();
+    const periodText = `${dateFrom || '...'} — ${dateTo || '...'}`;
+    const acctName = selectedBankAccount?.name || '';
+    const titleRow = ws.addRow([`${t('bank_transactions') || 'Bank tranzaksiyalari'} — ${acctName}`]);
+    ws.mergeCells(`A${titleRow.number}:G${titleRow.number}`);
+    titleRow.getCell(1).font = { bold: true, size: 16, color: { argb: '1E293B' } };
+    titleRow.getCell(1).alignment = { vertical: 'middle' };
+    titleRow.height = 30;
+    const subRow = ws.addRow([`${periodText}  •  ${data.length} ${t('entries_total') || 'yozuv'}`]);
+    ws.mergeCells(`A${subRow.number}:G${subRow.number}`);
+    subRow.getCell(1).font = { size: 10, color: { argb: '64748B' } };
+    subRow.height = 18;
+    ws.addRow([]);
+    const headers = ['№', t('date') || 'Sana', t('description') || 'Tavsif', t('reference') || 'Havola', t('type') || 'Tur', t('amount') || 'Summa', t('status') || 'Holat'];
+    const headerRow = ws.addRow(headers);
+    headerRow.height = 26;
+    headerRow.eachCell((cell) => {
+      cell.font = { bold: true, size: 11, color: { argb: HEADER_FG } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: HEADER_BG } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      cell.border = borders;
+    });
+    let sumCredits = 0, sumDebits = 0;
+    data.forEach((txn, idx) => {
+      const amt = txn.amount || 0;
+      if (txn.type === 'credit') sumCredits += amt; else sumDebits += amt;
+      const isStripe = idx % 2 === 1;
+      const row = ws.addRow([
+        idx + 1,
+        txn.transaction_date ? format(new Date(txn.transaction_date), 'dd.MM.yyyy') : '-',
+        txn.description || '-',
+        txn.reference || '-',
+        txn.type === 'credit' ? (t('income') || 'Kirim') : (t('expense') || 'Chiqim'),
+        amt,
+        txn.is_reconciled ? (t('confirmed') || 'Tasdiqlangan') : (t('waiting') || 'Kutilmoqda'),
+      ]);
+      row.eachCell((cell, colNumber) => {
+        cell.font = { size: 10 };
+        cell.border = borders;
+        cell.alignment = { vertical: 'middle' };
+        if (isStripe) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: STRIPE_BG } };
+        if (colNumber === 6) { cell.numFmt = '#,##0'; cell.alignment = { horizontal: 'right', vertical: 'middle' }; }
+        if (colNumber === 1) cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      });
+    });
+    const totRow = ws.addRow(['', '', '', '', t('total') || 'Jami:', sumCredits - sumDebits, '']);
+    totRow.height = 28;
+    totRow.eachCell((cell, colNumber) => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: TOTAL_BG } };
+      cell.border = { ...borders, top: { ...thickTop } };
+      cell.font = { bold: true, size: 11, color: { argb: '1E293B' } };
+      cell.alignment = { vertical: 'middle' };
+      if (colNumber === 6) { cell.numFmt = '#,##0'; cell.alignment = { horizontal: 'right', vertical: 'middle' }; }
+    });
+    ws.autoFilter = { from: { row: headerRow.number, column: 1 }, to: { row: headerRow.number, column: 7 } };
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `bank_transactions_${dateFrom || 'all'}_${dateTo || 'all'}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   // Show reconciliation workflow if active
@@ -519,27 +634,88 @@ export default function BankReconciliation() {
                 </CardContent>
               </Card>
 
-              {/* Filters */}
-              <div className="flex flex-col sm:flex-row gap-4">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <Input
-                    placeholder={t('search_transactions') || 'Search transactions...'}
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9"
-                  />
+              {/* Search + Filters */}
+              <div className="flex flex-col gap-3">
+                {/* Search row */}
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <Input
+                      placeholder={t('search_transactions') || 'Tranzaksiyalarni qidirish...'}
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-9 h-10 bg-slate-50 border-slate-200"
+                    />
+                  </div>
+                  <Select value={filterStatus} onValueChange={setFilterStatus}>
+                    <SelectTrigger className="w-[180px] h-10 bg-slate-50">
+                      <SelectValue placeholder={t('filter_by_status') || 'Holat bo\'yicha'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">{t('all') || 'Hammasi'}</SelectItem>
+                      <SelectItem value="reconciled">{t('reconciled') || 'Tasdiqlangan'}</SelectItem>
+                      <SelectItem value="unreconciled">{t('unreconciled') || 'Tasdiqlanmagan'}</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-                <Select value={filterStatus} onValueChange={setFilterStatus}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder={t('filter_by_status') || 'Filter by status'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">{t('all') || 'All'}</SelectItem>
-                    <SelectItem value="reconciled">{t('reconciled') || 'Reconciled'}</SelectItem>
-                    <SelectItem value="unreconciled">{t('unreconciled') || 'Unreconciled'}</SelectItem>
-                  </SelectContent>
-                </Select>
+                {/* Always-visible filter row */}
+                <div className="flex flex-wrap items-end gap-3 p-3 bg-gradient-to-r from-slate-50 to-blue-50/40 rounded-xl border border-slate-200/80">
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-slate-500 flex items-center gap-1">
+                      <Calendar className="w-3 h-3" />
+                      {t('from_date') || 'Dan'}
+                    </label>
+                    <Input
+                      type="date"
+                      value={dateFrom}
+                      onChange={e => setDateFrom(e.target.value)}
+                      className="h-9 w-[155px] bg-white border-slate-200 focus:ring-2 focus:ring-blue-500/20 rounded-lg text-sm"
+                    />
+                  </div>
+                  <div className="flex items-end pb-[6px]">
+                    <span className="text-slate-400 text-sm font-medium">—</span>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-slate-500 flex items-center gap-1">
+                      <Calendar className="w-3 h-3" />
+                      {t('to_date') || 'Gacha'}
+                    </label>
+                    <Input
+                      type="date"
+                      value={dateTo}
+                      onChange={e => setDateTo(e.target.value)}
+                      className="h-9 w-[155px] bg-white border-slate-200 focus:ring-2 focus:ring-blue-500/20 rounded-lg text-sm"
+                    />
+                  </div>
+                  <div className="w-px h-8 bg-slate-200 mx-1 self-end mb-[2px] hidden sm:block" />
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-slate-500 flex items-center gap-1">
+                      <FileText className="w-3 h-3" />
+                      {t('reference') || 'Havola'}
+                    </label>
+                    <Input
+                      placeholder={t('reference_code') || 'Kod...'}
+                      value={codeFilter}
+                      onChange={e => setCodeFilter(e.target.value)}
+                      className="h-9 w-[160px] bg-white border-slate-200 focus:ring-2 focus:ring-blue-500/20 rounded-lg text-sm"
+                    />
+                  </div>
+                  {bankActiveFilterCount > 0 && (
+                    <Button variant="ghost" size="sm" onClick={clearBankFilters} className="h-9 text-slate-500 hover:text-red-500 gap-1 transition-colors">
+                      <X className="w-3.5 h-3.5" />
+                      {t('clear') || 'Tozalash'}
+                    </Button>
+                  )}
+                  <div className="flex-1" />
+                  <Button
+                    onClick={handleExportBankExcel}
+                    className="h-9 gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white shadow-md shadow-emerald-200/50 transition-all duration-200 hover:shadow-lg hover:shadow-emerald-200/60 rounded-lg px-4"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>{t('export') || 'Export'}</span>
+                    <FileSpreadsheet className="w-4 h-4 opacity-70" />
+                  </Button>
+                </div>
               </div>
 
               {/* Transactions Table */}
@@ -700,9 +876,10 @@ export default function BankReconciliation() {
             <div>
               <label className="text-sm font-medium">{t('initial_balance') || 'Initial Balance'}</label>
               <Input
-                type="number"
-                value={newBankAccount.balance}
-                onChange={(e) => setNewBankAccount({ ...newBankAccount, balance: e.target.value })}
+                type="text"
+                inputMode="decimal"
+                value={formatPriceInput(newBankAccount.balance)}
+                onChange={(e) => setNewBankAccount({ ...newBankAccount, balance: parsePriceInput(e.target.value) })}
                 placeholder="0"
               />
             </div>

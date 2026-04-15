@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
-import { ChevronDown, ChevronRight, Search, Download, TrendingUp, TrendingDown, AlertTriangle, CheckCircle, Minus } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, Search, Download, TrendingUp, TrendingDown, AlertTriangle, CheckCircle, Minus } from 'lucide-react';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -29,6 +29,8 @@ const SmetaVsFactTab = ({ project }) => {
   const [loading, setLoading] = useState(true);
   const [stages, setStages] = useState([]);
   const [expandedSections, setExpandedSections] = useState({});
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 20;
 
   // Filters
   const [stageFilter, setStageFilter] = useState('');
@@ -78,6 +80,11 @@ const SmetaVsFactTab = ({ project }) => {
       .then(d => setStages(d || []))
       .catch(() => setStages([]));
   }, [project?.id]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [stageFilter, statusFilter, debouncedSearch]);
 
   const toggleSection = (idx) => {
     setExpandedSections(prev => ({ ...prev, [idx]: !prev[idx] }));
@@ -192,6 +199,9 @@ const SmetaVsFactTab = ({ project }) => {
 
   const summary = data?.summary || {};
   const sections = data?.sections || [];
+  const totalCount = sections.length;
+  const totalPages = Math.ceil(totalCount / pageSize);
+  const paginatedSections = sections.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   if (loading) {
     return (
@@ -298,7 +308,7 @@ const SmetaVsFactTab = ({ project }) => {
         </Card>
       ) : (
         <div className="space-y-3">
-          {sections.map((section, sIdx) => (
+          {paginatedSections.map((section, sIdx) => (
             <Card key={sIdx}>
               <CardHeader
                 className="py-3 px-4 cursor-pointer hover:bg-muted/50 transition-colors"
@@ -379,6 +389,20 @@ const SmetaVsFactTab = ({ project }) => {
               )}
             </Card>
           ))}
+          {Math.ceil(sections.length / pageSize) > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t">
+              <p className="text-sm text-slate-500">
+                {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, sections.length)} / {sections.length}
+              </p>
+              <div className="flex items-center gap-2">
+                <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}>1</button>
+                <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft className="w-4 h-4" /></button>
+                <span className="text-sm font-medium px-2">{currentPage} / {Math.ceil(sections.length / pageSize)}</span>
+                <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= Math.ceil(sections.length / pageSize)} onClick={() => setCurrentPage(p => p + 1)}><ChevronRight className="w-4 h-4" /></button>
+                <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= Math.ceil(sections.length / pageSize)} onClick={() => setCurrentPage(Math.ceil(sections.length / pageSize))}>{Math.ceil(sections.length / pageSize)}</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -149,6 +149,11 @@ export const financeService = {
     return response.data.data;
   },
 
+  async listPaymentJournals() {
+    const response = await apiClient.get('/journals/payment');
+    return response.data.data;
+  },
+
   async getJournal(id) {
     const response = await apiClient.get(`/journals/${id}`);
     return response.data.data;

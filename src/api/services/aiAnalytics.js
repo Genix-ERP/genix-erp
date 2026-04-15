@@ -18,8 +18,10 @@ const aiTranslations = {
     quotationsAwaiting: (count) => `${count} quotations awaiting customer confirmation`,
     focusTopCustomers: "Focus on Top Customers",
     topCustomerGenerates: (name, revenue, formatCurrency = defaultFormatter) => `Your top customer ${name} generates ${formatCurrency(revenue)}. Consider loyalty programs.`,
-    followUpPayments: "Follow Up on Payments",
-    sendPaymentReminders: (count) => `Send payment reminders for ${count} unpaid orders`,
+    followUpPayments: "Partially Paid Orders",
+    sendPaymentReminders: (count) => `${count} orders have incomplete payments`,
+    recentlyPaidOrders: "Recent Payments",
+    recentPaymentsNote: (count) => `${count} orders were recently paid`,
     increaseOrderValue: "Increase Order Value",
     avgOrderValueLow: (avg, formatCurrency = defaultFormatter) => `Average order value is ${formatCurrency(avg)}. Consider upselling or bundle offers.`,
 
@@ -184,10 +186,12 @@ const aiTranslations = {
     ordersUnpaid: (count, total, formatCurrency = defaultFormatter) => `${count} ta buyurtma, jami ${formatCurrency(total)} to'lanmagan`,
     pendingQuotations: "Kutilayotgan taklifnomalar",
     quotationsAwaiting: (count) => `${count} ta taklifnoma mijoz tasdig'ini kutmoqda`,
-    focusTopCustomers: "Top mijozlarga e'tibor",
+    focusTopCustomers: "Eng yaxshi mijozlar",
     topCustomerGenerates: (name, revenue, formatCurrency = defaultFormatter) => `Sizning eng yaxshi mijozingiz ${name} ${formatCurrency(revenue)} keltiradi. Sodiqlik dasturlarini ko'rib chiqing.`,
-    followUpPayments: "To'lovlarni kuzatish",
-    sendPaymentReminders: (count) => `${count} ta to'lanmagan buyurtma uchun eslatma yuboring`,
+    followUpPayments: "Qisman to'langan zakazlar",
+    sendPaymentReminders: (count) => `${count} ta zakazning to'lovi hali tugallanmagan`,
+    recentlyPaidOrders: "So'nggi to'lovlar",
+    recentPaymentsNote: (count) => `${count} ta buyurtma yaqinda to'landi`,
     increaseOrderValue: "Buyurtma qiymatini oshirish",
     avgOrderValueLow: (avg, formatCurrency = defaultFormatter) => `O'rtacha buyurtma qiymati ${formatCurrency(avg)}. Upselling yoki paketli takliflarni ko'rib chiqing.`,
 
@@ -354,8 +358,10 @@ const aiTranslations = {
     quotationsAwaiting: (count) => `${count} предложений ожидают подтверждения клиента`,
     focusTopCustomers: "Фокус на ключевых клиентах",
     topCustomerGenerates: (name, revenue, formatCurrency = defaultFormatter) => `Ваш лучший клиент ${name} приносит ${formatCurrency(revenue)}. Рассмотрите программы лояльности.`,
-    followUpPayments: "Отслеживание платежей",
-    sendPaymentReminders: (count) => `Отправьте напоминания об оплате для ${count} неоплаченных заказов`,
+    followUpPayments: "Частично оплаченные заказы",
+    sendPaymentReminders: (count) => `${count} заказов имеют неполную оплату`,
+    recentlyPaidOrders: "Недавние платежи",
+    recentPaymentsNote: (count) => `${count} заказов были недавно оплачены`,
     increaseOrderValue: "Увеличение стоимости заказа",
     avgOrderValueLow: (avg, formatCurrency = defaultFormatter) => `Средняя стоимость заказа ${formatCurrency(avg)}. Рассмотрите допродажи или пакетные предложения.`,
 
@@ -617,6 +623,16 @@ export const analyzeSales = (salesOrders, customers = [], language = 'en', forma
   const unpaidOrders = salesOrders.filter(o => o.payment_status === 'unpaid');
   const unpaidTotal = unpaidOrders.reduce((sum, o) => sum + (o.total_amount || 0), 0);
 
+  // Partially paid orders
+  const partialOrders = salesOrders.filter(o => o.payment_status === 'partial');
+  const partialTotal = partialOrders.reduce((sum, o) => sum + (o.total_amount || 0), 0);
+
+  // Recently paid orders (fallback if no partial)
+  const recentlyPaid = salesOrders
+    .filter(o => o.payment_status === 'paid')
+    .sort((a, b) => new Date(b.updated_at || b.created_at || 0) - new Date(a.updated_at || a.created_at || 0))
+    .slice(0, 5);
+
   // Generate insights
   const insights = [];
 
@@ -669,11 +685,17 @@ export const analyzeSales = (salesOrders, customers = [], language = 'en', forma
     });
   }
 
-  if (unpaidOrders.length > 0) {
+  if (partialOrders.length > 0) {
     recommendations.push({
       action: t.followUpPayments,
-      description: t.sendPaymentReminders(unpaidOrders.length),
+      description: t.sendPaymentReminders(partialOrders.length),
       impact: 'medium'
+    });
+  } else if (recentlyPaid.length > 0) {
+    recommendations.push({
+      action: t.recentlyPaidOrders,
+      description: t.recentPaymentsNote(recentlyPaid.length),
+      impact: 'low'
     });
   }
 
