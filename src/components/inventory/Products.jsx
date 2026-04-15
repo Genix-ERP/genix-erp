@@ -202,6 +202,7 @@ export default function Products() {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [warehouseFilter, setWarehouseFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [inventoryTypeFilter, setInventoryTypeFilter] = useState("trade");
 
   // Server-side pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -641,6 +642,7 @@ export default function Products() {
       const params = { page: currentPage, limit: pageSize };
       if (searchQuery) params.search = searchQuery;
       if (categoryFilter !== "all") params.category_id = categoryFilter;
+      if (inventoryTypeFilter !== "all") params.inventory_type = inventoryTypeFilter;
       if (statusFilter === "inactive") params.include_inactive = "true";
       const result = await inventoryService.listProductsPaginated(params);
       let items = result?.data || [];
@@ -664,7 +666,7 @@ export default function Products() {
     } finally {
       setProductsLoading(false);
     }
-  }, [currentPage, searchQuery, categoryFilter, warehouseFilter, statusFilter, inventory]);
+  }, [currentPage, searchQuery, categoryFilter, warehouseFilter, statusFilter, inventoryTypeFilter, inventory]);
 
   useEffect(() => {
     fetchProducts();
@@ -673,7 +675,7 @@ export default function Products() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, categoryFilter, warehouseFilter, statusFilter]);
+  }, [searchQuery, categoryFilter, warehouseFilter, statusFilter, inventoryTypeFilter]);
 
   const totalPages = Math.ceil(totalProducts / pageSize);
 
@@ -1368,6 +1370,17 @@ export default function Products() {
                   {(warehouses || []).filter(w => w.is_active !== false && accessibleWarehouseIds.has(w.id)).map(w => (
                     <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+              <Select value={inventoryTypeFilter} onValueChange={setInventoryTypeFilter}>
+                <SelectTrigger className="w-[180px] bg-slate-50">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{language === 'uz' ? 'Barcha turlar' : language === 'ru' ? 'Все типы' : 'All Types'}</SelectItem>
+                  <SelectItem value="trade">{language === 'uz' ? 'Sotish uchun (1340)' : language === 'ru' ? 'Для продажи (1340)' : 'Trade (1340)'}</SelectItem>
+                  <SelectItem value="raw">{language === 'uz' ? 'Xom ashyo (1310)' : language === 'ru' ? 'Сырьё (1310)' : 'Raw Material (1310)'}</SelectItem>
+                  <SelectItem value="finished">{language === 'uz' ? 'Tayyor mahsulot (1330)' : language === 'ru' ? 'Готовая продукция (1330)' : 'Finished Goods (1330)'}</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
