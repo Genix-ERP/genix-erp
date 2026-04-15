@@ -1229,10 +1229,10 @@ export default function ActSverka() {
                 <TableRow className="bg-slate-50">
                   <TableHead>{t('counterparty') || 'Kontragent'}</TableHead>
                   <TableHead>{t('period') || 'Davr'}</TableHead>
-                  <TableHead className="text-right">{t('opening') || 'Boshlanish'}</TableHead>
-                  <TableHead className="text-right">{t('debit') || 'Debet'}</TableHead>
-                  <TableHead className="text-right">{t('credit') || 'Kredit'}</TableHead>
-                  <TableHead className="text-right">{t('closing') || 'Tugash'}</TableHead>
+                  <TableHead className="text-right">{language === 'uz' ? 'Boshlang\'ich' : language === 'ru' ? 'Начальный' : 'Opening'}</TableHead>
+                  <TableHead className="text-right">{language === 'uz' ? 'Jami sotilgan' : language === 'ru' ? 'Всего продано' : 'Total Sold'}</TableHead>
+                  <TableHead className="text-right">{language === 'uz' ? 'Jami to\'langan' : language === 'ru' ? 'Всего оплачено' : 'Total Paid'}</TableHead>
+                  <TableHead className="text-right">{language === 'uz' ? 'Qoldiq' : language === 'ru' ? 'Остаток' : 'Balance'}</TableHead>
                   <TableHead className="text-center">{t('status') || 'Holat'}</TableHead>
                   <TableHead className="text-center">Javob</TableHead>
                   <TableHead className="text-center">{t('actions') || 'Amallar'}</TableHead>
