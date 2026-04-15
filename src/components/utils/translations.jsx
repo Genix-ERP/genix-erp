@@ -12562,7 +12562,7 @@ export const translations = {
     "components_materials": "Komponentlar / Materiallar",
     "component_name": "Komponent nomi",
     "component": "Komponent",
-    "qty": "Son",
+    "qty": "Miqdor",
     "add_component": "Komponent qo'shish",
     "create_bom": "BOM yaratish",
     "edit_bom": "BOM tahrirlash",
