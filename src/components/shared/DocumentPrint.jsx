@@ -139,7 +139,7 @@ export const generateDocumentPDF = (config) => {
   const margins = templateConfig.margins;
 
   const doc = new jsPDF({
-    orientation: templateConfig.orientation,
+    orientation: config.orientation || templateConfig.orientation,
     unit: "mm",
     format: "a4",
   });
