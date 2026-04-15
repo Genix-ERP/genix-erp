@@ -66,7 +66,7 @@ export default function BOMManagement() {
     const loadData = async () => {
       try {
         const [productsData, workCentersData, warehousesData] = await Promise.all([
-          inventoryService.listProducts({ limit: 1000 }),
+          inventoryService.listProducts(),
           workCentersService.list(),
           inventoryService.listWarehouses().catch(() => [])
         ]);
