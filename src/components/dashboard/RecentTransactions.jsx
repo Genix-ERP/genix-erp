@@ -4,15 +4,15 @@ import { useTranslation } from "@/components/utils/translations";
 import { useCurrencyFormatter } from "@/hooks/useCurrencyFormatter";
 import { ArrowUpRight, ArrowDownLeft, Receipt } from "lucide-react";
 
-const STATUS_MAP = {
-  paid: { label: "To'langan", color: "bg-emerald-100 text-emerald-700" },
-  completed: { label: "To'langan", color: "bg-emerald-100 text-emerald-700" },
-  confirmed: { label: "Tasdiqlangan", color: "bg-blue-100 text-blue-700" },
-  partial: { label: "Qisman", color: "bg-violet-100 text-violet-700" },
-  pending: { label: "Kutilmoqda", color: "bg-amber-100 text-amber-700" },
-  draft: { label: "Qoralama", color: "bg-slate-100 text-slate-500" },
-  overdue: { label: "Muddati o'tgan", color: "bg-red-100 text-red-700" },
-  cancelled: { label: "Bekor qilingan", color: "bg-slate-100 text-slate-500" },
+const STATUS_COLORS = {
+  paid: "bg-emerald-100 text-emerald-700",
+  completed: "bg-emerald-100 text-emerald-700",
+  confirmed: "bg-blue-100 text-blue-700",
+  partial: "bg-violet-100 text-violet-700",
+  pending: "bg-amber-100 text-amber-700",
+  draft: "bg-slate-100 text-slate-500",
+  overdue: "bg-red-100 text-red-700",
+  cancelled: "bg-slate-100 text-slate-500",
 };
 
 export default function RecentTransactions({ financialTransactions, customerInvoices, vendorBills }) {
@@ -48,7 +48,7 @@ export default function RecentTransactions({ financialTransactions, customerInvo
 
       all.push({
         id: bill.id,
-        name: bill.vendor_name || bill.partner_name || `Xarajat #${bill.invoice_number || bill.id?.toString().slice(-6)}`,
+        name: bill.vendor_name || bill.partner_name || `${t("expense") || "Expense"} #${bill.invoice_number || bill.id?.toString().slice(-6)}`,
         type: "expense",
         amount: bill.total_amount || bill.amount || 0,
         status,
@@ -80,14 +80,14 @@ export default function RecentTransactions({ financialTransactions, customerInvo
     <div className="glass-card rounded-2xl p-5 h-full transition-all duration-300">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold text-slate-900">
-          So'nggi tranzaksiyalar
+          {t("recent_transactions") || "Recent Transactions"}
         </h3>
       </div>
 
       {transactions.length > 0 ? (
         <div className="space-y-1.5">
           {transactions.map((tx, i) => {
-            const statusInfo = STATUS_MAP[tx.status] || STATUS_MAP.pending;
+            const statusColor = STATUS_COLORS[tx.status] || STATUS_COLORS.pending;
             const isIncome = tx.type === "income";
             return (
               <div
@@ -118,9 +118,9 @@ export default function RecentTransactions({ financialTransactions, customerInvo
                   {isIncome ? "+" : "-"}{formatCurrency(tx.amount)}
                 </span>
                 <span
-                  className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${statusInfo.color}`}
+                  className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${statusColor}`}
                 >
-                  {statusInfo.label}
+                  {t(tx.status) || tx.status}
                 </span>
               </div>
             );
