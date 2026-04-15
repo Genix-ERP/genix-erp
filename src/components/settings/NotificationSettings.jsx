@@ -29,7 +29,7 @@ export default function NotificationSettings() {
   const fetchNotifications = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('http://localhost:8080/api/v1/notifications?limit=20', {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || '/api/v1'}/notifications?limit=20`, {
         headers: getHeaders(),
       });
       if (res.ok) {
@@ -49,7 +49,7 @@ export default function NotificationSettings() {
 
   const handleMarkAsRead = async (id) => {
     try {
-      await fetch(`http://localhost:8080/api/v1/notifications/${id}/read`, {
+      await fetch(`${import.meta.env.VITE_API_URL || '/api/v1'}/notifications/${id}/read`, {
         method: 'PUT',
         headers: getHeaders(),
       });
@@ -61,7 +61,7 @@ export default function NotificationSettings() {
 
   const handleMarkAllAsRead = async () => {
     try {
-      await fetch('http://localhost:8080/api/v1/notifications/read-all', {
+      await fetch(`${import.meta.env.VITE_API_URL || '/api/v1'}/notifications/read-all`, {
         method: 'PUT',
         headers: getHeaders(),
       });
@@ -73,7 +73,7 @@ export default function NotificationSettings() {
 
   const handleDelete = async (id) => {
     try {
-      const res = await fetch(`http://localhost:8080/api/v1/notifications/${id}`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || '/api/v1'}/notifications/${id}`, {
         method: 'DELETE',
         headers: getHeaders(),
       });
