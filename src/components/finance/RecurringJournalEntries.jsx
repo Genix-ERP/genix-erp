@@ -19,6 +19,7 @@ import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { useCompany } from "@/components/contexts/CompanyContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { MODULES } from "@/config/permissions";
 import { financeService } from "@/api/services";
 import { format, parseISO, addDays, addWeeks, addMonths, addYears } from "date-fns";
@@ -817,13 +818,11 @@ export default function RecurringJournalEntries() {
                       <TableCell>
                         <Input
                           inputMode="decimal"
-                          value={line.debit_amount || ''}
+                          value={formatPriceInput(line.debit_amount || '')}
                           onFocus={(e) => { if (e.target.value === '0') e.target.value = ''; }}
                           onChange={(e) => {
-                            const val = e.target.value;
-                            if (val === '' || /^\d*\.?\d*$/.test(val)) {
-                              updateLine(index, 'debit_amount', val);
-                            }
+                            const val = parsePriceInput(e.target.value);
+                            updateLine(index, 'debit_amount', val);
                           }}
                           placeholder="0"
                           className="text-right"
@@ -832,13 +831,11 @@ export default function RecurringJournalEntries() {
                       <TableCell>
                         <Input
                           inputMode="decimal"
-                          value={line.credit_amount || ''}
+                          value={formatPriceInput(line.credit_amount || '')}
                           onFocus={(e) => { if (e.target.value === '0') e.target.value = ''; }}
                           onChange={(e) => {
-                            const val = e.target.value;
-                            if (val === '' || /^\d*\.?\d*$/.test(val)) {
-                              updateLine(index, 'credit_amount', val);
-                            }
+                            const val = parsePriceInput(e.target.value);
+                            updateLine(index, 'credit_amount', val);
                           }}
                           placeholder="0"
                           className="text-right"

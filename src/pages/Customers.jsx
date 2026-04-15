@@ -1205,145 +1205,146 @@ export default function Customers() {
           </TabsContent>
         </Tabs>
 
-        {/* Form Modal */}
-        {showForm && (
-          <CustomerForm
-            customer={editingCustomer}
-            onSave={handleSave}
-            onCancel={() => {
-              setShowForm(false);
-              setEditingCustomer(null);
-            }}
-            language={language}
-          />
-        )}
-
-        {/* Lead Form Modal */}
-        {showLeadForm && (
-          <LeadForm
-            lead={editingLead}
-            onSave={handleLeadSave}
-            onCancel={() => {
-              setShowLeadForm(false);
-              setEditingLead(null);
-            }}
-            language={language}
-          />
-        )}
-
-        {/* Delete Confirmation Modal */}
-        <AlertDialog open={!!customerToDelete} onOpenChange={(open) => !open && setCustomerToDelete(null)}>
-          <AlertDialogContent className="sm:max-w-md">
-            <AlertDialogHeader className="text-center sm:text-center">
-              <div className="mx-auto mb-4 w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-                <Trash2 className="w-6 h-6 text-red-600" />
-              </div>
-              <AlertDialogTitle className="text-xl font-semibold text-slate-900">
-                Delete Customer
-              </AlertDialogTitle>
-              <AlertDialogDescription className="text-slate-600 mt-2">
-                Are you sure you want to delete <span className="font-semibold text-slate-900">{customerToDelete?.company_name}</span>?
-                This action cannot be undone and all associated data will be permanently removed.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter className="mt-6 sm:justify-center gap-3">
-              <AlertDialogCancel
-                onClick={() => setCustomerToDelete(null)}
-                className="flex-1 sm:flex-none"
-              >
-                Cancel
-              </AlertDialogCancel>
-              <AlertDialogAction
-                className="flex-1 sm:flex-none bg-red-600 hover:bg-red-700 text-white focus:ring-red-600"
-                onClick={() => {
-                  deleteCustomer(customerToDelete.id);
-                  setCustomerToDelete(null);
-                }}
-              >
-                <Trash2 className="w-4 h-4 mr-2" />
-                Delete Customer
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-
-        {/* Opportunity Form Modal */}
-        {showOpportunityForm && (
-          <OpportunityForm
-            opportunity={editingOpportunity}
-            onSave={handleOpportunitySave}
-            onCancel={() => {
-              setShowOpportunityForm(false);
-              setEditingOpportunity(null);
-            }}
-            language={language}
-          />
-        )}
-
-        {/* Opportunity Delete Confirmation Modal */}
-        <AlertDialog open={!!opportunityToDelete} onOpenChange={(open) => !open && setOpportunityToDelete(null)}>
-          <AlertDialogContent className="sm:max-w-md">
-            <AlertDialogHeader className="text-center sm:text-center">
-              <div className="mx-auto mb-4 w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-                <Trash2 className="w-6 h-6 text-red-600" />
-              </div>
-              <AlertDialogTitle className="text-xl font-semibold text-slate-900">
-                {t('delete_opportunity')}
-              </AlertDialogTitle>
-              <AlertDialogDescription className="text-slate-600 mt-2">
-                {t('delete_opportunity_confirm')} <span className="font-semibold text-slate-900">{opportunityToDelete?.name}</span>?
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter className="mt-6 sm:justify-center gap-3">
-              <AlertDialogCancel
-                onClick={() => setOpportunityToDelete(null)}
-                className="flex-1 sm:flex-none"
-              >
-                {t('cancel')}
-              </AlertDialogCancel>
-              <AlertDialogAction
-                className="flex-1 sm:flex-none bg-red-600 hover:bg-red-700 text-white focus:ring-red-600"
-                onClick={handleOpportunityDeleteConfirm}
-              >
-                <Trash2 className="w-4 h-4 mr-2" />
-                {t('delete')}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-
-        {/* Lead Delete Confirmation Modal */}
-        <AlertDialog open={!!leadToDelete} onOpenChange={(open) => !open && setLeadToDelete(null)}>
-          <AlertDialogContent className="sm:max-w-md">
-            <AlertDialogHeader className="text-center sm:text-center">
-              <div className="mx-auto mb-4 w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-                <Trash2 className="w-6 h-6 text-red-600" />
-              </div>
-              <AlertDialogTitle className="text-xl font-semibold text-slate-900">
-                {t('delete_lead')}
-              </AlertDialogTitle>
-              <AlertDialogDescription className="text-slate-600 mt-2">
-                {t('delete_lead_confirm')} <span className="font-semibold text-slate-900">{leadToDelete?.contact_name || leadToDelete?.name}</span>?
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter className="mt-6 sm:justify-center gap-3">
-              <AlertDialogCancel
-                onClick={() => setLeadToDelete(null)}
-                className="flex-1 sm:flex-none"
-              >
-                {t('cancel')}
-              </AlertDialogCancel>
-              <AlertDialogAction
-                className="flex-1 sm:flex-none bg-red-600 hover:bg-red-700 text-white focus:ring-red-600"
-                onClick={handleLeadDeleteConfirm}
-              >
-                <Trash2 className="w-4 h-4 mr-2" />
-                {t('delete')}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
       </div>
+
+      {/* Form Modal - outside space-y-8 container to avoid margin-top interference with fixed positioning */}
+      {showForm && (
+        <CustomerForm
+          customer={editingCustomer}
+          onSave={handleSave}
+          onCancel={() => {
+            setShowForm(false);
+            setEditingCustomer(null);
+          }}
+          language={language}
+        />
+      )}
+
+      {/* Lead Form Modal */}
+      {showLeadForm && (
+        <LeadForm
+          lead={editingLead}
+          onSave={handleLeadSave}
+          onCancel={() => {
+            setShowLeadForm(false);
+            setEditingLead(null);
+          }}
+          language={language}
+        />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      <AlertDialog open={!!customerToDelete} onOpenChange={(open) => !open && setCustomerToDelete(null)}>
+        <AlertDialogContent className="sm:max-w-md">
+          <AlertDialogHeader className="text-center sm:text-center">
+            <div className="mx-auto mb-4 w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+              <Trash2 className="w-6 h-6 text-red-600" />
+            </div>
+            <AlertDialogTitle className="text-xl font-semibold text-slate-900">
+              Delete Customer
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-slate-600 mt-2">
+              Are you sure you want to delete <span className="font-semibold text-slate-900">{customerToDelete?.company_name}</span>?
+              This action cannot be undone and all associated data will be permanently removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="mt-6 sm:justify-center gap-3">
+            <AlertDialogCancel
+              onClick={() => setCustomerToDelete(null)}
+              className="flex-1 sm:flex-none"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="flex-1 sm:flex-none bg-red-600 hover:bg-red-700 text-white focus:ring-red-600"
+              onClick={() => {
+                deleteCustomer(customerToDelete.id);
+                setCustomerToDelete(null);
+              }}
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Delete Customer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Opportunity Form Modal */}
+      {showOpportunityForm && (
+        <OpportunityForm
+          opportunity={editingOpportunity}
+          onSave={handleOpportunitySave}
+          onCancel={() => {
+            setShowOpportunityForm(false);
+            setEditingOpportunity(null);
+          }}
+          language={language}
+        />
+      )}
+
+      {/* Opportunity Delete Confirmation Modal */}
+      <AlertDialog open={!!opportunityToDelete} onOpenChange={(open) => !open && setOpportunityToDelete(null)}>
+        <AlertDialogContent className="sm:max-w-md">
+          <AlertDialogHeader className="text-center sm:text-center">
+            <div className="mx-auto mb-4 w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+              <Trash2 className="w-6 h-6 text-red-600" />
+            </div>
+            <AlertDialogTitle className="text-xl font-semibold text-slate-900">
+              {t('delete_opportunity')}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-slate-600 mt-2">
+              {t('delete_opportunity_confirm')} <span className="font-semibold text-slate-900">{opportunityToDelete?.name}</span>?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="mt-6 sm:justify-center gap-3">
+            <AlertDialogCancel
+              onClick={() => setOpportunityToDelete(null)}
+              className="flex-1 sm:flex-none"
+            >
+              {t('cancel')}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="flex-1 sm:flex-none bg-red-600 hover:bg-red-700 text-white focus:ring-red-600"
+              onClick={handleOpportunityDeleteConfirm}
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              {t('delete')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Lead Delete Confirmation Modal */}
+      <AlertDialog open={!!leadToDelete} onOpenChange={(open) => !open && setLeadToDelete(null)}>
+        <AlertDialogContent className="sm:max-w-md">
+          <AlertDialogHeader className="text-center sm:text-center">
+            <div className="mx-auto mb-4 w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+              <Trash2 className="w-6 h-6 text-red-600" />
+            </div>
+            <AlertDialogTitle className="text-xl font-semibold text-slate-900">
+              {t('delete_lead')}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-slate-600 mt-2">
+              {t('delete_lead_confirm')} <span className="font-semibold text-slate-900">{leadToDelete?.contact_name || leadToDelete?.name}</span>?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="mt-6 sm:justify-center gap-3">
+            <AlertDialogCancel
+              onClick={() => setLeadToDelete(null)}
+              className="flex-1 sm:flex-none"
+            >
+              {t('cancel')}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="flex-1 sm:flex-none bg-red-600 hover:bg-red-700 text-white focus:ring-red-600"
+              onClick={handleLeadDeleteConfirm}
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              {t('delete')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -614,8 +614,6 @@ export function ProcurementProvider({ children }) {
           throw new Error('At least one product line is required');
         }
 
-        const orderTaxPercent = parseFloat(poData.tax_percent) || 0;
-
         const backendPayload = {
           order_number: poData.po_number || '',
           vendor_id: poData.supplier_id || poData.vendor_id,
@@ -623,6 +621,11 @@ export function ProcurementProvider({ children }) {
           expected_date: poData.expected_delivery_date || poData.expected_date || '',
           payment_terms: poData.payment_terms || 'net_30',
           warehouse_id: poData.warehouse_id || undefined,
+          vehicle_number: poData.vehicle_number || undefined,
+          requires_shipping: poData.requires_shipping !== undefined ? poData.requires_shipping : true,
+          subtotal: poData.subtotal || 0,
+          tax_amount: poData.tax_amount || 0,
+          total_amount: poData.total_amount || 0,
           notes: poData.notes || '',
           lines: validLines.map(line => ({
             product_id: line.product_id || '',
@@ -631,7 +634,7 @@ export function ProcurementProvider({ children }) {
             unit_price: parseFloat(line.unit_price) || 0,
             unit_id: line.unit_id || '',
             discount_amount: parseFloat(line.discount_amount) || 0,
-            tax_percent: parseFloat(line.tax_percent) || orderTaxPercent,
+            tax_percent: 0, // Tax is calculated at order level, not per line
             notes: line.notes || '',
             packaging_id: line.packaging_id || undefined,
             packaging_qty: line.packaging_id ? (parseFloat(line.packaging_qty) || 1) : undefined,
@@ -658,8 +661,8 @@ export function ProcurementProvider({ children }) {
     const newPO = {
       ...poData,
       id: Date.now().toString(),
-      po_number: poData.po_number || `PO-${new Date().getFullYear()}-${String(purchaseOrders.length + 1).padStart(4, '0')}`,
-      order_number: poData.po_number || `PO-${new Date().getFullYear()}-${String(purchaseOrders.length + 1).padStart(4, '0')}`,
+      po_number: poData.po_number || `PO-${String(purchaseOrders.length + 1).padStart(5, '0')}`,
+      order_number: poData.po_number || `PO-${String(purchaseOrders.length + 1).padStart(5, '0')}`,
       status: 'draft',
       created_at: new Date().toISOString().split('T')[0],
     };
@@ -714,6 +717,12 @@ export function ProcurementProvider({ children }) {
         }
         if (updates.vendor_reference !== undefined) {
           backendUpdates.vendor_reference = updates.vendor_reference;
+        }
+        if (updates.vehicle_number !== undefined) {
+          backendUpdates.vehicle_number = updates.vehicle_number;
+        }
+        if (updates.requires_shipping !== undefined) {
+          backendUpdates.requires_shipping = updates.requires_shipping;
         }
 
         // Debug: log what we're sending

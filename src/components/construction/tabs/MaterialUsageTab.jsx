@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Plus, Edit, Trash2, Package, BarChart3 } from 'lucide-react';
+import { Plus, Edit, Trash2, Package, BarChart3, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -60,6 +60,10 @@ const MaterialUsageTab = ({ project }) => {
   const [summary, setSummary] = useState([]);
   const [summaryLoading, setSummaryLoading] = useState(false);
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 20;
+
   const loadUsage = useCallback(async () => {
     if (!project?.id) return;
     setLoading(true);
@@ -95,6 +99,7 @@ const MaterialUsageTab = ({ project }) => {
   useEffect(() => {
     if (subTab === 'usage') {
       loadUsage();
+      setCurrentPage(1);
     } else {
       loadSummary();
     }
@@ -285,7 +290,11 @@ const MaterialUsageTab = ({ project }) => {
                   </tr>
                 </thead>
                 <tbody>
-                  {usageRecords.map(record => (
+                  {(() => {
+                    const totalCount = usageRecords.length;
+                    const totalPages = Math.ceil(totalCount / pageSize);
+                    const paginatedItems = usageRecords.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+                    return paginatedItems.map(record => (
                     <tr key={record.id} className="border-b hover:bg-slate-50">
                       <td className="py-2 px-3 whitespace-nowrap">{record.usage_date ? record.usage_date.slice(0, 10) : '—'}</td>
                       <td className="py-2 px-3">{record.product_name}</td>
@@ -305,9 +314,24 @@ const MaterialUsageTab = ({ project }) => {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                  ));
+                  })()}
                 </tbody>
               </table>
+              {Math.ceil(usageRecords.length / pageSize) > 1 && (
+                <div className="flex items-center justify-between px-4 py-3 border-t">
+                  <p className="text-sm text-slate-500">
+                    {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, usageRecords.length)} / {usageRecords.length}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}>1</button>
+                    <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft className="w-4 h-4" /></button>
+                    <span className="text-sm font-medium px-2">{currentPage} / {Math.ceil(usageRecords.length / pageSize)}</span>
+                    <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= Math.ceil(usageRecords.length / pageSize)} onClick={() => setCurrentPage(p => p + 1)}><ChevronRight className="w-4 h-4" /></button>
+                    <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= Math.ceil(usageRecords.length / pageSize)} onClick={() => setCurrentPage(Math.ceil(usageRecords.length / pageSize))}>{Math.ceil(usageRecords.length / pageSize)}</button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </CardContent>

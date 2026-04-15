@@ -196,10 +196,14 @@ export const pbxService = {
         };
       }
     } catch (error) {
-      console.warn('PBX call initiation failed:', error);
+      // If backend returned an error (e.g. PBX rejected the call), throw it
+      // so the UI can show the error instead of falling through to tel: fallback
+      const errorMsg = error?.response?.data?.message || error?.response?.data?.error || 'PBX call failed';
+      console.error('PBX call initiation failed:', errorMsg);
+      throw new Error(errorMsg);
     }
 
-    // Fallback: create local log and use tel: protocol
+    // Fallback only when backend is not available: use tel: protocol
     const callLog = await this.createCallLog({
       caller_number: phoneNumber,
       call_type: 'outbound',

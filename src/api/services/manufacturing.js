@@ -27,6 +27,21 @@ export const workCentersService = {
   async delete(id) {
     await apiClient.delete(`/work-centers/${id}`);
     return true;
+  },
+
+  async getEmployees(id) {
+    const response = await apiClient.get(`/work-centers/${id}/employees`);
+    return response.data.data?.employees || [];
+  },
+
+  async assignEmployees(id, data) {
+    const response = await apiClient.post(`/work-centers/${id}/employees`, data);
+    return response.data;
+  },
+
+  async removeEmployee(wcId, employeeId) {
+    await apiClient.delete(`/work-centers/${wcId}/employees/${employeeId}`);
+    return true;
   }
 };
 
@@ -114,6 +129,16 @@ export const productionOrdersService = {
   async getSchedule(params = {}) {
     const response = await apiClient.get('/production-orders/schedule', { params });
     return response.data.data || [];
+  },
+
+  async completeSplitOutput(id, data) {
+    const response = await apiClient.post(`/production-orders/${id}/complete-split`, data);
+    return response.data.data;
+  },
+
+  async getSplitOutputs(id) {
+    const response = await apiClient.get(`/production-orders/${id}/split-outputs`);
+    return response.data.data || [];
   }
 };
 
@@ -122,7 +147,7 @@ export const productionOrdersService = {
 // =====================================================
 export const workOrdersService = {
   async list(companyId, params = {}) {
-    const response = await apiClient.get('/work-orders', { params: { limit: 100, ...params } });
+    const response = await apiClient.get('/work-orders', { params: { limit: 100, organization_id: companyId, ...params } });
     return response.data.data || [];
   },
 
@@ -164,6 +189,41 @@ export const workOrdersService = {
   async recordTime(id, data) {
     const response = await apiClient.post(`/work-orders/${id}/time`, data);
     return response.data.data;
+  },
+
+  async getMaterials(id) {
+    const response = await apiClient.get(`/work-orders/${id}/materials`);
+    return response.data.data;
+  },
+
+  async addMaterial(id, data) {
+    const response = await apiClient.post(`/work-orders/${id}/materials`, data);
+    return response.data.data;
+  },
+
+  async removeMaterial(woId, materialId) {
+    await apiClient.delete(`/work-orders/${woId}/materials/${materialId}`);
+    return true;
+  },
+
+  async getAttachments(id) {
+    const response = await apiClient.get(`/work-orders/${id}/attachments`);
+    return response.data.data;
+  },
+
+  async uploadAttachment(id, file, description = '') {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (description) formData.append('description', description);
+    const response = await apiClient.post(`/work-orders/${id}/attachments`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    return response.data.data;
+  },
+
+  async deleteAttachment(woId, attachmentId) {
+    await apiClient.delete(`/work-orders/${woId}/attachments/${attachmentId}`);
+    return true;
   }
 };
 
@@ -315,6 +375,36 @@ export const manufacturingCategoriesService = {
 
   async delete(id) {
     await apiClient.delete(`/manufacturing-categories/${id}`);
+    return true;
+  }
+};
+
+// =====================================================
+// COST CALCULATIONS SERVICE
+// =====================================================
+export const costCalculationsService = {
+  async list() {
+    const response = await apiClient.get('/cost-calculations');
+    return response.data.data || [];
+  },
+
+  async get(id) {
+    const response = await apiClient.get(`/cost-calculations/${id}`);
+    return response.data.data;
+  },
+
+  async create(data) {
+    const response = await apiClient.post('/cost-calculations', data);
+    return response.data.data;
+  },
+
+  async update(id, data) {
+    const response = await apiClient.put(`/cost-calculations/${id}`, data);
+    return response.data.data;
+  },
+
+  async delete(id) {
+    await apiClient.delete(`/cost-calculations/${id}`);
     return true;
   }
 };

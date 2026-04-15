@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,7 @@ import {
   Plus, Search, Package, Pencil, Trash2, Eye, DollarSign,
   Tag, Barcode, Box, Boxes, Filter, MoreHorizontal, AlertCircle,
   CheckCircle, XCircle, ShoppingCart, Archive, Upload, Download, History,
-  Layers, Printer, HelpCircle, Truck, RefreshCw, Scale, ChevronDown
+  Layers, Printer, HelpCircle, Truck, RefreshCw, Scale, ChevronDown, ChevronLeft, ChevronRight, ShieldCheck
 } from "lucide-react";
 import {
   Tooltip,
@@ -24,6 +24,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { useInventory } from "@/components/contexts/InventoryContext";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -36,6 +37,8 @@ import ProductVariants from "./ProductVariants";
 import Packages from "./Packages";
 import PackageTypes from "./PackageTypes";
 import UnitsOfMeasure from "./UnitsOfMeasure";
+import MaterialReservations from "./MaterialReservations";
+import { inventoryService } from '@/api/services/inventory';
 import apiClient from '@/api/client';
 
 const API_ORIGIN = (import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1').replace(/\/api\/v1\/?$/, '');
@@ -156,6 +159,7 @@ export default function Products() {
     products,
     categories,
     inventory,
+    warehouses,
     items,
     stockMovements,
     createProduct,
@@ -169,7 +173,7 @@ export default function Products() {
   } = useInventory();
   const { accounts } = useFinancials();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
-  const { companies } = useCompany();
+  const { companies, activeCompany } = useCompany();
   const { toast } = useToast();
 
   const emptyCategoryAccounts = {
@@ -193,10 +197,25 @@ export default function Products() {
   }, [accounts]);
 
   const [filteredProducts, setFilteredProducts] = useState([]);
+  const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
-  const [typeFilter, setTypeFilter] = useState("all");
+  const [warehouseFilter, setWarehouseFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+
+  // Server-side pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalProducts, setTotalProducts] = useState(0);
+  const [productsLoading, setProductsLoading] = useState(false);
+  const pageSize = 20;
+
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchQuery(searchInput);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
   const [activeSubTab, setActiveSubTab] = useState("list");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -204,6 +223,7 @@ export default function Products() {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showCategoryImportModal, setShowCategoryImportModal] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showCategoryManageModal, setShowCategoryManageModal] = useState(false);
   const [showEditCategoryModal, setShowEditCategoryModal] = useState(false);
@@ -370,18 +390,29 @@ export default function Products() {
   const importColumns = [
     { key: 'name', label: 'Nomi', required: true },
     { key: 'barcode', label: 'Shtrix kod' },
+    { key: 'category', label: 'Kategoriya' },
     { key: 'tags', label: 'Teglar' },
     { key: 'cost_price', label: 'Tan narxi' },
-    { key: 'list_price', label: 'Sotish narxi', required: true },
+    { key: 'list_price', label: 'Sotish narxi' },
   ];
 
   const handleImport = async (data) => {
     for (const row of data) {
-      const generatedCode = row.barcode || row.name.toUpperCase().replace(/\s+/g, '-').substring(0, 50);
+      if (!row.name || !row.name.toString().trim()) continue;
+      const generatedCode = row.barcode || row.name.toString().toUpperCase().replace(/\s+/g, '-').substring(0, 50);
+
+      // Resolve category by name (case-insensitive)
+      let categoryId = '';
+      if (row.category) {
+        const cat = categories.find(c => c.name?.toLowerCase() === row.category?.toString().toLowerCase());
+        if (cat) categoryId = cat.id;
+      }
+
       const productData = {
         name: row.name,
         code: generatedCode,
         barcode: row.barcode || '',
+        category_id: categoryId || undefined,
         tags: row.tags ? row.tags.split(',').map(t => t.trim()) : [],
         type: 'product',
         cost_price: parseFloat(row.cost_price) || 0,
@@ -391,10 +422,28 @@ export default function Products() {
         is_purchasable: true,
         is_sellable: true,
         is_active: true,
+        organization_ids: activeCompany?.id ? [activeCompany.id] : [],
       };
-      createProduct(productData);
+      await createProduct(productData);
     }
     addAuditLog('create', 'batch', `${data.length} products imported`);
+  };
+
+  const categoryImportColumns = [
+    { key: 'name', label: 'Nomi', required: true },
+    { key: 'description', label: 'Tavsif' },
+  ];
+
+  const handleCategoryImport = async (data) => {
+    for (const row of data) {
+      const categoryData = {
+        name: row.name,
+        code: row.code || row.name.toUpperCase().replace(/\s+/g, '-').substring(0, 20),
+        description: row.description || '',
+        is_active: true,
+      };
+      await createCategory(categoryData);
+    }
   };
 
   const [formData, setFormData] = useState({
@@ -425,6 +474,8 @@ export default function Products() {
     is_overhead_expense: false,
     is_manufacturable: false,
     auto_manufacture: false,
+    has_delivery: false,
+    delivery_price: '',
     organization_ids: [],
     tags: [],
     // New advanced fields
@@ -572,55 +623,78 @@ export default function Products() {
     }
   };
 
-  // Summary calculations
+  // Summary calculations — use totalProducts from paginated API for total count
   const summaryStats = {
-    totalProducts: products.length,
+    totalProducts: totalProducts,
     activeProducts: products.filter(p => p.is_active).length,
     stockableProducts: products.filter(p => p.is_stockable).length,
-    serviceProducts: products.filter(p => p.type === 'service').length
+    lowStockProducts: products.filter(p => {
+      const stock = items.filter(i => i.product_id === p.id).reduce((s, i) => s + (i.current_stock || 0), 0);
+      return p.min_stock_level > 0 && stock <= p.min_stock_level;
+    }).length
   };
 
-  useEffect(() => {
-    setFilteredProducts(products);
-  }, [products]);
-
-  useEffect(() => {
-    let filtered = products;
-
-    if (searchQuery) {
-      filtered = filtered.filter(product =>
-        product.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.barcode?.includes(searchQuery) ||
-        (product.tags || []).some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
-      );
-    }
-
-    if (categoryFilter !== "all") {
-      filtered = filtered.filter(product => product.category_id === categoryFilter);
-    }
-
-    if (typeFilter !== "all") {
-      filtered = filtered.filter(product => product.type === typeFilter);
-    }
-
-    if (statusFilter !== "all") {
-      if (statusFilter === "active") {
-        filtered = filtered.filter(product => product.is_active);
-      } else if (statusFilter === "inactive") {
-        filtered = filtered.filter(product => !product.is_active);
+  // Server-side fetch for products with pagination
+  const fetchProducts = useCallback(async () => {
+    setProductsLoading(true);
+    try {
+      const params = { page: currentPage, limit: pageSize };
+      if (searchQuery) params.search = searchQuery;
+      if (categoryFilter !== "all") params.category_id = categoryFilter;
+      if (statusFilter === "inactive") params.include_inactive = "true";
+      const result = await inventoryService.listProductsPaginated(params);
+      let items = result?.data || [];
+      // Warehouse filter is client-side (not supported by backend)
+      if (warehouseFilter !== "all") {
+        const productIdsInWarehouse = new Set(
+          inventory.filter(i => i.warehouse_id === warehouseFilter).map(i => i.product_id)
+        );
+        items = items.filter(product => productIdsInWarehouse.has(product.id));
       }
+      // For inactive filter, backend returns all — filter client-side
+      if (statusFilter === "inactive") {
+        items = items.filter(product => !product.is_active);
+      }
+      setFilteredProducts(items);
+      setTotalProducts(result?.meta?.total || 0);
+    } catch (error) {
+      console.error('Error fetching products:', error);
+      setFilteredProducts([]);
+      setTotalProducts(0);
+    } finally {
+      setProductsLoading(false);
     }
+  }, [currentPage, searchQuery, categoryFilter, warehouseFilter, statusFilter, inventory]);
 
-    setFilteredProducts(filtered);
-  }, [searchQuery, categoryFilter, typeFilter, statusFilter, products]);
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, categoryFilter, warehouseFilter, statusFilter]);
+
+  const totalPages = Math.ceil(totalProducts / pageSize);
+
+  // Set of warehouse IDs belonging to the active company/organization
+  const accessibleWarehouseIds = useMemo(() => {
+    if (!activeCompany?.id) return new Set((warehouses || []).map(w => w.id));
+    return new Set(
+      (warehouses || []).filter(w => w.organization_id === activeCompany.id).map(w => w.id)
+    );
+  }, [warehouses, activeCompany]);
 
   const getProductStock = (productId) => {
-    const stockItems = inventory.filter(i => i.product_id === productId && i.warehouse_type !== 'scrap');
+    let stockItems = inventory.filter(i => i.product_id === productId && i.warehouse_type !== 'scrap' && accessibleWarehouseIds.has(i.warehouse_id));
+    if (warehouseFilter !== "all") {
+      stockItems = stockItems.filter(i => i.warehouse_id === warehouseFilter);
+    }
     return stockItems.reduce((sum, i) => sum + (i.quantity_on_hand ?? i.quantity ?? 0), 0);
   };
 
   const getProductScrapStock = (productId) => {
-    const scrapItems = inventory.filter(i => i.product_id === productId && i.warehouse_type === 'scrap');
+    const scrapItems = inventory.filter(i => i.product_id === productId && i.warehouse_type === 'scrap' && accessibleWarehouseIds.has(i.warehouse_id));
     return scrapItems.reduce((sum, i) => sum + (i.quantity_on_hand ?? i.quantity ?? 0), 0);
   };
 
@@ -653,7 +727,9 @@ export default function Products() {
       is_overhead_expense: false,
       is_manufacturable: false,
       auto_manufacture: false,
-      organization_ids: [],
+      has_delivery: false,
+      delivery_price: '',
+      organization_ids: activeCompany?.id ? [activeCompany.id] : [],
       tags: [],
       // Advanced fields
       brand: '',
@@ -720,6 +796,11 @@ export default function Products() {
   };
 
   const handleCreate = async () => {
+    // Validate at least one company is selected
+    if (companies.length > 0 && formData.organization_ids.length === 0) {
+      toast?.({ title: t('no_companies_selected_warning') || 'Please select at least one company', variant: 'destructive' });
+      return;
+    }
     setIsSaving(true);
     try {
       // Auto-generate EAN-13 barcode if not provided
@@ -735,6 +816,8 @@ export default function Products() {
         list_price: parseFloat(formData.list_price) || 0,
         min_price: parseFloat(formData.min_price) || 0,
         wholesale_price: parseFloat(formData.wholesale_price) || 0,
+        has_delivery: formData.has_delivery,
+        delivery_price: parseFloat(formData.delivery_price) || 0,
         min_stock_level: parseFloat(formData.min_stock_level) || 0,
         reorder_point: parseFloat(formData.reorder_point) || 0,
         reorder_quantity: parseFloat(formData.reorder_quantity) || 0,
@@ -776,6 +859,7 @@ export default function Products() {
 
       resetForm();
       setShowCreateModal(false);
+      fetchProducts();
     } catch (error) {
       console.error('Error creating product:', error);
     } finally {
@@ -797,6 +881,8 @@ export default function Products() {
       list_price: product.list_price ? product.list_price.toString() : '',
       min_price: product.min_price ? product.min_price.toString() : '',
       wholesale_price: product.wholesale_price ? product.wholesale_price.toString() : '',
+      has_delivery: product.has_delivery || false,
+      delivery_price: product.delivery_price ? product.delivery_price.toString() : '',
       is_stockable: product.is_stockable !== false,
       track_inventory: product.track_inventory !== false,
       min_stock_level: product.min_stock_level?.toString() || '',
@@ -849,9 +935,9 @@ export default function Products() {
       meta_description: product.meta_description || '',
       url_slug: product.url_slug || '',
       // Units of Measure
-      inventory_uom: product.inventory_uom || 'unit',
-      sales_uom: product.sales_uom || 'unit',
-      purchase_uom: product.purchase_uom || 'unit',
+      inventory_uom: product.unit_code || product.inventory_uom || 'unit',
+      sales_uom: product.unit_code || product.sales_uom || 'unit',
+      purchase_uom: product.unit_code || product.purchase_uom || 'unit',
       uom_conversion_factor: product.uom_conversion_factor?.toString() || '1',
       // Customer Lead Time
       customer_lead_time_days: product.customer_lead_time_days?.toString() || '',
@@ -929,7 +1015,7 @@ export default function Products() {
     }
   };
 
-  const handleUpdate = () => {
+  const handleUpdate = async () => {
     setIsSaving(true);
     try {
       const productData = {
@@ -939,6 +1025,8 @@ export default function Products() {
         list_price: parseFloat(formData.list_price) || 0,
         min_price: parseFloat(formData.min_price) || 0,
         wholesale_price: parseFloat(formData.wholesale_price) || 0,
+        has_delivery: formData.has_delivery,
+        delivery_price: parseFloat(formData.delivery_price) || 0,
         min_stock_level: parseFloat(formData.min_stock_level) || 0,
         reorder_point: parseFloat(formData.reorder_point) || 0,
         reorder_quantity: parseFloat(formData.reorder_quantity) || 0,
@@ -956,10 +1044,11 @@ export default function Products() {
         uom_conversion_factor: parseFloat(formData.uom_conversion_factor) || 1,
       };
 
-      updateProduct(selectedProduct.id, productData);
+      await updateProduct(selectedProduct.id, productData);
       resetForm();
       setSelectedProduct(null);
       setShowEditModal(false);
+      fetchProducts();
     } catch (error) {
       console.error('Error updating product:', error);
     } finally {
@@ -972,11 +1061,12 @@ export default function Products() {
     setShowDeleteModal(true);
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     try {
-      deleteProduct(selectedProduct.id);
+      await deleteProduct(selectedProduct.id);
       setSelectedProduct(null);
       setShowDeleteModal(false);
+      fetchProducts();
     } catch (error) {
       console.error('Error deleting product:', error);
     }
@@ -1139,6 +1229,13 @@ export default function Products() {
             <Scale className="w-4 h-4" />
             {t('units_of_measure')}
           </TabsTrigger>
+          <TabsTrigger
+            value="reserved"
+            className="flex items-center gap-2 px-4 py-2 rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm"
+          >
+            <ShieldCheck className="w-4 h-4" />
+            {t('reserved') || 'Zaxiralar'}
+          </TabsTrigger>
         </TabsList>
 
         {/* Products List Tab */}
@@ -1193,21 +1290,22 @@ export default function Products() {
           </CardContent>
         </Card>
 
-        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
+        <Card className={`bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm ${summaryStats.lowStockProducts > 0 ? 'border-amber-200' : ''}`}>
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">{t('services')}</p>
-                <p className="text-2xl font-bold text-purple-600">
-                  {summaryStats.serviceProducts}
+                <p className="text-sm text-slate-500">{t('low_stock')}</p>
+                <p className={`text-2xl font-bold ${summaryStats.lowStockProducts > 0 ? 'text-amber-600' : 'text-slate-900'}`}>
+                  {summaryStats.lowStockProducts}
                 </p>
               </div>
-              <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-                <ShoppingCart className="w-6 h-6 text-purple-600" />
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${summaryStats.lowStockProducts > 0 ? 'bg-amber-100' : 'bg-slate-100'}`}>
+                <AlertCircle className={`w-6 h-6 ${summaryStats.lowStockProducts > 0 ? 'text-amber-600' : 'text-slate-400'}`} />
               </div>
             </div>
           </CardContent>
         </Card>
+
       </div>
 
       {/* Products Table */}
@@ -1223,7 +1321,7 @@ export default function Products() {
                   {t('products_services')}
                 </CardTitle>
                 <p className="text-sm text-slate-500 mt-1">
-                  {filteredProducts.length} {t('items')}
+                  {totalProducts} {t('items')}
                 </p>
               </div>
             </div>
@@ -1233,8 +1331,8 @@ export default function Products() {
                 <Input
                   placeholder={t('search_products')}
                   className="pl-9 bg-slate-50 border-slate-200 focus:ring-2 focus:ring-[var(--genix-blue)]/20 h-10"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
                 />
               </div>
               <div className="flex items-center gap-1">
@@ -1261,15 +1359,15 @@ export default function Products() {
                   <Tag className="w-4 h-4" />
                 </Button>
               </div>
-              <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger className="w-[130px] bg-slate-50">
-                  <SelectValue placeholder={t('type')} />
+              <Select value={warehouseFilter} onValueChange={setWarehouseFilter}>
+                <SelectTrigger className="w-[160px] bg-slate-50">
+                  <SelectValue placeholder={t('warehouse') || 'Warehouse'} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">{t('all_types')}</SelectItem>
-                  <SelectItem value="product">{t('product')}</SelectItem>
-                  <SelectItem value="service">{t('service')}</SelectItem>
-                  <SelectItem value="bundle">Bundle</SelectItem>
+                  <SelectItem value="all">{t('all_warehouses') || 'All warehouses'}</SelectItem>
+                  {(warehouses || []).filter(w => w.is_active !== false && accessibleWarehouseIds.has(w.id)).map(w => (
+                    <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -1301,7 +1399,7 @@ export default function Products() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          {isLoading ? (
+          {(isLoading || productsLoading) ? (
             <div className="flex items-center justify-center py-16">
               <div className="text-center">
                 <div className="w-8 h-8 border-4 border-[var(--genix-blue)] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
@@ -1323,13 +1421,13 @@ export default function Products() {
               </p>
             </div>
           ) : (
+            <>
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-slate-50 hover:bg-slate-50">
                     <TableHead className="font-semibold text-slate-700 min-w-[200px]">{t('product')}</TableHead>
                     <TableHead className="hidden sm:table-cell font-semibold text-slate-700 min-w-[100px] whitespace-nowrap">{t('tags')}</TableHead>
-                    <TableHead className="hidden md:table-cell font-semibold text-slate-700 min-w-[80px] whitespace-nowrap">{t('type')}</TableHead>
                     <TableHead className="hidden lg:table-cell font-semibold text-slate-700 min-w-[100px] whitespace-nowrap">{t('category')}</TableHead>
                     <TableHead className="hidden md:table-cell font-semibold text-slate-700 text-right min-w-[80px] whitespace-nowrap">{t('cost')}</TableHead>
                     <TableHead className="font-semibold text-slate-700 text-right min-w-[80px] whitespace-nowrap">{t('price')}</TableHead>
@@ -1383,11 +1481,6 @@ export default function Products() {
                               </Badge>
                             )}
                           </div>
-                        </TableCell>
-                        <TableCell className="hidden md:table-cell">
-                          <Badge className={getTypeColor(product.type)}>
-                            {product.type}
-                          </Badge>
                         </TableCell>
                         <TableCell className="hidden lg:table-cell text-slate-600">
                           {getCategoryName(product.category_id)}
@@ -1466,6 +1559,53 @@ export default function Products() {
                 </TableBody>
               </Table>
             </div>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between px-6 py-4 border-t">
+                <p className="text-sm text-slate-500">
+                  {t('showing') || "Ko'rsatilmoqda"} {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, totalProducts)} / {totalProducts}
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage(1)}
+                  >
+                    1
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage(p => p - 1)}
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </Button>
+                  <span className="text-sm font-medium px-2">
+                    {currentPage} / {totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setCurrentPage(p => p + 1)}
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setCurrentPage(totalPages)}
+                  >
+                    {totalPages}
+                  </Button>
+                </div>
+              </div>
+            )}
+            </>
           )}
         </CardContent>
       </Card>
@@ -1490,13 +1630,23 @@ export default function Products() {
                   </div>
                 </div>
                 {canCreate(MODULES.INVENTORY) && (
-                  <Button
-                    onClick={() => setShowCategoryModal(true)}
-                    className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white hover:opacity-90"
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    {t('add_category')}
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowCategoryImportModal(true)}
+                      className="border-slate-200 text-slate-700 hover:bg-slate-50"
+                    >
+                      <Upload className="w-4 h-4 mr-2" />
+                      {t('import')}
+                    </Button>
+                    <Button
+                      onClick={() => setShowCategoryModal(true)}
+                      className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white hover:opacity-90"
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      {t('add_category')}
+                    </Button>
+                  </div>
                 )}
               </div>
             </CardHeader>
@@ -1616,6 +1766,9 @@ export default function Products() {
         {/* Units of Measure Tab */}
         <TabsContent value="units" className="mt-0">
           <UnitsOfMeasure />
+        </TabsContent>
+        <TabsContent value="reserved" className="mt-0">
+          <MaterialReservations />
         </TabsContent>
       </Tabs>
 
@@ -2019,23 +2172,29 @@ export default function Products() {
                       <span className="text-sm font-medium">{t('select_all') || 'Select all'}</span>
                     </div>
                     <div className="border-t my-1" />
-                    {companies.map(company => (
-                      <div
-                        key={company.id}
-                        className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-100 cursor-pointer"
-                        onClick={() => {
-                          setFormData(prev => ({
-                            ...prev,
-                            organization_ids: prev.organization_ids.includes(company.id)
-                              ? prev.organization_ids.filter(id => id !== company.id)
-                              : [...prev.organization_ids, company.id]
-                          }));
-                        }}
-                      >
-                        <Checkbox checked={formData.organization_ids.includes(company.id)} />
-                        <span className="text-sm">{company.company_name}</span>
-                      </div>
-                    ))}
+                    <div className="max-h-60 overflow-y-auto">
+                      {companies.map(company => {
+                        const isActive = activeCompany?.id === company.id;
+                        return (
+                          <div
+                            key={company.id}
+                            className={`flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-100 cursor-pointer ${isActive ? 'bg-blue-50' : ''}`}
+                            onClick={() => {
+                              setFormData(prev => ({
+                                ...prev,
+                                organization_ids: prev.organization_ids.includes(company.id)
+                                  ? prev.organization_ids.filter(id => id !== company.id)
+                                  : [...prev.organization_ids, company.id]
+                              }));
+                            }}
+                          >
+                            <Checkbox checked={formData.organization_ids.includes(company.id)} />
+                            <span className="text-sm">{company.company_name}</span>
+                            {isActive && <span className="text-xs text-blue-600 ml-auto">{t('current') || 'joriy'}</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </PopoverContent>
                 </Popover>
                 {formData.organization_ids.length === 0 && (
@@ -2084,6 +2243,38 @@ export default function Products() {
                     <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-sm text-slate-400">{currency_symbol}</span>
                   </div>
                 </div>
+              </div>
+
+              {/* Delivery price */}
+              <div className="mt-4 flex items-start gap-3">
+                <div className="flex items-center gap-2 mt-1">
+                  <input
+                    type="checkbox"
+                    id="has_delivery"
+                    checked={formData.has_delivery}
+                    onChange={(e) => setFormData({...formData, has_delivery: e.target.checked})}
+                    className="w-4 h-4 rounded border-slate-300 text-blue-600 cursor-pointer"
+                  />
+                  <label htmlFor="has_delivery" className="text-sm font-medium text-slate-700 cursor-pointer whitespace-nowrap">
+                    {t('has_delivery') || 'Yetkazib berish bor'}
+                  </label>
+                </div>
+                {formData.has_delivery && (
+                  <div className="flex-1">
+                    <div className="relative">
+                      <Input
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0"
+                        className="pr-14"
+                        value={formatPriceDisplay(formData.delivery_price)}
+                        onChange={(e) => handlePriceChange('delivery_price', e.target.value)}
+                      />
+                      <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-sm text-slate-400">{currency_symbol}</span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">{t('delivery_price_desc') || 'Yetkazib berish narxi'}</p>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -2653,8 +2844,8 @@ export default function Products() {
                                       placeholder={t('price_extra')}
                                       type="text"
                                       inputMode="decimal"
-                                      value={newValuePriceExtra}
-                                      onChange={(e) => setNewValuePriceExtra(e.target.value)}
+                                      value={formatPriceInput(newValuePriceExtra)}
+                                      onChange={(e) => setNewValuePriceExtra(parsePriceInput(e.target.value))}
                                     />
                                     <Button
                                       type="button"
@@ -2746,8 +2937,8 @@ export default function Products() {
                                   placeholder={t('price_extra')}
                                   type="text"
                                   inputMode="decimal"
-                                  value={newAttrValPrice}
-                                  onChange={(e) => setNewAttrValPrice(e.target.value)}
+                                  value={formatPriceInput(newAttrValPrice)}
+                                  onChange={(e) => setNewAttrValPrice(parsePriceInput(e.target.value))}
                                   onKeyDown={(e) => {
                                     if (e.key === 'Enter' && newAttrValName.trim()) {
                                       e.preventDefault();
@@ -3422,6 +3613,15 @@ export default function Products() {
         onImport={handleImport}
         columns={importColumns}
         entityName="Mahsulotlar"
+      />
+
+      {/* Category Import Modal */}
+      <ImportModal
+        open={showCategoryImportModal}
+        onClose={() => setShowCategoryImportModal(false)}
+        onImport={handleCategoryImport}
+        columns={categoryImportColumns}
+        entityName="Kategoriyalar"
       />
 
       {/* Export Modal */}

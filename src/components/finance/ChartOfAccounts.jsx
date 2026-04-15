@@ -139,6 +139,22 @@ export default function ChartOfAccounts() {
       }
     });
 
+    // Third pass: compute aggregated balances for parent accounts
+    // Parent account shows: its OWN balance + sum of all children's balances
+    const computeAggregatedBalance = (node) => {
+      if (node.children && node.children.length > 0) {
+        node.children.forEach(child => computeAggregatedBalance(child));
+        const childrenSum = node.children.reduce(
+          (sum, child) => sum + (child.aggregated_balance ?? child.current_balance ?? 0), 0
+        );
+        // Parent's total = own direct balance + all children's balances
+        node.aggregated_balance = (node.current_balance || 0) + childrenSum;
+      } else {
+        node.aggregated_balance = node.current_balance || 0;
+      }
+    };
+    rootAccounts.forEach(root => computeAggregatedBalance(root));
+
     return rootAccounts;
   }, [accounts]);
 
@@ -161,10 +177,14 @@ export default function ChartOfAccounts() {
   }, [accounts, searchQuery, typeFilter]);
 
   // Calculate totals by type (category from backend)
+  // Only sum leaf accounts (non-parent) to avoid double-counting parent + children
   // Contra-asset accounts (normal_balance=credit) reduce the asset total
   const totals = useMemo(() => {
+    const parentIds = new Set(accounts.filter(a => a.parent_id).map(a => a.parent_id));
     const result = { asset: 0, liability: 0, equity: 0, revenue: 0, expense: 0 };
     accounts.forEach(acc => {
+      // Skip parent accounts to avoid double-counting
+      if (parentIds.has(acc.id)) return;
       const category = acc.category || acc.type;
       if (result[category] !== undefined) {
         if (isContraAsset(acc)) {
@@ -218,6 +238,7 @@ export default function ChartOfAccounts() {
     setIsSaving(true);
     try {
       await updateAccount(selectedAccount.id, {
+        code: formData.code,
         name: formData.name,
         type: formData.type,
         internal_type: formData.internal_type,
@@ -366,7 +387,7 @@ export default function ChartOfAccounts() {
             )}
           </TableCell>
           <TableCell className="text-right font-semibold tabular-nums whitespace-nowrap">
-            {formatCurrency(account.current_balance || 0)}
+            {formatCurrency(hasChildren ? (account.aggregated_balance ?? account.current_balance ?? 0) : (account.current_balance || 0))}
           </TableCell>
           <TableCell>
             <Badge variant={account.is_active ? "default" : "secondary"}>
@@ -734,7 +755,7 @@ export default function ChartOfAccounts() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">{t('code') || 'Code'}</label>
-                <Input value={formData.code} disabled className="bg-slate-100" />
+                <Input value={formData.code} onChange={(e) => setFormData({...formData, code: e.target.value})} />
               </div>
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">{t('name') || 'Name'} *</label>
