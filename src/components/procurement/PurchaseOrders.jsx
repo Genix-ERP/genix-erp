@@ -300,7 +300,18 @@ export default function PurchaseOrders() {
 
   // Calculate order total from line items
   const calculateOrderTotal = (lines) => {
-    return lines.reduce((sum, line) => sum + (parseFloat(line.quantity || 0) * parseFloat(line.unit_price || 0)), 0);
+    return lines.reduce((sum, line) => {
+      const lineTotal = parseFloat(line.quantity || 0) * parseFloat(line.unit_price || 0);
+      const deliveryTotal = line.has_delivery ? (parseFloat(line.quantity || 0) * parseFloat(line.delivery_price || 0)) : 0;
+      return sum + lineTotal + deliveryTotal;
+    }, 0);
+  };
+
+  const calculateDeliveryTotal = (lines) => {
+    return lines.reduce((sum, line) => {
+      if (!line.has_delivery) return sum;
+      return sum + (parseFloat(line.quantity || 0) * parseFloat(line.delivery_price || 0));
+    }, 0);
   };
 
   // Calculate tax considering price_include flag
@@ -462,6 +473,8 @@ export default function PurchaseOrders() {
           unit_id: unitId,
           unit_name: unitName,
           product: selectedProduct,
+          has_delivery: selectedProduct.has_delivery || false,
+          delivery_price: parseFloat(selectedProduct.delivery_price) || 0,
           variant_id: null,
           variant_name: null,
           packaging_id: null,
@@ -1194,6 +1207,11 @@ export default function PurchaseOrders() {
                         <div className="h-9 flex items-center justify-end px-3 bg-white border rounded-md text-sm font-medium text-slate-700">
                           {formatPriceInput(String((parseFloat(line.quantity || 0) * parseFloat(line.unit_price || 0)).toFixed(2)))}
                         </div>
+                        {line.has_delivery && line.delivery_price > 0 && (
+                          <div className="text-xs text-blue-600 text-right mt-0.5">
+                            🚚 {formatPriceInput(String(line.delivery_price))} × {line.quantity} = {formatPriceInput(String((parseFloat(line.quantity || 0) * parseFloat(line.delivery_price || 0)).toFixed(2)))}
+                          </div>
+                        )}
                       </div>
                       <div className="flex-shrink-0">
                         <Button
@@ -1320,18 +1338,26 @@ export default function PurchaseOrders() {
               <div className="space-y-2">
                 {(() => {
                   const rawSubtotal = calculateOrderTotal(newPO.lines);
+                  const deliveryTotal = calculateDeliveryTotal(newPO.lines);
+                  const productSubtotal = rawSubtotal - deliveryTotal;
                   const taxPercent = parseFloat(newPO.tax_percent) || 0;
                   const selectedTax = newPO.tax_rate_id ? taxRates.find(tr => String(tr.id) === String(newPO.tax_rate_id)) : defaultPurchaseTax;
-                  const taxCalc = calculateTaxFromRate(rawSubtotal, taxPercent, selectedTax);
+                  const taxCalc = calculateTaxFromRate(productSubtotal, taxPercent, selectedTax);
                   const subtotal = taxCalc.subtotal;
                   const taxAmount = taxCalc.taxAmount;
-                  const total = subtotal + taxAmount;
+                  const total = subtotal + taxAmount + deliveryTotal;
                   return (
                     <>
                       <div className="flex justify-between text-sm">
                         <span className="text-slate-600">{t('subtotal')}:</span>
                         <span className="font-medium">{formatCurrency(subtotal)}</span>
                       </div>
+                      {deliveryTotal > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-slate-600">{language === 'uz' ? 'Yetkazib berish:' : language === 'ru' ? 'Доставка:' : 'Delivery:'}</span>
+                          <span className="font-medium text-blue-600">{formatCurrency(deliveryTotal)}</span>
+                        </div>
+                      )}
                       <div className="flex justify-between text-sm">
                         <span className="text-slate-600">{t('tax')}{taxCalc.isInclusive ? ` (${t('incl') || 'incl.'})` : ''}:</span>
                         <span className="font-medium">{formatCurrency(taxAmount)}</span>
