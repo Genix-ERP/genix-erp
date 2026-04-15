@@ -2482,16 +2482,6 @@ export default function Products() {
                   </label>
                 </div>
               </div>
-              <div className="flex items-center gap-2 mt-4">
-                <Switch
-                  checked={formData.is_active}
-                  onCheckedChange={(checked) => setFormData({...formData, is_active: checked})}
-                />
-                <span className="text-sm text-slate-700 flex items-center">
-                  {t('active')}
-                  <FieldHelp text={t('help_active') || "Faol mahsulot. O'chirilsa, mahsulot sotuvda ko'rinmaydi"} />
-                </span>
-              </div>
             </div>
 
             {/* Advanced Fields Toggle */}
