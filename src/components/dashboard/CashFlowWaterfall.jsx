@@ -74,7 +74,8 @@ export default function CashFlowWaterfall({ transactions, customerInvoices, vend
 
     // Group into last 4 weeks
     const now = new Date();
-    const weekLabels = ["1-hafta", "2-hafta", "3-hafta", "4-hafta"];
+    const wk = t("week") || "Week";
+    const weekLabels = [`${wk} 1`, `${wk} 2`, `${wk} 3`, `${wk} 4`];
     const result = [];
 
     for (let i = 0; i < 4; i++) {
@@ -115,7 +116,7 @@ export default function CashFlowWaterfall({ transactions, customerInvoices, vend
     const totalInflow = result.reduce((s, w) => s + w.inflow, 0);
     const totalOutflow = result.reduce((s, w) => s + w.outflow, 0);
     bars.push({
-      name: "Balans",
+      name: t("balance") || "Balance",
       value: totalInflow - totalOutflow,
       color: "#6C5CE7",
       type: "net",
@@ -134,7 +135,7 @@ export default function CashFlowWaterfall({ transactions, customerInvoices, vend
             {t("cash_flow") || "Naqd pul oqimi"}
           </h3>
           <p className="text-xs text-slate-400 mt-0.5">
-            Oxirgi 30 kun
+            {t("last_30_days") || "Last 30 days"}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -148,7 +149,7 @@ export default function CashFlowWaterfall({ transactions, customerInvoices, vend
           </div>
           <div className="flex items-center gap-1">
             <div className="w-2 h-2 rounded-full bg-[#6C5CE7]" />
-            <span className="text-[10px] text-slate-400">Balans</span>
+            <span className="text-[10px] text-slate-400">{t("balance") || "Balance"}</span>
           </div>
         </div>
       </div>
