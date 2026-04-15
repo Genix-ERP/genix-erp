@@ -807,8 +807,8 @@ export default function Warehouses() {
               </div>
             </div>
 
-            {/* Odoo-style Warehouse Operations */}
-            <div className="pt-4 border-t border-slate-200">
+            {/* Warehouse Operations section hidden — simplified to 1-step */}
+            <div className="pt-4 border-t border-slate-200" style={{display: 'none'}}>
               <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
                 {t('warehouse_operations') || 'Warehouse Operations'}
               </h4>
