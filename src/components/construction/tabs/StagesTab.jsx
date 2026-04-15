@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Plus, Edit, Trash2, Layers, X, ChevronDown, ChevronRight, Package, Truck, Users, ShieldCheck } from 'lucide-react';
+import { Plus, Edit, Trash2, Layers, X, ChevronDown, ChevronRight, ChevronLeft, Package, Truck, Users, ShieldCheck } from 'lucide-react';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -47,6 +47,8 @@ const StagesTab = ({ project }) => {
   const [stages, setStages] = useState([]);
   const [subStagesMap, setSubStagesMap] = useState({}); // { [stageId]: SubStage[] }
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 20;
 
   // Stage modal
   const [showModal, setShowModal] = useState(false);
@@ -139,6 +141,10 @@ const StagesTab = ({ project }) => {
   }, [project?.id, loadAllSubStages]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [stages.length]);
 
   const reloadSubStages = async (stageId) => {
     try {
@@ -523,7 +529,14 @@ const StagesTab = ({ project }) => {
             </div>
           ) : (
             <div className="space-y-3">
-              {stages.map((stage) => {
+              {(() => {
+                const totalCount = stages.length;
+                const totalPages = Math.ceil(totalCount / pageSize);
+                const paginatedItems = stages.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+                return (
+                  <>
+                    {paginatedItems.map((stage) => {
                 const subs = subStagesMap[stage.id] || [];
                 const pct = getProgress(stage);
                 const overBudget = stage.actual_amount > stage.planned_budget && stage.planned_budget > 0;
@@ -876,7 +889,24 @@ const StagesTab = ({ project }) => {
                     )}
                   </div>
                 );
-              })}
+                    })}
+                    {Math.ceil(stages.length / pageSize) > 1 && (
+                      <div className="flex items-center justify-between px-4 py-3 border-t">
+                        <p className="text-sm text-slate-500">
+                          {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, stages.length)} / {stages.length}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}>1</button>
+                          <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft className="w-4 h-4" /></button>
+                          <span className="text-sm font-medium px-2">{currentPage} / {Math.ceil(stages.length / pageSize)}</span>
+                          <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= Math.ceil(stages.length / pageSize)} onClick={() => setCurrentPage(p => p + 1)}><ChevronRight className="w-4 h-4" /></button>
+                          <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= Math.ceil(stages.length / pageSize)} onClick={() => setCurrentPage(Math.ceil(stages.length / pageSize))}>{Math.ceil(stages.length / pageSize)}</button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           )}
         </CardContent>

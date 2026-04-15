@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { constructionService } from '@/api/services/construction';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { TrendingUp } from 'lucide-react';
+import { TrendingUp, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -27,6 +27,8 @@ const BudgetTab = ({ project }) => {
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 20;
 
   const load = useCallback(async () => {
     if (!project?.id) return;
@@ -123,7 +125,15 @@ const BudgetTab = ({ project }) => {
                   </tr>
                 </thead>
                 <tbody>
-                  {Object.entries(byStage).map(([stageId, stage]) => {
+                  {(() => {
+                    const stageEntries = Object.entries(byStage);
+                    const totalCount = stageEntries.length;
+                    const totalPages = Math.ceil(totalCount / pageSize);
+                    const startIdx = (currentPage - 1) * pageSize;
+                    const endIdx = startIdx + pageSize;
+                    const paginatedEntries = stageEntries.slice(startIdx, endIdx);
+
+                    return paginatedEntries.map(([stageId, stage]) => {
                     const stageActual = stage.rows.reduce((s, r) => s + r.actual, 0);
                     const stagePct = stage.planned > 0 ? (stageActual / stage.planned) * 100 : 0;
                     const stageVariance = stage.planned - stageActual;
@@ -160,7 +170,8 @@ const BudgetTab = ({ project }) => {
                         ))}
                       </React.Fragment>
                     );
-                  })}
+                  });
+                  })()}
                   <tr className="border-t-2 border-slate-400 font-bold bg-slate-100">
                     <td className="py-2 px-3">{t('total') || 'TOTAL'}</td>
                     <td className="py-2 px-3 text-right">{formatCurrency(totalPlanned)}</td>
@@ -173,6 +184,27 @@ const BudgetTab = ({ project }) => {
                   </tr>
                 </tbody>
               </table>
+              {(() => {
+                const stageEntries = Object.entries(byStage);
+                const totalCount = stageEntries.length;
+                const totalPages = Math.ceil(totalCount / pageSize);
+                return (
+                  totalPages > 1 && (
+                    <div className="flex items-center justify-between px-4 py-3 border-t">
+                      <p className="text-sm text-slate-500">
+                        {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, totalCount)} / {totalCount}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}>1</button>
+                        <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft className="w-4 h-4" /></button>
+                        <span className="text-sm font-medium px-2">{currentPage} / {totalPages}</span>
+                        <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}><ChevronRight className="w-4 h-4" /></button>
+                        <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(totalPages)}>{totalPages}</button>
+                      </div>
+                    </div>
+                  )
+                );
+              })()}
             </div>
           )}
         </CardContent>

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,6 +55,8 @@ import {
   ChevronDown,
   ChevronUp,
   Printer,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { format, differenceInDays, startOfDay } from "date-fns";
 import { useSales } from "@/components/contexts/SalesContext";
@@ -65,6 +67,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { inventoryService } from "@/api/services/inventory";
 import { salesService } from "@/api/services/sales";
+import apiClient from "@/api/client";
 import { useCompany } from "@/components/contexts/CompanyContext";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { useAdminSettings } from "@/components/contexts/AdminSettingsContext";
@@ -105,6 +108,48 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalInvoices, setTotalInvoices] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [paginatedInvoices, setPaginatedInvoices] = useState([]);
+  const [invoicesLoading, setInvoicesLoading] = useState(false);
+  const pageSize = 20;
+
+  // Fetch invoices with server-side pagination
+  const fetchInvoices = useCallback(async () => {
+    setInvoicesLoading(true);
+    try {
+      const params = { page: currentPage, page_size: pageSize };
+      if (searchQuery) params.search = searchQuery;
+      if (statusFilter !== 'all') params.status = statusFilter;
+      if (typeFilter !== 'all') params.type = typeFilter;
+
+      const response = await apiClient.get('/sales-invoices', { params });
+      const data = response.data?.data || [];
+      const meta = response.data?.meta;
+      setPaginatedInvoices(data);
+      if (meta) {
+        setTotalInvoices(meta.total || 0);
+        setTotalPages(meta.total_pages || 1);
+      }
+    } catch (error) {
+      console.error('Failed to fetch invoices:', error);
+      setPaginatedInvoices([]);
+    } finally {
+      setInvoicesLoading(false);
+    }
+  }, [currentPage, searchQuery, statusFilter, typeFilter]);
+
+  useEffect(() => {
+    fetchInvoices();
+  }, [fetchInvoices]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter, typeFilter]);
 
   // Load products on mount
   useEffect(() => {
@@ -179,18 +224,8 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
     write_off_amount: 0,
   });
 
-  const filteredInvoices = useMemo(() => {
-    return invoices.filter((inv) => {
-      const matchesSearch =
-        inv.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        inv.customer_name?.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesStatus =
-        statusFilter === "all" || inv.payment_status === statusFilter;
-      const invType = inv.invoice_type || "invoice";
-      const matchesType = typeFilter === "all" || invType === typeFilter;
-      return matchesSearch && matchesStatus && matchesType;
-    });
-  }, [invoices, searchQuery, statusFilter, typeFilter]);
+  // Server-side filtering is done in fetchInvoices; just use paginatedInvoices directly
+  const filteredInvoices = paginatedInvoices;
 
   const stats = useMemo(() => {
     const today = new Date();
@@ -323,6 +358,7 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
       // Pass customer_name so it appears immediately in the list
       await createInvoice(data, formData.customer_name);
     }
+    await fetchInvoices();
     resetForm();
   };
 
@@ -411,7 +447,7 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
     try {
       await salesService.sendInvoice(invoice.id);
       // Refresh the invoice list
-      await getInvoice(invoice.id);
+      await fetchInvoices();
     } catch (err) {
       console.error("Failed to send invoice:", err);
     }
@@ -673,6 +709,7 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
         paymentData.date,
         paymentData.write_off ? paymentData.write_off_amount : 0
       );
+      await fetchInvoices();
       // Store for receipt printing before clearing
       const invoiceForReceipt = { ...selectedInvoice };
       const paymentForReceipt = { ...paymentData };
@@ -691,6 +728,7 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
   const confirmDelete = async () => {
     if (invoiceToDelete) {
       await deleteInvoice(invoiceToDelete.id);
+      await fetchInvoices();
       setShowDeleteConfirm(false);
       setInvoiceToDelete(null);
     }
@@ -895,7 +933,7 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
       {/* Invoices List */}
       <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
         <CardContent className="p-0">
-          {isLoading ? (
+          {(isLoading || invoicesLoading) ? (
             <div className="flex items-center justify-center py-12">
               <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
             </div>
@@ -1024,6 +1062,33 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                   })}
                 </TableBody>
               </Table>
+            </div>
+          )}
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-6 py-4 border-t">
+              <span className="text-sm text-slate-600">
+                {t('showing') || 'Showing'} {((currentPage - 1) * pageSize) + 1}–{Math.min(currentPage * pageSize, totalInvoices)} {t('of') || 'of'} {totalInvoices}
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage <= 1}
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                <span className="text-sm font-medium">{currentPage} / {totalPages}</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage >= totalPages}
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>

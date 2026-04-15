@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   DollarSign, TrendingUp, TrendingDown, Package, Download,
   Calendar, Filter, PieChart as PieChartIcon, BarChart3, FileText, Warehouse,
-  AlertTriangle, CheckCircle2, ArrowUpRight, ArrowDownRight
+  AlertTriangle, CheckCircle2, ArrowUpRight, ArrowDownRight, ChevronLeft, ChevronRight
 } from "lucide-react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -16,6 +16,7 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
 import { useCurrencyFormatter } from "@/hooks/useCurrencyFormatter";
+import { inventoryService } from '@/api/services';
 import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
 
 export default function InventoryValuation() {
@@ -36,6 +37,69 @@ export default function InventoryValuation() {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [costingMethod, setCostingMethod] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Server-side paginated products for the table
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalProducts, setTotalProducts] = useState(0);
+  const [paginatedProducts, setPaginatedProducts] = useState([]);
+  const [productsLoading, setProductsLoading] = useState(false);
+  const pageSize = 20;
+
+  const fetchProducts = useCallback(async () => {
+    setProductsLoading(true);
+    try {
+      const result = await inventoryService.listProductsPaginated({
+        page: currentPage,
+        limit: pageSize,
+        search: searchQuery || undefined,
+        category_id: selectedCategory !== 'all' ? selectedCategory : undefined,
+      });
+      setPaginatedProducts(result.data || []);
+      setTotalPages(result.meta?.total_pages || 1);
+      setTotalProducts(result.meta?.total || 0);
+    } catch (e) {
+      console.error('Failed to load products for valuation', e);
+      setPaginatedProducts([]);
+    } finally {
+      setProductsLoading(false);
+    }
+  }, [currentPage, searchQuery, selectedCategory]);
+
+  useEffect(() => { fetchProducts(); }, [fetchProducts]);
+
+  // Reset page when filters change
+  useEffect(() => { setCurrentPage(1); }, [searchQuery, selectedCategory, selectedWarehouse, costingMethod]);
+
+  // Valuation data from paginated products (for the table)
+  const paginatedValuationData = useMemo(() => {
+    let filteredProducts = paginatedProducts.filter(p => p.track_inventory !== false);
+    if (costingMethod !== 'all') {
+      filteredProducts = filteredProducts.filter(p => p.costing_method === costingMethod);
+    }
+    return filteredProducts.map(product => {
+      let productInventory = inventory.filter(inv => inv.product_id === product.id);
+      if (selectedWarehouse !== 'all') {
+        productInventory = productInventory.filter(inv => inv.warehouse_id === selectedWarehouse);
+      }
+      const totalQty = productInventory.reduce((sum, inv) => sum + (inv.quantity_on_hand ?? inv.quantity ?? 0), 0);
+      const unitCost = product.cost_price || 0;
+      const totalValue = totalQty * unitCost;
+      const listPrice = product.list_price || 0;
+      const potentialRevenue = totalQty * listPrice;
+      const potentialProfit = potentialRevenue - totalValue;
+      const margin = listPrice > 0 ? ((listPrice - unitCost) / listPrice) * 100 : 0;
+      return {
+        id: product.id, sku: product.sku, name: product.name,
+        category: categories.find(c => c.id === product.category_id)?.name || t('uncategorized'),
+        costingMethod: product.costing_method || 'FIFO',
+        quantity: totalQty, unitCost, totalValue, listPrice, potentialRevenue, potentialProfit, margin,
+        reorderLevel: product.reorder_level || 0,
+        isOutOfStock: totalQty <= 0,
+        isLowStock: totalQty > 0 && totalQty <= (product.reorder_level || 0),
+      };
+    });
+  }, [paginatedProducts, inventory, categories, selectedWarehouse, costingMethod]);
 
   // Calculate valuation data
   const valuationData = useMemo(() => {
@@ -302,11 +366,11 @@ export default function InventoryValuation() {
             </CardHeader>
 
             <CardContent>
-              {isLoading ? (
+              {(isLoading || productsLoading) ? (
                 <div className="flex items-center justify-center py-12">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--genix-blue)]" />
                 </div>
-              ) : valuationData.length === 0 ? (
+              ) : paginatedValuationData.length === 0 ? (
                 <div className="text-center py-12">
                   <Package className="w-12 h-12 mx-auto text-slate-300 mb-4" />
                   <p className="text-slate-500">{t('no_products_found') || 'No products found'}</p>
@@ -329,7 +393,7 @@ export default function InventoryValuation() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {valuationData.map(item => (
+                      {paginatedValuationData.map(item => (
                         <TableRow key={item.id} className={item.isOutOfStock ? 'bg-red-50' : item.isLowStock ? 'bg-orange-50' : ''}>
                           <TableCell className="font-mono text-sm">{item.sku || '-'}</TableCell>
                           <TableCell className="font-medium">{item.name}</TableCell>
@@ -377,10 +441,28 @@ export default function InventoryValuation() {
                     </TableBody>
                   </Table>
 
+                  {/* Pagination Controls */}
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between px-4 py-3 border-t">
+                      <span className="text-sm text-slate-600">
+                        {t('showing') || 'Showing'} {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, totalProducts)} {t('of') || 'of'} {totalProducts}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>
+                          <ChevronLeft className="w-4 h-4" />
+                        </Button>
+                        <span className="text-sm font-medium">{currentPage} / {totalPages}</span>
+                        <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}>
+                          <ChevronRight className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Totals Row */}
                   <div className="bg-slate-100 p-4 rounded-b-lg flex justify-between items-center">
                     <div className="text-sm text-slate-600">
-                      {valuationData.length} {t('products') || 'products'} | {summary.totalQty.toLocaleString()} {t('total_units') || 'total units'}
+                      {totalProducts} {t('products') || 'products'} | {summary.totalQty.toLocaleString()} {t('total_units') || 'total units'}
                     </div>
                     <div className="text-right">
                       <p className="text-sm text-slate-600">{t('total_inventory_value') || 'Total Inventory Value'}</p>

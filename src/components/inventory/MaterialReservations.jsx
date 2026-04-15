@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { CheckCircle, XCircle, Search, Loader2, Package, Trash2, Filter } from 'lucide-react';
+import { CheckCircle, XCircle, Search, Loader2, Package, Trash2, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -29,6 +29,8 @@ export default function MaterialReservations() {
   const [statusFilter, setStatusFilter] = useState('pending');
   const [searchQuery, setSearchQuery] = useState('');
   const [confirmAction, setConfirmAction] = useState(null); // { type: 'approve'|'reject'|'delete', id, name }
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 20;
 
   const loadReservations = useCallback(async () => {
     setLoading(true);
@@ -102,6 +104,10 @@ export default function MaterialReservations() {
     );
   });
 
+  const totalCount = filtered.length;
+  const totalPages = Math.ceil(totalCount / pageSize);
+  const paginatedItems = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
   const pendingCount = reservations.filter(r => r.status === 'pending').length;
 
   return (
@@ -127,11 +133,11 @@ export default function MaterialReservations() {
               <Input
                 placeholder={t('search') || 'Qidirish...'}
                 value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
+                onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); }}
                 className="pl-9"
               />
             </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <Select value={statusFilter} onValueChange={(val) => { setStatusFilter(val); setCurrentPage(1); }}>
               <SelectTrigger className="w-[180px]">
                 <Filter className="w-4 h-4 mr-2" />
                 <SelectValue />
@@ -181,7 +187,7 @@ export default function MaterialReservations() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map(res => (
+                  {paginatedItems.map(res => (
                     <tr key={res.id} className="border-t hover:bg-slate-50/50 transition-colors">
                       <td className="px-4 py-3 font-medium">{res.product_name}</td>
                       <td className="px-3 py-3 text-slate-600">{res.project_name}</td>
@@ -245,6 +251,20 @@ export default function MaterialReservations() {
                 </tbody>
               </table>
             </div>
+            {Math.ceil(filtered.length / pageSize) > 1 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t">
+                <p className="text-sm text-slate-500">
+                  {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, filtered.length)} / {filtered.length}
+                </p>
+                <div className="flex items-center gap-2">
+                  <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}>1</button>
+                  <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft className="w-4 h-4" /></button>
+                  <span className="text-sm font-medium px-2">{currentPage} / {Math.ceil(filtered.length / pageSize)}</span>
+                  <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= Math.ceil(filtered.length / pageSize)} onClick={() => setCurrentPage(p => p + 1)}><ChevronRight className="w-4 h-4" /></button>
+                  <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= Math.ceil(filtered.length / pageSize)} onClick={() => setCurrentPage(Math.ceil(filtered.length / pageSize))}>{Math.ceil(filtered.length / pageSize)}</button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

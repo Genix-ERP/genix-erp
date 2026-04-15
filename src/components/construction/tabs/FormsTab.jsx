@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Plus, Trash2, CheckCircle, XCircle, ArrowLeft, FileText, Zap, Eye, Download, PenLine, Ban, Loader2, ChevronUp, ChevronDown, Send, Save, X } from 'lucide-react';
+import { Plus, Trash2, CheckCircle, XCircle, ArrowLeft, FileText, Zap, Eye, Download, PenLine, Ban, Loader2, ChevronUp, ChevronDown, Send, Save, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -83,6 +83,10 @@ const FormsTab = ({ project }) => {
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ act_type: '', state: '' });
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 20;
+
   // Sorting state
   const [sortField, setSortField] = useState('created_date');
   const [sortDir, setSortDir] = useState('desc');
@@ -150,6 +154,7 @@ const FormsTab = ({ project }) => {
   const load = useCallback(async () => {
     if (!project?.id) return;
     setLoading(true);
+    setCurrentPage(1);
     try {
       const params = {};
       if (filters.state) params.state = filters.state;
@@ -1398,7 +1403,11 @@ const FormsTab = ({ project }) => {
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedActs.map(act => (
+                  {(() => {
+                    const totalCount = sortedActs.length;
+                    const totalPages = Math.ceil(totalCount / pageSize);
+                    const paginatedItems = sortedActs.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+                    return paginatedItems.map(act => (
                     <tr key={act.id} className="border-b hover:bg-slate-50">
                       <td className="py-2 px-3 font-medium">{act.name}{act.act_number ? ` #${act.act_number}` : ''}</td>
                       <td className="py-2 px-3"><Badge className={TYPE_COLORS[act.act_type]}>{TYPE_LABELS[act.act_type] || act.act_type}</Badge></td>
@@ -1418,9 +1427,28 @@ const FormsTab = ({ project }) => {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    ));
+                  })()}
                 </tbody>
               </table>
+              {(() => {
+                const totalCount = sortedActs.length;
+                const totalPages = Math.ceil(totalCount / pageSize);
+                return totalPages > 1 && (
+                  <div className="flex items-center justify-between px-4 py-3 border-t">
+                    <p className="text-sm text-slate-500">
+                      {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, totalCount)} / {totalCount}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}>1</button>
+                      <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft className="w-4 h-4" /></button>
+                      <span className="text-sm font-medium px-2">{currentPage} / {totalPages}</span>
+                      <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}><ChevronRight className="w-4 h-4" /></button>
+                      <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(totalPages)}>{totalPages}</button>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
         </CardContent>
