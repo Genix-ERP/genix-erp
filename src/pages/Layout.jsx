@@ -165,7 +165,8 @@ function LayoutContent({ children, currentPageName }) {
       const tenantId = localStorage.getItem('tenantId');
       const orgId = localStorage.getItem('organizationId');
       if (!token) return;
-      const res = await fetch('http://localhost:8080/api/v1/notifications/unread-count', {
+      const apiBase = import.meta.env.VITE_API_URL || '/api/v1';
+      const res = await fetch(`${apiBase}/notifications/unread-count`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'X-Tenant-ID': tenantId || '',
