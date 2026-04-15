@@ -20,7 +20,7 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { cn } from "@/lib/utils";
 
-const API_BASE = 'http://localhost:8080/api/v1';
+const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
 
 function getHeaders() {
   const token = localStorage.getItem('accessToken');
