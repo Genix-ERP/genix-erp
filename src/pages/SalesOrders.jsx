@@ -211,12 +211,11 @@ export default function SalesOrders() {
       title: t('sales_order'),
       documentNumber: order.order_number,
       documentDate: order.order_date ? format(new Date(order.order_date), 'dd.MM.yyyy') : '',
+      orientation: 'landscape',
       headerFields: [
         { label: t('customer'), value: order.customer_name },
         { label: t('delivery_date'), value: order.delivery_date || order.expected_date ? format(new Date(order.delivery_date || order.expected_date), 'dd.MM.yyyy') : '-' },
         ...(order.vehicle_number ? [{ label: t('vehicle_number') || 'Moshina raqami', value: order.vehicle_number }] : []),
-        { label: t('status'), value: t(order.status) },
-        { label: t('payment_status'), value: t(order.payment_status) },
       ],
       tableColumns: [
         { key: 'no', label: '№', width: 10 },
