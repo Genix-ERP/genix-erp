@@ -1264,10 +1264,12 @@ export default function SalesOrders() {
               <Building2 className="w-4 h-4" />
               <span className="hidden sm:inline">{t('carriers') || 'Carriers'}</span>
             </TabsTrigger>
+            {getSetting('sales.dropshipping.enabled') && (
             <TabsTrigger value="dropshipping" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
               <Package className="w-4 h-4" />
               <span className="hidden sm:inline">{t('dropshipping') || 'Dropshipping'}</span>
             </TabsTrigger>
+            )}
           </TabsList>
 
           {/* Dashboard Tab - Stats */}
@@ -1506,9 +1508,11 @@ export default function SalesOrders() {
           </TabsContent>
 
           {/* Dropshipping Tab */}
+          {getSetting('sales.dropshipping.enabled') && (
           <TabsContent value="dropshipping">
             <Dropshipping />
           </TabsContent>
+          )}
         </Tabs>
 
         {/* Create Order Modal */}
