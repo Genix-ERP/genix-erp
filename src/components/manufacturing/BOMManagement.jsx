@@ -14,6 +14,7 @@ import { useManufacturing } from '@/components/contexts/ManufacturingContext';
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { inventoryService, bomsService, workCentersService } from '@/api/services';
+import ProductCombobox from "@/components/shared/ProductCombobox";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { toast } from 'sonner';
 
@@ -603,21 +604,13 @@ export default function BOMManagement() {
                 </div>
                 <div>
                   <label className="text-sm font-medium mb-1 block">{t('product')} *</label>
-                  <Select
+                  <ProductCombobox
+                    products={products.filter(p => p.id)}
                     value={newBom.product_id}
                     onValueChange={(value) => setNewBom({...newBom, product_id: value})}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={t('select_product')} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {products.filter(product => product.id).map((product) => (
-                        <SelectItem key={product.id} value={product.id}>
-                          {product.name} ({product.sku || product.code || 'No SKU'})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder={t('select_product')}
+                    t={t}
+                  />
                 </div>
               </div>
               <div>
@@ -658,7 +651,8 @@ export default function BOMManagement() {
                 {/* Add Component Form */}
                 <div className="p-4 bg-slate-50 rounded-lg space-y-3">
                   <div className="grid grid-cols-3 gap-3">
-                    <Select
+                    <ProductCombobox
+                      products={products.filter(p => p.id)}
                       value={newComponent.component_id}
                       onValueChange={(value) => {
                         const selectedProduct = products.find(p => p.id === value);
@@ -668,18 +662,9 @@ export default function BOMManagement() {
                           unit: selectedProduct?.unit_name || selectedProduct?.purchase_unit_name || 'pcs'
                         });
                       }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={t('select_component')} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {products.filter(product => product.id).map((product) => (
-                          <SelectItem key={product.id} value={product.id}>
-                            {product.name} ({product.sku || product.code || 'No SKU'})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      placeholder={t('select_component')}
+                      t={t}
+                    />
                     <Input
                       type="text"
                       inputMode="decimal"
@@ -888,21 +873,13 @@ export default function BOMManagement() {
                   </div>
                   <div>
                     <label className="text-sm font-medium mb-1 block">{t('product')} *</label>
-                    <Select
+                    <ProductCombobox
+                      products={products.filter(p => p.id)}
                       value={editBom.product_id}
                       onValueChange={(value) => setEditBom({...editBom, product_id: value})}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={t('select_product')} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {products.filter(product => product.id).map((product) => (
-                          <SelectItem key={product.id} value={product.id}>
-                            {product.name} ({product.sku || product.code || 'No SKU'})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      placeholder={t('select_product')}
+                      t={t}
+                    />
                   </div>
                 </div>
                 <div>
@@ -943,7 +920,8 @@ export default function BOMManagement() {
                   {/* Add Component Form */}
                   <div className="p-4 bg-slate-50 rounded-lg space-y-3">
                     <div className="grid grid-cols-3 gap-3">
-                      <Select
+                      <ProductCombobox
+                        products={products.filter(p => p.id)}
                         value={editComponent.component_id}
                         onValueChange={(value) => {
                           const selectedProduct = products.find(p => p.id === value);
@@ -953,18 +931,9 @@ export default function BOMManagement() {
                             unit: selectedProduct?.unit_name || selectedProduct?.purchase_unit_name || editComponent.unit
                           });
                         }}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder={t('select_component')} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {products.filter(product => product.id).map((product) => (
-                            <SelectItem key={product.id} value={product.id}>
-                              {product.name} ({product.sku || product.code || 'No SKU'})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        placeholder={t('select_component')}
+                        t={t}
+                      />
                       <Input
                         type="text"
                         inputMode="decimal"
