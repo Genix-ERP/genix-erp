@@ -2430,33 +2430,6 @@ export default function Products() {
               </div>
             )}
 
-            {/* Options */}
-            <div>
-              <h4 className="font-semibold text-slate-900 mb-3">{t('options')}</h4>
-              <div className="flex flex-wrap gap-6">
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={formData.is_purchasable && formData.is_sellable}
-                    onCheckedChange={(checked) => setFormData({...formData, is_purchasable: checked, is_sellable: checked})}
-                  />
-                  <span className="text-sm text-slate-700 flex items-center">
-                    {t('can_buy_sell') || "Sotish/Sotib olish"}
-                    <FieldHelp text={t('help_can_buy_sell') || "Bu mahsulotni sotib olish va sotish mumkin. O'chirilsa, mahsulot faqat ko'rish uchun bo'ladi"} />
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={formData.is_active}
-                    onCheckedChange={(checked) => setFormData({...formData, is_active: checked})}
-                  />
-                  <span className="text-sm text-slate-700 flex items-center">
-                    {t('active')}
-                    <FieldHelp text={t('help_active') || "Faol mahsulot. O'chirilsa, mahsulot sotuvda ko'rinmaydi"} />
-                  </span>
-                </div>
-              </div>
-            </div>
-
             {/* Module Visibility */}
             <div className="pt-4 border-t border-slate-200">
               <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
@@ -2508,6 +2481,16 @@ export default function Products() {
                     <FieldHelp text={t('help_can_be_expensed') || "Bu mahsulot Xarajatlar modulida ko'rinadi"} />
                   </label>
                 </div>
+              </div>
+              <div className="flex items-center gap-2 mt-4">
+                <Switch
+                  checked={formData.is_active}
+                  onCheckedChange={(checked) => setFormData({...formData, is_active: checked})}
+                />
+                <span className="text-sm text-slate-700 flex items-center">
+                  {t('active')}
+                  <FieldHelp text={t('help_active') || "Faol mahsulot. O'chirilsa, mahsulot sotuvda ko'rinmaydi"} />
+                </span>
               </div>
             </div>
 
