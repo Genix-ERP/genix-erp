@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useManufacturing } from '@/components/contexts/ManufacturingContext';
 import { useInventory } from '@/components/contexts/InventoryContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,7 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Play, Pause, CheckCircle, X, Calendar, RefreshCw, Clock, DollarSign, Cog, Eye, ArrowRight, Package, Trash2 } from 'lucide-react';
+import { Plus, Search, Play, Pause, CheckCircle, X, Calendar, RefreshCw, Clock, DollarSign, Cog, Eye, ArrowRight, Package, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import apiClient from '@/api/client';
 import { format } from 'date-fns';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -48,6 +49,37 @@ export default function ProductionOrders() {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [products, setProducts] = useState([]);
   const [boms, setBoms] = useState([]);
+
+  // Server-side pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalOrders, setTotalOrders] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [paginatedOrders, setPaginatedOrders] = useState([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const pageSize = 20;
+
+  const fetchOrders = useCallback(async () => {
+    setOrdersLoading(true);
+    try {
+      const params = { page: currentPage, limit: pageSize, sort_by: 'created_at', sort_order: 'desc' };
+      if (searchQuery) params.search = searchQuery;
+      if (statusFilter !== 'all') params.status = statusFilter;
+      const response = await apiClient.get('/production-orders', { params });
+      const data = response.data?.data || [];
+      const meta = response.data?.meta || {};
+      setPaginatedOrders(data);
+      setTotalOrders(meta.total || data.length);
+      setTotalPages(meta.total_pages || Math.ceil((meta.total || data.length) / pageSize));
+    } catch (e) {
+      console.error('Failed to load production orders', e);
+      setPaginatedOrders([]);
+    } finally {
+      setOrdersLoading(false);
+    }
+  }, [currentPage, searchQuery, statusFilter]);
+
+  useEffect(() => { fetchOrders(); }, [fetchOrders]);
+  useEffect(() => { setCurrentPage(1); }, [searchQuery, statusFilter]);
 
   // Split output state
   const [showSplitModal, setShowSplitModal] = useState(false);
@@ -158,23 +190,8 @@ export default function ProductionOrders() {
     }
   }, [newOrder.product_id, boms]);
 
-  const filteredOrders = useMemo(() => {
-    let filtered = productionOrders;
-
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(o => o.status === statusFilter);
-    }
-
-    if (searchQuery) {
-      filtered = filtered.filter(o =>
-        o.product_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        o.code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        o.name?.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-
-    return filtered;
-  }, [productionOrders, searchQuery, statusFilter]);
+  // Server handles search/status filtering; use paginated data directly
+  const filteredOrders = paginatedOrders;
 
   const handleCreateOrder = async () => {
     try {
@@ -197,6 +214,7 @@ export default function ProductionOrders() {
       }
       await createProductionOrder(orderData);
       setShowCreateModal(false);
+      fetchOrders();
 
       // Reset form
       setNewOrder({
@@ -247,6 +265,7 @@ export default function ProductionOrders() {
         default:
           break;
       }
+      fetchOrders();
     } catch (error) {
       console.error('Error updating order status:', error);
     }
@@ -469,7 +488,7 @@ export default function ProductionOrders() {
             <div className="flex items-center justify-between">
               <CardTitle className="text-xl font-bold">{t('production_orders') || 'Production Orders'}</CardTitle>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={refreshData}>
+                <Button variant="outline" size="sm" onClick={() => { refreshData(); fetchOrders(); }}>
                   <RefreshCw className="w-4 h-4 mr-2" /> {t('refresh') || 'Refresh'}
                 </Button>
                 {canCreate(MODULES.MANUFACTURING) && (
@@ -509,7 +528,7 @@ export default function ProductionOrders() {
         </CardHeader>
 
         <CardContent className="p-0">
-          {isLoading ? (
+          {(isLoading || ordersLoading) ? (
             <div className="flex items-center justify-center py-16">
               <div className="text-center">
                 <div className="w-8 h-8 border-4 border-slate-800 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
@@ -636,7 +655,7 @@ export default function ProductionOrders() {
                               <Button size="sm" variant="ghost"
                                 onClick={() => {
                                   if (window.confirm(t('confirm_delete') || 'Delete this production order?')) {
-                                    deleteProductionOrder(order.id);
+                                    deleteProductionOrder(order.id).then(() => fetchOrders());
                                   }
                                 }}
                                 title={t('delete') || 'Delete'}
@@ -651,6 +670,22 @@ export default function ProductionOrders() {
                   })}
                 </TableBody>
               </Table>
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between px-4 py-3 border-t">
+                  <span className="text-sm text-slate-600">
+                    {t('showing') || 'Showing'} {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, totalOrders)} {t('of') || 'of'} {totalOrders}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>
+                      <ChevronLeft className="w-4 h-4" />
+                    </Button>
+                    <span className="text-sm font-medium">{currentPage} / {totalPages}</span>
+                    <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}>
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </CardContent>

@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Plus, Trash2, CheckCircle, XCircle, ArrowLeft, FileText, Eye, Download, PenLine, Ban, ImagePlus, X } from 'lucide-react';
+import { Plus, Trash2, CheckCircle, XCircle, ArrowLeft, FileText, Eye, Download, PenLine, Ban, ImagePlus, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -122,6 +122,8 @@ const ActsTab = ({ project }) => {
   const [acts, setActs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ act_type: '', state: '' });
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 20;
 
   // Create modal state
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -151,6 +153,7 @@ const ActsTab = ({ project }) => {
   const load = useCallback(async () => {
     if (!project?.id) return;
     setLoading(true);
+    setCurrentPage(1);
     try {
       const params = {};
       if (filters.act_type) params.type = filters.act_type;
@@ -501,27 +504,50 @@ const ActsTab = ({ project }) => {
                   </tr>
                 </thead>
                 <tbody>
-                  {(acts || []).map(act => (
-                    <tr key={act.id} className="border-b hover:bg-slate-50">
-                      <td className="py-2 px-3 font-medium">{act.name}{act.act_number ? ` #${act.act_number}` : ''}</td>
-                      <td className="py-2 px-3"><Badge className={TYPE_COLORS[act.act_type]}>{TYPE_LABELS[act.act_type] || act.act_type}</Badge></td>
-                      <td className="py-2 px-3 whitespace-nowrap">{act.period_from ? `${act.period_from} — ${act.period_to}` : '—'}</td>
-                      <td className="py-2 px-3">{act.subcontract_name || '—'}</td>
-                      <td className="py-2 px-3 text-right font-medium whitespace-nowrap">{formatCurrency(act.amount_total || 0)}</td>
-                      <td className="py-2 px-3"><Badge className={STATE_COLORS[act.state]}>{STATE_LABELS[act.state] || act.state}</Badge></td>
-                      <td className="py-2 px-3 text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="sm" onClick={() => loadActDetail(act.id)}><Eye className="w-4 h-4" /></Button>
-                          <Button variant="ghost" size="sm" onClick={() => handleExportPDF(act)}><Download className="w-4 h-4 text-slate-500" /></Button>
-                          {act.state === 'draft' && (
-                            <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(act)}><Trash2 className="w-4 h-4 text-red-500" /></Button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {(() => {
+                    const totalCount = (acts || []).length;
+                    const totalPages = Math.ceil(totalCount / pageSize);
+                    const paginatedItems = (acts || []).slice((currentPage - 1) * pageSize, currentPage * pageSize);
+                    return paginatedItems.map(act => (
+                      <tr key={act.id} className="border-b hover:bg-slate-50">
+                        <td className="py-2 px-3 font-medium">{act.name}{act.act_number ? ` #${act.act_number}` : ''}</td>
+                        <td className="py-2 px-3"><Badge className={TYPE_COLORS[act.act_type]}>{TYPE_LABELS[act.act_type] || act.act_type}</Badge></td>
+                        <td className="py-2 px-3 whitespace-nowrap">{act.period_from ? `${act.period_from} — ${act.period_to}` : '—'}</td>
+                        <td className="py-2 px-3">{act.subcontract_name || '—'}</td>
+                        <td className="py-2 px-3 text-right font-medium whitespace-nowrap">{formatCurrency(act.amount_total || 0)}</td>
+                        <td className="py-2 px-3"><Badge className={STATE_COLORS[act.state]}>{STATE_LABELS[act.state] || act.state}</Badge></td>
+                        <td className="py-2 px-3 text-right">
+                          <div className="flex justify-end gap-1">
+                            <Button variant="ghost" size="sm" onClick={() => loadActDetail(act.id)}><Eye className="w-4 h-4" /></Button>
+                            <Button variant="ghost" size="sm" onClick={() => handleExportPDF(act)}><Download className="w-4 h-4 text-slate-500" /></Button>
+                            {act.state === 'draft' && (
+                              <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(act)}><Trash2 className="w-4 h-4 text-red-500" /></Button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ));
+                  })()}
                 </tbody>
               </table>
+              {(() => {
+                const totalCount = (acts || []).length;
+                const totalPages = Math.ceil(totalCount / pageSize);
+                return totalPages > 1 && (
+                  <div className="flex items-center justify-between px-4 py-3 border-t">
+                    <p className="text-sm text-slate-500">
+                      {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, totalCount)} / {totalCount}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}>1</button>
+                      <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft className="w-4 h-4" /></button>
+                      <span className="text-sm font-medium px-2">{currentPage} / {totalPages}</span>
+                      <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}><ChevronRight className="w-4 h-4" /></button>
+                      <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(totalPages)}>{totalPages}</button>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
         </CardContent>

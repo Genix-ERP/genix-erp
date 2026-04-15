@@ -7,7 +7,7 @@ import {
   Plus, Search, Package, ArrowRightLeft, TrendingUp, TrendingDown,
   Warehouse, RotateCcw, Filter, Calendar, AlertCircle, CheckCircle,
   ArrowUpRight, ArrowDownLeft, History, DollarSign, HelpCircle, BarChart3, Activity,
-  ChevronDown, ChevronRight
+  ChevronDown, ChevronLeft, ChevronRight
 } from "lucide-react";
 import {
   Tooltip,
@@ -75,6 +75,15 @@ export default function InventoryManagement() {
   const [isSaving, setIsSaving] = useState(false);
   const [selectedABCCategory, setSelectedABCCategory] = useState(null);
   const [expandedProducts, setExpandedProducts] = useState(new Set());
+
+  // Pagination state
+  const [stockPage, setStockPage] = useState(1);
+  const [movementsPage, setMovementsPage] = useState(1);
+  const pageSize = 20;
+
+  // Reset pages when filters change
+  useEffect(() => { setStockPage(1); }, [searchQuery, warehouseFilter]);
+  useEffect(() => { setMovementsPage(1); }, [searchQuery, movementTypeFilter]);
 
   // Cleanup modals on unmount to prevent navigation blocking
   useEffect(() => {
@@ -560,7 +569,7 @@ export default function InventoryManagement() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {groupedInventory.map(group => {
+                      {groupedInventory.slice((stockPage - 1) * pageSize, stockPage * pageSize).map(group => {
                         const isExpanded = expandedProducts.has(group.productId);
                         const isOutOfStock = group.totalQuantity <= 0;
                         const isLowStock = !isOutOfStock && group.minStockLevel && group.totalQuantity <= group.minStockLevel;
@@ -651,6 +660,20 @@ export default function InventoryManagement() {
                       })}
                     </TableBody>
                   </Table>
+                  {Math.ceil(groupedInventory.length / pageSize) > 1 && (
+                    <div className="flex items-center justify-between px-4 py-3 border-t">
+                      <p className="text-sm text-slate-500">
+                        {(stockPage - 1) * pageSize + 1}-{Math.min(stockPage * pageSize, groupedInventory.length)} / {groupedInventory.length}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={stockPage === 1} onClick={() => setStockPage(1)}>1</button>
+                        <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={stockPage === 1} onClick={() => setStockPage(p => p - 1)}><ChevronLeft className="w-4 h-4" /></button>
+                        <span className="text-sm font-medium px-2">{stockPage} / {Math.ceil(groupedInventory.length / pageSize)}</span>
+                        <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={stockPage >= Math.ceil(groupedInventory.length / pageSize)} onClick={() => setStockPage(p => p + 1)}><ChevronRight className="w-4 h-4" /></button>
+                        <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={stockPage >= Math.ceil(groupedInventory.length / pageSize)} onClick={() => setStockPage(Math.ceil(groupedInventory.length / pageSize))}>{Math.ceil(groupedInventory.length / pageSize)}</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -826,7 +849,7 @@ export default function InventoryManagement() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredMovements.map(movement => {
+                      {filteredMovements.slice((movementsPage - 1) * pageSize, movementsPage * pageSize).map(movement => {
                         const movementQty = movement.quantity || 0;
                         const movementType = movement.transaction_type || movement.movement_type;
                         const TypeIcon = getMovementTypeIcon(movementType, movementQty);
@@ -890,6 +913,20 @@ export default function InventoryManagement() {
                       })}
                     </TableBody>
                   </Table>
+                  {Math.ceil(filteredMovements.length / pageSize) > 1 && (
+                    <div className="flex items-center justify-between px-4 py-3 border-t">
+                      <p className="text-sm text-slate-500">
+                        {(movementsPage - 1) * pageSize + 1}-{Math.min(movementsPage * pageSize, filteredMovements.length)} / {filteredMovements.length}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={movementsPage === 1} onClick={() => setMovementsPage(1)}>1</button>
+                        <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={movementsPage === 1} onClick={() => setMovementsPage(p => p - 1)}><ChevronLeft className="w-4 h-4" /></button>
+                        <span className="text-sm font-medium px-2">{movementsPage} / {Math.ceil(filteredMovements.length / pageSize)}</span>
+                        <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={movementsPage >= Math.ceil(filteredMovements.length / pageSize)} onClick={() => setMovementsPage(p => p + 1)}><ChevronRight className="w-4 h-4" /></button>
+                        <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={movementsPage >= Math.ceil(filteredMovements.length / pageSize)} onClick={() => setMovementsPage(Math.ceil(filteredMovements.length / pageSize))}>{Math.ceil(filteredMovements.length / pageSize)}</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>

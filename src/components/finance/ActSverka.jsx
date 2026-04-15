@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Plus, Search, FileCheck, AlertTriangle, CheckCircle2, FileText,
   Users, Trash2, RefreshCw, Eye, ArrowLeft, Printer, Loader2,
-  Send, Mail, MessageCircle, ChevronDown, ChevronRight, Link2, Check, Copy, Bell,
+  Send, Mail, MessageCircle, ChevronDown, ChevronRight, ChevronLeft, Link2, Check, Copy, Bell,
   Package, Truck, Download
 } from "lucide-react";
 import { exportReconciliationToExcel } from '@/utils/exportReconciliationExcel';
@@ -50,6 +50,8 @@ export default function ActSverka() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 20;
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -134,6 +136,18 @@ export default function ActSverka() {
     }
     return result;
   }, [reconciliationActs, searchQuery, statusFilter]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter]);
+
+  // Pagination
+  const totalCount = filteredActs.length;
+  const totalPages = Math.ceil(totalCount / pageSize);
+  const paginatedActs = useMemo(() => {
+    return filteredActs.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  }, [filteredActs, currentPage, pageSize]);
 
   // Filtered contacts for dropdown
   const filteredContacts = useMemo(() => {
@@ -1209,6 +1223,7 @@ export default function ActSverka() {
               </p>
             </div>
           ) : (
+            <>
             <Table>
               <TableHeader>
                 <TableRow className="bg-slate-50">
@@ -1224,7 +1239,7 @@ export default function ActSverka() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredActs.map((act) => {
+                {paginatedActs.map((act) => {
                   const closingBalance = (act.opening_balance || 0) + (act.our_debit_total || 0) - (act.our_credit_total || 0);
                   return (
                     <TableRow
@@ -1271,6 +1286,21 @@ export default function ActSverka() {
                 })}
               </TableBody>
             </Table>
+            {Math.ceil(filteredActs.length / pageSize) > 1 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t">
+                <p className="text-sm text-slate-500">
+                  {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, filteredActs.length)} / {filteredActs.length}
+                </p>
+                <div className="flex items-center gap-2">
+                  <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}>1</button>
+                  <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft className="w-4 h-4" /></button>
+                  <span className="text-sm font-medium px-2">{currentPage} / {Math.ceil(filteredActs.length / pageSize)}</span>
+                  <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= Math.ceil(filteredActs.length / pageSize)} onClick={() => setCurrentPage(p => p + 1)}><ChevronRight className="w-4 h-4" /></button>
+                  <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= Math.ceil(filteredActs.length / pageSize)} onClick={() => setCurrentPage(Math.ceil(filteredActs.length / pageSize))}>{Math.ceil(filteredActs.length / pageSize)}</button>
+                </div>
+              </div>
+            )}
+            </>
           )}
         </CardContent>
       </Card>

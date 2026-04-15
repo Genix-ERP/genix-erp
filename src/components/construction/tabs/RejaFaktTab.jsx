@@ -11,7 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Plus, Trash2, ChevronDown, ChevronRight, Package, Wrench, Edit, TrendingUp, TrendingDown, Minus, AlertTriangle, Download, Clock, Printer, ShieldCheck, Users, Truck } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, ChevronRight, ChevronLeft, Package, Wrench, Edit, TrendingUp, TrendingDown, Minus, AlertTriangle, Download, Clock, Printer, ShieldCheck, Users, Truck } from 'lucide-react';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -32,6 +32,8 @@ const RejaFaktTab = ({ project }) => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [expandedSubStages, setExpandedSubStages] = useState({});
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 20;
 
   // Filters
   const [stageFilter, setStageFilter] = useState('all');
@@ -462,7 +464,7 @@ const RejaFaktTab = ({ project }) => {
       <div className="flex flex-wrap gap-3 items-end">
         <div className="w-48">
           <Label className="text-xs text-slate-500">{t('stage')}</Label>
-          <Select value={stageFilter} onValueChange={setStageFilter}>
+          <Select value={stageFilter} onValueChange={(val) => { setStageFilter(val); setCurrentPage(1); }}>
             <SelectTrigger className="h-9">
               <SelectValue />
             </SelectTrigger>
@@ -476,7 +478,7 @@ const RejaFaktTab = ({ project }) => {
         </div>
         <div className="w-40">
           <Label className="text-xs text-slate-500">{t('status')}</Label>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <Select value={statusFilter} onValueChange={(val) => { setStatusFilter(val); setCurrentPage(1); }}>
             <SelectTrigger className="h-9">
               <SelectValue />
             </SelectTrigger>
@@ -490,7 +492,7 @@ const RejaFaktTab = ({ project }) => {
         </div>
         <div className="w-48">
           <Label className="text-xs text-slate-500">{t('rf_sub_stage')}</Label>
-          <Select value={subStageFilter} onValueChange={setSubStageFilter}>
+          <Select value={subStageFilter} onValueChange={(val) => { setSubStageFilter(val); setCurrentPage(1); }}>
             <SelectTrigger className="h-9">
               <SelectValue />
             </SelectTrigger>
@@ -508,14 +510,14 @@ const RejaFaktTab = ({ project }) => {
             className="h-9"
             placeholder={t('rf_search_placeholder')}
             value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
+            onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); }}
           />
         </div>
         <div className="flex items-center gap-2 h-9">
           <Checkbox
             id="over-budget-filter"
             checked={onlyOverBudget}
-            onCheckedChange={setOnlyOverBudget}
+            onCheckedChange={(checked) => { setOnlyOverBudget(checked); setCurrentPage(1); }}
           />
           <Label htmlFor="over-budget-filter" className="text-xs text-red-600 cursor-pointer">
             {t('rf_only_over_budget')}
@@ -604,7 +606,14 @@ const RejaFaktTab = ({ project }) => {
           </CardContent>
         </Card>
       ) : (
-        stages.map(stage => {
+        <>
+          {(() => {
+            const totalCount = stages.length;
+            const totalPages = Math.ceil(totalCount / pageSize);
+            const paginatedItems = stages.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+            return (
+              <>
+                {paginatedItems.map(stage => {
           const stagePct = stage.plan_total > 0 ? (stage.fact_total / stage.plan_total * 100) : 0;
           const stageProgress = getSubStageProgress(stage);
 
@@ -934,7 +943,25 @@ const RejaFaktTab = ({ project }) => {
               </CardContent>
             </Card>
           );
-        })
+                })}
+                {Math.ceil(stages.length / pageSize) > 1 && (
+                  <div className="flex items-center justify-between px-4 py-3 border-t bg-white">
+                    <p className="text-sm text-slate-500">
+                      {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, stages.length)} / {stages.length}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}>1</button>
+                      <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft className="w-4 h-4" /></button>
+                      <span className="text-sm font-medium px-2">{currentPage} / {Math.ceil(stages.length / pageSize)}</span>
+                      <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= Math.ceil(stages.length / pageSize)} onClick={() => setCurrentPage(p => p + 1)}><ChevronRight className="w-4 h-4" /></button>
+                      <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= Math.ceil(stages.length / pageSize)} onClick={() => setCurrentPage(Math.ceil(stages.length / pageSize))}>{Math.ceil(stages.length / pageSize)}</button>
+                    </div>
+                  </div>
+                )}
+              </>
+            );
+          })()}
+        </>
       )}
 
       {/* Sticky Project Summary at Bottom */}

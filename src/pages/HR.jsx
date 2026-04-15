@@ -40,6 +40,8 @@ import {
   ChevronsUpDown,
   FolderTree,
   AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
 // Import universal ERP components
@@ -96,6 +98,10 @@ export default function HR() {
   const [searchQuery, setSearchQuery] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalEmployees, setTotalEmployees] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const pageSize = 20;
   const [insights, setInsights] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
@@ -324,7 +330,16 @@ Only return the JSON, no other text.`;
 
   const loadEmployees = useCallback(async () => {
     try {
-      const data = await hrService.listEmployees({ sort_by: 'hire_date', sort_order: 'DESC' });
+      const params = { sort_by: 'hire_date', sort_order: 'DESC', page: currentPage, limit: pageSize };
+      if (searchQuery) params.search = searchQuery;
+      if (statusFilter !== 'all') params.status = statusFilter;
+      if (departmentFilter !== 'all') params.department = departmentFilter;
+      // Use apiClient directly to get pagination meta
+      const response = await apiClient.get('/employees', { params });
+      const data = response.data?.data || [];
+      const meta = response.data?.meta || {};
+      setTotalEmployees(meta.total || data.length);
+      setTotalPages(meta.total_pages || Math.ceil((meta.total || data.length) / pageSize));
       // Map backend response to frontend format
       const mapped = (data || []).map(emp => ({
         id: emp.id,
@@ -348,7 +363,7 @@ Only return the JSON, no other text.`;
     } catch (error) {
       console.error("Error loading employees:", error);
     }
-  }, [assessTurnoverRisk]);
+  }, [assessTurnoverRisk, currentPage, searchQuery, statusFilter, departmentFilter]);
 
   const generateInsights = useCallback(async () => {
     try {
@@ -853,27 +868,18 @@ Only return the JSON, no other text.`;
     }
   }, [employees.length]);
 
+  // Server handles search/status/department filtering; just sync filteredEmployees
   useEffect(() => {
-    let filtered = employees;
-    if (searchQuery) {
-      filtered = filtered.filter(e => e.full_name.toLowerCase().includes(searchQuery.toLowerCase()) || e.job_title.toLowerCase().includes(searchQuery.toLowerCase()));
-    }
-    if (departmentFilter !== "all") {
-      const selectedDept = departments.find(d => d.id === departmentFilter);
-      const selectedDeptName = selectedDept?.name?.toLowerCase() || '';
-      filtered = filtered.filter(e =>
-        e.department_id === departmentFilter ||
-        (selectedDeptName && (e.department || '').toLowerCase() === selectedDeptName)
-      );
-    }
-    if (statusFilter !== "all") {
-      filtered = filtered.filter(e => e.status === statusFilter);
-    }
-    setFilteredEmployees(filtered);
-  }, [employees, searchQuery, departmentFilter, statusFilter]);
+    setFilteredEmployees(employees);
+  }, [employees]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, departmentFilter, statusFilter]);
   
   const metrics = {
-    totalEmployees: employees.length,
+    totalEmployees: totalEmployees || employees.length,
     activeEmployees: employees.filter(e => e.status === 'active').length,
     totalSalaries: employees.filter(e => e.status === 'active').reduce((sum, e) => sum + (parseFloat(e.salary) || 0), 0),
   };
@@ -1078,6 +1084,22 @@ Only return the JSON, no other text.`;
                 ))}
               </TableBody>
             </Table>
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t mt-2">
+                <span className="text-sm text-slate-600">
+                  {t('showing') || 'Showing'} {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, totalEmployees)} {t('of') || 'of'} {totalEmployees}
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>
+                    <ChevronLeft className="w-4 h-4" />
+                  </Button>
+                  <span className="text-sm font-medium">{currentPage} / {totalPages}</span>
+                  <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}>
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 

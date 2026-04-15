@@ -42,6 +42,8 @@ import {
   ScanLine,
   AlertTriangle,
   Loader2,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useSearchParams } from 'react-router-dom';
@@ -99,6 +101,14 @@ export default function PurchaseOrders() {
   const [filteredOrders, setFilteredOrders] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+
+  // Server-side pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalOrders, setTotalOrders] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [paginatedOrders, setPaginatedOrders] = useState([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const pageSize = 20;
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -253,21 +263,40 @@ export default function PurchaseOrders() {
     return deliveryDate.toISOString().split('T')[0];
   }, []);
 
-  // Filter purchase orders
+  // Server-side fetch for purchase orders
+  const fetchOrders = useCallback(async () => {
+    setOrdersLoading(true);
+    try {
+      const params = { page: currentPage, limit: pageSize };
+      if (searchQuery) params.search = searchQuery;
+      if (statusFilter !== 'all') params.status = statusFilter;
+      const response = await apiClient.get('/purchase-orders', { params });
+      const rawData = response.data?.data || [];
+      const meta = response.data?.meta || {};
+      // Map backend fields to frontend format (same as ProcurementContext)
+      const data = rawData.map(po => ({
+        ...po,
+        po_number: po.order_number || po.po_number,
+        supplier_name: po.vendor_name || po.supplier_name,
+      }));
+      setPaginatedOrders(data);
+      setTotalOrders(meta.total || data.length);
+      setTotalPages(meta.total_pages || Math.ceil((meta.total || data.length) / pageSize));
+    } catch (e) {
+      console.error('Failed to load purchase orders', e);
+      setPaginatedOrders([]);
+    } finally {
+      setOrdersLoading(false);
+    }
+  }, [currentPage, searchQuery, statusFilter]);
+
+  useEffect(() => { fetchOrders(); }, [fetchOrders]);
+  useEffect(() => { setCurrentPage(1); }, [searchQuery, statusFilter]);
+
+  // Sync filteredOrders from server-paginated data
   useEffect(() => {
-    let filtered = purchaseOrders;
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(po => po.status === statusFilter);
-    }
-    if (searchQuery) {
-      filtered = filtered.filter(po =>
-        po.po_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        po.vendor_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        po.supplier_name?.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-    setFilteredOrders(filtered);
-  }, [purchaseOrders, searchQuery, statusFilter]);
+    setFilteredOrders(paginatedOrders);
+  }, [paginatedOrders]);
 
   // Calculate order total from line items
   const calculateOrderTotal = (lines) => {
@@ -534,6 +563,7 @@ export default function PurchaseOrders() {
       };
 
       await createPurchaseOrder(poData);
+      fetchOrders();
       setShowCreateModal(false);
 
       setNewPO({
@@ -653,6 +683,7 @@ export default function PurchaseOrders() {
     if (newStatus === 'cancelled') {
       await deletePurchaseOrder(poId);
     }
+    fetchOrders();
   };
 
   const handleCreateBill = async (poId) => {
@@ -745,7 +776,7 @@ export default function PurchaseOrders() {
               </div>
             </CardHeader>
             <CardContent className="p-0">
-              {isLoading ? (
+              {(isLoading || ordersLoading) ? (
                 <div className="flex items-center justify-center py-16">
                   <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
                 </div>
@@ -812,6 +843,7 @@ export default function PurchaseOrders() {
                                 <Button size="sm" variant="ghost" onClick={async () => {
                                   try {
                                     await approvePurchaseOrder(po.id);
+                                    fetchOrders();
                                   } catch (err) {
                                     const msg = err?.response?.data?.error?.message || err?.response?.data?.message || err?.message || '';
                                     if (msg.includes('NO_RECEIPT_WAREHOUSE')) {
@@ -846,6 +878,22 @@ export default function PurchaseOrders() {
                       ))}
                     </TableBody>
                   </Table>
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between px-4 py-3 border-t">
+                      <span className="text-sm text-slate-600">
+                        {t('showing') || 'Showing'} {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, totalOrders)} {t('of') || 'of'} {totalOrders}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>
+                          <ChevronLeft className="w-4 h-4" />
+                        </Button>
+                        <span className="text-sm font-medium">{currentPage} / {totalPages}</span>
+                        <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}>
+                          <ChevronRight className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -1601,6 +1649,7 @@ export default function PurchaseOrders() {
               onClick={async () => {
                 if (deleteConfirm) {
                   await deletePurchaseOrder(deleteConfirm.id);
+                  fetchOrders();
                   setDeleteConfirm(null);
                 }
               }}

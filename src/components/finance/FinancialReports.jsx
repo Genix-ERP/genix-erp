@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   FileText, Download, Loader2, CheckCircle2, AlertTriangle,
-  ChevronDown, ChevronRight, DollarSign,
+  ChevronDown, ChevronRight, ChevronLeft, DollarSign,
   TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, Scale
 } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -176,9 +176,19 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
   const [exchangeDiffs, setExchangeDiffs] = useState(null);
   const [currencyDebt, setCurrencyDebt] = useState(null);
 
+  // Pagination states
+  const pageSize = 20;
+  const [currentPageTrial, setCurrentPageTrial] = useState(1);
+  const [currentPageExchange, setCurrentPageExchange] = useState(1);
+  const [currentPageCurrency, setCurrentPageCurrency] = useState(1);
+
   // Fetch all reports when period changes
   useEffect(() => {
     fetchReports();
+    // Reset pagination when period changes
+    setCurrentPageTrial(1);
+    setCurrentPageExchange(1);
+    setCurrentPageCurrency(1);
   }, [period]);
 
   const fetchReports = async () => {
@@ -490,7 +500,7 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {trialBalance.accounts.map((account, idx) => (
+                      {trialBalance.accounts.slice((currentPageTrial - 1) * pageSize, currentPageTrial * pageSize).map((account, idx) => (
                         <TableRow key={account.account_id || idx}>
                           <TableCell className="font-mono text-sm">{account.account_code}</TableCell>
                           <TableCell>{getAccountName(account)}</TableCell>
@@ -521,6 +531,24 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
                       </TableRow>
                     </TableBody>
                   </Table>
+                  {(() => {
+                    const totalCount = trialBalance.accounts.length;
+                    const totalPages = Math.ceil(totalCount / pageSize);
+                    return totalPages > 1 && (
+                      <div className="flex items-center justify-between px-4 py-3 border-t">
+                        <p className="text-sm text-slate-500">
+                          {(currentPageTrial - 1) * pageSize + 1}-{Math.min(currentPageTrial * pageSize, totalCount)} / {totalCount}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPageTrial === 1} onClick={() => setCurrentPageTrial(1)}>1</button>
+                          <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPageTrial === 1} onClick={() => setCurrentPageTrial(p => p - 1)}><ChevronLeft className="w-4 h-4" /></button>
+                          <span className="text-sm font-medium px-2">{currentPageTrial} / {totalPages}</span>
+                          <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPageTrial >= totalPages} onClick={() => setCurrentPageTrial(p => p + 1)}><ChevronRight className="w-4 h-4" /></button>
+                          <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPageTrial >= totalPages} onClick={() => setCurrentPageTrial(totalPages)}>{totalPages}</button>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               ) : (
                 <div className="text-center py-12 text-slate-500">
@@ -946,44 +974,64 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
                   </div>
 
                   {/* Details Table */}
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>{language === 'uz' ? 'Sana' : 'Date'}</TableHead>
-                        <TableHead>{language === 'uz' ? 'Hujjat №' : 'Document #'}</TableHead>
-                        <TableHead>{language === 'uz' ? 'Kontragent' : 'Counterparty'}</TableHead>
-                        <TableHead>{language === 'uz' ? 'Valyuta' : 'Currency'}</TableHead>
-                        <TableHead className="text-right">{language === 'uz' ? 'Miqdor' : 'Amount'}</TableHead>
-                        <TableHead className="text-right">{language === 'uz' ? "Boshlang'ich kurs" : 'Initial Rate'}</TableHead>
-                        <TableHead className="text-right">{language === 'uz' ? 'Yakuniy kurs' : 'Final Rate'}</TableHead>
-                        <TableHead className="text-right">{language === 'uz' ? "Farq (so'mda)" : 'Diff (UZS)'}</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {exchangeDiffs.items.map((item) => (
-                        <TableRow key={item.id}>
-                          <TableCell>{item.date}</TableCell>
-                          <TableCell className="font-mono text-sm">{item.document_number || '—'}</TableCell>
-                          <TableCell className="text-sm">{item.counterparty || '—'}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{item.currency_code}</Badge>
-                          </TableCell>
-                          <TableCell className="text-right font-mono">
-                            {item.foreign_amount ? Number(item.foreign_amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
-                          </TableCell>
-                          <TableCell className="text-right font-mono">
-                            {item.initial_rate ? Number(item.initial_rate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
-                          </TableCell>
-                          <TableCell className="text-right font-mono">
-                            {item.final_rate ? Number(item.final_rate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
-                          </TableCell>
-                          <TableCell className={`text-right font-medium ${item.type === 'positive' ? 'text-green-600' : 'text-red-600'}`}>
-                            {item.type === 'positive' ? '+' : '-'}{formatCurrency(item.amount)}
-                          </TableCell>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>{language === 'uz' ? 'Sana' : 'Date'}</TableHead>
+                          <TableHead>{language === 'uz' ? 'Hujjat №' : 'Document #'}</TableHead>
+                          <TableHead>{language === 'uz' ? 'Kontragent' : 'Counterparty'}</TableHead>
+                          <TableHead>{language === 'uz' ? 'Valyuta' : 'Currency'}</TableHead>
+                          <TableHead className="text-right">{language === 'uz' ? 'Miqdor' : 'Amount'}</TableHead>
+                          <TableHead className="text-right">{language === 'uz' ? "Boshlang'ich kurs" : 'Initial Rate'}</TableHead>
+                          <TableHead className="text-right">{language === 'uz' ? 'Yakuniy kurs' : 'Final Rate'}</TableHead>
+                          <TableHead className="text-right">{language === 'uz' ? "Farq (so'mda)" : 'Diff (UZS)'}</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {exchangeDiffs.items.slice((currentPageExchange - 1) * pageSize, currentPageExchange * pageSize).map((item) => (
+                          <TableRow key={item.id}>
+                            <TableCell>{item.date}</TableCell>
+                            <TableCell className="font-mono text-sm">{item.document_number || '—'}</TableCell>
+                            <TableCell className="text-sm">{item.counterparty || '—'}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline">{item.currency_code}</Badge>
+                            </TableCell>
+                            <TableCell className="text-right font-mono">
+                              {item.foreign_amount ? Number(item.foreign_amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
+                            </TableCell>
+                            <TableCell className="text-right font-mono">
+                              {item.initial_rate ? Number(item.initial_rate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
+                            </TableCell>
+                            <TableCell className="text-right font-mono">
+                              {item.final_rate ? Number(item.final_rate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
+                            </TableCell>
+                            <TableCell className={`text-right font-medium ${item.type === 'positive' ? 'text-green-600' : 'text-red-600'}`}>
+                              {item.type === 'positive' ? '+' : '-'}{formatCurrency(item.amount)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                    {(() => {
+                      const totalCount = exchangeDiffs.items.length;
+                      const totalPages = Math.ceil(totalCount / pageSize);
+                      return totalPages > 1 && (
+                        <div className="flex items-center justify-between px-4 py-3 border-t">
+                          <p className="text-sm text-slate-500">
+                            {(currentPageExchange - 1) * pageSize + 1}-{Math.min(currentPageExchange * pageSize, totalCount)} / {totalCount}
+                          </p>
+                          <div className="flex items-center gap-2">
+                            <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPageExchange === 1} onClick={() => setCurrentPageExchange(1)}>1</button>
+                            <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPageExchange === 1} onClick={() => setCurrentPageExchange(p => p - 1)}><ChevronLeft className="w-4 h-4" /></button>
+                            <span className="text-sm font-medium px-2">{currentPageExchange} / {totalPages}</span>
+                            <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPageExchange >= totalPages} onClick={() => setCurrentPageExchange(p => p + 1)}><ChevronRight className="w-4 h-4" /></button>
+                            <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPageExchange >= totalPages} onClick={() => setCurrentPageExchange(totalPages)}>{totalPages}</button>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
                 </>
               ) : (
                 <div className="text-center py-12 text-slate-500">
@@ -1035,53 +1083,73 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
                   </div>
 
                   {/* Detail Table */}
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-slate-50">
-                        <TableHead>{language === 'uz' ? 'Hujjat' : 'Document'}</TableHead>
-                        <TableHead>{language === 'uz' ? 'Turi' : 'Type'}</TableHead>
-                        <TableHead>{language === 'uz' ? 'Hamkor' : 'Partner'}</TableHead>
-                        <TableHead>{language === 'uz' ? 'Valyuta' : 'Currency'}</TableHead>
-                        <TableHead className="text-right">{language === 'uz' ? 'Qoldiq' : 'Due'}</TableHead>
-                        <TableHead className="text-right">{language === 'uz' ? 'HF kursi' : 'Inv. Rate'}</TableHead>
-                        <TableHead className="text-right">{language === 'uz' ? 'Joriy kurs' : 'Curr. Rate'}</TableHead>
-                        <TableHead className="text-right">{language === 'uz' ? 'HF UZS' : 'Inv. UZS'}</TableHead>
-                        <TableHead className="text-right">{language === 'uz' ? 'Joriy UZS' : 'Curr. UZS'}</TableHead>
-                        <TableHead className="text-right">{language === 'uz' ? 'Farq' : 'Diff'}</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {currencyDebt.items.map((item, idx) => (
-                        <TableRow key={item.id || idx} className="hover:bg-slate-50">
-                          <TableCell className="font-medium">{item.invoice_number}</TableCell>
-                          <TableCell>
-                            <Badge variant={item.type === 'sales' ? 'default' : 'secondary'}>
-                              {item.type === 'sales'
-                                ? (language === 'uz' ? 'Sotish' : 'Sales')
-                                : (language === 'uz' ? 'Xarid' : 'Purchase')
-                              }
-                            </Badge>
-                          </TableCell>
-                          <TableCell>{item.partner_name}</TableCell>
-                          <TableCell><Badge variant="outline">{item.currency_code}</Badge></TableCell>
-                          <TableCell className="text-right font-mono">
-                            {new Intl.NumberFormat('uz-UZ', { maximumFractionDigits: 2 }).format(item.amount_due)}
-                          </TableCell>
-                          <TableCell className="text-right font-mono">
-                            {new Intl.NumberFormat('uz-UZ').format(item.invoice_rate)}
-                          </TableCell>
-                          <TableCell className="text-right font-mono">
-                            {new Intl.NumberFormat('uz-UZ').format(item.current_rate)}
-                          </TableCell>
-                          <TableCell className="text-right">{formatCurrency(item.invoice_uzs)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(item.current_uzs)}</TableCell>
-                          <TableCell className={`text-right font-medium ${item.diff >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                            {item.diff >= 0 ? '+' : ''}{formatCurrency(item.diff)}
-                          </TableCell>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-slate-50">
+                          <TableHead>{language === 'uz' ? 'Hujjat' : 'Document'}</TableHead>
+                          <TableHead>{language === 'uz' ? 'Turi' : 'Type'}</TableHead>
+                          <TableHead>{language === 'uz' ? 'Hamkor' : 'Partner'}</TableHead>
+                          <TableHead>{language === 'uz' ? 'Valyuta' : 'Currency'}</TableHead>
+                          <TableHead className="text-right">{language === 'uz' ? 'Qoldiq' : 'Due'}</TableHead>
+                          <TableHead className="text-right">{language === 'uz' ? 'HF kursi' : 'Inv. Rate'}</TableHead>
+                          <TableHead className="text-right">{language === 'uz' ? 'Joriy kurs' : 'Curr. Rate'}</TableHead>
+                          <TableHead className="text-right">{language === 'uz' ? 'HF UZS' : 'Inv. UZS'}</TableHead>
+                          <TableHead className="text-right">{language === 'uz' ? 'Joriy UZS' : 'Curr. UZS'}</TableHead>
+                          <TableHead className="text-right">{language === 'uz' ? 'Farq' : 'Diff'}</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {currencyDebt.items.slice((currentPageCurrency - 1) * pageSize, currentPageCurrency * pageSize).map((item, idx) => (
+                          <TableRow key={item.id || idx} className="hover:bg-slate-50">
+                            <TableCell className="font-medium">{item.invoice_number}</TableCell>
+                            <TableCell>
+                              <Badge variant={item.type === 'sales' ? 'default' : 'secondary'}>
+                                {item.type === 'sales'
+                                  ? (language === 'uz' ? 'Sotish' : 'Sales')
+                                  : (language === 'uz' ? 'Xarid' : 'Purchase')
+                                }
+                              </Badge>
+                            </TableCell>
+                            <TableCell>{item.partner_name}</TableCell>
+                            <TableCell><Badge variant="outline">{item.currency_code}</Badge></TableCell>
+                            <TableCell className="text-right font-mono">
+                              {new Intl.NumberFormat('uz-UZ', { maximumFractionDigits: 2 }).format(item.amount_due)}
+                            </TableCell>
+                            <TableCell className="text-right font-mono">
+                              {new Intl.NumberFormat('uz-UZ').format(item.invoice_rate)}
+                            </TableCell>
+                            <TableCell className="text-right font-mono">
+                              {new Intl.NumberFormat('uz-UZ').format(item.current_rate)}
+                            </TableCell>
+                            <TableCell className="text-right">{formatCurrency(item.invoice_uzs)}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(item.current_uzs)}</TableCell>
+                            <TableCell className={`text-right font-medium ${item.diff >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                              {item.diff >= 0 ? '+' : ''}{formatCurrency(item.diff)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                    {(() => {
+                      const totalCount = currencyDebt.items.length;
+                      const totalPages = Math.ceil(totalCount / pageSize);
+                      return totalPages > 1 && (
+                        <div className="flex items-center justify-between px-4 py-3 border-t">
+                          <p className="text-sm text-slate-500">
+                            {(currentPageCurrency - 1) * pageSize + 1}-{Math.min(currentPageCurrency * pageSize, totalCount)} / {totalCount}
+                          </p>
+                          <div className="flex items-center gap-2">
+                            <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPageCurrency === 1} onClick={() => setCurrentPageCurrency(1)}>1</button>
+                            <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPageCurrency === 1} onClick={() => setCurrentPageCurrency(p => p - 1)}><ChevronLeft className="w-4 h-4" /></button>
+                            <span className="text-sm font-medium px-2">{currentPageCurrency} / {totalPages}</span>
+                            <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPageCurrency >= totalPages} onClick={() => setCurrentPageCurrency(p => p + 1)}><ChevronRight className="w-4 h-4" /></button>
+                            <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPageCurrency >= totalPages} onClick={() => setCurrentPageCurrency(totalPages)}>{totalPages}</button>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
                 </>
               ) : (
                 <div className="text-center py-12 text-slate-500">

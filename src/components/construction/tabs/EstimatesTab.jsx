@@ -38,6 +38,7 @@ import {
   Building2,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
   FolderOpen,
   Package,
 } from 'lucide-react';
@@ -84,6 +85,10 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
 
   // Source type filter for estimates list
   const [sourceTypeFilter, setSourceTypeFilter] = useState('all');
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 20;
 
   // Import/Export
   const [showImportModal, setShowImportModal] = useState(false);
@@ -212,6 +217,11 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
       .then(data => setProducts(data || []))
       .catch(() => setProducts([]));
   }, [project?.id]);
+
+  // Reset pagination when filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [sourceTypeFilter]);
 
   // Load lines for an estimate
   const loadEstimateLines = async (estimateId) => {
@@ -635,7 +645,11 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
           ) : (
             <ScrollArea className="h-[600px]">
               <div className="p-4 space-y-3">
-                {filteredEstimates.map((est) => {
+                {(() => {
+                  const totalCount = filteredEstimates.length;
+                  const totalPages = Math.ceil(totalCount / pageSize);
+                  const paginatedEstimates = filteredEstimates.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+                  return paginatedEstimates.map((est) => {
                   const isExpanded = expandedEstimate === est.id;
                   const lines = estimateLines[est.id] || [];
                   const isLoadingLines = linesLoading === est.id;
@@ -884,7 +898,26 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                       )}
                     </div>
                   );
-                })}
+                  });
+                })()}
+                {(() => {
+                  const totalCount = filteredEstimates.length;
+                  const totalPages = Math.ceil(totalCount / pageSize);
+                  return totalPages > 1 && (
+                    <div className="flex items-center justify-between px-4 py-3 border-t">
+                      <p className="text-sm text-slate-500">
+                        {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, totalCount)} / {totalCount}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}>1</button>
+                        <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft className="w-4 h-4" /></button>
+                        <span className="text-sm font-medium px-2">{currentPage} / {totalPages}</span>
+                        <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}><ChevronRight className="w-4 h-4" /></button>
+                        <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(totalPages)}>{totalPages}</button>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </ScrollArea>
           )}
