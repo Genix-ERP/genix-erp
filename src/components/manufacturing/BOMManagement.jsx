@@ -605,7 +605,7 @@ export default function BOMManagement() {
                 <div>
                   <label className="text-sm font-medium mb-1 block">{t('product')} *</label>
                   <ProductCombobox
-                    products={products.filter(p => p.id)}
+                    products={products.filter(p => p.id && (p.can_be_sold || p.is_sellable))}
                     value={newBom.product_id}
                     onValueChange={(value) => setNewBom({...newBom, product_id: value})}
                     placeholder={t('select_product')}
@@ -874,7 +874,7 @@ export default function BOMManagement() {
                   <div>
                     <label className="text-sm font-medium mb-1 block">{t('product')} *</label>
                     <ProductCombobox
-                      products={products.filter(p => p.id)}
+                      products={products.filter(p => p.id && (p.can_be_sold || p.is_sellable))}
                       value={editBom.product_id}
                       onValueChange={(value) => setEditBom({...editBom, product_id: value})}
                       placeholder={t('select_product')}
