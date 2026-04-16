@@ -24,10 +24,12 @@ import {
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from "@/components/ui/command";
+import { cn } from "@/lib/utils";
 import {
   Plus, Search, ShoppingBag, TrendingUp, Package, DollarSign, Truck,
   CheckCircle, FileText, Receipt, RotateCcw, Tag, BarChart3, Upload, Download, Eye, Printer, Trash2, X,
-  LayoutDashboard, Building2, Edit, ToggleLeft, ToggleRight, MessageSquareWarning, ChevronDown
+  LayoutDashboard, Building2, Edit, ToggleLeft, ToggleRight, MessageSquareWarning, ChevronDown, Check
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
@@ -1579,46 +1581,81 @@ export default function SalesOrders() {
                   />
                 </div>
                 <div>
-                  <Label className="flex items-center gap-1">
-                    <Building2 className="w-3.5 h-3.5 text-blue-600" />
-                    {t('project') || 'Loyiha'}
-                  </Label>
-                  <Select
-                    value={newOrder.project_id || ''}
-                    onValueChange={(value) => {
-                      const project = allProjects.find(p => p.id === value);
-                      // Auto-set customer if project has an organization that matches a customer
-                      if (project?.organization_id) {
-                        const matchingCustomer = customers.find(c => c.source_organization_id === project.organization_id);
-                        if (matchingCustomer) {
-                          setNewOrder({
-                            ...newOrder,
-                            project_id: value,
-                            project_name: project?.project_name || project?.name || '',
-                            customer_id: matchingCustomer.id,
-                            customer_name: matchingCustomer.company_name || matchingCustomer.name || '',
-                          });
-                          return;
-                        }
-                      }
-                      setNewOrder({
-                        ...newOrder,
-                        project_id: value,
-                        project_name: project?.project_name || project?.name || '',
-                      });
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={t('select_project') || 'Loyihani tanlang'} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {allProjects.map((project) => (
-                        <SelectItem key={project.id} value={project.id}>
-                          {project.project_code || project.code} — {project.project_name || project.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label>{t('project') || 'Loyiha'}</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        className="w-full justify-between font-normal h-9 px-3 text-sm"
+                      >
+                        <span className="truncate">
+                          {newOrder.project_id
+                            ? (() => {
+                                const p = allProjects.find(p => p.id === newOrder.project_id);
+                                return p ? `${p.project_code || p.code} — ${p.project_name || p.name}` : newOrder.project_name;
+                              })()
+                            : (t('select_project') || 'Loyihani tanlang')}
+                        </span>
+                        <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[350px] p-0" align="start">
+                      <Command shouldFilter={true}>
+                        <CommandInput placeholder={t('search') || "Qidirish..."} />
+                        <CommandList>
+                          <CommandEmpty>{t('not_found') || "Topilmadi"}</CommandEmpty>
+                          <CommandGroup>
+                            {allProjects.map((project) => (
+                              <CommandItem
+                                key={project.id}
+                                value={`${project.project_code || project.code} ${project.project_name || project.name}`}
+                                onSelect={() => {
+                                  // Auto-set customer from project's client
+                                  if (project.client_id) {
+                                    const matchingCustomer = customers.find(c => c.id === project.client_id);
+                                    if (matchingCustomer) {
+                                      setNewOrder({
+                                        ...newOrder,
+                                        project_id: project.id,
+                                        project_name: project.project_name || project.name || '',
+                                        customer_id: matchingCustomer.id,
+                                        customer_name: matchingCustomer.company_name || matchingCustomer.name || '',
+                                      });
+                                    } else {
+                                      setNewOrder({
+                                        ...newOrder,
+                                        project_id: project.id,
+                                        project_name: project.project_name || project.name || '',
+                                        customer_id: project.client_id,
+                                        customer_name: project.client_name || '',
+                                      });
+                                    }
+                                  } else {
+                                    setNewOrder({
+                                      ...newOrder,
+                                      project_id: project.id,
+                                      project_name: project.project_name || project.name || '',
+                                    });
+                                  }
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    newOrder.project_id === project.id ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                                <span className="truncate">
+                                  {project.project_code || project.code} — {project.project_name || project.name}
+                                </span>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 </div>
               </div>
 
