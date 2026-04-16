@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,6 +45,7 @@ import {
   Package,
   AlertTriangle,
   FileText,
+  Trash2,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useSales } from "@/components/contexts/SalesContext";
@@ -55,6 +56,9 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { useCompany } from "@/components/contexts/CompanyContext";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import ProductCombobox from "@/components/shared/ProductCombobox";
+import CustomerCombobox from "@/components/shared/CustomerCombobox";
+import inventoryService from "@/api/services/inventory";
 
 export default function Returns() {
   const { language } = useLanguage();
@@ -81,15 +85,29 @@ export default function Returns() {
   const [showDetails, setShowDetails] = useState(false);
   const [selectedReturn, setSelectedReturn] = useState(null);
 
+  const [products, setProducts] = useState([]);
   const [formData, setFormData] = useState({
-    sales_order_id: "",
     customer_id: "",
     customer_name: "",
     return_date: new Date().toISOString().split("T")[0],
     reason: "defective",
-    items: [{ product_name: "", quantity: 1, unit_price: 0, condition: "damaged" }],
+    items: [{ product_id: "", product_name: "", quantity: 1, unit_price: 0, condition: "damaged" }],
     notes: "",
   });
+
+  // Fetch sellable products
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const data = await inventoryService.listProducts({ limit: 1000 });
+        const all = Array.isArray(data) ? data : data?.items || [];
+        setProducts(all.filter(p => p.can_be_sold !== false && p.is_sellable !== false));
+      } catch (error) {
+        console.error('Failed to fetch products:', error);
+      }
+    };
+    fetchProducts();
+  }, []);
 
   const filteredReturns = useMemo(() => {
     if (!returns || !Array.isArray(returns)) return [];
@@ -116,58 +134,50 @@ export default function Returns() {
     return { total, pending, approved, totalAmount, refundedAmount };
   }, [returns]);
 
-  // Filter to show only shipped or delivered orders
-  const shippedOrders = useMemo(() => {
-    if (!salesOrders || !Array.isArray(salesOrders)) return [];
-    return salesOrders.filter(order =>
-      order.status === 'shipped' || order.status === 'delivered'
-    );
-  }, [salesOrders]);
-
-  const handleOrderSelect = async (orderId) => {
-    if (!orderId) return;
-
-    try {
-      // Fetch full order with lines
-      const fullOrder = await getOrder(orderId);
-      if (fullOrder) {
-        const orderLines = fullOrder.lines || fullOrder.items || [];
-        setFormData({
-          ...formData,
-          sales_order_id: orderId,
-          customer_id: fullOrder.customer_id,
-          customer_name: fullOrder.customer_name,
-          items: orderLines.length > 0 ? orderLines.map((item) => ({
-            product_id: item.product_id,
-            product_name: item.product_name || item.description || 'Unknown Product',
-            quantity: 1,
-            max_quantity: item.quantity_delivered || item.quantity || 1,
-            unit_price: item.unit_price || 0,
-            condition: "damaged",
-          })) : [{ product_name: "", quantity: 1, unit_price: 0, condition: "damaged" }],
-        });
-      }
-    } catch (error) {
-      console.error('Failed to fetch order details:', error);
-      // Fallback to basic order from list
-      const order = salesOrders?.find((o) => o.id === orderId);
-      if (order) {
-        setFormData({
-          ...formData,
-          sales_order_id: orderId,
-          customer_id: order.customer_id,
-          customer_name: order.customer_name,
-          items: [{ product_name: "", quantity: 1, unit_price: 0, condition: "damaged" }],
-        });
-      }
+  const handleCustomerSelect = (customerId) => {
+    const customer = customers?.find(c => c.id === customerId);
+    if (customer) {
+      setFormData({
+        ...formData,
+        customer_id: customerId,
+        customer_name: customer.name || customer.company_name || '',
+      });
     }
+  };
+
+  const handleProductSelect = (index, productId) => {
+    const product = products.find(p => p.id === productId);
+    if (product) {
+      const newItems = [...formData.items];
+      newItems[index] = {
+        ...newItems[index],
+        product_id: productId,
+        product_name: product.name,
+        unit_price: product.selling_price || product.sale_price || product.price || 0,
+      };
+      setFormData({ ...formData, items: newItems });
+    }
+  };
+
+  const addItemRow = () => {
+    setFormData({
+      ...formData,
+      items: [...formData.items, { product_id: "", product_name: "", quantity: 1, unit_price: 0, condition: "damaged" }],
+    });
+  };
+
+  const removeItemRow = (index) => {
+    if (formData.items.length <= 1) return;
+    const newItems = formData.items.filter((_, i) => i !== index);
+    setFormData({ ...formData, items: newItems });
   };
 
   const handleItemChange = (index, field, value) => {
     const newItems = [...formData.items];
     if (field === "quantity") {
-      const maxQty = newItems[index].max_quantity || 99;
-      newItems[index][field] = Math.min(parseInt(value) || 1, maxQty);
+      newItems[index][field] = Math.max(1, parseInt(value) || 1);
+    } else if (field === "unit_price") {
+      newItems[index][field] = parseFloat(value) || 0;
     } else {
       newItems[index][field] = value;
     }
@@ -198,12 +208,11 @@ export default function Returns() {
     setShowForm(false);
     setSelectedReturn(null);
     setFormData({
-      sales_order_id: "",
       customer_id: "",
       customer_name: "",
       return_date: new Date().toISOString().split("T")[0],
       reason: "defective",
-      items: [{ product_name: "", quantity: 1, unit_price: 0, condition: "damaged" }],
+      items: [{ product_id: "", product_name: "", quantity: 1, unit_price: 0, condition: "damaged" }],
       notes: "",
     });
   };
@@ -483,37 +492,29 @@ export default function Returns() {
 
       {/* Create Form Modal */}
       <Dialog open={showForm} onOpenChange={(open) => !open && resetForm()}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{t('new_return')}</DialogTitle>
           </DialogHeader>
           <div className="space-y-6 py-4">
-            {/* Order Selection - only shipped/delivered orders */}
+            {/* Customer Selection */}
             <div className="space-y-2">
-              <Label>{t('sales_order')} *</Label>
-              <Select
-                value={formData.sales_order_id}
-                onValueChange={handleOrderSelect}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={t('select_sales_order')} />
-                </SelectTrigger>
-                <SelectContent>
-                  {shippedOrders.map((order) => (
-                    <SelectItem key={order.id} value={order.id}>
-                      {order.order_number} - {order.customer_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>{t('customer')} *</Label>
+              <CustomerCombobox
+                customers={customers || []}
+                value={formData.customer_id}
+                onValueChange={(value, customer) => {
+                  if (!customer) customer = customers?.find(c => c.id === value);
+                  setFormData({
+                    ...formData,
+                    customer_id: value,
+                    customer_name: customer?.name || customer?.company_name || '',
+                  });
+                }}
+                placeholder={t('select_customer') || 'Mijozni tanlang'}
+                t={t}
+              />
             </div>
-
-            {formData.customer_name && (
-              <div className="p-3 bg-slate-50 rounded-lg">
-                <p className="text-sm text-slate-600">{t('customer')}:</p>
-                <p className="font-medium">{formData.customer_name}</p>
-              </div>
-            )}
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -549,73 +550,85 @@ export default function Returns() {
               </div>
             </div>
 
-            {/* Items */}
-            {formData.items.length > 0 && formData.items[0].product_name && (
-              <div className="space-y-3">
-                <Label className="text-base font-semibold">{t('return_products')}</Label>
-                <div className="border rounded-lg overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-slate-50">
-                        <TableHead>{t('product')}</TableHead>
-                        <TableHead className="w-24">{t('quantity')}</TableHead>
-                        <TableHead className="w-36">{t('condition')}</TableHead>
-                        <TableHead className="w-32 text-right">{t('amount')}</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {formData.items.map((item, index) => (
-                        <TableRow key={index}>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Package className="w-4 h-4 text-slate-400" />
-                              <span>{item.product_name}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              type="number"
-                              min="1"
-                              max={item.max_quantity}
-                              value={item.quantity}
-                              onChange={(e) =>
-                                handleItemChange(index, "quantity", e.target.value)
-                              }
-                              className="w-20"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Select
-                              value={item.condition}
-                              onValueChange={(value) =>
-                                handleItemChange(index, "condition", value)
-                              }
-                            >
-                              <SelectTrigger className="w-full">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="damaged">{t('damaged')}</SelectItem>
-                                <SelectItem value="opened">{t('opened')}</SelectItem>
-                                <SelectItem value="sealed">{t('sealed')}</SelectItem>
-                                <SelectItem value="used">{t('used')}</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </TableCell>
-                          <TableCell className="text-right font-medium">
-                            {formatCurrency(item.quantity * item.unit_price)}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+            {/* Product Line Items */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-base font-semibold">{t('return_products') || 'Qaytarilayotgan mahsulotlar'}</Label>
+                <Button variant="outline" size="sm" onClick={addItemRow}>
+                  <Plus className="w-4 h-4 mr-1" />
+                  {t('add') || "Qo'shish"}
+                </Button>
               </div>
-            )}
+              <div className="space-y-3">
+                {formData.items.map((item, index) => (
+                  <div key={index} className="bg-slate-50 p-3 rounded-lg space-y-2">
+                    <div className="flex gap-2 items-end">
+                      <div className="flex-[3] min-w-0">
+                        {index === 0 && <Label className="text-xs text-slate-500 mb-1">{t('product')}</Label>}
+                        <ProductCombobox
+                          products={products}
+                          value={item.product_id || ''}
+                          onValueChange={(value) => handleProductSelect(index, value)}
+                          placeholder={t('select_product') || 'Mahsulotni tanlang'}
+                          t={t}
+                        />
+                      </div>
+                      <div className="w-20">
+                        {index === 0 && <Label className="text-xs text-slate-500 mb-1">{t('quantity')}</Label>}
+                        <Input
+                          type="number"
+                          min="1"
+                          value={item.quantity}
+                          onChange={(e) => handleItemChange(index, "quantity", e.target.value)}
+                        />
+                      </div>
+                      <div className="w-28">
+                        {index === 0 && <Label className="text-xs text-slate-500 mb-1">{t('price')}</Label>}
+                        <Input
+                          type="number"
+                          min="0"
+                          value={item.unit_price}
+                          onChange={(e) => handleItemChange(index, "unit_price", e.target.value)}
+                        />
+                      </div>
+                      <div className="w-32">
+                        {index === 0 && <Label className="text-xs text-slate-500 mb-1">{t('condition')}</Label>}
+                        <Select
+                          value={item.condition}
+                          onValueChange={(value) => handleItemChange(index, "condition", value)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="damaged">{t('damaged')}</SelectItem>
+                            <SelectItem value="opened">{t('opened')}</SelectItem>
+                            <SelectItem value="sealed">{t('sealed')}</SelectItem>
+                            <SelectItem value="used">{t('used')}</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="w-24 text-right font-medium text-sm pt-1">
+                        {formatCurrency(item.quantity * item.unit_price)}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 w-9 text-red-500 hover:text-red-700"
+                        onClick={() => removeItemRow(index)}
+                        disabled={formData.items.length <= 1}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
 
             <div className="bg-slate-50 rounded-lg p-4">
               <div className="flex justify-between font-semibold text-lg">
-                <span>{t('total_return_amount')}:</span>
+                <span>{t('total_return_amount') || 'Jami qaytarish summasi'}:</span>
                 <span>{formatCurrency(totalAmount)}</span>
               </div>
             </div>
@@ -636,7 +649,7 @@ export default function Returns() {
               </Button>
               <Button
                 onClick={handleSubmit}
-                disabled={!formData.sales_order_id || totalAmount === 0}
+                disabled={!formData.customer_id || totalAmount === 0}
               >
                 {t('create')}
               </Button>

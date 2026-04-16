@@ -106,7 +106,7 @@ export default function WorkCenters() {
   // Auto-calculate cost breakdown from detailed inputs
   const calculatedCosts = useMemo(() => {
     const workingHours = parseFloat(newWorkCenter.working_hours_per_day) || 8;
-    const annualHours = workingHours * 250;
+    const annualHours = workingHours * 365;
     const assetValue = parseFloat(newWorkCenter.asset_value) || 0;
     const usefulLife = parseFloat(newWorkCenter.useful_life_years) || 10;
     const powerKw = parseFloat(newWorkCenter.power_kw) || 0;
@@ -1270,7 +1270,7 @@ export default function WorkCenters() {
               {(() => {
                 const wc = selectedWorkCenter;
                 const workingHours = parseFloat(wc.working_hours_per_day) || 8;
-                const annualHours = workingHours * 250;
+                const annualHours = workingHours * 365;
                 const assetValue = parseFloat(wc.asset_value) || 0;
                 const usefulLife = parseFloat(wc.useful_life_years) || 10;
                 const powerKw = parseFloat(wc.power_kw) || 0;
