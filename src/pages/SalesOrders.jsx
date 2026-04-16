@@ -39,6 +39,7 @@ import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { usePermissions } from "@/hooks/usePermissions";
 import ProductCombobox from "@/components/shared/ProductCombobox";
+import CustomerCombobox from "@/components/shared/CustomerCombobox";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useAdminSettings } from '@/components/contexts/AdminSettingsContext';
 import { useFinancials } from '@/components/contexts/FinancialsContext';
@@ -1532,10 +1533,11 @@ export default function SalesOrders() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>{t('customer')} *</Label>
-                  <Select
+                  <CustomerCombobox
+                    customers={customers}
                     value={newOrder.customer_id || ''}
-                    onValueChange={async (value) => {
-                      const customer = customers.find(c => c.id === value);
+                    onValueChange={async (value, customer) => {
+                      if (!customer) customer = customers.find(c => c.id === value);
                       setNewOrder({
                         ...newOrder,
                         customer_id: value,
@@ -1559,19 +1561,49 @@ export default function SalesOrders() {
                         }
                       }
                     }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={t('select_customer') || 'Select customer'} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {customers.map((customer) => (
-                        <SelectItem key={customer.id} value={customer.id}>
-                          {customer.company_name || customer.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder={t('select_customer') || 'Mijozni tanlang'}
+                    t={t}
+                  />
                 </div>
+                {/* Intercompany Project - next to customer */}
+                {(() => {
+                  const selectedCustomer = customers.find(c => c.id === newOrder.customer_id);
+                  if (!selectedCustomer?.source_organization_id) return null;
+                  return (
+                    <div>
+                      <Label className="flex items-center gap-1">
+                        <Building2 className="w-3.5 h-3.5 text-blue-600" />
+                        {t('intercompany_project') || 'Kompaniyalararo loyiha'} <span className="text-red-500">*</span>
+                      </Label>
+                      <Select
+                        value={newOrder.project_id || ''}
+                        onValueChange={(value) => {
+                          const project = intercompanyProjects.find(p => p.id === value);
+                          setNewOrder({
+                            ...newOrder,
+                            project_id: value,
+                            project_name: project?.project_name || '',
+                          });
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder={
+                            loadingIntercompanyProjects
+                              ? (t('loading') || 'Yuklanmoqda...')
+                              : (t('select_project') || 'Loyihani tanlang')
+                          } />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {intercompanyProjects.map((project) => (
+                            <SelectItem key={project.id} value={project.id}>
+                              {project.project_code} — {project.project_name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -1648,50 +1680,7 @@ export default function SalesOrders() {
                 </div>
               </div>
 
-              {/* Intercompany Project Selection */}
-              {(() => {
-                const selectedCustomer = customers.find(c => c.id === newOrder.customer_id);
-                if (!selectedCustomer?.source_organization_id) return null;
-                return (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Building2 className="w-4 h-4 text-blue-600" />
-                      <Label className="text-sm font-semibold text-blue-800">
-                        {t('intercompany_project') || 'Kompaniyalararo loyiha'} <span className="text-red-500">*</span>
-                      </Label>
-                    </div>
-                    <p className="text-xs text-blue-600 mb-2">
-                      {t('intercompany_project_hint') || "Buyurtma qaysi loyihaga tegishli ekanligini tanlang"}
-                    </p>
-                    <Select
-                      value={newOrder.project_id || ''}
-                      onValueChange={(value) => {
-                        const project = intercompanyProjects.find(p => p.id === value);
-                        setNewOrder({
-                          ...newOrder,
-                          project_id: value,
-                          project_name: project?.project_name || '',
-                        });
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={
-                          loadingIntercompanyProjects
-                            ? (t('loading') || 'Loading...')
-                            : (t('select_project') || 'Loyihani tanlang')
-                        } />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {intercompanyProjects.map((project) => (
-                          <SelectItem key={project.id} value={project.id}>
-                            {project.project_code} — {project.project_name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                );
-              })()}
+              {/* Intercompany project selector moved next to customer field above */}
 
               {/* Order Lines */}
               <div className="border-t pt-4">
