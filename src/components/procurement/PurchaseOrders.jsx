@@ -852,7 +852,7 @@ export default function PurchaseOrders() {
                                   {t('send') || 'Send'}
                                 </Button>
                               )}
-                              {canUpdate(MODULES.PURCHASES) && po.status === 'sent' && (
+                              {canUpdate(MODULES.PURCHASES) && (po.status === 'sent' || po.status === 'ordered') && (
                                 <Button size="sm" variant="ghost" onClick={async () => {
                                   try {
                                     await approvePurchaseOrder(po.id);
