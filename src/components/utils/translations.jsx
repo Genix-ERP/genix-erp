@@ -10238,7 +10238,7 @@ export const translations = {
     "confirm_delete_asset": "Ushbu aktivni o'chirishni xohlaysizmi?",
     "run_depreciation_description": "Joriy davr uchun barcha faol aktivlar bo'yicha amortizatsiyani hisoblang va yozing.",
     "depreciation_summary": "Xulosa",
-    "processing": "Qayta ishlanmoqda...",
+    "processing": "Jarayonda",
     "dispose_asset": "Aktivni hisobdan chiqarish",
     "dispose_asset_description": "Ushbu asosiy vositani hisobdan chiqarishni qayd eting.",
     "disposal_date": "Hisobdan chiqarish sanasi",
