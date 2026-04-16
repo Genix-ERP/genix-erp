@@ -326,6 +326,9 @@ export default function SalesOrders() {
   const [intercompanyProjects, setIntercompanyProjects] = useState([]);
   const [loadingIntercompanyProjects, setLoadingIntercompanyProjects] = useState(false);
 
+  // All projects for the current org (for project-first selection)
+  const [allProjects, setAllProjects] = useState([]);
+
   // Track if delivery date was manually set (for new order)
   const [isDeliveryDateManual, setIsDeliveryDateManual] = useState(false);
   // Track if delivery date was manually set (for editing order)
@@ -365,9 +368,19 @@ export default function SalesOrders() {
         console.error('Failed to fetch carriers:', error);
       }
     };
+    const fetchAllProjects = async () => {
+      try {
+        const res = await projectsService.listProjects({ limit: 500 });
+        const list = res?.data || res?.items || res || [];
+        setAllProjects(Array.isArray(list) ? list : []);
+      } catch (error) {
+        console.error('Failed to fetch projects:', error);
+      }
+    };
     fetchProducts();
     fetchWarehouses();
     fetchCarriers();
+    fetchAllProjects();
   }, []);
 
   // Calculate delivery date based on product lead times
@@ -1565,45 +1578,48 @@ export default function SalesOrders() {
                     t={t}
                   />
                 </div>
-                {/* Intercompany Project - next to customer */}
-                {(() => {
-                  const selectedCustomer = customers.find(c => c.id === newOrder.customer_id);
-                  if (!selectedCustomer?.source_organization_id) return null;
-                  return (
-                    <div>
-                      <Label className="flex items-center gap-1">
-                        <Building2 className="w-3.5 h-3.5 text-blue-600" />
-                        {t('intercompany_project') || 'Kompaniyalararo loyiha'} <span className="text-red-500">*</span>
-                      </Label>
-                      <Select
-                        value={newOrder.project_id || ''}
-                        onValueChange={(value) => {
-                          const project = intercompanyProjects.find(p => p.id === value);
+                <div>
+                  <Label className="flex items-center gap-1">
+                    <Building2 className="w-3.5 h-3.5 text-blue-600" />
+                    {t('project') || 'Loyiha'}
+                  </Label>
+                  <Select
+                    value={newOrder.project_id || ''}
+                    onValueChange={(value) => {
+                      const project = allProjects.find(p => p.id === value);
+                      // Auto-set customer if project has an organization that matches a customer
+                      if (project?.organization_id) {
+                        const matchingCustomer = customers.find(c => c.source_organization_id === project.organization_id);
+                        if (matchingCustomer) {
                           setNewOrder({
                             ...newOrder,
                             project_id: value,
-                            project_name: project?.project_name || '',
+                            project_name: project?.project_name || project?.name || '',
+                            customer_id: matchingCustomer.id,
+                            customer_name: matchingCustomer.company_name || matchingCustomer.name || '',
                           });
-                        }}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder={
-                            loadingIntercompanyProjects
-                              ? (t('loading') || 'Yuklanmoqda...')
-                              : (t('select_project') || 'Loyihani tanlang')
-                          } />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {intercompanyProjects.map((project) => (
-                            <SelectItem key={project.id} value={project.id}>
-                              {project.project_code} — {project.project_name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  );
-                })()}
+                          return;
+                        }
+                      }
+                      setNewOrder({
+                        ...newOrder,
+                        project_id: value,
+                        project_name: project?.project_name || project?.name || '',
+                      });
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('select_project') || 'Loyihani tanlang'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {allProjects.map((project) => (
+                        <SelectItem key={project.id} value={project.id}>
+                          {project.project_code || project.code} — {project.project_name || project.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -1680,7 +1696,6 @@ export default function SalesOrders() {
                 </div>
               </div>
 
-              {/* Intercompany project selector moved next to customer field above */}
 
               {/* Order Lines */}
               <div className="border-t pt-4">
