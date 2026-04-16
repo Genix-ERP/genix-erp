@@ -263,7 +263,7 @@ function LayoutContent({ children, currentPageName }) {
       title: t("inventory"),
       url: createPageUrl("Inventory"),
       icon: Package,
-      badge: "3",
+      badge: null,
       moduleId: 'inventory'
     },
     'crm': {
