@@ -901,6 +901,8 @@ export default function Products() {
       can_be_rented: product.can_be_rented || false,
       can_be_subcontracted: product.can_be_subcontracted || false,
       is_overhead_expense: product.is_overhead_expense || false,
+      is_manufacturable: product.is_manufacturable || false,
+      auto_manufacture: product.auto_manufacture || false,
       tags: product.tags || [],
       // Advanced fields
       brand: product.brand || '',

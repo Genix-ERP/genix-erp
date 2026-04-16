@@ -83,6 +83,14 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
   const { taxRates = [], journals = [], paymentJournals = [], currencies = [], exchangeRates = [], getLatestExchangeRate } = useFinancials();
   const bankCashJournals = paymentJournals.length > 0 ? paymentJournals : journals.filter(j => j.type === 'bank' || j.type === 'cash');
 
+  // Helper to get translated journal name
+  const getJournalName = (journal) => {
+    if (!journal) return '-';
+    if (language === 'uz' && journal.name_uz) return journal.name_uz;
+    if (language === 'en' && journal.name_en) return journal.name_en;
+    return journal.name || '-';
+  };
+
   // Get default tax from settings
   const defaultSalesTaxId = getSetting('sales.tax.default_tax_id', '');
   const salesTaxRates = taxRates.filter(tr => tr.tax_type === 'sales' || !tr.tax_type);
@@ -475,7 +483,7 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
       bank_transfer: language === 'ru' ? 'Банковский перевод' : language === 'uz' ? 'Bank o\'tkazmasi' : 'Bank Transfer',
       cash: language === 'ru' ? 'Наличные' : language === 'uz' ? 'Naqd' : 'Cash',
     };
-    const journalName = alloc.journal_name || '-';
+    const journalName = (language === 'uz' && alloc.journal_name_uz ? alloc.journal_name_uz : language === 'en' && alloc.journal_name_en ? alloc.journal_name_en : alloc.journal_name) || '-';
     const method = journalName.toLowerCase().includes('kassa') || journalName.toLowerCase().includes('cash') || journalName.toLowerCase().includes('нал') ? 'cash' : 'bank_transfer';
 
     const html = `
@@ -649,7 +657,7 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
           ${selectedJournal ? `
           <div class="row">
             <span class="label">${t('receipt_journal')}:</span>
-            <span class="value">${selectedJournal.name}</span>
+            <span class="value">${getJournalName(selectedJournal)}</span>
           </div>` : ''}
 
           <div class="row">
@@ -951,7 +959,9 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                     <TableHead>{t('customer')}</TableHead>
                     <TableHead>{t('due_date')}</TableHead>
                     <TableHead className="text-right">{t('amount')}</TableHead>
+                    <TableHead className="text-right">{t('paid') || 'Paid'}</TableHead>
                     <TableHead className="text-right">{t('balance')}</TableHead>
+                    <TableHead>{t('payment_method') || 'Payment Method'}</TableHead>
                     <TableHead>{t('status')}</TableHead>
                     <TableHead className="w-20"></TableHead>
                   </TableRow>
@@ -998,6 +1008,11 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                           {formatCurrency(invoice.total_amount)}
                         </TableCell>
                         <TableCell className="text-right">
+                          <span className={`font-medium ${(invoice.amount_paid || 0) > 0 ? "text-green-600" : "text-slate-400"}`}>
+                            {formatCurrency(invoice.amount_paid || 0)}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right">
                           <span
                             className={`font-medium ${
                               (invoice.balance || invoice.amount_due || 0) > 0 ? "text-red-600" : "text-green-600"
@@ -1005,6 +1020,18 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                           >
                             {formatCurrency(invoice.balance || invoice.amount_due || 0)}
                           </span>
+                        </TableCell>
+                        <TableCell>
+                          {(() => {
+                            const pj = language === 'uz' ? (invoice.payment_journals_uz || invoice.payment_journals)
+                              : language === 'en' ? (invoice.payment_journals_en || invoice.payment_journals)
+                              : invoice.payment_journals;
+                            return pj ? (
+                              <span className="text-sm text-slate-700">{pj}</span>
+                            ) : (
+                              <span className="text-sm text-slate-400">—</span>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell>{getPaymentStatusBadge(invoice)}</TableCell>
                         <TableCell>
@@ -1448,7 +1475,7 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                             {j.type === 'cash'
                               ? <Banknote className="w-4 h-4 text-green-600" />
                               : <CreditCard className="w-4 h-4 text-blue-600" />}
-                            {j.name}
+                            {getJournalName(j)}
                           </div>
                         </SelectItem>
                       ))
@@ -1651,7 +1678,7 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                           </Badge>
                           <span className="text-slate-600">{alloc.payment_number}</span>
                           {alloc.journal_name && (
-                            <span className="text-slate-400 text-xs">({alloc.journal_name})</span>
+                            <span className="text-slate-400 text-xs">({language === 'uz' && alloc.journal_name_uz ? alloc.journal_name_uz : language === 'en' && alloc.journal_name_en ? alloc.journal_name_en : alloc.journal_name})</span>
                           )}
                         </div>
                         <div className="flex items-center gap-3">

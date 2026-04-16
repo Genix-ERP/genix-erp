@@ -231,6 +231,14 @@ export default function SalesOrders() {
         { label: t('shipping'), value: formatCurrency(order.shipping_amount || order.shipping_cost || 0) },
         { label: t('total'), value: formatCurrency(order.total_amount || 0), bold: true },
       ],
+      customCompany: activeCompany ? {
+        name: activeCompany.company_name || localStorage.getItem("company_name") || "Yuksalish ERP",
+        address: localStorage.getItem("company_address") || "Toshkent, O'zbekiston",
+        phone: localStorage.getItem("company_phone") || "+998 XX XXX XX XX",
+        email: localStorage.getItem("company_email") || "info@genix.uz",
+        inn: localStorage.getItem("company_inn") || "123456789",
+        logo: localStorage.getItem("company_logo") || null,
+      } : null,
     };
   };
 
