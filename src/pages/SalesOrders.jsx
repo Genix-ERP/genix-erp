@@ -324,12 +324,9 @@ export default function SalesOrders() {
   // Carriers list for selection
   const [carriers, setCarriers] = useState([]);
 
-  // Intercompany projects (loaded when customer has source_organization_id)
-  const [intercompanyProjects, setIntercompanyProjects] = useState([]);
+  // All intercompany projects (from orgs we sell to)
+  const [allIntercompanyProjects, setAllIntercompanyProjects] = useState([]);
   const [loadingIntercompanyProjects, setLoadingIntercompanyProjects] = useState(false);
-
-  // All projects for the current org (for project-first selection)
-  const [allProjects, setAllProjects] = useState([]);
 
   // Track if delivery date was manually set (for new order)
   const [isDeliveryDateManual, setIsDeliveryDateManual] = useState(false);
@@ -370,20 +367,38 @@ export default function SalesOrders() {
         console.error('Failed to fetch carriers:', error);
       }
     };
-    const fetchAllProjects = async () => {
+    const fetchIntercompanyProjects = async () => {
+      // Find all intercompany customers (those with source_organization_id)
+      const intercompanyCustomers = (customers || []).filter(c => c.source_organization_id);
+      if (intercompanyCustomers.length === 0) return;
+
+      setLoadingIntercompanyProjects(true);
       try {
-        const res = await projectsService.listProjects({ limit: 500 });
-        const list = res?.data || res?.items || res || [];
-        setAllProjects(Array.isArray(list) ? list : []);
+        const allProjects = [];
+        for (const customer of intercompanyCustomers) {
+          const res = await apiClient.get('/projects/by-organization', {
+            params: { organization_id: customer.source_organization_id }
+          });
+          const projects = res.data?.data || [];
+          // Tag each project with the customer info for auto-selection
+          projects.forEach(p => {
+            p._customer_id = customer.id;
+            p._customer_name = customer.company_name || customer.name || '';
+          });
+          allProjects.push(...projects);
+        }
+        setAllIntercompanyProjects(allProjects);
       } catch (error) {
-        console.error('Failed to fetch projects:', error);
+        console.error('Failed to fetch intercompany projects:', error);
+      } finally {
+        setLoadingIntercompanyProjects(false);
       }
     };
     fetchProducts();
     fetchWarehouses();
     fetchCarriers();
-    fetchAllProjects();
-  }, []);
+    fetchIntercompanyProjects();
+  }, [customers]);
 
   // Calculate delivery date based on product lead times
   const calculateDeliveryDate = useCallback((orderLines, orderDate) => {
@@ -1551,7 +1566,7 @@ export default function SalesOrders() {
                   <CustomerCombobox
                     customers={customers}
                     value={newOrder.customer_id || ''}
-                    onValueChange={async (value, customer) => {
+                    onValueChange={(value, customer) => {
                       if (!customer) customer = customers.find(c => c.id === value);
                       setNewOrder({
                         ...newOrder,
@@ -1560,103 +1575,91 @@ export default function SalesOrders() {
                         project_id: '',
                         project_name: '',
                       });
-                      // If customer is intercompany (has source_organization_id), fetch their projects
-                      setIntercompanyProjects([]);
-                      if (customer?.source_organization_id) {
-                        setLoadingIntercompanyProjects(true);
-                        try {
-                          const res = await apiClient.get('/projects/by-organization', {
-                            params: { organization_id: customer.source_organization_id }
-                          });
-                          setIntercompanyProjects(res.data?.data || []);
-                        } catch (err) {
-                          console.error('Failed to fetch intercompany projects:', err);
-                        } finally {
-                          setLoadingIntercompanyProjects(false);
-                        }
-                      }
                     }}
                     placeholder={t('select_customer') || 'Mijozni tanlang'}
                     t={t}
                   />
                 </div>
-                <div>
-                  <Label>{t('project') || 'Loyiha'}</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        role="combobox"
-                        className="w-full justify-between font-normal h-9 px-3 text-sm"
-                      >
-                        <span className="truncate">
-                          {newOrder.project_id
-                            ? (() => {
-                                const p = allProjects.find(p => p.id === newOrder.project_id);
-                                return p ? `${p.project_code || p.code} — ${p.project_name || p.name}` : newOrder.project_name;
-                              })()
-                            : (t('select_project') || 'Loyihani tanlang')}
-                        </span>
-                        <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[350px] p-0" align="start">
-                      <Command shouldFilter={true}>
-                        <CommandInput placeholder={t('search') || "Qidirish..."} />
-                        <CommandList>
-                          <CommandEmpty>{t('not_found') || "Topilmadi"}</CommandEmpty>
-                          <CommandGroup>
-                            {allProjects.map((project) => (
-                              <CommandItem
-                                key={project.id}
-                                value={`${project.project_code || project.code} ${project.project_name || project.name}`}
-                                onSelect={() => {
-                                  // Auto-set customer from project's client
-                                  if (project.client_id) {
-                                    const matchingCustomer = customers.find(c => c.id === project.client_id);
-                                    if (matchingCustomer) {
+                {/* Project selector — only for intercompany customers or project-first flow */}
+                {(() => {
+                  // Determine which projects to show
+                  const selectedCustomer = customers.find(c => c.id === newOrder.customer_id);
+                  const isIntercompany = selectedCustomer?.source_organization_id;
+
+                  // If customer selected and is intercompany — filter projects for that customer
+                  // If no customer selected — show all intercompany projects (project-first flow)
+                  // If customer selected but NOT intercompany — hide project selector
+                  if (newOrder.customer_id && !isIntercompany) return null;
+
+                  const visibleProjects = newOrder.customer_id
+                    ? allIntercompanyProjects.filter(p => p._customer_id === newOrder.customer_id)
+                    : allIntercompanyProjects;
+
+                  if (visibleProjects.length === 0 && !newOrder.customer_id) return null;
+
+                  return (
+                    <div>
+                      <Label>{t('project') || 'Loyiha'} {isIntercompany && <span className="text-red-500">*</span>}</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            className="w-full justify-between font-normal h-9 px-3 text-sm"
+                          >
+                            <span className="truncate">
+                              {newOrder.project_id
+                                ? (() => {
+                                    const p = allIntercompanyProjects.find(p => p.id === newOrder.project_id);
+                                    return p ? `${p.project_code} — ${p.project_name}` : newOrder.project_name;
+                                  })()
+                                : (t('select_project') || 'Loyihani tanlang')}
+                            </span>
+                            <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[400px] p-0" align="start">
+                          <Command shouldFilter={true}>
+                            <CommandInput placeholder={t('search') || "Qidirish..."} />
+                            <CommandList>
+                              <CommandEmpty>{t('not_found') || "Topilmadi"}</CommandEmpty>
+                              <CommandGroup>
+                                {visibleProjects.map((project) => (
+                                  <CommandItem
+                                    key={project.id}
+                                    value={`${project.project_code} ${project.project_name} ${project._customer_name}`}
+                                    onSelect={() => {
                                       setNewOrder({
                                         ...newOrder,
                                         project_id: project.id,
-                                        project_name: project.project_name || project.name || '',
-                                        customer_id: matchingCustomer.id,
-                                        customer_name: matchingCustomer.company_name || matchingCustomer.name || '',
+                                        project_name: project.project_name || '',
+                                        customer_id: project._customer_id,
+                                        customer_name: project._customer_name,
                                       });
-                                    } else {
-                                      setNewOrder({
-                                        ...newOrder,
-                                        project_id: project.id,
-                                        project_name: project.project_name || project.name || '',
-                                        customer_id: project.client_id,
-                                        customer_name: project.client_name || '',
-                                      });
-                                    }
-                                  } else {
-                                    setNewOrder({
-                                      ...newOrder,
-                                      project_id: project.id,
-                                      project_name: project.project_name || project.name || '',
-                                    });
-                                  }
-                                }}
-                              >
-                                <Check
-                                  className={cn(
-                                    "mr-2 h-4 w-4",
-                                    newOrder.project_id === project.id ? "opacity-100" : "opacity-0"
-                                  )}
-                                />
-                                <span className="truncate">
-                                  {project.project_code || project.code} — {project.project_name || project.name}
-                                </span>
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                </div>
+                                    }}
+                                  >
+                                    <Check
+                                      className={cn(
+                                        "mr-2 h-4 w-4",
+                                        newOrder.project_id === project.id ? "opacity-100" : "opacity-0"
+                                      )}
+                                    />
+                                    <div className="truncate">
+                                      <span className="font-medium">{project.project_code} — {project.project_name}</span>
+                                      {!newOrder.customer_id && (
+                                        <span className="text-xs text-slate-500 ml-2">({project._customer_name})</span>
+                                      )}
+                                    </div>
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
