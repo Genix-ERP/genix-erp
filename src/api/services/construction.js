@@ -483,10 +483,18 @@ export const constructionService = {
     return response.data.data;
   },
 
-  // Estimate Lines
-  async listEstimateLines(estimateId) {
-    const response = await apiClient.get(`/construction/estimates/${estimateId}/lines`);
+  // Estimate Lines — supports pagination via params { page, page_size }
+  async listEstimateLines(estimateId, params = {}) {
+    // Default to large page_size for callers that don't paginate
+    const queryParams = { page_size: 5000, ...params };
+    const response = await apiClient.get(`/construction/estimates/${estimateId}/lines`, { params: queryParams });
     return response.data.data;
+  },
+
+  // Paginated version — returns { data, meta }
+  async listEstimateLinesPaginated(estimateId, params = {}) {
+    const response = await apiClient.get(`/construction/estimates/${estimateId}/lines`, { params });
+    return { data: response.data.data, meta: response.data.meta };
   },
 
   async createEstimateLine(estimateId, data) {
@@ -494,8 +502,8 @@ export const constructionService = {
     return response.data.data;
   },
 
-  async bulkCreateEstimateLines(estimateId, lines, { replace = false } = {}) {
-    const response = await apiClient.post(`/construction/estimates/${estimateId}/lines/bulk`, { lines, replace });
+  async bulkCreateEstimateLines(estimateId, lines, { replace = false, sourceType = '' } = {}) {
+    const response = await apiClient.post(`/construction/estimates/${estimateId}/lines/bulk`, { lines, replace, source_type: sourceType });
     return response.data.data;
   },
 
