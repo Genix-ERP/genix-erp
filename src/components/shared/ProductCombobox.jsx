@@ -18,11 +18,18 @@ export default function ProductCombobox({ products: initialProducts = [], value,
   const [search, setSearch] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
+  // Remember the last selected product so the label stays after search clears
+  const [lastSelected, setLastSelected] = useState(null);
   const debounceRef = useRef(null);
 
   // Use initial products when no search, search results when searching
   const displayProducts = search.length >= 2 ? searchResults : initialProducts;
-  const selectedProduct = [...initialProducts, ...searchResults].find((p) => p.id === value);
+  const selectedProduct = [...initialProducts, ...searchResults, ...(lastSelected ? [lastSelected] : [])].find((p) => p.id === value);
+
+  // Clear lastSelected when value is externally cleared
+  useEffect(() => {
+    if (!value) setLastSelected(null);
+  }, [value]);
 
   // Server-side search with debounce
   useEffect(() => {
@@ -83,6 +90,7 @@ export default function ProductCombobox({ products: initialProducts = [], value,
                     key={product.id}
                     value={product.id}
                     onSelect={() => {
+                      setLastSelected(product);
                       onValueChange(product.id, product);
                       setOpen(false);
                       setSearch("");

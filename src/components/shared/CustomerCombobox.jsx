@@ -18,11 +18,16 @@ export default function CustomerCombobox({ customers: initialCustomers = [], val
   const [search, setSearch] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [lastSelected, setLastSelected] = useState(null);
   const debounceRef = useRef(null);
 
   // Use initial customers when no search, search results when searching
   const displayCustomers = search.length >= 2 ? searchResults : initialCustomers;
-  const selectedCustomer = [...initialCustomers, ...searchResults].find((c) => c.id === value);
+  const selectedCustomer = [...initialCustomers, ...searchResults, ...(lastSelected ? [lastSelected] : [])].find((c) => c.id === value);
+
+  useEffect(() => {
+    if (!value) setLastSelected(null);
+  }, [value]);
 
   // Server-side search with debounce
   useEffect(() => {
@@ -88,6 +93,7 @@ export default function CustomerCombobox({ customers: initialCustomers = [], val
                     key={customer.id}
                     value={customer.id}
                     onSelect={() => {
+                      setLastSelected(customer);
                       onValueChange(customer.id, customer);
                       setOpen(false);
                       setSearch("");
