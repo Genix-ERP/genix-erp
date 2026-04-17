@@ -15,8 +15,19 @@ export function SalesProvider({ children }) {
   const [invoices, setInvoices] = useState([]);
   const [returns, setReturns] = useState([]);
   const [discounts, setDiscounts] = useState([]);
+  const [summary, setSummary] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Fetch dashboard summary — single call, pre-computed stats
+  const refreshSummary = useCallback(async () => {
+    try {
+      const data = await salesService.getSummary();
+      setSummary(data);
+    } catch (err) {
+      console.warn('Failed to load sales summary:', err);
+    }
+  }, []);
 
   // Admin settings for sales module - these affect module behavior
   const salesSettings = useMemo(() => ({
@@ -69,6 +80,7 @@ export function SalesProvider({ children }) {
       setInvoices(invoicesData || []);
       setReturns(returnsData || []);
       setDiscounts(discountsData || []);
+      refreshSummary();
     } catch (err) {
       console.error('Error loading sales data:', err);
       setError(err.message);
@@ -453,6 +465,8 @@ export function SalesProvider({ children }) {
     invoices,
     returns,
     discounts,
+    summary,
+    refreshSummary,
     isLoading,
     error,
 
@@ -511,7 +525,7 @@ export function SalesProvider({ children }) {
     needsDiscountApproval: (discountPercent) => discountPercent > salesSettings.discountApprovalThreshold,
     needsApproval: (amount) => salesSettings.requireApproval && amount >= salesSettings.approvalThreshold,
     isCreditLimitEnabled: () => salesSettings.enableCreditLimit
-  }), [quotations, salesOrders, invoices, returns, discounts, isLoading, error, createQuotation, updateQuotation, deleteQuotation, convertQuotationToOrder, getOrder, createSalesOrder, updateSalesOrder, deleteSalesOrder, confirmSalesOrder, cancelSalesOrder, createInvoiceFromOrder, getInvoice, createInvoice, updateInvoice, deleteInvoice, recordPayment, createReturn, updateReturn, deleteReturn, approveReturn, rejectReturn, processRefund, createDiscount, updateDiscount, deleteDiscount, applyDiscount, validateDiscountCode, useDiscountCode, getSalesAnalytics, getAIInsights, refreshData, salesSettings]);
+  }), [quotations, salesOrders, invoices, returns, discounts, summary, refreshSummary, isLoading, error, createQuotation, updateQuotation, deleteQuotation, convertQuotationToOrder, getOrder, createSalesOrder, updateSalesOrder, deleteSalesOrder, confirmSalesOrder, cancelSalesOrder, createInvoiceFromOrder, getInvoice, createInvoice, updateInvoice, deleteInvoice, recordPayment, createReturn, updateReturn, deleteReturn, approveReturn, rejectReturn, processRefund, createDiscount, updateDiscount, deleteDiscount, applyDiscount, validateDiscountCode, useDiscountCode, getSalesAnalytics, getAIInsights, refreshData, salesSettings]);
 
   return (
     <SalesContext.Provider value={value}>

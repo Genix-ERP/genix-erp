@@ -124,7 +124,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
       }
 
       // Bulk create all lines (replace existing if re-importing to same estimate)
-      const bulkResult = await constructionService.bulkCreateEstimateLines(estId, lines, { replace: isExisting });
+      const bulkResult = await constructionService.bulkCreateEstimateLines(estId, lines, { replace: isExisting, sourceType: sourceType || '' });
 
       // Show toast if products were auto-created from resource lines
       if (bulkResult?.products_created > 0) {
