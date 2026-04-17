@@ -63,12 +63,9 @@ const FormsTab = ({ project }) => {
   const { t } = useTranslation(language);
   const { formatCurrency } = useCurrencyFormatter();
 
-  // Check if project has required client details for KS-2 / KS-3
+  // Validate required client fields in a given form object
   const REQUIRED_CLIENT_FIELDS = ['client_name', 'client_stir', 'client_bank_name', 'client_bank_account', 'client_mfo', 'client_address'];
-  const missingClientFields = REQUIRED_CLIENT_FIELDS.filter(f => !project?.[f]?.trim());
-  const hasRequiredClientDetails = missingClientFields.length === 0;
-
-  const FIELD_LABELS = {
+  const CLIENT_FIELD_LABELS = {
     client_name: language === 'ru' ? 'Наименование заказчика' : language === 'uz' ? 'Buyurtmachi nomi' : 'Client Name',
     client_stir: language === 'ru' ? 'ИНН (СТИР)' : 'STIR (TIN)',
     client_bank_name: language === 'ru' ? 'Название банка' : language === 'uz' ? 'Bank nomi' : 'Bank Name',
@@ -77,13 +74,16 @@ const FormsTab = ({ project }) => {
     client_address: language === 'ru' ? 'Юридический адрес' : language === 'uz' ? 'Yuridik manzil' : 'Legal Address',
   };
 
-  const clientFieldsWarning = missingClientFields.length > 0
-    ? (language === 'ru'
-        ? `Заполните данные заказчика в настройках проекта: ${missingClientFields.map(f => FIELD_LABELS[f] || f).join(', ')}`
-        : language === 'uz'
-          ? `Loyiha sozlamalarida buyurtmachi ma'lumotlarini to'ldiring: ${missingClientFields.map(f => FIELD_LABELS[f] || f).join(', ')}`
-          : `Fill in client details in project settings: ${missingClientFields.map(f => FIELD_LABELS[f] || f).join(', ')}`)
-    : '';
+  const validateClientFields = (formData) => {
+    const missing = REQUIRED_CLIENT_FIELDS.filter(f => !formData?.[f]?.trim());
+    if (missing.length === 0) return null;
+    const labels = missing.map(f => CLIENT_FIELD_LABELS[f] || f).join(', ');
+    return language === 'ru'
+      ? `Заполните данные заказчика: ${labels}`
+      : language === 'uz'
+        ? `Buyurtmachi ma'lumotlarini to'ldiring: ${labels}`
+        : `Fill in client details: ${labels}`;
+  };
 
   const TYPE_LABELS = {
     ks2: t('forma_2') || 'Forma 2 (KS-2)',
@@ -137,17 +137,35 @@ const FormsTab = ({ project }) => {
   const [editRowForm, setEditRowForm] = useState({});
   const [buildings, setBuildings] = useState([]);
 
+  // Client requisite defaults from project
+  const defaultClientFields = {
+    client_name: project?.client_name || '',
+    client_phone: project?.client_phone || '',
+    client_address: project?.client_address || '',
+    client_bank_name: project?.client_bank_name || '',
+    client_bank_account: project?.client_bank_account || '',
+    client_mfo: project?.client_mfo || '',
+    client_stir: project?.client_stir || '',
+    client_okonh: project?.client_okonh || '',
+    contract_number: project?.contract_number || '',
+    object_full_name: project?.object_full_name || '',
+    client_director_name: project?.client_director_name || '',
+    client_chief_accountant_name: project?.client_chief_accountant_name || '',
+  };
+
   // Auto-generate modals
   const [showAutoGenModal, setShowAutoGenModal] = useState(false);
-  const [autoGenForm, setAutoGenForm] = useState({ subcontract_id: '', period_from: '', period_to: '' });
+  const [autoGenForm, setAutoGenForm] = useState({ subcontract_id: '', period_from: '', period_to: '', ...defaultClientFields });
   const [autoGenSaving, setAutoGenSaving] = useState(false);
   const [autoGenPreview, setAutoGenPreview] = useState(null); // preview data, null = not yet fetched
   const [autoGenLoadingPreview, setAutoGenLoadingPreview] = useState(false);
   const [showAutoGenConfirm, setShowAutoGenConfirm] = useState(false);
+  const [showAutoGenClientFields, setShowAutoGenClientFields] = useState(false);
 
   const [showGenF3Modal, setShowGenF3Modal] = useState(false);
-  const [genF3Form, setGenF3Form] = useState({ subcontract_id: '', period_from: '', period_to: '' });
+  const [genF3Form, setGenF3Form] = useState({ subcontract_id: '', period_from: '', period_to: '', ...defaultClientFields });
   const [genF3Saving, setGenF3Saving] = useState(false);
+  const [showGenF3ClientFields, setShowGenF3ClientFields] = useState(false);
 
   // Detail view state
   const [selectedAct, setSelectedAct] = useState(null);
@@ -295,7 +313,6 @@ const FormsTab = ({ project }) => {
   // ---- Handlers ----
 
   const handleCreate = async () => {
-    if (!hasRequiredClientDetails) { toast.error(clientFieldsWarning); return; }
     if (!form.act_type) { setError('Akt turini tanlang'); return; }
     if (!form.period_from || !form.period_to) { setError('Davrni kiriting'); return; }
     const linesWithQty = selectedLines.filter(l => l.qty_period > 0);
@@ -458,7 +475,8 @@ const FormsTab = ({ project }) => {
 
   // Step 1: fetch preview only (no DB write)
   const handleAutoGeneratePreview = async () => {
-    if (!hasRequiredClientDetails) { toast.error(clientFieldsWarning); return; }
+    const clientError = validateClientFields(autoGenForm);
+    if (clientError) { toast.error(clientError); setShowAutoGenClientFields(true); return; }
     if (!autoGenForm.period_from || !autoGenForm.period_to) {
       toast.error("Davrni kiriting"); return;
     }
@@ -490,6 +508,18 @@ const FormsTab = ({ project }) => {
         subcontract_id: autoGenForm.subcontract_id ? Number(autoGenForm.subcontract_id) : 0,
         period_from: autoGenForm.period_from,
         period_to: autoGenForm.period_to,
+        client_name: autoGenForm.client_name,
+        client_phone: autoGenForm.client_phone,
+        client_address: autoGenForm.client_address,
+        client_bank_name: autoGenForm.client_bank_name,
+        client_bank_account: autoGenForm.client_bank_account,
+        client_mfo: autoGenForm.client_mfo,
+        client_stir: autoGenForm.client_stir,
+        client_okonh: autoGenForm.client_okonh,
+        contract_number: autoGenForm.contract_number,
+        object_full_name: autoGenForm.object_full_name,
+        client_director_name: autoGenForm.client_director_name,
+        client_chief_accountant_name: autoGenForm.client_chief_accountant_name,
       });
       setShowAutoGenConfirm(false);
       setAutoGenPreview(null);
@@ -510,7 +540,8 @@ const FormsTab = ({ project }) => {
   };
 
   const handleGenerateF3 = async () => {
-    if (!hasRequiredClientDetails) { toast.error(clientFieldsWarning); return; }
+    const clientError = validateClientFields(genF3Form);
+    if (clientError) { toast.error(clientError); setShowGenF3ClientFields(true); return; }
     if (!genF3Form.period_from || !genF3Form.period_to) {
       toast.error("Davrni kiriting"); return;
     }
@@ -520,6 +551,18 @@ const FormsTab = ({ project }) => {
         subcontract_id: genF3Form.subcontract_id ? Number(genF3Form.subcontract_id) : 0,
         period_from: genF3Form.period_from,
         period_to: genF3Form.period_to,
+        client_name: genF3Form.client_name,
+        client_phone: genF3Form.client_phone,
+        client_address: genF3Form.client_address,
+        client_bank_name: genF3Form.client_bank_name,
+        client_bank_account: genF3Form.client_bank_account,
+        client_mfo: genF3Form.client_mfo,
+        client_stir: genF3Form.client_stir,
+        client_okonh: genF3Form.client_okonh,
+        contract_number: genF3Form.contract_number,
+        object_full_name: genF3Form.object_full_name,
+        client_director_name: genF3Form.client_director_name,
+        client_chief_accountant_name: genF3Form.client_chief_accountant_name,
       });
       setShowGenF3Modal(false);
       toast.success('KS-3 (Forma 3) yaratildi');
@@ -1362,21 +1405,6 @@ const FormsTab = ({ project }) => {
   // ======== LIST VIEW ========
   return (
     <div className="space-y-4">
-      {/* Warning banner when client details are missing */}
-      {!hasRequiredClientDetails && (
-        <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-lg">
-          <Ban className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
-          <div>
-            <p className="text-sm font-medium text-amber-800">
-              {language === 'ru' ? 'Данные заказчика не заполнены' : language === 'uz' ? 'Buyurtmachi ma\'lumotlari to\'ldirilmagan' : 'Client details are incomplete'}
-            </p>
-            <p className="text-xs text-amber-600 mt-1">{clientFieldsWarning}</p>
-            <p className="text-xs text-amber-600 mt-1">
-              {language === 'ru' ? 'Создание Форма 2 (KS-2) и Форма 3 (KS-3) заблокировано до заполнения данных.' : language === 'uz' ? 'Ma\'lumotlar to\'ldirilmaguncha Forma 2 (KS-2) va Forma 3 (KS-3) yaratish bloklangan.' : 'KS-2 and KS-3 creation is blocked until fields are filled.'}
-            </p>
-          </div>
-        </div>
-      )}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
           <CardTitle className="flex items-center gap-2"><FileText className="w-5 h-5" /> {t('forms')}</CardTitle>
@@ -1400,8 +1428,8 @@ const FormsTab = ({ project }) => {
                 <SelectItem value="cancelled">{t('cancelled') || 'Bekor qilingan'}</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline" disabled={!hasRequiredClientDetails} onClick={() => setShowAutoGenModal(true)} title={!hasRequiredClientDetails ? clientFieldsWarning : ''}><Zap className="w-4 h-4 mr-2" /> {t('auto_ks2') || 'KS-2 avto'}</Button>
-            <Button variant="outline" disabled={!hasRequiredClientDetails} onClick={() => setShowGenF3Modal(true)} title={!hasRequiredClientDetails ? clientFieldsWarning : ''}><FileText className="w-4 h-4 mr-2" /> {t('gen_ks3') || 'KS-3 yaratish'}</Button>
+            <Button variant="outline" onClick={() => { setAutoGenForm({ subcontract_id: '', period_from: '', period_to: '', ...defaultClientFields }); setShowAutoGenClientFields(false); setShowAutoGenModal(true); }}><Zap className="w-4 h-4 mr-2" /> {t('auto_ks2') || 'KS-2 avto'}</Button>
+            <Button variant="outline" onClick={() => { setGenF3Form({ subcontract_id: '', period_from: '', period_to: '', ...defaultClientFields }); setShowGenF3ClientFields(false); setShowGenF3Modal(true); }}><FileText className="w-4 h-4 mr-2" /> {t('gen_ks3') || 'KS-3 yaratish'}</Button>
             <Button variant="outline" className="text-orange-600 border-orange-300" onClick={() => { setF19CreateForm({ building_id: '', period_from: '', period_to: '', notes: '' }); setShowF19CreateModal(true); }}>
               <Plus className="w-4 h-4 mr-2" /> {t('create_f19') || 'Forma 19'}
             </Button>
@@ -1824,7 +1852,7 @@ const FormsTab = ({ project }) => {
 
       {/* Auto-generate KS-2 Modal */}
       <Dialog open={showAutoGenModal} onOpenChange={setShowAutoGenModal}>
-        <DialogContent className="max-w-md" aria-describedby={undefined}>
+        <DialogContent className="max-w-lg" aria-describedby={undefined}>
           <DialogHeader><DialogTitle>{t('auto_generate_ks2') || 'KS-2 avtomatik yaratish'}</DialogTitle><DialogDescription className="sr-only">Auto KS-2</DialogDescription></DialogHeader>
           <div className="space-y-4">
             <div><Label>{t('subcontractor') || 'Subpudratchi'}</Label>
@@ -1839,6 +1867,40 @@ const FormsTab = ({ project }) => {
             <div className="grid grid-cols-2 gap-4">
               <div><Label>{t('period_from') || 'Boshlanish'} *</Label><Input type="date" value={autoGenForm.period_from} onChange={e => setAutoGenForm(f => ({ ...f, period_from: e.target.value }))} /></div>
               <div><Label>{t('period_to') || 'Tugash'} *</Label><Input type="date" value={autoGenForm.period_to} onChange={e => setAutoGenForm(f => ({ ...f, period_to: e.target.value }))} /></div>
+            </div>
+
+            {/* Buyurtmachi rekvizitlari */}
+            <div className="border rounded-md bg-slate-50">
+              <button type="button" className="w-full flex items-center justify-between p-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 rounded-md transition-colors" onClick={() => setShowAutoGenClientFields(p => !p)}>
+                <span>{language === 'ru' ? 'Реквизиты заказчика (Форма 2)' : language === 'uz' ? 'Buyurtmachi rekvizitlari (Forma 2 uchun)' : 'Client Details (for Form 2)'}</span>
+                {showAutoGenClientFields ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+              {showAutoGenClientFields && (
+                <div className="px-3 pb-3 space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label>{language === 'ru' ? 'Наименование' : language === 'uz' ? 'Mijoz nomi' : 'Client Name'} *</Label><Input value={autoGenForm.client_name} onChange={e => setAutoGenForm(f => ({ ...f, client_name: e.target.value }))} placeholder={language === 'ru' ? 'ООО "..."' : 'MChJ "..."'} /></div>
+                    <div><Label>{language === 'ru' ? 'Телефон' : language === 'uz' ? 'Telefon' : 'Phone'}</Label><Input value={autoGenForm.client_phone} onChange={e => setAutoGenForm(f => ({ ...f, client_phone: e.target.value }))} placeholder="+998" /></div>
+                  </div>
+                  <div><Label>{language === 'ru' ? 'Юридический адрес' : language === 'uz' ? 'Yuridik manzil' : 'Legal Address'} *</Label><Input value={autoGenForm.client_address} onChange={e => setAutoGenForm(f => ({ ...f, client_address: e.target.value }))} placeholder={language === 'ru' ? 'г. Ташкент, ...' : 'Toshkent sh., ...'} /></div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label>{language === 'ru' ? 'Банк' : language === 'uz' ? 'Bank nomi' : 'Bank Name'} *</Label><Input value={autoGenForm.client_bank_name} onChange={e => setAutoGenForm(f => ({ ...f, client_bank_name: e.target.value }))} placeholder={language === 'ru' ? 'АКБ "..."' : 'AKB "..."'} /></div>
+                    <div><Label>{language === 'ru' ? 'Расчётный счёт' : language === 'uz' ? 'Hisob raqami' : 'Account'} *</Label><Input value={autoGenForm.client_bank_account} onChange={e => setAutoGenForm(f => ({ ...f, client_bank_account: e.target.value }))} placeholder="2020 8000 ..." /></div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div><Label>MFO *</Label><Input value={autoGenForm.client_mfo} onChange={e => setAutoGenForm(f => ({ ...f, client_mfo: e.target.value }))} placeholder="00440" /></div>
+                    <div><Label>STIR *</Label><Input value={autoGenForm.client_stir} onChange={e => setAutoGenForm(f => ({ ...f, client_stir: e.target.value }))} placeholder="123456789" /></div>
+                    <div><Label>OKONH</Label><Input value={autoGenForm.client_okonh} onChange={e => setAutoGenForm(f => ({ ...f, client_okonh: e.target.value }))} placeholder="61124" /></div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label>{language === 'ru' ? 'Номер договора' : language === 'uz' ? 'Shartnoma raqami' : 'Contract №'}</Label><Input value={autoGenForm.contract_number} onChange={e => setAutoGenForm(f => ({ ...f, contract_number: e.target.value }))} placeholder="№ 12/2025" /></div>
+                    <div><Label>{language === 'ru' ? 'Наименование объекта' : language === 'uz' ? 'Obyekt nomi' : 'Object Name'}</Label><Input value={autoGenForm.object_full_name} onChange={e => setAutoGenForm(f => ({ ...f, object_full_name: e.target.value }))} /></div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label>{language === 'ru' ? 'Директор (Ф.И.О)' : language === 'uz' ? 'Direktor (F.I.Sh)' : 'Director'}</Label><Input value={autoGenForm.client_director_name} onChange={e => setAutoGenForm(f => ({ ...f, client_director_name: e.target.value }))} /></div>
+                    <div><Label>{language === 'ru' ? 'Гл. бухгалтер' : language === 'uz' ? 'Bosh hisobchi' : 'Chief Accountant'}</Label><Input value={autoGenForm.client_chief_accountant_name} onChange={e => setAutoGenForm(f => ({ ...f, client_chief_accountant_name: e.target.value }))} /></div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>
@@ -1939,7 +2001,7 @@ const FormsTab = ({ project }) => {
 
       {/* Generate Forma 3 (KS-3) Modal */}
       <Dialog open={showGenF3Modal} onOpenChange={setShowGenF3Modal}>
-        <DialogContent className="max-w-md" aria-describedby={undefined}>
+        <DialogContent className="max-w-lg" aria-describedby={undefined}>
           <DialogHeader><DialogTitle>{t('gen_ks3') || 'KS-3 (Forma 3) yaratish'}</DialogTitle><DialogDescription className="sr-only">Generate KS-3</DialogDescription></DialogHeader>
           <div className="space-y-4">
             <p className="text-sm text-slate-500">{t('gen_ks3_desc') || "Imzolangan KS-2 aktlar asosida KS-3 hisoboti yaratiladi"}</p>
@@ -1956,10 +2018,44 @@ const FormsTab = ({ project }) => {
               <div><Label>{t('period_from') || 'Boshlanish'} *</Label><Input type="date" value={genF3Form.period_from} onChange={e => setGenF3Form(f => ({ ...f, period_from: e.target.value }))} /></div>
               <div><Label>{t('period_to') || 'Tugash'} *</Label><Input type="date" value={genF3Form.period_to} onChange={e => setGenF3Form(f => ({ ...f, period_to: e.target.value }))} /></div>
             </div>
+
+            {/* Buyurtmachi rekvizitlari */}
+            <div className="border rounded-md bg-slate-50">
+              <button type="button" className="w-full flex items-center justify-between p-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 rounded-md transition-colors" onClick={() => setShowGenF3ClientFields(p => !p)}>
+                <span>{language === 'ru' ? 'Реквизиты заказчика (Форма 3)' : language === 'uz' ? 'Buyurtmachi rekvizitlari (Forma 3 uchun)' : 'Client Details (for Form 3)'}</span>
+                {showGenF3ClientFields ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+              {showGenF3ClientFields && (
+                <div className="px-3 pb-3 space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label>{language === 'ru' ? 'Наименование' : language === 'uz' ? 'Mijoz nomi' : 'Client Name'} *</Label><Input value={genF3Form.client_name} onChange={e => setGenF3Form(f => ({ ...f, client_name: e.target.value }))} placeholder={language === 'ru' ? 'ООО "..."' : 'MChJ "..."'} /></div>
+                    <div><Label>{language === 'ru' ? 'Телефон' : language === 'uz' ? 'Telefon' : 'Phone'}</Label><Input value={genF3Form.client_phone} onChange={e => setGenF3Form(f => ({ ...f, client_phone: e.target.value }))} placeholder="+998" /></div>
+                  </div>
+                  <div><Label>{language === 'ru' ? 'Юридический адрес' : language === 'uz' ? 'Yuridik manzil' : 'Legal Address'} *</Label><Input value={genF3Form.client_address} onChange={e => setGenF3Form(f => ({ ...f, client_address: e.target.value }))} placeholder={language === 'ru' ? 'г. Ташкент, ...' : 'Toshkent sh., ...'} /></div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label>{language === 'ru' ? 'Банк' : language === 'uz' ? 'Bank nomi' : 'Bank Name'} *</Label><Input value={genF3Form.client_bank_name} onChange={e => setGenF3Form(f => ({ ...f, client_bank_name: e.target.value }))} placeholder={language === 'ru' ? 'АКБ "..."' : 'AKB "..."'} /></div>
+                    <div><Label>{language === 'ru' ? 'Расчётный счёт' : language === 'uz' ? 'Hisob raqami' : 'Account'} *</Label><Input value={genF3Form.client_bank_account} onChange={e => setGenF3Form(f => ({ ...f, client_bank_account: e.target.value }))} placeholder="2020 8000 ..." /></div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div><Label>MFO *</Label><Input value={genF3Form.client_mfo} onChange={e => setGenF3Form(f => ({ ...f, client_mfo: e.target.value }))} placeholder="00440" /></div>
+                    <div><Label>STIR *</Label><Input value={genF3Form.client_stir} onChange={e => setGenF3Form(f => ({ ...f, client_stir: e.target.value }))} placeholder="123456789" /></div>
+                    <div><Label>OKONH</Label><Input value={genF3Form.client_okonh} onChange={e => setGenF3Form(f => ({ ...f, client_okonh: e.target.value }))} placeholder="61124" /></div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label>{language === 'ru' ? 'Номер договора' : language === 'uz' ? 'Shartnoma raqami' : 'Contract №'}</Label><Input value={genF3Form.contract_number} onChange={e => setGenF3Form(f => ({ ...f, contract_number: e.target.value }))} placeholder="№ 12/2025" /></div>
+                    <div><Label>{language === 'ru' ? 'Наименование объекта' : language === 'uz' ? 'Obyekt nomi' : 'Object Name'}</Label><Input value={genF3Form.object_full_name} onChange={e => setGenF3Form(f => ({ ...f, object_full_name: e.target.value }))} /></div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label>{language === 'ru' ? 'Директор (Ф.И.О)' : language === 'uz' ? 'Direktor (F.I.Sh)' : 'Director'}</Label><Input value={genF3Form.client_director_name} onChange={e => setGenF3Form(f => ({ ...f, client_director_name: e.target.value }))} /></div>
+                    <div><Label>{language === 'ru' ? 'Гл. бухгалтер' : language === 'uz' ? 'Bosh hisobchi' : 'Chief Accountant'}</Label><Input value={genF3Form.client_chief_accountant_name} onChange={e => setGenF3Form(f => ({ ...f, client_chief_accountant_name: e.target.value }))} /></div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowGenF3Modal(false)}>{t('cancel') || 'Bekor qilish'}</Button>
-            <Button onClick={handleGenerateF3} disabled={genF3Saving}>{genF3Saving ? 'Yaratilmoqda...' : 'Yaratish'}</Button>
+            <Button onClick={handleGenerateF3} disabled={genF3Saving}>{genF3Saving ? 'Yaratilmoqda...' : (language === 'ru' ? 'Создать' : 'Yaratish')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
