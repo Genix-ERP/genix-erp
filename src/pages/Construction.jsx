@@ -6,6 +6,7 @@ import { hrService } from '@/api/services/hr';
 import { inventoryService } from '@/api/services/inventory';
 import { Core as Integrations } from '@/api/integrations';
 import apiClient from '@/api/client';
+import { useCompany } from '@/components/contexts/CompanyContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 // Tabs import kept for potential sub-component usage
 // import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -3390,7 +3391,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium truncate">{file.filename}</p>
+                        <p className="text-lg font-bold truncate" title={file.filename}>{file.filename}</p>
                         <p className="text-xs text-slate-400">
                           {formatFileSize(file.file_size)}
                           {file.created_at && ` · ${format(new Date(file.created_at), 'dd.MM.yyyy HH:mm')}`}
@@ -3454,6 +3455,7 @@ export default function Construction() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
+  const { activeCompany } = useCompany();
 
   const {
     projects,
@@ -3558,11 +3560,19 @@ export default function Construction() {
       project_type: '', building_type: '',
       total_area: '', floors_count: '', contract_amount: '', planned_start_date: '', planned_end_date: '',
       status: 'draft',
-      client_name: '', client_phone: '', client_contact: '',
-      client_address: '', client_bank_name: '', client_bank_account: '',
-      client_mfo: '', client_stir: '', client_okonh: '',
+      // Auto-fill client details from active company
+      client_name: activeCompany?.company_name || '',
+      client_phone: activeCompany?.phone || activeCompany?.director_phone || '',
+      client_contact: '',
+      client_address: activeCompany?.legal_address || '',
+      client_bank_name: activeCompany?.bank_name || '',
+      client_bank_account: activeCompany?.bank_account || '',
+      client_mfo: activeCompany?.bank_mfo || '',
+      client_stir: activeCompany?.tax_id || '',
+      client_okonh: activeCompany?.oked || '',
       contract_number: '', object_full_name: '',
-      client_director_name: '', client_chief_accountant_name: '',
+      client_director_name: activeCompany?.director_name || '',
+      client_chief_accountant_name: '',
     });
     setEditingProject(null);
   };
@@ -3998,19 +4008,19 @@ export default function Construction() {
             {/* Forma 2 / Forma 3 client (Заказчик) banking & legal identity */}
             <div className="border rounded-md p-3 bg-slate-50 space-y-3">
               <div className="text-sm font-semibold text-slate-700">
-                Реквизиты Заказчика (для Формы 2 / Формы 3)
+                {t('client_details_section')}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label>{t('client_name') || 'Наименование заказчика'}</Label>
+                  <Label>{t('client_name')}</Label>
                   <Input
                     value={projectForm.client_name}
                     onChange={(e) => setProjectForm({ ...projectForm, client_name: e.target.value })}
-                    placeholder='ООО "..."'
+                    placeholder={language === 'ru' ? 'ООО "..."' : language === 'uz' ? 'MChJ "..."' : 'LLC "..."'}
                   />
                 </div>
                 <div>
-                  <Label>{t('client_phone') || 'Телефон заказчика'}</Label>
+                  <Label>{t('client_phone')}</Label>
                   <Input
                     value={projectForm.client_phone}
                     onChange={(e) => setProjectForm({ ...projectForm, client_phone: e.target.value })}
@@ -4019,24 +4029,24 @@ export default function Construction() {
                 </div>
               </div>
               <div>
-                <Label>Юридический адрес заказчика</Label>
+                <Label>{t('client_legal_address')}</Label>
                 <Input
                   value={projectForm.client_address}
                   onChange={(e) => setProjectForm({ ...projectForm, client_address: e.target.value })}
-                  placeholder="г. Ташкент, ..."
+                  placeholder={language === 'ru' ? 'г. Ташкент, ...' : language === 'uz' ? 'Toshkent sh., ...' : 'Tashkent, ...'}
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label>Название банка</Label>
+                  <Label>{t('client_bank_name')}</Label>
                   <Input
                     value={projectForm.client_bank_name}
                     onChange={(e) => setProjectForm({ ...projectForm, client_bank_name: e.target.value })}
-                    placeholder='АКБ "..."'
+                    placeholder={language === 'ru' ? 'АКБ "..."' : language === 'uz' ? 'AKB "..."' : 'Bank "..."'}
                   />
                 </div>
                 <div>
-                  <Label>Расчётный счёт</Label>
+                  <Label>{t('client_bank_account')}</Label>
                   <Input
                     value={projectForm.client_bank_account}
                     onChange={(e) => setProjectForm({ ...projectForm, client_bank_account: e.target.value })}
@@ -4046,7 +4056,7 @@ export default function Construction() {
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <Label>МФО</Label>
+                  <Label>{t('client_mfo')}</Label>
                   <Input
                     value={projectForm.client_mfo}
                     onChange={(e) => setProjectForm({ ...projectForm, client_mfo: e.target.value })}
@@ -4054,7 +4064,7 @@ export default function Construction() {
                   />
                 </div>
                 <div>
-                  <Label>СТИР (ИНН)</Label>
+                  <Label>{t('client_stir')}</Label>
                   <Input
                     value={projectForm.client_stir}
                     onChange={(e) => setProjectForm({ ...projectForm, client_stir: e.target.value })}
@@ -4062,7 +4072,7 @@ export default function Construction() {
                   />
                 </div>
                 <div>
-                  <Label>ОКОНХ</Label>
+                  <Label>{t('client_okonh')}</Label>
                   <Input
                     value={projectForm.client_okonh}
                     onChange={(e) => setProjectForm({ ...projectForm, client_okonh: e.target.value })}
@@ -4072,7 +4082,7 @@ export default function Construction() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label>Номер договора</Label>
+                  <Label>{t('contract_number')}</Label>
                   <Input
                     value={projectForm.contract_number}
                     onChange={(e) => setProjectForm({ ...projectForm, contract_number: e.target.value })}
@@ -4080,29 +4090,29 @@ export default function Construction() {
                   />
                 </div>
                 <div>
-                  <Label>Полное название объекта</Label>
+                  <Label>{t('object_full_name')}</Label>
                   <Input
                     value={projectForm.object_full_name}
                     onChange={(e) => setProjectForm({ ...projectForm, object_full_name: e.target.value })}
-                    placeholder="ЛЭП-10кВ и ТП-..."
+                    placeholder={language === 'ru' ? 'ЛЭП-10кВ и ТП-...' : language === 'uz' ? 'EYL-10kV va TP-...' : 'Power line 10kV and TP-...'}
                   />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label>Руководитель заказчика</Label>
+                  <Label>{t('client_director_name')}</Label>
                   <Input
                     value={projectForm.client_director_name}
                     onChange={(e) => setProjectForm({ ...projectForm, client_director_name: e.target.value })}
-                    placeholder="Ф.И.О"
+                    placeholder={language === 'ru' ? 'Ф.И.О' : language === 'uz' ? 'F.I.Sh' : 'Full name'}
                   />
                 </div>
                 <div>
-                  <Label>Главный бухгалтер заказчика</Label>
+                  <Label>{t('client_chief_accountant')}</Label>
                   <Input
                     value={projectForm.client_chief_accountant_name}
                     onChange={(e) => setProjectForm({ ...projectForm, client_chief_accountant_name: e.target.value })}
-                    placeholder="Ф.И.О"
+                    placeholder={language === 'ru' ? 'Ф.И.О' : language === 'uz' ? 'F.I.Sh' : 'Full name'}
                   />
                 </div>
               </div>
@@ -4237,7 +4247,7 @@ export default function Construction() {
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium truncate">{file.filename}</p>
+                        <p className="text-lg font-bold truncate" title={file.filename}>{file.filename}</p>
                         {file.description && (
                           <p className="text-xs text-slate-500 truncate">{file.description}</p>
                         )}

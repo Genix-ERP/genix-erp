@@ -63,6 +63,28 @@ const FormsTab = ({ project }) => {
   const { t } = useTranslation(language);
   const { formatCurrency } = useCurrencyFormatter();
 
+  // Check if project has required client details for KS-2 / KS-3
+  const REQUIRED_CLIENT_FIELDS = ['client_name', 'client_stir', 'client_bank_name', 'client_bank_account', 'client_mfo', 'client_address'];
+  const missingClientFields = REQUIRED_CLIENT_FIELDS.filter(f => !project?.[f]?.trim());
+  const hasRequiredClientDetails = missingClientFields.length === 0;
+
+  const FIELD_LABELS = {
+    client_name: language === 'ru' ? 'Наименование заказчика' : language === 'uz' ? 'Buyurtmachi nomi' : 'Client Name',
+    client_stir: language === 'ru' ? 'ИНН (СТИР)' : 'STIR (TIN)',
+    client_bank_name: language === 'ru' ? 'Название банка' : language === 'uz' ? 'Bank nomi' : 'Bank Name',
+    client_bank_account: language === 'ru' ? 'Расчётный счёт' : language === 'uz' ? 'Hisob raqami' : 'Settlement Account',
+    client_mfo: 'MFO',
+    client_address: language === 'ru' ? 'Юридический адрес' : language === 'uz' ? 'Yuridik manzil' : 'Legal Address',
+  };
+
+  const clientFieldsWarning = missingClientFields.length > 0
+    ? (language === 'ru'
+        ? `Заполните данные заказчика в настройках проекта: ${missingClientFields.map(f => FIELD_LABELS[f] || f).join(', ')}`
+        : language === 'uz'
+          ? `Loyiha sozlamalarida buyurtmachi ma'lumotlarini to'ldiring: ${missingClientFields.map(f => FIELD_LABELS[f] || f).join(', ')}`
+          : `Fill in client details in project settings: ${missingClientFields.map(f => FIELD_LABELS[f] || f).join(', ')}`)
+    : '';
+
   const TYPE_LABELS = {
     ks2: t('forma_2') || 'Forma 2 (KS-2)',
     ks3: t('forma_3') || 'Forma 3 (KS-3)',
@@ -273,6 +295,7 @@ const FormsTab = ({ project }) => {
   // ---- Handlers ----
 
   const handleCreate = async () => {
+    if (!hasRequiredClientDetails) { toast.error(clientFieldsWarning); return; }
     if (!form.act_type) { setError('Akt turini tanlang'); return; }
     if (!form.period_from || !form.period_to) { setError('Davrni kiriting'); return; }
     const linesWithQty = selectedLines.filter(l => l.qty_period > 0);
@@ -435,6 +458,7 @@ const FormsTab = ({ project }) => {
 
   // Step 1: fetch preview only (no DB write)
   const handleAutoGeneratePreview = async () => {
+    if (!hasRequiredClientDetails) { toast.error(clientFieldsWarning); return; }
     if (!autoGenForm.period_from || !autoGenForm.period_to) {
       toast.error("Davrni kiriting"); return;
     }
@@ -486,6 +510,7 @@ const FormsTab = ({ project }) => {
   };
 
   const handleGenerateF3 = async () => {
+    if (!hasRequiredClientDetails) { toast.error(clientFieldsWarning); return; }
     if (!genF3Form.period_from || !genF3Form.period_to) {
       toast.error("Davrni kiriting"); return;
     }
@@ -1337,6 +1362,21 @@ const FormsTab = ({ project }) => {
   // ======== LIST VIEW ========
   return (
     <div className="space-y-4">
+      {/* Warning banner when client details are missing */}
+      {!hasRequiredClientDetails && (
+        <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+          <Ban className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
+          <div>
+            <p className="text-sm font-medium text-amber-800">
+              {language === 'ru' ? 'Данные заказчика не заполнены' : language === 'uz' ? 'Buyurtmachi ma\'lumotlari to\'ldirilmagan' : 'Client details are incomplete'}
+            </p>
+            <p className="text-xs text-amber-600 mt-1">{clientFieldsWarning}</p>
+            <p className="text-xs text-amber-600 mt-1">
+              {language === 'ru' ? 'Создание Форма 2 (KS-2) и Форма 3 (KS-3) заблокировано до заполнения данных.' : language === 'uz' ? 'Ma\'lumotlar to\'ldirilmaguncha Forma 2 (KS-2) va Forma 3 (KS-3) yaratish bloklangan.' : 'KS-2 and KS-3 creation is blocked until fields are filled.'}
+            </p>
+          </div>
+        </div>
+      )}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
           <CardTitle className="flex items-center gap-2"><FileText className="w-5 h-5" /> {t('forms')}</CardTitle>
@@ -1360,8 +1400,8 @@ const FormsTab = ({ project }) => {
                 <SelectItem value="cancelled">{t('cancelled') || 'Bekor qilingan'}</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline" onClick={() => setShowAutoGenModal(true)}><Zap className="w-4 h-4 mr-2" /> {t('auto_ks2') || 'KS-2 avto'}</Button>
-            <Button variant="outline" onClick={() => setShowGenF3Modal(true)}><FileText className="w-4 h-4 mr-2" /> {t('gen_ks3') || 'KS-3 yaratish'}</Button>
+            <Button variant="outline" disabled={!hasRequiredClientDetails} onClick={() => setShowAutoGenModal(true)} title={!hasRequiredClientDetails ? clientFieldsWarning : ''}><Zap className="w-4 h-4 mr-2" /> {t('auto_ks2') || 'KS-2 avto'}</Button>
+            <Button variant="outline" disabled={!hasRequiredClientDetails} onClick={() => setShowGenF3Modal(true)} title={!hasRequiredClientDetails ? clientFieldsWarning : ''}><FileText className="w-4 h-4 mr-2" /> {t('gen_ks3') || 'KS-3 yaratish'}</Button>
             <Button variant="outline" className="text-orange-600 border-orange-300" onClick={() => { setF19CreateForm({ building_id: '', period_from: '', period_to: '', notes: '' }); setShowF19CreateModal(true); }}>
               <Plus className="w-4 h-4 mr-2" /> {t('create_f19') || 'Forma 19'}
             </Button>
