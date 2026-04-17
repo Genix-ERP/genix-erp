@@ -463,20 +463,12 @@ export default function Returns() {
                             )}
                             {returnItem.status === "approved" &&
                               returnItem.refund_status === "pending" && (
-                                <>
-                                  <DropdownMenuItem
-                                    onClick={() => handleProcessRefund(returnItem, "cash")}
-                                  >
-                                    <DollarSign className="w-4 h-4 mr-2" />
-                                    {t('cash_refund')}
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={() => handleProcessRefund(returnItem, "credit_note")}
-                                  >
-                                    <FileText className="w-4 h-4 mr-2" />
-                                    {t('issue_credit_note')}
-                                  </DropdownMenuItem>
-                                </>
+                                <DropdownMenuItem
+                                  onClick={() => handleProcessRefund(returnItem, "credit_note")}
+                                >
+                                  <FileText className="w-4 h-4 mr-2" />
+                                  {t('issue_credit_note')}
+                                </DropdownMenuItem>
                               )}
                           </DropdownMenuContent>
                         </DropdownMenu>
