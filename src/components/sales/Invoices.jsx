@@ -1691,14 +1691,14 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                           <Button
                             variant="outline"
                             size="sm"
-                            className="h-6 px-2 text-xs gap-1"
+                            className="h-8 px-3 text-sm gap-2 border-blue-300 text-blue-700 hover:bg-blue-50 hover:border-blue-400 font-medium"
                             onClick={(e) => {
                               e.stopPropagation();
                               handlePrintAllocationReceipt(selectedInvoice, alloc);
                             }}
                           >
-                            <Printer className="w-3 h-3" />
-                            {t('print') || 'Print'}
+                            <Printer className="w-4 h-4" />
+                            {t('print_receipt')}
                           </Button>
                         </div>
                       </div>
@@ -1804,6 +1804,29 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                 <div className="p-3 bg-yellow-50 rounded-lg">
                   <p className="text-sm text-yellow-800">{selectedInvoice.notes}</p>
                 </div>
+              )}
+
+              {/* Print Last Payment Receipt - big prominent button */}
+              {(selectedInvoice.amount_paid > 0 || (selectedInvoice.payment_allocations || []).length > 0) && (
+                <Button
+                  onClick={() => {
+                    const allocs = selectedInvoice.payment_allocations || [];
+                    const lastAlloc = allocs.length > 0 ? allocs[allocs.length - 1] : null;
+                    if (lastAlloc) {
+                      handlePrintAllocationReceipt(selectedInvoice, lastAlloc);
+                    } else {
+                      handlePrintPaymentReceipt(selectedInvoice, {
+                        amount: selectedInvoice.amount_paid || 0,
+                        date: selectedInvoice.payment_date || new Date().toISOString().split('T')[0],
+                        journal_id: '',
+                      });
+                    }
+                  }}
+                  className="w-full h-12 text-base font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md"
+                >
+                  <Printer className="w-5 h-5 mr-3" />
+                  {t('print_receipt')}
+                </Button>
               )}
             </div>
           )}
