@@ -100,7 +100,6 @@ import { ReportGenerator } from '@/components/construction/ReportGenerator';
 import { ProjectKanban } from '@/components/construction/ProjectKanban';
 import {
   ProgressWidget,
-  FinancialWidget,
   TimelineWidget,
   TeamWidget,
   VendorsWidget,
@@ -1594,17 +1593,31 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
               }} />
             </div>
 
-            {/* Financial Widget */}
-            <FinancialWidget
-              project={{
-                ...project,
-                total_smeta: sections.reduce((sum, s) => sum + (parseFloat(s.total_cost) || 0), 0)
-              }}
-              formatCurrency={formatCurrencyCompact}
-            />
-
             {/* Timeline Widget */}
             <TimelineWidget project={project} />
+
+            {/* Quick Action Buttons */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">{t('quick_actions') || 'Tezkor amallar'}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button variant="outline" onClick={() => { setActiveGroup('materiallar'); setActiveTab('forms'); }}>
+                    <FileText className="w-4 h-4 mr-2" /> Forma 19
+                  </Button>
+                  <Button variant="outline" onClick={() => { setActiveGroup('materiallar'); setActiveTab('materials'); }}>
+                    <Package className="w-4 h-4 mr-2" /> {t('material') || 'Material'}
+                  </Button>
+                  <Button variant="outline" onClick={() => { setActiveGroup('hujjatlar'); setActiveTab('daily_logs'); }}>
+                    <ClipboardList className="w-4 h-4 mr-2" /> {t('journal') || 'Jurnal'}
+                  </Button>
+                  <Button variant="outline" onClick={() => { setActiveGroup('moliya'); setActiveTab('expenses'); }}>
+                    <DollarSign className="w-4 h-4 mr-2" /> {t('expense') || 'Xarajat'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Project Info Card */}
             <Card className="lg:col-span-2">
@@ -1655,28 +1668,6 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
               vendors={vendors}
             />
 
-            {/* Quick Action Buttons */}
-            <Card className="lg:col-span-3">
-              <CardHeader>
-                <CardTitle className="text-base">Tezkor amallar</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 gap-2">
-                  <Button variant="outline" onClick={() => { setActiveGroup('materiallar'); setActiveTab('forms'); }}>
-                    <FileText className="w-4 h-4 mr-2" /> Forma 19
-                  </Button>
-                  <Button variant="outline" onClick={() => { setActiveGroup('materiallar'); setActiveTab('materials'); }}>
-                    <Package className="w-4 h-4 mr-2" /> Material
-                  </Button>
-                  <Button variant="outline" onClick={() => { setActiveGroup('hujjatlar'); setActiveTab('daily_logs'); }}>
-                    <ClipboardList className="w-4 h-4 mr-2" /> Jurnal
-                  </Button>
-                  <Button variant="outline" onClick={() => { setActiveGroup('moliya'); setActiveTab('expenses'); }}>
-                    <DollarSign className="w-4 h-4 mr-2" /> Xarajat
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
 
           </div>
         )}
