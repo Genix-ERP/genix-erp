@@ -83,7 +83,7 @@ export default function ProductCombobox({ products: initialProducts = [], value,
                     key={product.id}
                     value={product.id}
                     onSelect={() => {
-                      onValueChange(product.id);
+                      onValueChange(product.id, product);
                       setOpen(false);
                       setSearch("");
                     }}

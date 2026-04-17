@@ -163,6 +163,7 @@ export default function BOMManagement() {
       });
       setNewComponent({
         component_id: '',
+        component_name: '',
         quantity: 0,
         unit: 'pcs'
       });
@@ -654,11 +655,12 @@ export default function BOMManagement() {
                     <ProductCombobox
                       products={products.filter(p => p.id)}
                       value={newComponent.component_id}
-                      onValueChange={(value) => {
-                        const selectedProduct = products.find(p => p.id === value);
+                      onValueChange={(value, product) => {
+                        const selectedProduct = product || products.find(p => p.id === value);
                         setNewComponent({
                           ...newComponent,
                           component_id: value,
+                          component_name: selectedProduct?.name || '',
                           unit: selectedProduct?.unit_name || selectedProduct?.purchase_unit_name || 'pcs'
                         });
                       }}
@@ -703,7 +705,7 @@ export default function BOMManagement() {
                           const component = products.find(p => p.id === line.component_id);
                           return (
                             <TableRow key={index}>
-                              <TableCell>{component?.name || line.component_id}</TableCell>
+                              <TableCell>{line.component_name || component?.name || line.component_id}</TableCell>
                               <TableCell>{line.quantity}</TableCell>
                               <TableCell>{line.unit}</TableCell>
                               <TableCell>
@@ -923,11 +925,12 @@ export default function BOMManagement() {
                       <ProductCombobox
                         products={products.filter(p => p.id)}
                         value={editComponent.component_id}
-                        onValueChange={(value) => {
-                          const selectedProduct = products.find(p => p.id === value);
+                        onValueChange={(value, product) => {
+                          const selectedProduct = product || products.find(p => p.id === value);
                           setEditComponent({
                             ...editComponent,
                             component_id: value,
+                            component_name: selectedProduct?.name || '',
                             unit: selectedProduct?.unit_name || selectedProduct?.purchase_unit_name || editComponent.unit
                           });
                         }}
@@ -972,7 +975,7 @@ export default function BOMManagement() {
                             const component = products.find(p => p.id === line.component_id);
                             return (
                               <TableRow key={index}>
-                                <TableCell>{component?.name || line.component_name || line.component_id}</TableCell>
+                                <TableCell>{line.component_name || component?.name || line.component_id}</TableCell>
                                 <TableCell>{line.quantity}</TableCell>
                                 <TableCell>{line.unit || line.unit_of_measure}</TableCell>
                                 <TableCell>
