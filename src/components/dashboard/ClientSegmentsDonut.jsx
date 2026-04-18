@@ -4,11 +4,11 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { Users } from "lucide-react";
 
-const SEGMENTS = [
-  { key: "new", label: "Yangi", color: "#6C5CE7" },
-  { key: "regular", label: "Doimiy", color: "#00CEC9" },
-  { key: "at_risk", label: "Xavf ostida", color: "#FDCB6E" },
-  { key: "lost", label: "Yo'qolgan", color: "#E17055" },
+const SEGMENT_DEFS = [
+  { key: "new", tKey: "new_customers", fallback: "New", color: "#6C5CE7" },
+  { key: "regular", tKey: "regular_customers", fallback: "Regular", color: "#00CEC9" },
+  { key: "at_risk", tKey: "at_risk", fallback: "At Risk", color: "#FDCB6E" },
+  { key: "lost", tKey: "lost_customers", fallback: "Lost", color: "#E17055" },
 ];
 
 function CustomTooltip({ active, payload }) {
@@ -75,6 +75,7 @@ export default function ClientSegmentsDonut({ customers, salesOrders }) {
     // Regular: everyone else
     const regular = Math.max(total - newCustomers - lost - atRisk, 0);
 
+    const SEGMENTS = SEGMENT_DEFS.map(s => ({ ...s, label: t(s.tKey) || s.fallback }));
     const result = [
       { ...SEGMENTS[0], value: newCustomers },
       { ...SEGMENTS[1], value: regular },
@@ -89,10 +90,10 @@ export default function ClientSegmentsDonut({ customers, salesOrders }) {
     <div className="glass-card rounded-2xl p-5 h-full transition-all duration-300">
       <div className="mb-4">
         <h3 className="text-sm font-semibold text-slate-900">
-          Mijoz segmentlari
+          {t("client_segments") || "Client Segments"}
         </h3>
         <p className="text-xs text-slate-400 mt-0.5">
-          Taqsimot
+          {t("distribution") || "Distribution"}
         </p>
       </div>
 

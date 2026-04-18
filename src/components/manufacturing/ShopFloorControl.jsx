@@ -24,6 +24,7 @@ import {
   Hammer,
   RefreshCw,
 } from 'lucide-react';
+import { Trash2, Paperclip, Upload, FileText, Image, X } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useManufacturing } from '@/components/contexts/ManufacturingContext';
 import { useInventory } from '@/components/contexts/InventoryContext';
@@ -40,7 +41,7 @@ const WORK_ORDER_STATUS = {
   failed: { color: 'bg-red-100 text-red-700 border-red-200', icon: XCircle },
 };
 
-function KanbanCard({ wo, labels, language, workCenters, productionOrders, currentTimer, calculateTimeSpent, onStart, onPause, onComplete, onMaterials }) {
+function KanbanCard({ wo, labels, language, workCenters, productionOrders, currentTimer, calculateTimeSpent, onStart, onPause, onComplete, onMaterials, onAttachments }) {
   const StatusIcon = WORK_ORDER_STATUS[wo.status]?.icon || Clock;
   const timeSpent = calculateTimeSpent(wo);
   const totalQty = wo.quantity_to_produce || 0;
@@ -118,6 +119,15 @@ function KanbanCard({ wo, labels, language, workCenters, productionOrders, curre
             <Package className="w-3.5 h-3.5 mr-1" />
             {language === 'uz' ? 'Mat.' : language === 'ru' ? 'Мат.' : 'Mat.'}
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => onAttachments(wo)}
+            className="h-7 px-2 text-xs border-purple-200 text-purple-600 hover:bg-purple-50"
+          >
+            <Paperclip className="w-3.5 h-3.5 mr-1" />
+            {language === 'uz' ? 'Fayllar' : language === 'ru' ? 'Файлы' : 'Files'}
+          </Button>
 
           {(wo.status === 'pending' || wo.status === 'ready') && (
             <Button size="sm" onClick={() => onStart(wo)} className="h-7 px-2 text-xs bg-green-600 hover:bg-green-700 flex-1">
@@ -151,7 +161,7 @@ function KanbanCard({ wo, labels, language, workCenters, productionOrders, curre
   );
 }
 
-function KanbanColumn({ title, count, headerColor, titleColor, countColor, workOrders, labels, language, workCenters, productionOrders, currentTimer, calculateTimeSpent, onStart, onPause, onComplete, onMaterials }) {
+function KanbanColumn({ title, count, headerColor, titleColor, countColor, workOrders, labels, language, workCenters, productionOrders, currentTimer, calculateTimeSpent, onStart, onPause, onComplete, onMaterials, onAttachments }) {
   return (
     <div className="w-72 shrink-0 flex flex-col gap-3 h-full">
       {/* Column header */}
@@ -181,6 +191,7 @@ function KanbanColumn({ title, count, headerColor, titleColor, countColor, workO
               onPause={onPause}
               onComplete={onComplete}
               onMaterials={onMaterials}
+              onAttachments={onAttachments}
             />
           ))
         )}
@@ -192,7 +203,7 @@ function KanbanColumn({ title, count, headerColor, titleColor, countColor, workO
 export default function ShopFloorControl({ isActive }) {
   const { language } = useLanguage();
   const { workOrders, workCenters, productionOrders, manufacturingCategories, startWorkOrder, pauseWorkOrder, completeWorkOrder, refreshData } = useManufacturing();
-  const { refreshData: refreshInventory } = useInventory();
+  const { refreshData: refreshInventory, products, warehouses } = useInventory();
 
   const [selectedWorkCenter, setSelectedWorkCenter] = useState('all');
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -223,6 +234,13 @@ export default function ShopFloorControl({ isActive }) {
   const [newMaterial, setNewMaterial] = useState({ product_id: '', quantity: '', unit_cost: '', notes: '' });
   const [productSearch, setProductSearch] = useState('');
   const [productSearchFocused, setProductSearchFocused] = useState(false);
+
+  // Attachments modal state
+  const [showAttachmentsModal, setShowAttachmentsModal] = useState(false);
+  const [attachmentsWorkOrder, setAttachmentsWorkOrder] = useState(null);
+  const [woAttachments, setWoAttachments] = useState([]);
+  const [attachmentsLoading, setAttachmentsLoading] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
 
   // Split output modal state
   const [showSplitModal, setShowSplitModal] = useState(false);
@@ -398,14 +416,23 @@ export default function ShopFloorControl({ isActive }) {
 
     const poId = activeWorkOrder.production_order_id;
 
+    // Capture values before closing the modal
+    const produced = parseFloat(completionData.quantity_produced) || 0;
+    const scrapped = parseFloat(completionData.quantity_scrapped) || 0;
+    const notes = completionData.notes;
+
+    // Close the complete modal first to avoid overlap with split modal
+    setShowCompleteModal(false);
+    setCompletionData({ quantity_produced: 0, quantity_scrapped: 0, notes: '' });
+
     try {
       const timeSpent = calculateTimeSpent(activeWorkOrder);
 
       await completeWorkOrder(activeWorkOrder.id, {
-        quantity_produced: parseFloat(completionData.quantity_produced) || 0,
-        scrap_quantity: parseFloat(completionData.quantity_scrapped) || 0,
+        quantity_produced: produced,
+        scrap_quantity: scrapped,
         actual_duration: timeSpent.totalMinutes,
-        notes: completionData.notes,
+        notes: notes,
       });
 
       refreshData();
@@ -415,19 +442,20 @@ export default function ShopFloorControl({ isActive }) {
       if (poId) {
         try {
           const po = await productionOrdersService.get(poId);
-          if (po && po.status === 'packaging') {
+          console.log('Split output check: PO status =', po?.status, 'has_split_output =', po?.has_split_output);
+          if (po && (po.status === 'packaging' || (po.status === 'completed' && po.has_split_output))) {
             setSplitPoId(poId);
             setSplitItems([{ product_id: '', quantity: '', warehouse_id: '' }]);
             setShowSplitModal(true);
           }
-        } catch { /* non-critical */ }
+        } catch (splitErr) {
+          console.error('Failed to check split output status:', splitErr);
+        }
       }
     } catch (error) {
       console.error('Failed to complete work order:', error);
     }
 
-    setShowCompleteModal(false);
-    setCompletionData({ quantity_produced: 0, quantity_scrapped: 0, notes: '' });
     setActiveWorkOrder(null);
   };
 
@@ -508,6 +536,57 @@ export default function ShopFloorControl({ isActive }) {
     } catch {
       toast.error('Failed to remove material');
     }
+  };
+
+  // Attachments handlers
+  const handleOpenAttachments = async (workOrder) => {
+    setAttachmentsWorkOrder(workOrder);
+    setShowAttachmentsModal(true);
+    setAttachmentsLoading(true);
+    try {
+      const data = await workOrdersService.getAttachments(workOrder.id);
+      setWoAttachments(data || []);
+    } catch {
+      setWoAttachments([]);
+    }
+    setAttachmentsLoading(false);
+  };
+
+  const handleUploadAttachment = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !attachmentsWorkOrder) return;
+    setUploadingFile(true);
+    try {
+      await workOrdersService.uploadAttachment(attachmentsWorkOrder.id, file);
+      const data = await workOrdersService.getAttachments(attachmentsWorkOrder.id);
+      setWoAttachments(data || []);
+      toast.success(language === 'uz' ? 'Fayl yuklandi' : 'File uploaded');
+    } catch {
+      toast.error('Failed to upload file');
+    }
+    setUploadingFile(false);
+    e.target.value = '';
+  };
+
+  const handleDeleteAttachment = async (attachmentId) => {
+    if (!attachmentsWorkOrder) return;
+    try {
+      await workOrdersService.deleteAttachment(attachmentsWorkOrder.id, attachmentId);
+      setWoAttachments(prev => prev.filter(a => a.id !== attachmentId));
+      toast.success('Deleted');
+    } catch {
+      toast.error('Failed to delete');
+    }
+  };
+
+  const getFileIcon = (mimeType) => {
+    if (mimeType?.startsWith('image/')) return Image;
+    return FileText;
+  };
+
+  const getApiBase = () => {
+    const base = import.meta.env.VITE_API_URL || '';
+    return base.replace('/api/v1', '');
   };
 
   // Statistics
@@ -721,172 +800,32 @@ export default function ShopFloorControl({ isActive }) {
             </CardContent>
           </Card>
         ) : (
-          groupedWorkOrders.map(group => {
-            const isCollapsed = collapsedGroups.has(group.production_order_id);
-            const groupInProgress = group.workOrders.some(wo => wo.status === 'in_progress');
-            const groupPaused = group.workOrders.some(wo => wo.status === 'paused');
-            const groupStatusColor = groupInProgress
-              ? 'bg-amber-100 text-amber-700 border-amber-200'
-              : groupPaused
-              ? 'bg-orange-100 text-orange-700 border-orange-200'
-              : 'bg-blue-100 text-blue-700 border-blue-200';
-
-            return (
-              <Card key={group.production_order_id} className="bg-white/80 backdrop-blur-sm overflow-hidden">
-                {/* Group header — click to expand/collapse */}
-                <button
-                  className="w-full text-left"
-                  onClick={() => toggleGroup(group.production_order_id)}
-                >
-                  <div className="flex items-center justify-between px-5 py-3 hover:bg-slate-50 transition-colors">
-                    <div className="flex items-center gap-3">
-                      {isCollapsed
-                        ? <ChevronRight className="w-4 h-4 text-slate-400" />
-                        : <ChevronDown className="w-4 h-4 text-slate-400" />
-                      }
-                      <Package className="w-4 h-4 text-blue-500" />
-                      <span className="font-semibold text-slate-800">{group.production_order_code}</span>
-                      {group.product_name && (
-                        <span className="text-sm text-slate-500">— {group.product_name}</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm text-slate-400">{group.workOrders.length} {labels.operation}{group.workOrders.length !== 1 ? 's' : ''}</span>
-                      <Badge variant="outline" className={groupStatusColor}>
-                        {groupInProgress ? labels.in_progress : groupPaused ? labels.paused : labels.pending}
-                      </Badge>
-                    </div>
-                  </div>
-                </button>
-
-                {/* Work orders table — shown when expanded */}
-                {!isCollapsed && (
-                  <div className="border-t border-slate-100">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-slate-50/60">
-                          <TableHead className="pl-5">{labels.operation}</TableHead>
-                          <TableHead>{labels.work_center}</TableHead>
-                          <TableHead>{labels.quantity}</TableHead>
-                          <TableHead>{labels.progress}</TableHead>
-                          <TableHead>{labels.time_spent}</TableHead>
-                          <TableHead>{labels.status}</TableHead>
-                          <TableHead className="text-right pr-5">{labels.actions}</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {group.workOrders.map(wo => {
-                          const StatusIcon = WORK_ORDER_STATUS[wo.status]?.icon || Clock;
-                          const timeSpent = calculateTimeSpent(wo);
-                          const totalQty = wo.quantity_to_produce || 0;
-
-                          // Progress: quantity-based if any qty recorded, else time-based for in_progress
-                          const progress = (() => {
-                            if ((wo.quantity_produced || 0) > 0 && totalQty > 0) {
-                              return Math.min(100, (wo.quantity_produced / totalQty) * 100);
-                            }
-                            if (wo.status === 'in_progress' && wo.actual_start && (wo.expected_duration_minutes || 0) > 0) {
-                              void currentTimer; // re-evaluated every second
-                              const elapsed = differenceInMinutes(new Date(), parseISO(wo.actual_start));
-                              return Math.min(99, (elapsed / wo.expected_duration_minutes) * 100);
-                            }
-                            return 0;
-                          })();
-
-                          return (
-                            <TableRow key={wo.id}>
-                              <TableCell className="pl-5">
-                                <div>
-                                  <p className="font-medium">{wo.operation_name || wo.name || '-'}</p>
-                                  <p className="text-xs text-slate-400">{wo.work_order_number || wo.code || wo.id?.substring(0, 8)}</p>
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant="outline">
-                                  {wo.work_center_name || workCenters.find(wc => wc.id === wo.work_center_id)?.name || '-'}
-                                </Badge>
-                              </TableCell>
-                              <TableCell>
-                                <span className="font-medium">{wo.quantity_produced || 0}</span>
-                                <span className="text-slate-400"> / {totalQty}</span>
-                              </TableCell>
-                              <TableCell>
-                                <div className="w-24">
-                                  <Progress value={progress} className="h-2" />
-                                  <p className="text-xs text-slate-500 mt-1">
-                                    {wo.status === 'in_progress' && (wo.quantity_produced || 0) === 0 && (wo.expected_duration_minutes || 0) > 0
-                                      ? `~${progress.toFixed(0)}%`
-                                      : `${progress.toFixed(0)}%`}
-                                  </p>
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex items-center gap-1">
-                                  <Timer className="w-4 h-4 text-slate-400" />
-                                  <span className="text-sm">{timeSpent.formatted}</span>
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant="outline" className={WORK_ORDER_STATUS[wo.status]?.color}>
-                                  <StatusIcon className="w-3 h-3 mr-1" />
-                                  {statusLabel(wo.status)}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="text-right pr-5">
-                                <div className="flex justify-end gap-2">
-                                  {(wo.status === 'ready' || wo.status === 'pending') && (
-                                    <Button
-                                      size="sm"
-                                      onClick={() => handleStartWorkOrder(wo)}
-                                      className="bg-green-600 hover:bg-green-700"
-                                    >
-                                      <Play className="w-4 h-4 mr-1" />
-                                      {labels.start}
-                                    </Button>
-                                  )}
-                                  {wo.status === 'in_progress' && (
-                                    <>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => handlePauseWorkOrder(wo)}
-                                        className="border-orange-200 text-orange-600 hover:bg-orange-50"
-                                      >
-                                        <Pause className="w-4 h-4 mr-1" />
-                                        {labels.pause}
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        onClick={() => handleCompleteWorkOrder(wo)}
-                                        className="bg-green-600 hover:bg-green-700"
-                                      >
-                                        <CheckCircle className="w-4 h-4 mr-1" />
-                                        {labels.complete}
-                                      </Button>
-                                    </>
-                                  )}
-                                  {wo.status === 'paused' && (
-                                    <Button
-                                      size="sm"
-                                      onClick={() => handleStartWorkOrder(wo)}
-                                      className="bg-amber-600 hover:bg-amber-700"
-                                    >
-                                      <Play className="w-4 h-4 mr-1" />
-                                      {labels.resume}
-                                    </Button>
-                                  )}
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-              </Card>
-            );
-          })
+          <div className="overflow-x-auto" style={{ height: 'calc(100vh - 420px)', minHeight: '400px' }}>
+            <div className="flex gap-4 min-w-max h-full">
+              {kanbanColumns.map(col => (
+                <KanbanColumn
+                  key={col.id}
+                  title={col.name}
+                  count={col.workOrders.length}
+                  headerColor="bg-slate-50 border-slate-200"
+                  titleColor="text-slate-700"
+                  countColor="bg-slate-200 text-slate-600"
+                  workOrders={col.workOrders}
+                  labels={labels}
+                  language={language}
+                  workCenters={workCenters}
+                  productionOrders={productionOrders}
+                  currentTimer={currentTimer}
+                  calculateTimeSpent={calculateTimeSpent}
+                  onStart={handleStartWorkOrder}
+                  onPause={handlePauseWorkOrder}
+                  onComplete={handleCompleteWorkOrder}
+                  onMaterials={handleOpenMaterials}
+                  onAttachments={handleOpenAttachments}
+                />
+              ))}
+            </div>
+          </div>
         )}
       </div>
 
@@ -1179,6 +1118,73 @@ export default function ShopFloorControl({ isActive }) {
         </DialogContent>
       </Dialog>
 
+      {/* Attachments Modal */}
+      <Dialog open={showAttachmentsModal} onOpenChange={(open) => { setShowAttachmentsModal(open); if (!open) { setAttachmentsWorkOrder(null); setWoAttachments([]); } }}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Paperclip className="w-5 h-5" />
+              {language === 'uz' ? 'Fayllar' : language === 'ru' ? 'Файлы' : 'Attachments'}
+              {attachmentsWorkOrder && <span className="text-sm font-normal text-slate-500">— {attachmentsWorkOrder.name}</span>}
+            </DialogTitle>
+          </DialogHeader>
+
+          {/* Upload button */}
+          <div className="flex items-center gap-2">
+            <label className="flex-1">
+              <input type="file" className="hidden" onChange={handleUploadAttachment} disabled={uploadingFile} accept="image/*,.pdf,.doc,.docx,.dwg,.dxf" />
+              <div className={`flex items-center justify-center gap-2 border-2 border-dashed rounded-lg p-4 cursor-pointer transition-colors ${uploadingFile ? 'border-slate-200 bg-slate-50' : 'border-purple-200 hover:border-purple-400 hover:bg-purple-50'}`}>
+                <Upload className="w-5 h-5 text-purple-500" />
+                <span className="text-sm text-purple-600 font-medium">
+                  {uploadingFile
+                    ? (language === 'uz' ? 'Yuklanmoqda...' : 'Uploading...')
+                    : (language === 'uz' ? 'Fayl yuklash (rasm, chizma, PDF)' : language === 'ru' ? 'Загрузить файл (фото, чертёж, PDF)' : 'Upload file (image, drawing, PDF)')}
+                </span>
+              </div>
+            </label>
+          </div>
+
+          {/* Attachments list */}
+          {attachmentsLoading ? (
+            <div className="text-center py-8 text-slate-400">{language === 'uz' ? 'Yuklanmoqda...' : 'Loading...'}</div>
+          ) : woAttachments.length === 0 ? (
+            <div className="text-center py-8 text-slate-400">
+              <Paperclip className="w-8 h-8 mx-auto mb-2 opacity-30" />
+              {language === 'uz' ? 'Fayllar yo\'q' : language === 'ru' ? 'Файлов нет' : 'No files yet'}
+            </div>
+          ) : (
+            <div className="grid gap-3">
+              {woAttachments.map((att) => {
+                const isImage = att.mime_type?.startsWith('image/');
+                const FileIcon = getFileIcon(att.mime_type);
+                const fileUrl = `${getApiBase()}${att.url}`;
+                return (
+                  <div key={att.id} className="border rounded-lg overflow-hidden">
+                    {isImage && (
+                      <a href={fileUrl} target="_blank" rel="noopener noreferrer">
+                        <img src={fileUrl} alt={att.original_name} className="w-full max-h-[300px] object-contain bg-slate-50" />
+                      </a>
+                    )}
+                    <div className="flex items-center justify-between p-3 bg-white">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <FileIcon className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                        <a href={fileUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-blue-600 hover:underline truncate">
+                          {att.original_name}
+                        </a>
+                        <span className="text-xs text-slate-400 flex-shrink-0">{(att.file_size / 1024).toFixed(0)} KB</span>
+                      </div>
+                      <Button variant="ghost" size="sm" onClick={() => handleDeleteAttachment(att.id)} className="text-red-500 hover:text-red-700 h-7 w-7 p-0 flex-shrink-0">
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* Split Output Modal */}
       <Dialog open={showSplitModal} onOpenChange={setShowSplitModal}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -1206,7 +1212,7 @@ export default function ShopFloorControl({ isActive }) {
                     onChange={(e) => updateSplitItem(idx, 'product_id', e.target.value)}
                   >
                     <option value="">— {language === 'uz' ? 'tanlang' : language === 'ru' ? 'выбрать' : 'select'} —</option>
-                    {(products || []).map(p => (
+                    {(products || []).filter(p => p.can_be_sold || p.is_sellable).map(p => (
                       <option key={p.id} value={p.id}>{p.name} {p.weight ? `(${p.weight} kg)` : ''}</option>
                     ))}
                   </select>
@@ -1224,12 +1230,16 @@ export default function ShopFloorControl({ isActive }) {
                 </div>
                 <div className="col-span-3 space-y-1">
                   <Label className="text-xs">{language === 'uz' ? 'Sklad' : language === 'ru' ? 'Склад' : 'Warehouse'}</Label>
-                  <Input
-                    placeholder="optional ID"
+                  <select
+                    className="w-full border border-slate-200 rounded-md px-2 py-1.5 text-sm bg-white"
                     value={item.warehouse_id}
                     onChange={(e) => updateSplitItem(idx, 'warehouse_id', e.target.value)}
-                    className="text-xs"
-                  />
+                  >
+                    <option value="">{language === 'uz' ? 'Tanlang' : language === 'ru' ? 'Выбрать' : 'Select'}</option>
+                    {(warehouses || []).map(w => (
+                      <option key={w.id} value={w.id}>{w.name}</option>
+                    ))}
+                  </select>
                 </div>
                 <div className="col-span-1 flex justify-center">
                   {splitItems.length > 1 && (

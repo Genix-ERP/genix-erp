@@ -108,7 +108,7 @@ export const DOCUMENT_TEMPLATES = {
 // Company info placeholder
 const getCompanyInfo = () => {
   return {
-    name: localStorage.getItem("company_name") || "Genix ERP",
+    name: localStorage.getItem("company_name") || "Yuksalish ERP",
     address: localStorage.getItem("company_address") || "Toshkent, O'zbekiston",
     phone: localStorage.getItem("company_phone") || "+998 XX XXX XX XX",
     email: localStorage.getItem("company_email") || "info@genix.uz",
@@ -139,7 +139,7 @@ export const generateDocumentPDF = (config) => {
   const margins = templateConfig.margins;
 
   const doc = new jsPDF({
-    orientation: templateConfig.orientation,
+    orientation: config.orientation || templateConfig.orientation,
     unit: "mm",
     format: "a4",
   });
@@ -427,7 +427,7 @@ export const generateDocumentPDF = (config) => {
   doc.setFontSize(7);
   doc.setTextColor(180, 180, 180);
   doc.text(
-    `Genix ERP | Yaratilgan: ${format(new Date(), "dd.MM.yyyy HH:mm")}`,
+    `${company.name} | Yaratilgan: ${format(new Date(), "dd.MM.yyyy HH:mm")}`,
     margins.left,
     pageHeight - 8
   );
@@ -507,7 +507,7 @@ export function PrintPreviewModal({
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl h-[90vh] flex flex-col">
         <DialogHeader className="flex-shrink-0">
-          <DialogTitle className="flex items-center justify-between">
+          <DialogTitle className="flex items-center justify-between pr-8">
             <span className="flex items-center gap-2">
               <Eye className="w-5 h-5" />
               Hujjatni ko'rish

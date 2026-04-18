@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,6 +55,8 @@ import {
   ChevronDown,
   ChevronUp,
   Printer,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { format, differenceInDays, startOfDay } from "date-fns";
 import { useSales } from "@/components/contexts/SalesContext";
@@ -65,6 +67,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { inventoryService } from "@/api/services/inventory";
 import { salesService } from "@/api/services/sales";
+import apiClient from "@/api/client";
 import { useCompany } from "@/components/contexts/CompanyContext";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { useAdminSettings } from "@/components/contexts/AdminSettingsContext";
@@ -79,6 +82,14 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
   const { getSetting } = useAdminSettings();
   const { taxRates = [], journals = [], paymentJournals = [], currencies = [], exchangeRates = [], getLatestExchangeRate } = useFinancials();
   const bankCashJournals = paymentJournals.length > 0 ? paymentJournals : journals.filter(j => j.type === 'bank' || j.type === 'cash');
+
+  // Helper to get translated journal name
+  const getJournalName = (journal) => {
+    if (!journal) return '-';
+    if (language === 'uz' && journal.name_uz) return journal.name_uz;
+    if (language === 'en' && journal.name_en) return journal.name_en;
+    return journal.name || '-';
+  };
 
   // Get default tax from settings
   const defaultSalesTaxId = getSetting('sales.tax.default_tax_id', '');
@@ -105,6 +116,48 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalInvoices, setTotalInvoices] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [paginatedInvoices, setPaginatedInvoices] = useState([]);
+  const [invoicesLoading, setInvoicesLoading] = useState(false);
+  const pageSize = 20;
+
+  // Fetch invoices with server-side pagination
+  const fetchInvoices = useCallback(async () => {
+    setInvoicesLoading(true);
+    try {
+      const params = { page: currentPage, page_size: pageSize };
+      if (searchQuery) params.search = searchQuery;
+      if (statusFilter !== 'all') params.status = statusFilter;
+      if (typeFilter !== 'all') params.type = typeFilter;
+
+      const response = await apiClient.get('/sales-invoices', { params });
+      const data = response.data?.data || [];
+      const meta = response.data?.meta;
+      setPaginatedInvoices(data);
+      if (meta) {
+        setTotalInvoices(meta.total || 0);
+        setTotalPages(meta.total_pages || 1);
+      }
+    } catch (error) {
+      console.error('Failed to fetch invoices:', error);
+      setPaginatedInvoices([]);
+    } finally {
+      setInvoicesLoading(false);
+    }
+  }, [currentPage, searchQuery, statusFilter, typeFilter]);
+
+  useEffect(() => {
+    fetchInvoices();
+  }, [fetchInvoices]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter, typeFilter]);
 
   // Load products on mount
   useEffect(() => {
@@ -179,18 +232,8 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
     write_off_amount: 0,
   });
 
-  const filteredInvoices = useMemo(() => {
-    return invoices.filter((inv) => {
-      const matchesSearch =
-        inv.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        inv.customer_name?.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesStatus =
-        statusFilter === "all" || inv.payment_status === statusFilter;
-      const invType = inv.invoice_type || "invoice";
-      const matchesType = typeFilter === "all" || invType === typeFilter;
-      return matchesSearch && matchesStatus && matchesType;
-    });
-  }, [invoices, searchQuery, statusFilter, typeFilter]);
+  // Server-side filtering is done in fetchInvoices; just use paginatedInvoices directly
+  const filteredInvoices = paginatedInvoices;
 
   const stats = useMemo(() => {
     const today = new Date();
@@ -323,6 +366,7 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
       // Pass customer_name so it appears immediately in the list
       await createInvoice(data, formData.customer_name);
     }
+    await fetchInvoices();
     resetForm();
   };
 
@@ -411,7 +455,7 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
     try {
       await salesService.sendInvoice(invoice.id);
       // Refresh the invoice list
-      await getInvoice(invoice.id);
+      await fetchInvoices();
     } catch (err) {
       console.error("Failed to send invoice:", err);
     }
@@ -439,7 +483,7 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
       bank_transfer: language === 'ru' ? 'Банковский перевод' : language === 'uz' ? 'Bank o\'tkazmasi' : 'Bank Transfer',
       cash: language === 'ru' ? 'Наличные' : language === 'uz' ? 'Naqd' : 'Cash',
     };
-    const journalName = alloc.journal_name || '-';
+    const journalName = (language === 'uz' && alloc.journal_name_uz ? alloc.journal_name_uz : language === 'en' && alloc.journal_name_en ? alloc.journal_name_en : alloc.journal_name) || '-';
     const method = journalName.toLowerCase().includes('kassa') || journalName.toLowerCase().includes('cash') || journalName.toLowerCase().includes('нал') ? 'cash' : 'bank_transfer';
 
     const html = `
@@ -613,7 +657,7 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
           ${selectedJournal ? `
           <div class="row">
             <span class="label">${t('receipt_journal')}:</span>
-            <span class="value">${selectedJournal.name}</span>
+            <span class="value">${getJournalName(selectedJournal)}</span>
           </div>` : ''}
 
           <div class="row">
@@ -673,6 +717,7 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
         paymentData.date,
         paymentData.write_off ? paymentData.write_off_amount : 0
       );
+      await fetchInvoices();
       // Store for receipt printing before clearing
       const invoiceForReceipt = { ...selectedInvoice };
       const paymentForReceipt = { ...paymentData };
@@ -691,6 +736,7 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
   const confirmDelete = async () => {
     if (invoiceToDelete) {
       await deleteInvoice(invoiceToDelete.id);
+      await fetchInvoices();
       setShowDeleteConfirm(false);
       setInvoiceToDelete(null);
     }
@@ -895,7 +941,7 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
       {/* Invoices List */}
       <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
         <CardContent className="p-0">
-          {isLoading ? (
+          {(isLoading || invoicesLoading) ? (
             <div className="flex items-center justify-center py-12">
               <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
             </div>
@@ -913,7 +959,9 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                     <TableHead>{t('customer')}</TableHead>
                     <TableHead>{t('due_date')}</TableHead>
                     <TableHead className="text-right">{t('amount')}</TableHead>
+                    <TableHead className="text-right">{t('paid') || 'Paid'}</TableHead>
                     <TableHead className="text-right">{t('balance')}</TableHead>
+                    <TableHead>{t('payment_method') || 'Payment Method'}</TableHead>
                     <TableHead>{t('status')}</TableHead>
                     <TableHead className="w-20"></TableHead>
                   </TableRow>
@@ -960,6 +1008,11 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                           {formatCurrency(invoice.total_amount)}
                         </TableCell>
                         <TableCell className="text-right">
+                          <span className={`font-medium ${(invoice.amount_paid || 0) > 0 ? "text-green-600" : "text-slate-400"}`}>
+                            {formatCurrency(invoice.amount_paid || 0)}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right">
                           <span
                             className={`font-medium ${
                               (invoice.balance || invoice.amount_due || 0) > 0 ? "text-red-600" : "text-green-600"
@@ -967,6 +1020,18 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                           >
                             {formatCurrency(invoice.balance || invoice.amount_due || 0)}
                           </span>
+                        </TableCell>
+                        <TableCell>
+                          {(() => {
+                            const pj = language === 'uz' ? (invoice.payment_journals_uz || invoice.payment_journals)
+                              : language === 'en' ? (invoice.payment_journals_en || invoice.payment_journals)
+                              : invoice.payment_journals;
+                            return pj ? (
+                              <span className="text-sm text-slate-700">{pj}</span>
+                            ) : (
+                              <span className="text-sm text-slate-400">—</span>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell>{getPaymentStatusBadge(invoice)}</TableCell>
                         <TableCell>
@@ -1024,6 +1089,33 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                   })}
                 </TableBody>
               </Table>
+            </div>
+          )}
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-6 py-4 border-t">
+              <span className="text-sm text-slate-600">
+                {t('showing') || 'Showing'} {((currentPage - 1) * pageSize) + 1}–{Math.min(currentPage * pageSize, totalInvoices)} {t('of') || 'of'} {totalInvoices}
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage <= 1}
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                <span className="text-sm font-medium">{currentPage} / {totalPages}</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage >= totalPages}
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>
@@ -1383,7 +1475,7 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                             {j.type === 'cash'
                               ? <Banknote className="w-4 h-4 text-green-600" />
                               : <CreditCard className="w-4 h-4 text-blue-600" />}
-                            {j.name}
+                            {getJournalName(j)}
                           </div>
                         </SelectItem>
                       ))
@@ -1586,7 +1678,7 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                           </Badge>
                           <span className="text-slate-600">{alloc.payment_number}</span>
                           {alloc.journal_name && (
-                            <span className="text-slate-400 text-xs">({alloc.journal_name})</span>
+                            <span className="text-slate-400 text-xs">({language === 'uz' && alloc.journal_name_uz ? alloc.journal_name_uz : language === 'en' && alloc.journal_name_en ? alloc.journal_name_en : alloc.journal_name})</span>
                           )}
                         </div>
                         <div className="flex items-center gap-3">
@@ -1599,14 +1691,14 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                           <Button
                             variant="outline"
                             size="sm"
-                            className="h-6 px-2 text-xs gap-1"
+                            className="h-8 px-3 text-sm gap-2 border-blue-300 text-blue-700 hover:bg-blue-50 hover:border-blue-400 font-medium"
                             onClick={(e) => {
                               e.stopPropagation();
                               handlePrintAllocationReceipt(selectedInvoice, alloc);
                             }}
                           >
-                            <Printer className="w-3 h-3" />
-                            {t('print') || 'Print'}
+                            <Printer className="w-4 h-4" />
+                            {t('print_receipt')}
                           </Button>
                         </div>
                       </div>
@@ -1712,6 +1804,29 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                 <div className="p-3 bg-yellow-50 rounded-lg">
                   <p className="text-sm text-yellow-800">{selectedInvoice.notes}</p>
                 </div>
+              )}
+
+              {/* Print Last Payment Receipt - big prominent button */}
+              {(selectedInvoice.amount_paid > 0 || (selectedInvoice.payment_allocations || []).length > 0) && (
+                <Button
+                  onClick={() => {
+                    const allocs = selectedInvoice.payment_allocations || [];
+                    const lastAlloc = allocs.length > 0 ? allocs[allocs.length - 1] : null;
+                    if (lastAlloc) {
+                      handlePrintAllocationReceipt(selectedInvoice, lastAlloc);
+                    } else {
+                      handlePrintPaymentReceipt(selectedInvoice, {
+                        amount: selectedInvoice.amount_paid || 0,
+                        date: selectedInvoice.payment_date || new Date().toISOString().split('T')[0],
+                        journal_id: '',
+                      });
+                    }
+                  }}
+                  className="w-full h-12 text-base font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md"
+                >
+                  <Printer className="w-5 h-5 mr-3" />
+                  {t('print_receipt')}
+                </Button>
               )}
             </div>
           )}

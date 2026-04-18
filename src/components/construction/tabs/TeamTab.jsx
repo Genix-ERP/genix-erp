@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Users, UserPlus, Edit, Trash2, Phone, Mail, Loader2, ArrowRightLeft } from 'lucide-react';
+import { Users, UserPlus, Edit, Trash2, Phone, Mail, Loader2, ArrowRightLeft, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { toast } from 'sonner';
@@ -67,6 +67,8 @@ const TeamTab = ({ project }) => {
   const [transferNotes, setTransferNotes] = useState('');
   const [transferring, setTransferring] = useState(false);
   const [allProjects, setAllProjects] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 20;
 
   const loadData = useCallback(async () => {
     if (!project?.id) return;
@@ -210,6 +212,8 @@ const TeamTab = ({ project }) => {
     return labels[status] || status;
   };
 
+  const paginatedMembers = members.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
   return (
     <div className="space-y-4">
       <Card>
@@ -253,7 +257,7 @@ const TeamTab = ({ project }) => {
                   </tr>
                 </thead>
                 <tbody>
-                  {members.map(member => (
+                  {paginatedMembers.map(member => (
                     <tr key={member.id} className="border-b hover:bg-slate-50">
                       <td className="py-2 px-3">
                         <div className="flex items-center gap-2">
@@ -307,6 +311,20 @@ const TeamTab = ({ project }) => {
                   ))}
                 </tbody>
               </table>
+              {Math.ceil(members.length / pageSize) > 1 && (
+                <div className="flex items-center justify-between px-4 py-3 border-t">
+                  <p className="text-sm text-slate-500">
+                    {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, members.length)} / {members.length}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}>1</button>
+                    <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft className="w-4 h-4" /></button>
+                    <span className="text-sm font-medium px-2">{currentPage} / {Math.ceil(members.length / pageSize)}</span>
+                    <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= Math.ceil(members.length / pageSize)} onClick={() => setCurrentPage(p => p + 1)}><ChevronRight className="w-4 h-4" /></button>
+                    <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= Math.ceil(members.length / pageSize)} onClick={() => setCurrentPage(Math.ceil(members.length / pageSize))}>{Math.ceil(members.length / pageSize)}</button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </CardContent>

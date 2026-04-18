@@ -76,6 +76,24 @@ export const constructionService = {
   },
 
   // =====================================================
+  // PROJECT FILES
+  // =====================================================
+
+  async listProjectFiles(projectId) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/files`);
+    return response.data.data;
+  },
+
+  async createProjectFile(projectId, data) {
+    const response = await apiClient.post(`/construction/projects/${projectId}/files`, data);
+    return response.data.data;
+  },
+
+  async deleteProjectFile(projectId, fileId) {
+    await apiClient.delete(`/construction/projects/${projectId}/files/${fileId}`);
+  },
+
+  // =====================================================
   // SMETA SECTIONS
   // =====================================================
 
@@ -256,6 +274,13 @@ export const constructionService = {
 
   async listProjectMaterials(projectId) {
     const response = await apiClient.get(`/construction/projects/${projectId}/project-materials`);
+    return response.data.data;
+  },
+
+  // Estimate resources by type (for substage dropdowns)
+  async listEstimateResources(projectId, type) {
+    const params = type ? { type } : {};
+    const response = await apiClient.get(`/construction/projects/${projectId}/estimate-resources`, { params });
     return response.data.data;
   },
 
@@ -458,10 +483,18 @@ export const constructionService = {
     return response.data.data;
   },
 
-  // Estimate Lines
-  async listEstimateLines(estimateId) {
-    const response = await apiClient.get(`/construction/estimates/${estimateId}/lines`);
+  // Estimate Lines — supports pagination via params { page, page_size }
+  async listEstimateLines(estimateId, params = {}) {
+    // Default to large page_size for callers that don't paginate
+    const queryParams = { page_size: 5000, ...params };
+    const response = await apiClient.get(`/construction/estimates/${estimateId}/lines`, { params: queryParams });
     return response.data.data;
+  },
+
+  // Paginated version — returns { data, meta }
+  async listEstimateLinesPaginated(estimateId, params = {}) {
+    const response = await apiClient.get(`/construction/estimates/${estimateId}/lines`, { params });
+    return { data: response.data.data, meta: response.data.meta };
   },
 
   async createEstimateLine(estimateId, data) {
@@ -469,8 +502,13 @@ export const constructionService = {
     return response.data.data;
   },
 
-  async bulkCreateEstimateLines(estimateId, lines, { replace = false } = {}) {
-    const response = await apiClient.post(`/construction/estimates/${estimateId}/lines/bulk`, { lines, replace });
+  async bulkCreateEstimateLines(estimateId, lines, { replace = false, sourceType = '' } = {}) {
+    const response = await apiClient.post(`/construction/estimates/${estimateId}/lines/bulk`, { lines, replace, source_type: sourceType });
+    return response.data.data;
+  },
+
+  async createProductsFromEstimate(estimateId) {
+    const response = await apiClient.post(`/construction/estimates/${estimateId}/create-products`);
     return response.data.data;
   },
 
@@ -824,6 +862,11 @@ export const constructionService = {
     await apiClient.delete(`/construction/acts/${id}`);
   },
 
+  async previewAutoGenerateKS2(projectId, data) {
+    const response = await apiClient.post(`/construction/projects/${projectId}/acts/generate-ks2/preview`, data);
+    return response.data.data;
+  },
+
   async autoGenerateKS2(projectId, data) {
     const response = await apiClient.post(`/construction/projects/${projectId}/acts/generate-ks2`, data);
     return response.data.data;
@@ -897,6 +940,10 @@ export const constructionService = {
     const response = await apiClient.put(`/construction/acts/${f2Id}/lines/${lineId}`, data);
     return response.data.data;
   },
+  async submitF2(projectId, f2Id) {
+    const response = await apiClient.post(`/construction/projects/${projectId}/f2/${f2Id}/submit`);
+    return response.data.data;
+  },
   async exportF2PDF(projectId, f2Id) {
     const response = await apiClient.get(`/construction/acts/${f2Id}/export?format=pdf`, { responseType: 'blob' });
     return response.data;
@@ -934,6 +981,10 @@ export const constructionService = {
     const response = await apiClient.get(`/construction/acts/${f3Id}/export?format=pdf`, { responseType: 'blob' });
     return response.data;
   },
+  async exportF3XLSX(projectId, f3Id) {
+    const response = await apiClient.get(`/construction/acts/${f3Id}/export?format=xlsx`, { responseType: 'blob' });
+    return response.data;
+  },
 
   // =====================================================
   // FORMA 19 — Material Consumption Tracking
@@ -963,9 +1014,21 @@ export const constructionService = {
     const response = await apiClient.post(`/construction/projects/${projectId}/f19/${actId}/approve`);
     return response.data.data;
   },
+  async submitF19(projectId, actId) {
+    const response = await apiClient.post(`/construction/projects/${projectId}/f19/${actId}/approve`);
+    return response.data.data;
+  },
   async deleteF19(projectId, actId) {
     const response = await apiClient.delete(`/construction/projects/${projectId}/f19/${actId}`);
     return response.data.data;
+  },
+  async exportF19PDF(projectId, f19Id) {
+    const response = await apiClient.get(`/construction/acts/${f19Id}/export?format=pdf`, { responseType: 'blob' });
+    return response.data;
+  },
+  async exportF19XLSX(projectId, f19Id) {
+    const response = await apiClient.get(`/construction/acts/${f19Id}/export?format=xlsx`, { responseType: 'blob' });
+    return response.data;
   },
 
   // =====================================================

@@ -24,10 +24,12 @@ import {
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from "@/components/ui/command";
+import { cn } from "@/lib/utils";
 import {
   Plus, Search, ShoppingBag, TrendingUp, Package, DollarSign, Truck,
   CheckCircle, FileText, Receipt, RotateCcw, Tag, BarChart3, Upload, Download, Eye, Printer, Trash2, X,
-  LayoutDashboard, Building2, Edit, ToggleLeft, ToggleRight, MessageSquareWarning, ChevronDown
+  LayoutDashboard, Building2, Edit, ToggleLeft, ToggleRight, MessageSquareWarning, ChevronDown, Check
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
@@ -39,6 +41,7 @@ import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { usePermissions } from "@/hooks/usePermissions";
 import ProductCombobox from "@/components/shared/ProductCombobox";
+import CustomerCombobox from "@/components/shared/CustomerCombobox";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useAdminSettings } from '@/components/contexts/AdminSettingsContext';
 import { useFinancials } from '@/components/contexts/FinancialsContext';
@@ -211,12 +214,11 @@ export default function SalesOrders() {
       title: t('sales_order'),
       documentNumber: order.order_number,
       documentDate: order.order_date ? format(new Date(order.order_date), 'dd.MM.yyyy') : '',
+      orientation: 'landscape',
       headerFields: [
         { label: t('customer'), value: order.customer_name },
         { label: t('delivery_date'), value: order.delivery_date || order.expected_date ? format(new Date(order.delivery_date || order.expected_date), 'dd.MM.yyyy') : '-' },
         ...(order.vehicle_number ? [{ label: t('vehicle_number') || 'Moshina raqami', value: order.vehicle_number }] : []),
-        { label: t('status'), value: t(order.status) },
-        { label: t('payment_status'), value: t(order.payment_status) },
       ],
       tableColumns: [
         { key: 'no', label: '№', width: 10 },
@@ -232,6 +234,14 @@ export default function SalesOrders() {
         { label: t('shipping'), value: formatCurrency(order.shipping_amount || order.shipping_cost || 0) },
         { label: t('total'), value: formatCurrency(order.total_amount || 0), bold: true },
       ],
+      customCompany: activeCompany ? {
+        name: activeCompany.company_name || localStorage.getItem("company_name") || "Yuksalish ERP",
+        address: localStorage.getItem("company_address") || "Toshkent, O'zbekiston",
+        phone: localStorage.getItem("company_phone") || "+998 XX XXX XX XX",
+        email: localStorage.getItem("company_email") || "info@genix.uz",
+        inn: localStorage.getItem("company_inn") || "123456789",
+        logo: localStorage.getItem("company_logo") || null,
+      } : null,
     };
   };
 
@@ -314,8 +324,8 @@ export default function SalesOrders() {
   // Carriers list for selection
   const [carriers, setCarriers] = useState([]);
 
-  // Intercompany projects (loaded when customer has source_organization_id)
-  const [intercompanyProjects, setIntercompanyProjects] = useState([]);
+  // All intercompany projects (from orgs we sell to)
+  const [allIntercompanyProjects, setAllIntercompanyProjects] = useState([]);
   const [loadingIntercompanyProjects, setLoadingIntercompanyProjects] = useState(false);
 
   // Track if delivery date was manually set (for new order)
@@ -357,10 +367,38 @@ export default function SalesOrders() {
         console.error('Failed to fetch carriers:', error);
       }
     };
+    const fetchIntercompanyProjects = async () => {
+      // Find all intercompany customers (those with source_organization_id)
+      const intercompanyCustomers = (customers || []).filter(c => c.source_organization_id);
+      if (intercompanyCustomers.length === 0) return;
+
+      setLoadingIntercompanyProjects(true);
+      try {
+        const allProjects = [];
+        for (const customer of intercompanyCustomers) {
+          const res = await apiClient.get('/projects/by-organization', {
+            params: { organization_id: customer.source_organization_id }
+          });
+          const projects = res.data?.data || [];
+          // Tag each project with the customer info for auto-selection
+          projects.forEach(p => {
+            p._customer_id = customer.id;
+            p._customer_name = customer.company_name || customer.name || '';
+          });
+          allProjects.push(...projects);
+        }
+        setAllIntercompanyProjects(allProjects);
+      } catch (error) {
+        console.error('Failed to fetch intercompany projects:', error);
+      } finally {
+        setLoadingIntercompanyProjects(false);
+      }
+    };
     fetchProducts();
     fetchWarehouses();
     fetchCarriers();
-  }, []);
+    fetchIntercompanyProjects();
+  }, [customers]);
 
   // Calculate delivery date based on product lead times
   const calculateDeliveryDate = useCallback((orderLines, orderDate) => {
@@ -1264,10 +1302,12 @@ export default function SalesOrders() {
               <Building2 className="w-4 h-4" />
               <span className="hidden sm:inline">{t('carriers') || 'Carriers'}</span>
             </TabsTrigger>
+            {getSetting('sales.dropshipping.enabled') && (
             <TabsTrigger value="dropshipping" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
               <Package className="w-4 h-4" />
               <span className="hidden sm:inline">{t('dropshipping') || 'Dropshipping'}</span>
             </TabsTrigger>
+            )}
           </TabsList>
 
           {/* Dashboard Tab - Stats */}
@@ -1506,9 +1546,11 @@ export default function SalesOrders() {
           </TabsContent>
 
           {/* Dropshipping Tab */}
+          {getSetting('sales.dropshipping.enabled') && (
           <TabsContent value="dropshipping">
             <Dropshipping />
           </TabsContent>
+          )}
         </Tabs>
 
         {/* Create Order Modal */}
@@ -1521,10 +1563,11 @@ export default function SalesOrders() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>{t('customer')} *</Label>
-                  <Select
+                  <CustomerCombobox
+                    customers={customers}
                     value={newOrder.customer_id || ''}
-                    onValueChange={async (value) => {
-                      const customer = customers.find(c => c.id === value);
+                    onValueChange={(value, customer) => {
+                      if (!customer) customer = customers.find(c => c.id === value);
                       setNewOrder({
                         ...newOrder,
                         customer_id: value,
@@ -1532,35 +1575,91 @@ export default function SalesOrders() {
                         project_id: '',
                         project_name: '',
                       });
-                      // If customer is intercompany (has source_organization_id), fetch their projects
-                      setIntercompanyProjects([]);
-                      if (customer?.source_organization_id) {
-                        setLoadingIntercompanyProjects(true);
-                        try {
-                          const res = await apiClient.get('/projects/by-organization', {
-                            params: { organization_id: customer.source_organization_id }
-                          });
-                          setIntercompanyProjects(res.data?.data || []);
-                        } catch (err) {
-                          console.error('Failed to fetch intercompany projects:', err);
-                        } finally {
-                          setLoadingIntercompanyProjects(false);
-                        }
-                      }
                     }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={t('select_customer') || 'Select customer'} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {customers.map((customer) => (
-                        <SelectItem key={customer.id} value={customer.id}>
-                          {customer.company_name || customer.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder={t('select_customer') || 'Mijozni tanlang'}
+                    t={t}
+                  />
                 </div>
+                {/* Project selector — only for intercompany customers or project-first flow */}
+                {(() => {
+                  // Determine which projects to show
+                  const selectedCustomer = customers.find(c => c.id === newOrder.customer_id);
+                  const isIntercompany = selectedCustomer?.source_organization_id;
+
+                  // If customer selected and is intercompany — filter projects for that customer
+                  // If no customer selected — show all intercompany projects (project-first flow)
+                  // If customer selected but NOT intercompany — hide project selector
+                  if (newOrder.customer_id && !isIntercompany) return null;
+
+                  const visibleProjects = newOrder.customer_id
+                    ? allIntercompanyProjects.filter(p => p._customer_id === newOrder.customer_id)
+                    : allIntercompanyProjects;
+
+                  if (visibleProjects.length === 0 && !newOrder.customer_id) return null;
+
+                  return (
+                    <div>
+                      <Label>{t('project') || 'Loyiha'} {isIntercompany && <span className="text-red-500">*</span>}</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            className="w-full justify-between font-normal h-9 px-3 text-sm"
+                          >
+                            <span className="truncate">
+                              {newOrder.project_id
+                                ? (() => {
+                                    const p = allIntercompanyProjects.find(p => p.id === newOrder.project_id);
+                                    return p ? `${p.project_code} — ${p.project_name}` : newOrder.project_name;
+                                  })()
+                                : (t('select_project') || 'Loyihani tanlang')}
+                            </span>
+                            <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[400px] p-0" align="start">
+                          <Command shouldFilter={true}>
+                            <CommandInput placeholder={t('search') || "Qidirish..."} />
+                            <CommandList>
+                              <CommandEmpty>{t('not_found') || "Topilmadi"}</CommandEmpty>
+                              <CommandGroup>
+                                {visibleProjects.map((project) => (
+                                  <CommandItem
+                                    key={project.id}
+                                    value={`${project.project_code} ${project.project_name} ${project._customer_name}`}
+                                    onSelect={() => {
+                                      setNewOrder({
+                                        ...newOrder,
+                                        project_id: project.id,
+                                        project_name: project.project_name || '',
+                                        customer_id: project._customer_id,
+                                        customer_name: project._customer_name,
+                                      });
+                                    }}
+                                  >
+                                    <Check
+                                      className={cn(
+                                        "mr-2 h-4 w-4",
+                                        newOrder.project_id === project.id ? "opacity-100" : "opacity-0"
+                                      )}
+                                    />
+                                    <div className="truncate">
+                                      <span className="font-medium">{project.project_code} — {project.project_name}</span>
+                                      {!newOrder.customer_id && (
+                                        <span className="text-xs text-slate-500 ml-2">({project._customer_name})</span>
+                                      )}
+                                    </div>
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -1637,50 +1736,6 @@ export default function SalesOrders() {
                 </div>
               </div>
 
-              {/* Intercompany Project Selection */}
-              {(() => {
-                const selectedCustomer = customers.find(c => c.id === newOrder.customer_id);
-                if (!selectedCustomer?.source_organization_id) return null;
-                return (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Building2 className="w-4 h-4 text-blue-600" />
-                      <Label className="text-sm font-semibold text-blue-800">
-                        {t('intercompany_project') || 'Kompaniyalararo loyiha'} <span className="text-red-500">*</span>
-                      </Label>
-                    </div>
-                    <p className="text-xs text-blue-600 mb-2">
-                      {t('intercompany_project_hint') || "Buyurtma qaysi loyihaga tegishli ekanligini tanlang"}
-                    </p>
-                    <Select
-                      value={newOrder.project_id || ''}
-                      onValueChange={(value) => {
-                        const project = intercompanyProjects.find(p => p.id === value);
-                        setNewOrder({
-                          ...newOrder,
-                          project_id: value,
-                          project_name: project?.project_name || '',
-                        });
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={
-                          loadingIntercompanyProjects
-                            ? (t('loading') || 'Loading...')
-                            : (t('select_project') || 'Loyihani tanlang')
-                        } />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {intercompanyProjects.map((project) => (
-                          <SelectItem key={project.id} value={project.id}>
-                            {project.project_code} — {project.project_name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                );
-              })()}
 
               {/* Order Lines */}
               <div className="border-t pt-4">
@@ -1830,11 +1885,6 @@ export default function SalesOrders() {
                       {line.variant_name && (
                         <div className="text-xs text-slate-500 pl-1">
                           {t('variant')}: {line.variant_name}
-                        </div>
-                      )}
-                      {line.product?.has_delivery && (
-                        <div className="flex items-center gap-1.5 text-xs px-2 py-1 rounded mt-1 bg-blue-50 text-blue-600 border border-blue-200">
-                          <span>🚚 {t('delivery_price') || 'Yetkazib berish'}: {formatCurrency(line.product.delivery_price || 0)}</span>
                         </div>
                       )}
                       {(() => {
@@ -2534,11 +2584,6 @@ export default function SalesOrders() {
                         {line.packaging_name && (
                           <div className="text-xs text-slate-500 pl-1">
                             {t('packaging')}: {line.packaging_name} ({line.packaging_qty || 1} × {line.packaging_unit_qty || 1} = {line.quantity} {t('units') || 'units'})
-                          </div>
-                        )}
-                        {line.product?.has_delivery && (
-                          <div className="flex items-center gap-1.5 text-xs px-2 py-1 rounded mt-1 bg-blue-50 text-blue-600 border border-blue-200">
-                            <span>🚚 {t('delivery_price') || 'Yetkazib berish'}: {formatCurrency(line.product.delivery_price || 0)}</span>
                           </div>
                         )}
                         {(() => {

@@ -14,6 +14,7 @@ import { useManufacturing } from '@/components/contexts/ManufacturingContext';
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { inventoryService, bomsService, workCentersService } from '@/api/services';
+import ProductCombobox from "@/components/shared/ProductCombobox";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { toast } from 'sonner';
 
@@ -35,9 +36,11 @@ export default function BOMManagement() {
 
   const [products, setProducts] = useState([]);
   const [workCenters, setWorkCenters] = useState([]);
+  const [warehouses, setWarehouses] = useState([]);
   const [newBom, setNewBom] = useState({
     name: '',
     product_id: '',
+    warehouse_id: '',
     quantity: 1,
     bom_type: 'manufacturing',
     lines: [],
@@ -62,12 +65,14 @@ export default function BOMManagement() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [productsData, workCentersData] = await Promise.all([
+        const [productsData, workCentersData, warehousesData] = await Promise.all([
           inventoryService.listProducts(),
-          workCentersService.list()
+          workCentersService.list(),
+          inventoryService.listWarehouses().catch(() => [])
         ]);
         setProducts(productsData || []);
         setWorkCenters(workCentersData || []);
+        setWarehouses(warehousesData || []);
 
       } catch (error) {
         console.error('Failed to load data:', error);
@@ -158,6 +163,7 @@ export default function BOMManagement() {
       });
       setNewComponent({
         component_id: '',
+        component_name: '',
         quantity: 0,
         unit: 'pcs'
       });
@@ -599,22 +605,32 @@ export default function BOMManagement() {
                 </div>
                 <div>
                   <label className="text-sm font-medium mb-1 block">{t('product')} *</label>
-                  <Select
+                  <ProductCombobox
+                    products={products.filter(p => p.id && (p.can_be_sold || p.is_sellable))}
                     value={newBom.product_id}
                     onValueChange={(value) => setNewBom({...newBom, product_id: value})}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={t('select_product')} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {products.filter(product => product.id).map((product) => (
-                        <SelectItem key={product.id} value={product.id}>
-                          {product.name} ({product.sku || product.code || 'No SKU'})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder={t('select_product')}
+                    t={t}
+                  />
                 </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">{language === 'uz' ? 'Tayyor mahsulot ombori' : language === 'ru' ? 'Склад готовой продукции' : 'Finished Goods Warehouse'}</label>
+                <Select
+                  value={newBom.warehouse_id || ''}
+                  onValueChange={(value) => setNewBom({...newBom, warehouse_id: value})}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={language === 'uz' ? 'Omborni tanlang' : language === 'ru' ? 'Выберите склад' : 'Select warehouse'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {warehouses.map((wh) => (
+                      <SelectItem key={wh.id} value={wh.id}>
+                        {wh.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
@@ -636,28 +652,21 @@ export default function BOMManagement() {
                 {/* Add Component Form */}
                 <div className="p-4 bg-slate-50 rounded-lg space-y-3">
                   <div className="grid grid-cols-3 gap-3">
-                    <Select
+                    <ProductCombobox
+                      products={products.filter(p => p.id)}
                       value={newComponent.component_id}
-                      onValueChange={(value) => {
-                        const selectedProduct = products.find(p => p.id === value);
+                      onValueChange={(value, product) => {
+                        const selectedProduct = product || products.find(p => p.id === value);
                         setNewComponent({
                           ...newComponent,
                           component_id: value,
+                          component_name: selectedProduct?.name || '',
                           unit: selectedProduct?.unit_name || selectedProduct?.purchase_unit_name || 'pcs'
                         });
                       }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={t('select_component')} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {products.filter(product => product.id).map((product) => (
-                          <SelectItem key={product.id} value={product.id}>
-                            {product.name} ({product.sku || product.code || 'No SKU'})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      placeholder={t('select_component')}
+                      t={t}
+                    />
                     <Input
                       type="text"
                       inputMode="decimal"
@@ -696,7 +705,7 @@ export default function BOMManagement() {
                           const component = products.find(p => p.id === line.component_id);
                           return (
                             <TableRow key={index}>
-                              <TableCell>{component?.name || line.component_id}</TableCell>
+                              <TableCell>{line.component_name || component?.name || line.component_id}</TableCell>
                               <TableCell>{line.quantity}</TableCell>
                               <TableCell>{line.unit}</TableCell>
                               <TableCell>
@@ -866,22 +875,32 @@ export default function BOMManagement() {
                   </div>
                   <div>
                     <label className="text-sm font-medium mb-1 block">{t('product')} *</label>
-                    <Select
+                    <ProductCombobox
+                      products={products.filter(p => p.id && (p.can_be_sold || p.is_sellable))}
                       value={editBom.product_id}
                       onValueChange={(value) => setEditBom({...editBom, product_id: value})}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={t('select_product')} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {products.filter(product => product.id).map((product) => (
-                          <SelectItem key={product.id} value={product.id}>
-                            {product.name} ({product.sku || product.code || 'No SKU'})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      placeholder={t('select_product')}
+                      t={t}
+                    />
                   </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-1 block">{language === 'uz' ? 'Tayyor mahsulot ombori' : language === 'ru' ? 'Склад готовой продукции' : 'Finished Goods Warehouse'}</label>
+                  <Select
+                    value={editBom.warehouse_id || ''}
+                    onValueChange={(value) => setEditBom({...editBom, warehouse_id: value})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={language === 'uz' ? 'Omborni tanlang' : language === 'ru' ? 'Выберите склад' : 'Select warehouse'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {warehouses.map((wh) => (
+                        <SelectItem key={wh.id} value={wh.id}>
+                          {wh.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
@@ -903,28 +922,21 @@ export default function BOMManagement() {
                   {/* Add Component Form */}
                   <div className="p-4 bg-slate-50 rounded-lg space-y-3">
                     <div className="grid grid-cols-3 gap-3">
-                      <Select
+                      <ProductCombobox
+                        products={products.filter(p => p.id)}
                         value={editComponent.component_id}
-                        onValueChange={(value) => {
-                          const selectedProduct = products.find(p => p.id === value);
+                        onValueChange={(value, product) => {
+                          const selectedProduct = product || products.find(p => p.id === value);
                           setEditComponent({
                             ...editComponent,
                             component_id: value,
+                            component_name: selectedProduct?.name || '',
                             unit: selectedProduct?.unit_name || selectedProduct?.purchase_unit_name || editComponent.unit
                           });
                         }}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder={t('select_component')} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {products.filter(product => product.id).map((product) => (
-                            <SelectItem key={product.id} value={product.id}>
-                              {product.name} ({product.sku || product.code || 'No SKU'})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        placeholder={t('select_component')}
+                        t={t}
+                      />
                       <Input
                         type="text"
                         inputMode="decimal"
@@ -963,7 +975,7 @@ export default function BOMManagement() {
                             const component = products.find(p => p.id === line.component_id);
                             return (
                               <TableRow key={index}>
-                                <TableCell>{component?.name || line.component_name || line.component_id}</TableCell>
+                                <TableCell>{line.component_name || component?.name || line.component_id}</TableCell>
                                 <TableCell>{line.quantity}</TableCell>
                                 <TableCell>{line.unit || line.unit_of_measure}</TableCell>
                                 <TableCell>

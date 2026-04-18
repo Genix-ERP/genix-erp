@@ -1,6 +1,7 @@
 
 
 import React from "react";
+import { createPortal } from "react-dom";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import {
@@ -62,8 +63,6 @@ import { FinancialsProvider } from "@/components/contexts/FinancialsContext";
 import { ModulesProvider } from "@/components/contexts/ModulesContext";
 import { AIProvider } from "@/components/contexts/AIContext";
 import { SubscriptionProvider } from "@/components/contexts/SubscriptionContext";
-import TrialBanner from "@/components/ui/TrialBanner";
-import PaymentWall from "@/components/ui/PaymentWall";
 import { CompanyProvider } from "@/components/contexts/CompanyContext";
 import { RolesProvider } from "@/components/contexts/RolesContext";
 import { ProcurementProvider } from "@/components/contexts/ProcurementContext";
@@ -131,18 +130,15 @@ function LayoutContent({ children, currentPageName }) {
   const [isAIChatOpen, setIsAIChatOpen] = React.useState(false);
   const [isPhoneOpen, setIsPhoneOpen] = React.useState(false);
   const [aiInitialPrompt, setAIInitialPrompt] = React.useState(null);
-  const [paymentWallOpen, setPaymentWallOpen] = React.useState(false);
+  const [unreadCount, setUnreadCount] = React.useState(0);
+  const [notifDropdownOpen, setNotifDropdownOpen] = React.useState(false);
+  const [recentNotifications, setRecentNotifications] = React.useState([]);
   const { user: currentUser, logout, isSiteAdmin, isOwner } = useAuth();
   const { canAccessModule, isAdmin, isLoading: permissionsLoading } = useEmployeePermissions();
 
   // Set browser title based on language
   React.useEffect(() => {
-    const titles = {
-      uz: "Genix ERP — Sun'iy intellekt orqali biznes boshqaruvi",
-      ru: "Genix ERP — Система управления бизнесом на основе ИИ",
-      en: "Genix ERP — AI-Powered Business Management System",
-    };
-    document.title = titles[language] || titles.en;
+    document.title = "Yuksalish ERP";
   }, [language]);
 
   // Force re-render when user role changes by including user in dependency tracking
@@ -161,6 +157,80 @@ function LayoutContent({ children, currentPageName }) {
       delete window.openAIChat;
     };
   }, []);
+
+  // Poll unread notification count every 30s
+  const fetchUnreadCount = React.useCallback(async () => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const tenantId = localStorage.getItem('tenantId');
+      const orgId = localStorage.getItem('organizationId');
+      if (!token) return;
+      const apiBase = import.meta.env.VITE_API_URL || '/api/v1';
+      const res = await fetch(`${apiBase}/notifications/unread-count`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-ID': tenantId || '',
+          'X-Organization-ID': orgId || '',
+        },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setUnreadCount(json.data?.count || 0);
+      }
+    } catch (e) { /* silent */ }
+  }, []);
+
+  const fetchRecentNotifications = React.useCallback(async () => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const tenantId = localStorage.getItem('tenantId');
+      const orgId = localStorage.getItem('organizationId');
+      if (!token) return;
+      const res = await fetch(`${import.meta.env.VITE_API_URL || '/api/v1'}/notifications?is_read=false`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-ID': tenantId || '',
+          'X-Organization-ID': orgId || '',
+        },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setRecentNotifications((json.data || []).slice(0, 8));
+      }
+    } catch (e) { /* silent */ }
+  }, []);
+
+  const markAllRead = React.useCallback(async () => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const tenantId = localStorage.getItem('tenantId');
+      const orgId = localStorage.getItem('organizationId');
+      if (!token) return;
+      await fetch(`${import.meta.env.VITE_API_URL || '/api/v1'}/notifications/read-all`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-ID': tenantId || '',
+          'X-Organization-ID': orgId || '',
+        },
+      });
+      setUnreadCount(0);
+      setRecentNotifications([]);
+    } catch (e) { /* silent */ }
+  }, []);
+
+  React.useEffect(() => {
+    fetchUnreadCount();
+    const interval = setInterval(fetchUnreadCount, 30000);
+    return () => clearInterval(interval);
+  }, [fetchUnreadCount]);
+
+  // Fetch recent notifications when dropdown opens
+  React.useEffect(() => {
+    if (notifDropdownOpen) {
+      fetchRecentNotifications();
+    }
+  }, [notifDropdownOpen, fetchRecentNotifications]);
 
   // Get data for dynamic AI insights
   const { items: inventory } = useInventory();
@@ -193,7 +263,7 @@ function LayoutContent({ children, currentPageName }) {
       title: t("inventory"),
       url: createPageUrl("Inventory"),
       icon: Package,
-      badge: "3",
+      badge: null,
       moduleId: 'inventory'
     },
     'crm': {
@@ -341,21 +411,23 @@ function LayoutContent({ children, currentPageName }) {
     // Add Dashboard first (always visible)
     dynamicItems.push(coreNavigationItems[0]);
 
-    // Add installed app modules - only if user has permission to access
+    // Add app modules based on installation status and permissions
+    const isPrivilegedUser = isAdmin || isUserSiteAdmin || isUserOwner;
     Object.keys(appNavigationMap).forEach(appId => {
       // Skip POS here, we'll add it separately after sales_orders
       if (appId === 'pos') return;
 
       const appConfig = appNavigationMap[appId];
-      // Check if app is installed AND user has permission to access the module
-      // Admins, site admins, and owners always have access
-      const hasAccess = isAdmin || isUserSiteAdmin || isUserOwner || canAccessModule(appConfig.moduleId);
-      if (isAppInstalled(appId) && hasAccess) {
+      const installed = isAppInstalled(appId);
+      const hasModulePermission = canAccessModule(appConfig.moduleId);
+
+      // Privileged users: show if app is installed (they have access to everything)
+      // Employees: show if they have explicit module permission (permission implies installation)
+      const hasAccess = isPrivilegedUser || hasModulePermission;
+      const shouldShow = isPrivilegedUser ? installed : (installed || hasModulePermission);
+
+      if (shouldShow && hasAccess) {
         dynamicItems.push(appConfig);
-        // POS temporarily hidden - uncomment when ready
-        // if (appId === 'sales_orders' && appNavigationMap['pos']) {
-        //   dynamicItems.push(appNavigationMap['pos']);
-        // }
       }
     });
 
@@ -407,7 +479,7 @@ function LayoutContent({ children, currentPageName }) {
               --genix-green: #10B981;
               --genix-orange: #F59E0B;
             }
-            .genix-logo-transparent {
+            .brand-logo-transparent {
               mix-blend-mode: multiply;
               filter: contrast(1.1);
             }
@@ -416,12 +488,13 @@ function LayoutContent({ children, currentPageName }) {
         
         <Sidebar className="border-r border-slate-200/60 bg-white/80 backdrop-blur-xl" role="navigation" aria-label="Main navigation">
           <SidebarHeader className="border-b border-slate-100 px-4 py-5">
-            <div className="flex items-center justify-center h-10 overflow-hidden">
+            <div className="flex items-center gap-2 h-10 overflow-hidden">
               <img
-                src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68d244cb8a392237a5acfbd9/a049d6898_Logo.png"
-                alt="Genix"
-                className="h-[120px] w-auto object-contain genix-logo-transparent"
+                src="/logo.png"
+                alt="Yuksalish"
+                className="h-10 w-auto object-contain brand-logo-transparent"
               />
+              <span className="text-xl font-bold tracking-tight text-slate-800">Yuksalish</span>
             </div>
           </SidebarHeader>
           
@@ -458,7 +531,6 @@ function LayoutContent({ children, currentPageName }) {
         </Sidebar>
 
         <main className="flex-1 flex flex-col min-w-0" aria-label="Main content">
-          <TrialBanner onPayClick={() => setPaymentWallOpen(true)} />
           <header className="bg-white/80 backdrop-blur-xl border-b border-slate-200/60 px-4 md:px-6 py-4 shadow-sm" role="banner">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
@@ -495,11 +567,87 @@ function LayoutContent({ children, currentPageName }) {
                 >
                   <Phone className="w-4 h-4 md:w-5 md:h-5" />
                 </Button>
-                <Link to={createPageUrl("Notifications")}>
-                  <Button variant="ghost" size="icon" className="relative hover:bg-slate-100 rounded-full transition-all duration-200">
+                <div className="relative">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="relative hover:bg-slate-100 rounded-full transition-all duration-200"
+                    onClick={() => setNotifDropdownOpen(!notifDropdownOpen)}
+                  >
                     <Bell className="w-4 h-4 md:w-5 md:h-5" />
+                    {unreadCount > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                        {unreadCount > 99 ? '99+' : unreadCount}
+                      </span>
+                    )}
                   </Button>
-                </Link>
+                  {notifDropdownOpen && createPortal(
+                    <>
+                      <div
+                        style={{ position: 'fixed', inset: 0, zIndex: 99998, backgroundColor: 'rgba(0,0,0,0.1)' }}
+                        onClick={() => setNotifDropdownOpen(false)}
+                      />
+                      <div
+                        style={{
+                          position: 'fixed',
+                          top: '64px',
+                          right: '80px',
+                          width: '384px',
+                          maxWidth: 'calc(100vw - 32px)',
+                          zIndex: 99999,
+                          backgroundColor: '#ffffff',
+                          borderRadius: '12px',
+                          border: '1px solid #e2e8f0',
+                          boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
+                          overflow: 'hidden',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid #f1f5f9', backgroundColor: '#f8fafc' }}>
+                          <h3 style={{ fontWeight: 600, fontSize: '14px', color: '#1e293b', margin: 0 }}>{t('notifications') || 'Notifications'}</h3>
+                          {unreadCount > 0 && (
+                            <button
+                              onClick={markAllRead}
+                              style={{ fontSize: '12px', color: '#2563eb', fontWeight: 500, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                            >
+                              {t('mark_all_read') || 'Mark all read'}
+                            </button>
+                          )}
+                        </div>
+                        <div style={{ maxHeight: '320px', overflowY: 'auto', backgroundColor: '#ffffff' }}>
+                          {recentNotifications.length === 0 ? (
+                            <div style={{ padding: '32px 0', textAlign: 'center', color: '#94a3b8', backgroundColor: '#ffffff' }}>
+                              <Bell className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                              <p style={{ fontSize: '14px', margin: 0 }}>{t('no_notifications') || 'No new notifications'}</p>
+                            </div>
+                          ) : (
+                            recentNotifications.map((n) => (
+                              <div
+                                key={n.id}
+                                className="hover:bg-blue-50"
+                                style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', backgroundColor: '#ffffff', cursor: 'pointer', transition: 'background-color 0.15s' }}
+                              >
+                                <p style={{ fontSize: '14px', fontWeight: 500, color: '#1e293b', margin: 0 }}>{n.title}</p>
+                                <p style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>{n.message}</p>
+                                <p style={{ fontSize: '10px', color: '#94a3b8', marginTop: '4px' }}>
+                                  {new Date(n.created_at).toLocaleString()}
+                                </p>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                        <Link
+                          to={createPageUrl("Notifications")}
+                          onClick={() => setNotifDropdownOpen(false)}
+                          className="hover:bg-blue-50"
+                          style={{ display: 'block', textAlign: 'center', padding: '10px', fontSize: '14px', fontWeight: 500, color: '#2563eb', borderTop: '1px solid #f1f5f9', backgroundColor: '#ffffff', textDecoration: 'none', transition: 'background-color 0.15s' }}
+                        >
+                          {t('view_all') || 'View all'}
+                        </Link>
+                      </div>
+                    </>,
+                    document.body
+                  )}
+                </div>
                 {/* Company Switcher next to profile - Odoo style */}
                 <div className="hidden md:flex items-center gap-1.5 ml-1">
                   <div className="w-px h-6 bg-slate-200"></div>
@@ -517,9 +665,6 @@ function LayoutContent({ children, currentPageName }) {
           </div>
         </main>
       </div>
-
-      {/* Payment Wall (auto-shows when trial expires; can also be opened early) */}
-      <PaymentWall visible={paymentWallOpen} onClose={() => setPaymentWallOpen(false)} />
 
       {/* Phone Widget */}
       <PhoneWidget

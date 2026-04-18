@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,7 @@ import { LabelWithHelp } from "@/components/ui/field-help";
 import { X } from "lucide-react";
 import { useTranslation } from "@/components/utils/translations";
 import { formatPhoneInput, parsePhoneInput, formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
+import { financeService } from '@/api/services/finance';
 
 export default function CustomerForm({ customer, onSave, onCancel, language = 'en' }) {
   const { t } = useTranslation(language);
@@ -22,6 +23,8 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
     expected_revenue: customer?.expected_revenue || "",
     annual_revenue: customer?.annual_revenue || 0,
     employee_count: customer?.employee_count || 0,
+    default_receivable_account_id: customer?.default_receivable_account_id || "",
+    default_payable_account_id: customer?.default_payable_account_id || "",
     address: customer?.address || {
       street: "",
       city: "",
@@ -31,6 +34,19 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
   });
 
   const [tagInput, setTagInput] = useState("");
+  const [accounts, setAccounts] = useState([]);
+
+  useEffect(() => {
+    const loadAccounts = async () => {
+      try {
+        const data = await financeService.listAccounts({ limit: 500 });
+        setAccounts(Array.isArray(data) ? data : data?.items || []);
+      } catch (err) {
+        console.error('Failed to load accounts:', err);
+      }
+    };
+    loadAccounts();
+  }, []);
 
   const handleTagKeyDown = (e) => {
     if ((e.key === 'Enter' || e.key === ',') && tagInput.trim()) {

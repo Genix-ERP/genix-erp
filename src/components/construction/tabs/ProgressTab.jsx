@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { BarChart3, Table2, TrendingUp, CheckCircle, AlertTriangle } from 'lucide-react';
+import { BarChart3, Table2, TrendingUp, CheckCircle, AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { toast } from 'sonner';
@@ -41,6 +41,8 @@ const ProgressTab = ({ project }) => {
   const [ganttData, setGanttData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 20;
 
   const STATUS_LABELS = {
     on_track: t('on_track') || 'On track',
@@ -179,63 +181,81 @@ const ProgressTab = ({ project }) => {
       );
     }
 
+    const paginatedItems = items.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
     return (
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b text-slate-500">
-              <th className="text-left py-2 px-3">{t('wbs_code') || 'WBS kodi'}</th>
-              <th className="text-left py-2 px-3">{t('wbs_name') || 'Nomi'}</th>
-              <th className="text-center py-2 px-3">{t('plan_pct') || 'Reja %'}</th>
-              <th className="text-center py-2 px-3">{t('fact_pct') || 'Fakt %'}</th>
-              <th className="text-center py-2 px-3">{t('gap') || 'Farq'}</th>
-              <th className="text-center py-2 px-3">{t('status') || 'Holat'}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item, idx) => {
-              const gap = (item.fact_pct || 0) - (item.plan_pct || 0);
-              return (
-                <tr key={idx} className="border-b hover:bg-slate-50">
-                  <td className="py-2 px-3 font-mono text-xs">{item.wbs_code}</td>
-                  <td className="py-2 px-3">{item.wbs_name}</td>
-                  <td className="py-2 px-3">
-                    <div className="flex items-center gap-2">
-                      <Progress value={item.plan_pct || 0} className="h-2 flex-1 bg-slate-200" />
-                      <span className="text-xs text-slate-500 min-w-[36px] text-right">
-                        {(item.plan_pct || 0).toFixed(1)}%
+      <div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b text-slate-500">
+                <th className="text-left py-2 px-3">{t('wbs_code') || 'WBS kodi'}</th>
+                <th className="text-left py-2 px-3">{t('wbs_name') || 'Nomi'}</th>
+                <th className="text-center py-2 px-3">{t('plan_pct') || 'Reja %'}</th>
+                <th className="text-center py-2 px-3">{t('fact_pct') || 'Fakt %'}</th>
+                <th className="text-center py-2 px-3">{t('gap') || 'Farq'}</th>
+                <th className="text-center py-2 px-3">{t('status') || 'Holat'}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedItems.map((item, idx) => {
+                const gap = (item.fact_pct || 0) - (item.plan_pct || 0);
+                return (
+                  <tr key={idx} className="border-b hover:bg-slate-50">
+                    <td className="py-2 px-3 font-mono text-xs">{item.wbs_code}</td>
+                    <td className="py-2 px-3">{item.wbs_name}</td>
+                    <td className="py-2 px-3">
+                      <div className="flex items-center gap-2">
+                        <Progress value={item.plan_pct || 0} className="h-2 flex-1 bg-slate-200" />
+                        <span className="text-xs text-slate-500 min-w-[36px] text-right">
+                          {(item.plan_pct || 0).toFixed(1)}%
+                        </span>
+                      </div>
+                    </td>
+                    <td className="py-2 px-3">
+                      <div className="flex items-center gap-2">
+                        <Progress
+                          value={item.fact_pct || 0}
+                          className="h-2 flex-1 bg-slate-200"
+                        />
+                        <span className="text-xs text-slate-500 min-w-[36px] text-right">
+                          {(item.fact_pct || 0).toFixed(1)}%
+                        </span>
+                      </div>
+                    </td>
+                    <td className="py-2 px-3 text-center">
+                      <span
+                        className={`font-medium ${gap >= 0 ? 'text-green-600' : 'text-red-600'}`}
+                      >
+                        {gap >= 0 ? '+' : ''}
+                        {gap.toFixed(1)}%
                       </span>
-                    </div>
-                  </td>
-                  <td className="py-2 px-3">
-                    <div className="flex items-center gap-2">
-                      <Progress
-                        value={item.fact_pct || 0}
-                        className="h-2 flex-1 bg-slate-200"
-                      />
-                      <span className="text-xs text-slate-500 min-w-[36px] text-right">
-                        {(item.fact_pct || 0).toFixed(1)}%
-                      </span>
-                    </div>
-                  </td>
-                  <td className="py-2 px-3 text-center">
-                    <span
-                      className={`font-medium ${gap >= 0 ? 'text-green-600' : 'text-red-600'}`}
-                    >
-                      {gap >= 0 ? '+' : ''}
-                      {gap.toFixed(1)}%
-                    </span>
-                  </td>
-                  <td className="py-2 px-3 text-center">
-                    <Badge className={STATUS_BADGE[item.status] || 'bg-slate-100 text-slate-700'}>
-                      {STATUS_LABELS[item.status] || item.status}
-                    </Badge>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                    </td>
+                    <td className="py-2 px-3 text-center">
+                      <Badge className={STATUS_BADGE[item.status] || 'bg-slate-100 text-slate-700'}>
+                        {STATUS_LABELS[item.status] || item.status}
+                      </Badge>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        {Math.ceil(items.length / pageSize) > 1 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t">
+            <p className="text-sm text-slate-500">
+              {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, items.length)} / {items.length}
+            </p>
+            <div className="flex items-center gap-2">
+              <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}>1</button>
+              <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft className="w-4 h-4" /></button>
+              <span className="text-sm font-medium px-2">{currentPage} / {Math.ceil(items.length / pageSize)}</span>
+              <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= Math.ceil(items.length / pageSize)} onClick={() => setCurrentPage(p => p + 1)}><ChevronRight className="w-4 h-4" /></button>
+              <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= Math.ceil(items.length / pageSize)} onClick={() => setCurrentPage(Math.ceil(items.length / pageSize))}>{Math.ceil(items.length / pageSize)}</button>
+            </div>
+          </div>
+        )}
       </div>
     );
   };

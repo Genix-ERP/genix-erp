@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,8 @@ import {
   Package,
   Send,
   AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -25,6 +27,7 @@ import { useSales } from '@/components/contexts/SalesContext';
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { salesService } from "@/api/services/sales";
+import apiClient from "@/api/client";
 import { inventoryService } from "@/api/services/inventory";
 import { toast } from 'sonner';
 
@@ -56,6 +59,12 @@ export default function DeliveryOrders() {
   const [loading, setLoading] = useState(false);
   const [carriers, setCarriers] = useState([]);
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalDOs, setTotalDOs] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const pageSize = 20;
+
   const [newDO, setNewDO] = useState({
     sales_order_id: '',
     shipping_method: '',
@@ -68,21 +77,31 @@ export default function DeliveryOrders() {
     lines: [],
   });
 
-  // Fetch delivery orders from API
-  const fetchDeliveryOrders = async () => {
+  // Fetch delivery orders from API with server-side pagination
+  const fetchDeliveryOrders = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await salesService.listDeliveryOrders();
-      // API returns { data: [...], meta: {...} } structure
-      const orders = Array.isArray(response) ? response : (response?.data || []);
+      const params = { page: currentPage, page_size: pageSize };
+      if (searchQuery) params.search = searchQuery;
+      if (statusFilter !== 'all') params.status = statusFilter;
+
+      const response = await apiClient.get('/sales/delivery-orders', { params });
+      const orders = response.data?.data || [];
+      const meta = response.data?.meta;
       setDeliveryOrders(orders);
+      setFilteredDOs(orders);
+      if (meta) {
+        setTotalDOs(meta.total || 0);
+        setTotalPages(meta.total_pages || 1);
+      }
     } catch (error) {
       console.error('Failed to fetch delivery orders:', error);
       setDeliveryOrders([]);
+      setFilteredDOs([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentPage, searchQuery, statusFilter]);
 
   // Fetch carriers
   const fetchCarriers = async () => {
@@ -97,25 +116,16 @@ export default function DeliveryOrders() {
 
   useEffect(() => {
     fetchDeliveryOrders();
+  }, [fetchDeliveryOrders]);
+
+  useEffect(() => {
     fetchCarriers();
   }, []);
 
-  // Filter delivery orders
+  // Reset page when filters change
   useEffect(() => {
-    // Ensure deliveryOrders is always an array
-    let filtered = Array.isArray(deliveryOrders) ? deliveryOrders : [];
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(d => d.status === statusFilter);
-    }
-    if (searchQuery) {
-      filtered = filtered.filter(d =>
-        d.delivery_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        d.so_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        d.customer_name?.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-    setFilteredDOs(filtered);
-  }, [deliveryOrders, searchQuery, statusFilter]);
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter]);
 
   // Get confirmed sales orders that can have DOs created
   const confirmedSOs = salesOrders.filter(so =>
@@ -416,6 +426,33 @@ export default function DeliveryOrders() {
                 ))}
               </TableBody>
             </Table>
+          </div>
+        )}
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between px-6 py-4 border-t">
+            <span className="text-sm text-slate-600">
+              {t('showing') || 'Showing'} {((currentPage - 1) * pageSize) + 1}–{Math.min(currentPage * pageSize, totalDOs)} {t('of') || 'of'} {totalDOs}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage <= 1}
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <span className="text-sm font-medium">{currentPage} / {totalPages}</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage >= totalPages}
+              >
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
         )}
       </CardContent>

@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
   Plus, Search, Layers, Pencil, Trash2, Package, Palette,
-  RefreshCw, ChevronDown, ChevronRight, Settings, Barcode, DollarSign, Eye, PackagePlus
+  RefreshCw, ChevronDown, ChevronLeft, ChevronRight, Settings, Barcode, DollarSign, Eye, PackagePlus
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -16,6 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
+import { inventoryService } from '@/api/services/inventory';
 import apiClient from "@/api/client";
 import { useToast } from "@/components/ui/use-toast";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
@@ -43,6 +44,12 @@ export default function ProductVariants() {
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [showConfigureModal, setShowConfigureModal] = useState(false);
   const [showVariantDetailsModal, setShowVariantDetailsModal] = useState(false);
+
+  // Configure tab pagination (server-side)
+  const [configProducts, setConfigProducts] = useState([]);
+  const [configPage, setConfigPage] = useState(1);
+  const [configTotal, setConfigTotal] = useState(0);
+  const configPageSize = 20;
   const [showEditVariantModal, setShowEditVariantModal] = useState(false);
   const [showAttributeDetailsModal, setShowAttributeDetailsModal] = useState(false);
   const [showEditAttributeModal, setShowEditAttributeModal] = useState(false);
@@ -134,11 +141,25 @@ export default function ProductVariants() {
     }
   }, []);
 
+  const loadConfigProducts = useCallback(async () => {
+    try {
+      const result = await inventoryService.listProductsPaginated({ page: configPage, limit: configPageSize });
+      setConfigProducts((result?.data || []).filter(p => p.type === 'product' || !p.type));
+      setConfigTotal(result?.meta?.total || 0);
+    } catch (error) {
+      console.error('Failed to load config products:', error);
+    }
+  }, [configPage]);
+
   useEffect(() => {
     loadAttributes();
     loadVariants();
     loadWarehouses();
   }, [loadAttributes, loadVariants, loadWarehouses]);
+
+  useEffect(() => {
+    if (activeTab === 'configure') loadConfigProducts();
+  }, [activeTab, loadConfigProducts]);
 
   // Filter variants
   const filteredVariants = variants.filter(v => {
@@ -650,7 +671,7 @@ export default function ProductVariants() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {productsWithVariants.map(product => {
+                  {configProducts.map(product => {
                     const productVariantCount = variants.filter(v => v.product_id === product.id).length;
                     return (
                       <TableRow key={product.id}>
@@ -705,6 +726,20 @@ export default function ProductVariants() {
                   })}
                 </TableBody>
               </Table>
+              {Math.ceil(configTotal / configPageSize) > 1 && (
+                <div className="flex items-center justify-between px-4 py-3 border-t">
+                  <p className="text-sm text-slate-500">
+                    {(configPage - 1) * configPageSize + 1}-{Math.min(configPage * configPageSize, configTotal)} / {configTotal}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={configPage === 1} onClick={() => setConfigPage(1)}>1</button>
+                    <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={configPage === 1} onClick={() => setConfigPage(p => p - 1)}><ChevronLeft className="w-4 h-4" /></button>
+                    <span className="text-sm font-medium px-2">{configPage} / {Math.ceil(configTotal / configPageSize)}</span>
+                    <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={configPage >= Math.ceil(configTotal / configPageSize)} onClick={() => setConfigPage(p => p + 1)}><ChevronRight className="w-4 h-4" /></button>
+                    <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={configPage >= Math.ceil(configTotal / configPageSize)} onClick={() => setConfigPage(Math.ceil(configTotal / configPageSize))}>{Math.ceil(configTotal / configPageSize)}</button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

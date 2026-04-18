@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,7 @@ import {
   Plus, Search, Package, Pencil, Trash2, Eye, DollarSign,
   Tag, Barcode, Box, Boxes, Filter, MoreHorizontal, AlertCircle,
   CheckCircle, XCircle, ShoppingCart, Archive, Upload, Download, History,
-  Layers, Printer, HelpCircle, Truck, RefreshCw, Scale, ChevronDown
+  Layers, Printer, HelpCircle, Truck, RefreshCw, Scale, ChevronDown, ChevronLeft, ChevronRight, ShieldCheck
 } from "lucide-react";
 import {
   Tooltip,
@@ -37,6 +37,8 @@ import ProductVariants from "./ProductVariants";
 import Packages from "./Packages";
 import PackageTypes from "./PackageTypes";
 import UnitsOfMeasure from "./UnitsOfMeasure";
+import MaterialReservations from "./MaterialReservations";
+import { inventoryService } from '@/api/services/inventory';
 import apiClient from '@/api/client';
 
 const API_ORIGIN = (import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1').replace(/\/api\/v1\/?$/, '');
@@ -195,10 +197,26 @@ export default function Products() {
   }, [accounts]);
 
   const [filteredProducts, setFilteredProducts] = useState([]);
+  const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [warehouseFilter, setWarehouseFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [inventoryTypeFilter, setInventoryTypeFilter] = useState("trade");
+
+  // Server-side pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalProducts, setTotalProducts] = useState(0);
+  const [productsLoading, setProductsLoading] = useState(false);
+  const pageSize = 20;
+
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchQuery(searchInput);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
   const [activeSubTab, setActiveSubTab] = useState("list");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -606,9 +624,9 @@ export default function Products() {
     }
   };
 
-  // Summary calculations
+  // Summary calculations — use totalProducts from paginated API for total count
   const summaryStats = {
-    totalProducts: products.length,
+    totalProducts: totalProducts,
     activeProducts: products.filter(p => p.is_active).length,
     stockableProducts: products.filter(p => p.is_stockable).length,
     lowStockProducts: products.filter(p => {
@@ -617,42 +635,49 @@ export default function Products() {
     }).length
   };
 
-  useEffect(() => {
-    setFilteredProducts(products);
-  }, [products]);
-
-  useEffect(() => {
-    let filtered = products;
-
-    if (searchQuery) {
-      filtered = filtered.filter(product =>
-        product.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.barcode?.includes(searchQuery) ||
-        (product.tags || []).some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
-      );
-    }
-
-    if (categoryFilter !== "all") {
-      filtered = filtered.filter(product => product.category_id === categoryFilter);
-    }
-
-    if (warehouseFilter !== "all") {
-      const productIdsInWarehouse = new Set(
-        inventory.filter(i => i.warehouse_id === warehouseFilter).map(i => i.product_id)
-      );
-      filtered = filtered.filter(product => productIdsInWarehouse.has(product.id));
-    }
-
-    if (statusFilter !== "all") {
-      if (statusFilter === "active") {
-        filtered = filtered.filter(product => product.is_active);
-      } else if (statusFilter === "inactive") {
-        filtered = filtered.filter(product => !product.is_active);
+  // Server-side fetch for products with pagination
+  const fetchProducts = useCallback(async () => {
+    setProductsLoading(true);
+    try {
+      const params = { page: currentPage, limit: pageSize };
+      if (searchQuery) params.search = searchQuery;
+      if (categoryFilter !== "all") params.category_id = categoryFilter;
+      if (inventoryTypeFilter !== "all") params.inventory_type = inventoryTypeFilter;
+      if (statusFilter === "inactive") params.include_inactive = "true";
+      const result = await inventoryService.listProductsPaginated(params);
+      let items = result?.data || [];
+      // Warehouse filter is client-side (not supported by backend)
+      if (warehouseFilter !== "all") {
+        const productIdsInWarehouse = new Set(
+          inventory.filter(i => i.warehouse_id === warehouseFilter).map(i => i.product_id)
+        );
+        items = items.filter(product => productIdsInWarehouse.has(product.id));
       }
+      // For inactive filter, backend returns all — filter client-side
+      if (statusFilter === "inactive") {
+        items = items.filter(product => !product.is_active);
+      }
+      setFilteredProducts(items);
+      setTotalProducts(result?.meta?.total || 0);
+    } catch (error) {
+      console.error('Error fetching products:', error);
+      setFilteredProducts([]);
+      setTotalProducts(0);
+    } finally {
+      setProductsLoading(false);
     }
+  }, [currentPage, searchQuery, categoryFilter, warehouseFilter, statusFilter, inventoryTypeFilter, inventory]);
 
-    setFilteredProducts(filtered);
-  }, [searchQuery, categoryFilter, warehouseFilter, statusFilter, products, inventory]);
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, categoryFilter, warehouseFilter, statusFilter, inventoryTypeFilter]);
+
+  const totalPages = Math.ceil(totalProducts / pageSize);
 
   // Set of warehouse IDs belonging to the active company/organization
   const accessibleWarehouseIds = useMemo(() => {
@@ -836,6 +861,7 @@ export default function Products() {
 
       resetForm();
       setShowCreateModal(false);
+      fetchProducts();
     } catch (error) {
       console.error('Error creating product:', error);
     } finally {
@@ -875,6 +901,8 @@ export default function Products() {
       can_be_rented: product.can_be_rented || false,
       can_be_subcontracted: product.can_be_subcontracted || false,
       is_overhead_expense: product.is_overhead_expense || false,
+      is_manufacturable: product.is_manufacturable || false,
+      auto_manufacture: product.auto_manufacture || false,
       tags: product.tags || [],
       // Advanced fields
       brand: product.brand || '',
@@ -991,7 +1019,7 @@ export default function Products() {
     }
   };
 
-  const handleUpdate = () => {
+  const handleUpdate = async () => {
     setIsSaving(true);
     try {
       const productData = {
@@ -1020,10 +1048,11 @@ export default function Products() {
         uom_conversion_factor: parseFloat(formData.uom_conversion_factor) || 1,
       };
 
-      updateProduct(selectedProduct.id, productData);
+      await updateProduct(selectedProduct.id, productData);
       resetForm();
       setSelectedProduct(null);
       setShowEditModal(false);
+      fetchProducts();
     } catch (error) {
       console.error('Error updating product:', error);
     } finally {
@@ -1036,11 +1065,12 @@ export default function Products() {
     setShowDeleteModal(true);
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     try {
-      deleteProduct(selectedProduct.id);
+      await deleteProduct(selectedProduct.id);
       setSelectedProduct(null);
       setShowDeleteModal(false);
+      fetchProducts();
     } catch (error) {
       console.error('Error deleting product:', error);
     }
@@ -1203,6 +1233,13 @@ export default function Products() {
             <Scale className="w-4 h-4" />
             {t('units_of_measure')}
           </TabsTrigger>
+          <TabsTrigger
+            value="reserved"
+            className="flex items-center gap-2 px-4 py-2 rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm"
+          >
+            <ShieldCheck className="w-4 h-4" />
+            {t('reserved') || 'Zaxiralar'}
+          </TabsTrigger>
         </TabsList>
 
         {/* Products List Tab */}
@@ -1288,7 +1325,7 @@ export default function Products() {
                   {t('products_services')}
                 </CardTitle>
                 <p className="text-sm text-slate-500 mt-1">
-                  {filteredProducts.length} {t('items')}
+                  {totalProducts} {t('items')}
                 </p>
               </div>
             </div>
@@ -1298,8 +1335,8 @@ export default function Products() {
                 <Input
                   placeholder={t('search_products')}
                   className="pl-9 bg-slate-50 border-slate-200 focus:ring-2 focus:ring-[var(--genix-blue)]/20 h-10"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
                 />
               </div>
               <div className="flex items-center gap-1">
@@ -1337,6 +1374,17 @@ export default function Products() {
                   ))}
                 </SelectContent>
               </Select>
+              <Select value={inventoryTypeFilter} onValueChange={setInventoryTypeFilter}>
+                <SelectTrigger className="w-[180px] bg-slate-50">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{language === 'uz' ? 'Barcha turlar' : language === 'ru' ? 'Все типы' : 'All Types'}</SelectItem>
+                  <SelectItem value="trade">{language === 'uz' ? 'Sotish uchun (1340)' : language === 'ru' ? 'Для продажи (1340)' : 'Trade (1340)'}</SelectItem>
+                  <SelectItem value="raw">{language === 'uz' ? 'Xom ashyo (1310)' : language === 'ru' ? 'Сырьё (1310)' : 'Raw Material (1310)'}</SelectItem>
+                  <SelectItem value="finished">{language === 'uz' ? 'Tayyor mahsulot (1330)' : language === 'ru' ? 'Готовая продукция (1330)' : 'Finished Goods (1330)'}</SelectItem>
+                </SelectContent>
+              </Select>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="w-[130px] bg-slate-50">
                   <SelectValue placeholder={t('status')} />
@@ -1366,7 +1414,7 @@ export default function Products() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          {isLoading ? (
+          {(isLoading || productsLoading) ? (
             <div className="flex items-center justify-center py-16">
               <div className="text-center">
                 <div className="w-8 h-8 border-4 border-[var(--genix-blue)] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
@@ -1388,6 +1436,7 @@ export default function Products() {
               </p>
             </div>
           ) : (
+            <>
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -1525,6 +1574,53 @@ export default function Products() {
                 </TableBody>
               </Table>
             </div>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between px-6 py-4 border-t">
+                <p className="text-sm text-slate-500">
+                  {t('showing') || "Ko'rsatilmoqda"} {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, totalProducts)} / {totalProducts}
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage(1)}
+                  >
+                    1
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage(p => p - 1)}
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </Button>
+                  <span className="text-sm font-medium px-2">
+                    {currentPage} / {totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setCurrentPage(p => p + 1)}
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setCurrentPage(totalPages)}
+                  >
+                    {totalPages}
+                  </Button>
+                </div>
+              </div>
+            )}
+            </>
           )}
         </CardContent>
       </Card>
@@ -1685,6 +1781,9 @@ export default function Products() {
         {/* Units of Measure Tab */}
         <TabsContent value="units" className="mt-0">
           <UnitsOfMeasure />
+        </TabsContent>
+        <TabsContent value="reserved" className="mt-0">
+          <MaterialReservations />
         </TabsContent>
       </Tabs>
 
@@ -2333,33 +2432,6 @@ export default function Products() {
               </div>
             )}
 
-            {/* Options */}
-            <div>
-              <h4 className="font-semibold text-slate-900 mb-3">{t('options')}</h4>
-              <div className="flex flex-wrap gap-6">
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={formData.is_purchasable && formData.is_sellable}
-                    onCheckedChange={(checked) => setFormData({...formData, is_purchasable: checked, is_sellable: checked})}
-                  />
-                  <span className="text-sm text-slate-700 flex items-center">
-                    {t('can_buy_sell') || "Sotish/Sotib olish"}
-                    <FieldHelp text={t('help_can_buy_sell') || "Bu mahsulotni sotib olish va sotish mumkin. O'chirilsa, mahsulot faqat ko'rish uchun bo'ladi"} />
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={formData.is_active}
-                    onCheckedChange={(checked) => setFormData({...formData, is_active: checked})}
-                  />
-                  <span className="text-sm text-slate-700 flex items-center">
-                    {t('active')}
-                    <FieldHelp text={t('help_active') || "Faol mahsulot. O'chirilsa, mahsulot sotuvda ko'rinmaydi"} />
-                  </span>
-                </div>
-              </div>
-            </div>
-
             {/* Module Visibility */}
             <div className="pt-4 border-t border-slate-200">
               <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
@@ -2374,7 +2446,7 @@ export default function Products() {
                     type="checkbox"
                     id="can_be_sold"
                     checked={formData.can_be_sold}
-                    onChange={(e) => setFormData({...formData, can_be_sold: e.target.checked})}
+                    onChange={(e) => setFormData({...formData, can_be_sold: e.target.checked, is_sellable: e.target.checked})}
                     className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
                   />
                   <label htmlFor="can_be_sold" className="text-sm text-slate-700 flex items-center cursor-pointer">
@@ -2388,7 +2460,7 @@ export default function Products() {
                     type="checkbox"
                     id="can_be_purchased"
                     checked={formData.can_be_purchased}
-                    onChange={(e) => setFormData({...formData, can_be_purchased: e.target.checked})}
+                    onChange={(e) => setFormData({...formData, can_be_purchased: e.target.checked, is_purchasable: e.target.checked})}
                     className="w-4 h-4 text-green-600 rounded border-slate-300 focus:ring-green-500"
                   />
                   <label htmlFor="can_be_purchased" className="text-sm text-slate-700 flex items-center cursor-pointer">

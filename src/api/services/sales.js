@@ -1,6 +1,12 @@
 import apiClient from '../client';
 
 export const salesService = {
+  // Dashboard summary — single call returns pre-computed stats
+  async getSummary() {
+    const response = await apiClient.get('/reports/sales-summary');
+    return response.data.data;
+  },
+
   // Quotations
   async listQuotations(params = {}) {
     const response = await apiClient.get('/quotations', { params });
