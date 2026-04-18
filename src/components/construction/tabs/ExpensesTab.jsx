@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -158,8 +159,10 @@ const ExpensesTab = ({ project, scope }) => {
       };
       if (editingLine) {
         await constructionService.updateExpenseLine(editingLine.id, payload);
+        toast.success(t('expense_updated') || 'Xarajat yangilandi');
       } else {
         await constructionService.createExpenseLine(project.id, payload);
+        toast.success(t('expense_created') || "Xarajat qo'shildi");
       }
       setShowModal(false);
       load();
@@ -173,6 +176,7 @@ const ExpensesTab = ({ project, scope }) => {
   const handleApprove = async (line) => {
     try {
       await constructionService.approveExpenseLine(line.id);
+      toast.success(t('expense_approved') || 'Xarajat tasdiqlandi');
       load();
     } catch (e) {
       toast.error(e?.response?.data?.message || t('error_occurred'));
@@ -184,6 +188,7 @@ const ExpensesTab = ({ project, scope }) => {
     try {
       await constructionService.deleteExpenseLine(deleteTarget.id);
       setDeleteTarget(null);
+      toast.success(t('expense_deleted') || "Xarajat o'chirildi");
       load();
     } catch (e) {
       toast.error(e?.response?.data?.message || t('error_occurred'));
@@ -192,10 +197,15 @@ const ExpensesTab = ({ project, scope }) => {
 
   const handleCancel = async () => {
     if (!cancelTarget) return;
+    if (!cancelReason?.trim()) {
+      toast.error(t('cancel_reason_required') || 'Bekor qilish sababini kiriting');
+      return;
+    }
     try {
       await constructionService.cancelExpenseLine(cancelTarget.id, cancelReason);
       setCancelTarget(null);
       setCancelReason('');
+      toast.success(t('expense_cancelled') || 'Xarajat bekor qilindi');
       load();
     } catch (e) {
       toast.error(e?.response?.data?.message || t('error_occurred'));
@@ -239,22 +249,28 @@ const ExpensesTab = ({ project, scope }) => {
   };
 
   const handleSaveCat = async () => {
-    if (!catForm.name.trim()) return;
+    if (!catForm.name.trim()) {
+      toast.error(t('category_name_required') || 'Kategoriya nomi shart');
+      return;
+    }
     setCatSaving(true);
     try {
       const payload = {
-        name: catForm.name,
+        name: catForm.name.trim(),
         default_debit_account_id: catForm.default_debit_account_id || '',
       };
       if (editingCat) {
         await constructionService.updateCostCategory(editingCat.id, payload);
+        toast.success(t('category_updated') || 'Kategoriya yangilandi');
       } else {
         await constructionService.createCostCategory(payload);
+        toast.success(t('category_created') || "Kategoriya qo'shildi");
       }
       setShowCatModal(false);
       loadCategories();
     } catch (e) {
       console.error('Failed to save category:', e);
+      toast.error(e?.response?.data?.message || t('error_occurred'));
     } finally {
       setCatSaving(false);
     }
@@ -263,9 +279,15 @@ const ExpensesTab = ({ project, scope }) => {
   const handleToggleCat = async (cat) => {
     try {
       await constructionService.updateCostCategory(cat.id, { is_active: !cat.is_active });
+      toast.success(
+        !cat.is_active
+          ? (t('category_activated') || 'Kategoriya yoqildi')
+          : (t('category_deactivated') || "Kategoriya o'chirildi")
+      );
       loadCategories();
     } catch (e) {
       console.error('Failed to toggle category:', e);
+      toast.error(e?.response?.data?.message || t('error_occurred'));
     }
   };
 
@@ -555,7 +577,7 @@ const ExpensesTab = ({ project, scope }) => {
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <Label>{t('quantity')}</Label>
-                <Input type="number" value={form.quantity} onChange={e => setForm(f => ({...f, quantity: e.target.value}))} placeholder="0" />
+                <NumberInput value={form.quantity} onChange={raw => setForm(f => ({...f, quantity: raw}))} placeholder="0" />
               </div>
               <div>
                 <Label>{t('uom')}</Label>

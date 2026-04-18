@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -998,17 +999,17 @@ const FormsTab = ({ project }) => {
                           <td className="py-2 px-3">{row.material_name}</td>
                           <td className="py-2 px-3">{row.unit}</td>
                           <td className="py-2 px-3 text-right">
-                            <Input type="number" step="0.01" value={editRowForm.boshi} onChange={e => setEditRowForm(f => ({ ...f, boshi: e.target.value }))} className="w-20 h-7 text-right text-sm" onClick={e => e.stopPropagation()} />
+                            <NumberInput value={editRowForm.boshi} onChange={raw => setEditRowForm(f => ({ ...f, boshi: raw }))} className="w-20 h-7 text-right text-sm" onClick={e => e.stopPropagation()} />
                           </td>
                           <td className="py-2 px-3 text-right">
-                            <Input type="number" step="0.01" value={editRowForm.keldi} onChange={e => setEditRowForm(f => ({ ...f, keldi: e.target.value }))} className="w-20 h-7 text-right text-sm" onClick={e => e.stopPropagation()} />
+                            <NumberInput value={editRowForm.keldi} onChange={raw => setEditRowForm(f => ({ ...f, keldi: raw }))} className="w-20 h-7 text-right text-sm" onClick={e => e.stopPropagation()} />
                           </td>
                           <td className="py-2 px-3 text-right">
-                            <Input type="number" step="0.01" value={editRowForm.sarf} onChange={e => setEditRowForm(f => ({ ...f, sarf: e.target.value }))} className="w-20 h-7 text-right text-sm" onClick={e => e.stopPropagation()} onKeyDown={e => { if (e.key === 'Enter') saveF19Row(row.id); if (e.key === 'Escape') cancelEditF19Row(); }} />
+                            <NumberInput value={editRowForm.sarf} onChange={raw => setEditRowForm(f => ({ ...f, sarf: raw }))} className="w-20 h-7 text-right text-sm" onClick={e => e.stopPropagation()} onKeyDown={e => { if (e.key === 'Enter') saveF19Row(row.id); if (e.key === 'Escape') cancelEditF19Row(); }} />
                           </td>
                           <td className="py-2 px-3 text-right">{editQoldi.toFixed(2)}</td>
                           <td className="py-2 px-3 text-right">
-                            <Input type="number" step="0.01" value={editRowForm.cost_price} onChange={e => setEditRowForm(f => ({ ...f, cost_price: e.target.value }))} className="w-24 h-7 text-right text-sm" onClick={e => e.stopPropagation()} />
+                            <NumberInput value={editRowForm.cost_price} onChange={raw => setEditRowForm(f => ({ ...f, cost_price: raw }))} className="w-24 h-7 text-right text-sm" onClick={e => e.stopPropagation()} />
                           </td>
                           <td className="py-2 px-3 text-right font-medium">{formatCurrency(editSumma)}</td>
                           <td className="py-2 px-3">
@@ -1078,9 +1079,9 @@ const FormsTab = ({ project }) => {
               <div><Label>{t('material_name') || 'Material nomi'} *</Label><Input value={changeRowForm.material_name} onChange={e => setChangeRowForm(f => ({ ...f, material_name: e.target.value }))} placeholder="Material nomi" /></div>
               <div><Label>{t('unit') || 'Birlik'} *</Label><Input value={changeRowForm.unit} onChange={e => setChangeRowForm(f => ({ ...f, unit: e.target.value }))} placeholder="dona, kg, m3..." /></div>
               <div className="grid grid-cols-3 gap-3">
-                <div><Label>{t('keldi') || 'Keldi'}</Label><Input type="number" step="0.01" value={changeRowForm.keldi} onChange={e => setChangeRowForm(f => ({ ...f, keldi: e.target.value }))} /></div>
-                <div><Label>{t('sarf') || 'Sarflandi'}</Label><Input type="number" step="0.01" value={changeRowForm.sarf} onChange={e => setChangeRowForm(f => ({ ...f, sarf: e.target.value }))} /></div>
-                <div><Label>{t('price') || 'Narx'}</Label><Input type="number" step="0.01" value={changeRowForm.cost_price} onChange={e => setChangeRowForm(f => ({ ...f, cost_price: e.target.value }))} /></div>
+                <div><Label>{t('keldi') || 'Keldi'}</Label><NumberInput value={changeRowForm.keldi} onChange={raw => setChangeRowForm(f => ({ ...f, keldi: raw }))} /></div>
+                <div><Label>{t('sarf') || 'Sarflandi'}</Label><NumberInput value={changeRowForm.sarf} onChange={raw => setChangeRowForm(f => ({ ...f, sarf: raw }))} /></div>
+                <div><Label>{t('price') || 'Narx'}</Label><NumberInput value={changeRowForm.cost_price} onChange={raw => setChangeRowForm(f => ({ ...f, cost_price: raw }))} /></div>
               </div>
               <div><Label>{t('change_reason') || "O'zgarish sababi"} *</Label>
                 <Select value={changeRowForm.change_reason || ''} onValueChange={v => setChangeRowForm(f => ({ ...f, change_reason: v }))}>
@@ -1208,11 +1209,9 @@ const FormsTab = ({ project }) => {
                               <td className="py-2 px-3 text-right text-slate-500">{line.qty_smeta || '—'}</td>
                               <td className="py-2 px-3 text-right">
                                 {isEditing ? (
-                                  <Input
-                                    type="number"
-                                    step="0.0001"
+                                  <NumberInput
                                     value={editLineForm.qty_period}
-                                    onChange={e => setEditLineForm(f => ({ ...f, qty_period: e.target.value }))}
+                                    onChange={raw => setEditLineForm(f => ({ ...f, qty_period: raw }))}
                                     onKeyDown={e => { if (e.key === 'Enter') saveEditLine(selectedAct.id, line.id); if (e.key === 'Escape') cancelEditLine(); }}
                                     className="w-28 h-7 text-right text-sm"
                                     autoFocus
@@ -1613,11 +1612,9 @@ const FormsTab = ({ project }) => {
                 </div>
                 <div>
                   <Label className="text-xs">Qaytarilgan materiallar / Возврат материалов</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
+                  <NumberInput
                     value={form.f2_materials_returned}
-                    onChange={e => setForm(f => ({ ...f, f2_materials_returned: e.target.value }))}
+                    onChange={raw => setForm(f => ({ ...f, f2_materials_returned: raw }))}
                   />
                   <p className="text-[10px] text-slate-500 mt-1">Umumiy summadan chegiriladi</p>
                 </div>
@@ -1692,60 +1689,45 @@ const FormsTab = ({ project }) => {
                               <td className="py-2 px-2 text-right">{formatCurrency(line.unit_rate)}</td>
                               <td className="py-2 px-2 text-right">
                                 {isSelected ? (
-                                  <Input
-                                    type="number"
-                                    step="0.0001"
-                                    min="0"
+                                  <NumberInput
                                     value={selectedLine?.qty_period || ''}
-                                    onChange={e => updateSelectedLineQty(line.estimate_line_id, e.target.value)}
+                                    onChange={raw => updateSelectedLineQty(line.estimate_line_id, raw)}
                                     className="w-24 h-7 text-right text-sm"
                                   />
                                 ) : '—'}
                               </td>
                               <td className="py-2 px-2 text-right">
                                 {isSelected ? (
-                                  <Input
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
+                                  <NumberInput
                                     value={selectedLine?.labor_amount || ''}
-                                    onChange={e => updateSelectedLineField(line.estimate_line_id, 'labor_amount', parseFloat(e.target.value) || 0)}
+                                    onChange={raw => updateSelectedLineField(line.estimate_line_id, 'labor_amount', raw === '' ? 0 : parseFloat(raw) || 0)}
                                     className="w-24 h-7 text-right text-xs"
                                   />
                                 ) : '—'}
                               </td>
                               <td className="py-2 px-2 text-right">
                                 {isSelected ? (
-                                  <Input
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
+                                  <NumberInput
                                     value={selectedLine?.equipment_amount || ''}
-                                    onChange={e => updateSelectedLineField(line.estimate_line_id, 'equipment_amount', parseFloat(e.target.value) || 0)}
+                                    onChange={raw => updateSelectedLineField(line.estimate_line_id, 'equipment_amount', raw === '' ? 0 : parseFloat(raw) || 0)}
                                     className="w-24 h-7 text-right text-xs"
                                   />
                                 ) : '—'}
                               </td>
                               <td className="py-2 px-2 text-right">
                                 {isSelected ? (
-                                  <Input
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
+                                  <NumberInput
                                     value={selectedLine?.materials_amount || ''}
-                                    onChange={e => updateSelectedLineField(line.estimate_line_id, 'materials_amount', parseFloat(e.target.value) || 0)}
+                                    onChange={raw => updateSelectedLineField(line.estimate_line_id, 'materials_amount', raw === '' ? 0 : parseFloat(raw) || 0)}
                                     className="w-24 h-7 text-right text-xs"
                                   />
                                 ) : '—'}
                               </td>
                               <td className="py-2 px-2 text-right">
                                 {isSelected ? (
-                                  <Input
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
+                                  <NumberInput
                                     value={selectedLine?.cables_amount || ''}
-                                    onChange={e => updateSelectedLineField(line.estimate_line_id, 'cables_amount', parseFloat(e.target.value) || 0)}
+                                    onChange={raw => updateSelectedLineField(line.estimate_line_id, 'cables_amount', raw === '' ? 0 : parseFloat(raw) || 0)}
                                     className="w-24 h-7 text-right text-xs"
                                   />
                                 ) : '—'}
@@ -1771,7 +1753,7 @@ const FormsTab = ({ project }) => {
                                         type="text"
                                         value={selectedLine?.section_name || ''}
                                         onChange={e => updateSelectedLineField(line.estimate_line_id, 'section_name', e.target.value)}
-                                        placeholder="Bo'lim nomi (masalan: РАЗДЕЛ 1. Монтажные работы)"
+                                        placeholder="Bo'lim nomi (РАЗДЕЛ 1. Монтажные работы)"
                                         className="flex-1 h-7 text-xs"
                                       />
                                     )}

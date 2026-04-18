@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
   AlertDialog,
@@ -324,7 +325,7 @@ export const WBSTree = ({ items = [], onCreateItem, onUpdateItem, onDeleteItem, 
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 required
-                placeholder={t('work_name_placeholder') || 'Masalan: Poydevor qazish'}
+                placeholder={t('work_name_placeholder') || 'Poydevor qazish'}
               />
             </div>
 
@@ -339,10 +340,9 @@ export const WBSTree = ({ items = [], onCreateItem, onUpdateItem, onDeleteItem, 
 
             <div>
               <Label>{t('budget_amount') || 'Byudjet summasi'}</Label>
-              <Input
-                type="number"
+              <NumberInput
                 value={form.budget_amount}
-                onChange={(e) => setForm({ ...form, budget_amount: e.target.value })}
+                onChange={(raw) => setForm({ ...form, budget_amount: raw })}
                 placeholder="0"
               />
             </div>
