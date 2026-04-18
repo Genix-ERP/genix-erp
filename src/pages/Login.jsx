@@ -5,13 +5,14 @@ import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import LanguageSelector from '@/components/ui/language-selector';
 import GoogleSignInButton from '@/components/ui/GoogleSignInButton';
-import { Loader2, User, Lock, Building2, ArrowLeft } from 'lucide-react';
+import { Loader2, Mail, Lock, Phone, Building2, ArrowLeft } from 'lucide-react';
 import './Login.scss';
 
 export default function Login() {
   const [identifier, setIdentifier] = useState('');
   const [isPhone, setIsPhone] = useState(false);
   const [password, setPassword] = useState('');
+  const [usePhone, setUsePhone] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [tenants, setTenants] = useState(null);
@@ -23,11 +24,27 @@ export default function Login() {
   const { t } = useTranslation(language);
   const navigate = useNavigate();
 
+  // Translation helpers for phone-specific strings
+  const T = {
+    phone: { uz: 'Telefon raqam', ru: 'Номер телефона', en: 'Phone number' },
+    enter_phone: { uz: 'Telefon raqamingizni kiriting', ru: 'Введите номер телефона', en: 'Enter your phone number' },
+    use_email: { uz: 'Email bilan kirish', ru: 'Войти с email', en: 'Sign in with email' },
+    use_phone: { uz: 'Telefon bilan kirish', ru: 'Войти с телефоном', en: 'Sign in with phone' },
+  };
+  const tr = (key) => T[key]?.[language] || T[key]?.en || key;
+
   useEffect(() => {
     if (shouldNavigate && isAuthenticated && user) {
       navigate('/');
     }
   }, [shouldNavigate, isAuthenticated, user, navigate]);
+
+  // Reset identifier when toggling input type
+  const toggleInputType = () => {
+    setUsePhone(prev => !prev);
+    setIdentifier('');
+    setError('');
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -44,7 +61,7 @@ export default function Login() {
     if (domPassword !== password) setPassword(domPassword);
 
     const cleanIdentifier = domIdentifier.replace(/\s/g, '');
-    const result = await login(cleanIdentifier, domPassword, selectedTenantId);
+    const result = await login(cleanIdentifier, domPassword, selectedTenantId, usePhone);
 
     if (result.success) {
       setShouldNavigate(true);
@@ -70,7 +87,7 @@ export default function Login() {
     // Use Google auth if we have a stored credential
     const result = googleCredential
       ? await loginWithGoogle(googleCredential, tenantId)
-      : await login(domIdentifier.replace(/\s/g, ''), domPassword, tenantId);
+      : await login(domIdentifier.replace(/\s/g, ''), domPassword, tenantId, usePhone);
 
     if (result.success) {
       setShouldNavigate(true);
@@ -94,7 +111,6 @@ export default function Login() {
       setError('');
       setIsLoading(false);
     } else if (result.needsCompletion) {
-      // New Google user — redirect to register page (they'll need to provide company name)
       navigate('/register?google=1');
       setIsLoading(false);
     } else {
@@ -121,8 +137,8 @@ export default function Login() {
         <div className="login-card">
           <div className="login-card__header">
             <img
-              src="/logo.png"
-              alt="Yuksalish Logo"
+              src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68d244cb8a392237a5acfbd9/a049d6898_Logo.png"
+              alt="Genix Logo"
               className="login-card__logo"
             />
             <h1 className="login-card__title">{t('select_company')}</h1>
@@ -179,8 +195,8 @@ export default function Login() {
       <div className="login-card">
         <div className="login-card__header">
           <img
-            src="/logo.png"
-            alt="Yuksalish Logo"
+            src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68d244cb8a392237a5acfbd9/a049d6898_Logo.png"
+            alt="Genix Logo"
             className="login-card__logo"
           />
           <h1 className="login-card__title">{t('welcome_back')}</h1>
@@ -193,15 +209,37 @@ export default function Login() {
             )}
 
             <div className="login-form__field">
-              <label htmlFor="identifier" className="login-form__label">{t('email_or_phone')}</label>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <label htmlFor="identifier" className="login-form__label">
+                  {usePhone ? tr('phone') : t('email')}
+                </label>
+                <button
+                  type="button"
+                  onClick={toggleInputType}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    fontSize: '0.75rem',
+                    color: '#0EA5E9',
+                    cursor: 'pointer',
+                    padding: 0,
+                    fontWeight: 500,
+                  }}
+                >
+                  {usePhone ? tr('use_email') : tr('use_phone')}
+                </button>
+              </div>
               <div className="login-form__input-wrap">
-                <User className="login-form__icon" />
+                {usePhone
+                  ? <Phone className="login-form__icon" />
+                  : <Mail className="login-form__icon" />
+                }
                 <input
                   id="identifier"
                   name="email"
-                  type="text"
+                  type={usePhone ? 'tel' : 'text'}
                   autoComplete="username"
-                  placeholder={isPhone ? '+998 XX XXX XX XX' : t('enter_email_or_phone')}
+                  placeholder={usePhone ? tr('enter_phone') : (isPhone ? '+998 XX XXX XX XX' : t('enter_email_or_phone'))}
                   value={identifier}
                   onChange={(e) => {
                     const raw = e.target.value;
@@ -274,6 +312,12 @@ export default function Login() {
             </button>
           </form>
 
+          {backendAvailable && (
+            <p className="login-register">
+              {t('dont_have_account')}{' '}
+              <Link to="/register">{t('sign_up')}</Link>
+            </p>
+          )}
         </div>
       </div>
     </div>

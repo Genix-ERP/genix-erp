@@ -245,6 +245,11 @@ apiClient.interceptors.response.use(
       }
     }
 
+    // Handle 402 Payment Required — broadcast so PaymentWall can show itself
+    if (error.response?.status === 402) {
+      window.dispatchEvent(new CustomEvent('genix:payment-required'));
+    }
+
     releaseRequest();
     return Promise.reject(error);
   }

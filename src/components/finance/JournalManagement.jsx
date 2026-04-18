@@ -1113,7 +1113,7 @@ export default function JournalManagement() {
                         </TableCell>
                         <TableCell>
                           <div>
-                            <p className="font-medium text-slate-900">{language === 'uz' && journal.name_uz ? journal.name_uz : language === 'en' && journal.name_en ? journal.name_en : journal.name}</p>
+                            <p className="font-medium text-slate-900">{journal.name}</p>
                             {journal.description && (
                               <p className="text-xs text-slate-500 mt-0.5">{journal.description}</p>
                             )}

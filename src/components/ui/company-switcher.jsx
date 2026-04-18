@@ -104,7 +104,6 @@ export default function CompanySwitcher({ compact = false }) {
         <DropdownMenuSeparator />
 
         {/* Company List */}
-        <div className="max-h-64 overflow-y-auto">
         {companies.map((company) => (
           <DropdownMenuItem
             key={company.id}
@@ -129,7 +128,6 @@ export default function CompanySwitcher({ compact = false }) {
             </div>
           </DropdownMenuItem>
         ))}
-        </div>
 
         <DropdownMenuSeparator />
 

@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { LabelWithHelp } from "@/components/ui/field-help";
-import { Plus, Cog, AlertTriangle, CheckCircle, Wrench, Eye, Pencil, Trash2, Settings, Check, Users, X } from 'lucide-react';
+import { Plus, Cog, AlertTriangle, CheckCircle, Wrench, Eye, Pencil, Trash2, Settings, Check } from 'lucide-react';
 import { Checkbox } from "@/components/ui/checkbox";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -17,8 +17,7 @@ import { useManufacturing } from '@/components/contexts/ManufacturingContext';
 import { useCompany } from '@/components/contexts/CompanyContext';
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
-import { equipmentService, workCentersService } from '@/api/services/manufacturing';
-import { hrService } from '@/api/services/hr';
+import { equipmentService } from '@/api/services/manufacturing';
 import { toast } from 'sonner';
 
 const COLORS = ['#0ea5e9', '#8b5cf6', '#10b981', '#f59e0b'];
@@ -35,35 +34,11 @@ export default function WorkCenters() {
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedWorkCenter, setSelectedWorkCenter] = useState(null);
   const [equipment, setEquipment] = useState([]);
-  const [allEmployees, setAllEmployees] = useState([]);
-  const [wcEmployees, setWcEmployees] = useState({});
-  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState([]);
-  const [employeeSearch, setEmployeeSearch] = useState('');
 
-  // Load equipment and employees from API
+  // Load equipment from real API
   useEffect(() => {
     equipmentService.list().then(data => setEquipment(data)).catch(() => {});
-    hrService.listEmployees({ limit: 1000, status: 'active' }).then(data => {
-      setAllEmployees(data?.employees || data || []);
-    }).catch(() => {});
   }, []);
-
-  // Load employees for all work centers
-  useEffect(() => {
-    if (workCenters?.length > 0) {
-      const loadEmployees = async () => {
-        const empMap = {};
-        for (const wc of workCenters) {
-          try {
-            const emps = await workCentersService.getEmployees(wc.id);
-            empMap[wc.id] = emps;
-          } catch { empMap[wc.id] = []; }
-        }
-        setWcEmployees(empMap);
-      };
-      loadEmployees();
-    }
-  }, [workCenters]);
 
   // Get equipment for a specific work center
   const getEquipmentForWorkCenter = (workCenterId) => {
@@ -181,13 +156,6 @@ export default function WorkCenters() {
         await saveEquipmentAssignments(createdWC.id, selectedEquipmentIds);
       }
 
-      // Save employee assignments if any were selected
-      if (selectedEmployeeIds.length > 0 && createdWC?.id) {
-        await workCentersService.assignEmployees(createdWC.id, { employee_ids: selectedEmployeeIds, role: 'operator' });
-        const emps = await workCentersService.getEmployees(createdWC.id);
-        setWcEmployees(prev => ({ ...prev, [createdWC.id]: emps }));
-      }
-
       setShowCreateModal(false);
       resetForm();
     } catch (error) {
@@ -219,8 +187,6 @@ export default function WorkCenters() {
       operator_monthly_salary: '',
     });
     setSelectedEquipmentIds([]);
-    setSelectedEmployeeIds([]);
-    setEmployeeSearch('');
   };
 
   const handleViewWorkCenter = (wc) => {
@@ -253,9 +219,6 @@ export default function WorkCenters() {
     // Load currently assigned equipment IDs
     const assignedIds = getEquipmentForWorkCenter(wc.id).map(eq => eq.id);
     setSelectedEquipmentIds(assignedIds);
-    // Load currently assigned employee IDs
-    const assignedEmps = (wcEmployees[wc.id] || []).map(emp => emp.employee_id);
-    setSelectedEmployeeIds(assignedEmps);
     setShowEditModal(true);
   };
 
@@ -288,19 +251,6 @@ export default function WorkCenters() {
 
       // Update equipment assignments
       await saveEquipmentAssignments(selectedWorkCenter.id, selectedEquipmentIds);
-
-      // Update employee assignments - remove old, add new
-      const currentEmpIds = (wcEmployees[selectedWorkCenter.id] || []).map(e => e.employee_id);
-      const toRemove = currentEmpIds.filter(id => !selectedEmployeeIds.includes(id));
-      const toAdd = selectedEmployeeIds.filter(id => !currentEmpIds.includes(id));
-      for (const empId of toRemove) {
-        await workCentersService.removeEmployee(selectedWorkCenter.id, empId);
-      }
-      if (toAdd.length > 0) {
-        await workCentersService.assignEmployees(selectedWorkCenter.id, { employee_ids: toAdd, role: 'operator' });
-      }
-      const updatedEmps = await workCentersService.getEmployees(selectedWorkCenter.id);
-      setWcEmployees(prev => ({ ...prev, [selectedWorkCenter.id]: updatedEmps }));
 
       setShowEditModal(false);
       setSelectedWorkCenter(null);
@@ -410,8 +360,8 @@ export default function WorkCenters() {
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between">
                     <div>
-                      <CardTitle className="text-lg font-bold">{wc.name}</CardTitle>
-                      <p className="text-sm text-slate-500 mt-1">{wc.code}</p>
+                      <CardTitle className="text-base font-bold">{wc.name}</CardTitle>
+                      <p className="text-xs text-slate-500 mt-1">{wc.code}</p>
                     </div>
                     <Badge className={getStatusColor(wc.status)}>
                       {getStatusIcon(wc.status)}
@@ -421,11 +371,11 @@ export default function WorkCenters() {
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="p-3 bg-blue-50 rounded-lg">
-                    <p className="text-sm text-blue-600 font-medium">{t('utilization')}</p>
-                    <p className="text-xl font-bold text-blue-900">{Math.round(wc.current_utilization || 0)}%</p>
+                    <p className="text-xs text-blue-600 font-medium">{t('utilization')}</p>
+                    <p className="text-lg font-bold text-blue-900">{Math.round(wc.current_utilization || 0)}%</p>
                   </div>
 
-                  <div className="space-y-2 text-sm">
+                  <div className="space-y-2 text-xs">
                     {wc.department && (
                       <div className="flex justify-between">
                         <span className="text-slate-600">{t('department')}:</span>
@@ -447,15 +397,8 @@ export default function WorkCenters() {
                     <div className="flex justify-between">
                       <span className="text-slate-600">{t('equipment')}:</span>
                       <span className="font-semibold flex items-center gap-1">
-                        <Settings className="w-3.5 h-3.5" />
+                        <Settings className="w-3 h-3" />
                         {equipmentCountByWorkCenter[wc.id] || 0} {t('items') || 'items'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-600">{t('employees') || 'Employees'}:</span>
-                      <span className="font-semibold flex items-center gap-1">
-                        <Users className="w-3.5 h-3.5" />
-                        {(wcEmployees[wc.id] || []).length} {t('items') || 'items'}
                       </span>
                     </div>
                   </div>
@@ -1384,58 +1327,6 @@ export default function WorkCenters() {
                     <Settings className="w-8 h-8 mx-auto mb-2 text-slate-300" />
                     <p className="text-sm text-slate-500">{t('no_equipment_assigned') || 'No equipment assigned to this work center'}</p>
                     <p className="text-xs text-slate-400 mt-1">{t('assign_equipment_hint') || 'Go to Equipment tab to assign equipment'}</p>
-                  </div>
-                )}
-              </div>
-
-              {/* Employees Section */}
-              <div className="space-y-3 pt-4 border-t border-slate-100">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium flex items-center gap-2">
-                    <Users className="w-4 h-4" />
-                    {language === 'uz' ? 'Tayinlangan xodimlar' : language === 'ru' ? 'Назначенные сотрудники' : 'Assigned Employees'}
-                  </p>
-                  <Badge variant="outline">
-                    {(wcEmployees[selectedWorkCenter.id] || []).length} {t('items') || 'items'}
-                  </Badge>
-                </div>
-
-                {(wcEmployees[selectedWorkCenter.id] || []).length > 0 ? (
-                  <div className="border rounded-lg overflow-hidden">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-slate-50">
-                          <TableHead className="text-xs">{t('employee') || 'Employee'}</TableHead>
-                          <TableHead className="text-xs">{t('job_title') || 'Job Title'}</TableHead>
-                          <TableHead className="text-xs">{t('role') || 'Role'}</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {(wcEmployees[selectedWorkCenter.id] || []).map((emp) => (
-                          <TableRow key={emp.id}>
-                            <TableCell>
-                              <div>
-                                <p className="font-medium text-sm">{emp.employee_name}</p>
-                                <p className="text-xs text-slate-500">{emp.employee_number}</p>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <span className="text-sm">{emp.job_title || '-'}</span>
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant="outline" className="text-xs capitalize">
-                                {emp.role}
-                              </Badge>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                ) : (
-                  <div className="text-center py-6 bg-slate-50 rounded-lg">
-                    <Users className="w-8 h-8 mx-auto mb-2 text-slate-300" />
-                    <p className="text-sm text-slate-500">{language === 'uz' ? 'Bu ish markaziga xodimlar tayinlanmagan' : language === 'ru' ? 'Нет назначенных сотрудников' : 'No employees assigned to this work center'}</p>
                   </div>
                 )}
               </div>

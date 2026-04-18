@@ -12,7 +12,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Plus, Edit, Trash2, Users, Star, Play, CheckCircle, XCircle, FileSpreadsheet, Receipt } from 'lucide-react';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
-import { formatPriceInput, parsePriceInput, formatPhoneInput, parsePhoneInput } from '@/utils/formatCurrency';
+import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { toast } from 'sonner';
@@ -526,9 +526,9 @@ const SubcontractorsTab = ({ project, buildings = [], wbsItems = [] }) => {
               <div>
                 <Label>{t('contact_phone') || 'Telefon raqami'}</Label>
                 <Input
-                  value={formatPhoneInput(form.contact_phone)}
-                  onChange={e => setForm(f => ({ ...f, contact_phone: parsePhoneInput(e.target.value) }))}
-                  placeholder="+998 XX XXX XXXX"
+                  value={form.contact_phone}
+                  onChange={e => setForm(f => ({ ...f, contact_phone: e.target.value }))}
+                  placeholder="+998 ..."
                 />
               </div>
             </div>

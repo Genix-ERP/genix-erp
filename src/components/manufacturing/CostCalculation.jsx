@@ -454,7 +454,7 @@ export default function CostCalculation() {
                 <Input
                   value={form.name}
                   onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                  placeholder={language === 'uz' ? 'Masalan: Stul kalkulyatsiyasi' : 'e.g. Chair cost estimate'}
+                  placeholder={language === 'uz' ? 'Stul kalkulyatsiyasi' : 'e.g. Chair cost estimate'}
                 />
               </div>
               <div>
@@ -462,7 +462,7 @@ export default function CostCalculation() {
                 <Input
                   value={form.product_name}
                   onChange={e => setForm(f => ({ ...f, product_name: e.target.value }))}
-                  placeholder={language === 'uz' ? 'Masalan: Stul' : 'e.g. Chair'}
+                  placeholder={language === 'uz' ? 'Stul' : 'e.g. Chair'}
                 />
               </div>
               <div>

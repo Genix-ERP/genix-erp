@@ -592,7 +592,13 @@ const ActsTab = ({ project }) => {
               <div className="mt-2 flex flex-wrap gap-3">
                 {form.photos.map((file, idx) => (
                   <div key={idx} className="relative w-20 h-20 rounded-lg overflow-hidden border border-slate-200 group">
-                    <img src={URL.createObjectURL(file)} alt="" className="w-full h-full object-cover" />
+                    <img
+                      src={URL.createObjectURL(file)}
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
+                      className="w-full h-full object-cover"
+                    />
                     <button
                       type="button"
                       onClick={() => setForm(f => ({ ...f, photos: f.photos.filter((_, i) => i !== idx) }))}
@@ -637,7 +643,7 @@ const ActsTab = ({ project }) => {
               <Input
                 value={newTypeLabel}
                 onChange={e => setNewTypeLabel(e.target.value)}
-                placeholder={"Masalan: Sinov akti"}
+                placeholder={"Sinov akti"}
                 onKeyDown={e => { if (e.key === 'Enter') handleCreateActType(); }}
               />
             </div>

@@ -15,7 +15,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
-import { formatPhoneInput, parsePhoneInput } from '@/utils/formatCurrency';
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { usePermissions } from "@/hooks/usePermissions";
@@ -1008,9 +1007,9 @@ export default function ActSverka() {
                   </label>
                   <Input
                     type="tel"
-                    placeholder="+998 XX XXX XXXX"
-                    value={formatPhoneInput(sendPhone)}
-                    onChange={(e) => setSendPhone(parsePhoneInput(e.target.value))}
+                    placeholder="+998901234567"
+                    value={sendPhone}
+                    onChange={(e) => setSendPhone(e.target.value)}
                     className="bg-slate-50 border-slate-200"
                   />
                 </div>
@@ -1575,9 +1574,9 @@ export default function ActSverka() {
                 </label>
                 <Input
                   type="tel"
-                  placeholder="+998 XX XXX XXXX"
-                  value={formatPhoneInput(sendPhone)}
-                  onChange={(e) => setSendPhone(parsePhoneInput(e.target.value))}
+                  placeholder="+998901234567"
+                  value={sendPhone}
+                  onChange={(e) => setSendPhone(e.target.value)}
                   className="bg-slate-50 border-slate-200"
                 />
               </div>
