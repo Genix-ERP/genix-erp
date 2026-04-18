@@ -197,7 +197,7 @@ export default function JobPositionManagement({ jobPositions, onRefresh }) {
               <Input
                 value={form.name}
                 onChange={e => setForm({ ...form, name: e.target.value })}
-                placeholder={t('enter_name') || 'e.g. Software Engineer'}
+                placeholder={t('enter_position_name') || 'Lavozim nomini kiriting'}
               />
             </div>
             <div className="space-y-2">

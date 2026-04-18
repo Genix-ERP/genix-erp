@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,9 +17,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import ProductCombobox from "@/components/shared/ProductCombobox";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { inventoryService } from '@/api/services/inventory';
 import apiClient from '@/api/client';
+import { Switch } from "@/components/ui/switch";
 import {
   Plus,
   Search,
@@ -36,6 +38,12 @@ import {
   Trash2,
   Receipt,
   ChevronDown,
+  Package,
+  ScanLine,
+  AlertTriangle,
+  Loader2,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useSearchParams } from 'react-router-dom';
@@ -93,6 +101,14 @@ export default function PurchaseOrders() {
   const [filteredOrders, setFilteredOrders] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+
+  // Server-side pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalOrders, setTotalOrders] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [paginatedOrders, setPaginatedOrders] = useState([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const pageSize = 20;
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -124,6 +140,11 @@ export default function PurchaseOrders() {
   // Track which POs already have vendor bills
   const [poBillMap, setPoBillMap] = useState({});
 
+  // Receipt scan
+  const receiptInputRef = useRef(null);
+  const [isScanningReceipt, setIsScanningReceipt] = useState(false);
+  const [unmatchedProducts, setUnmatchedProducts] = useState([]);
+
   const [newPO, setNewPO] = useState({
     po_number: '',
     supplier_id: '',
@@ -135,6 +156,8 @@ export default function PurchaseOrders() {
     tax_percent: 0,
     tax_rate_id: '',
     payment_terms: 'net_30',
+    vehicle_number: '',
+    requires_shipping: true,
     lines: [{ product_id: '', product_name: '', quantity: 1, unit_price: 0, lead_time_days: 0 }]
   });
 
@@ -240,21 +263,40 @@ export default function PurchaseOrders() {
     return deliveryDate.toISOString().split('T')[0];
   }, []);
 
-  // Filter purchase orders
+  // Server-side fetch for purchase orders
+  const fetchOrders = useCallback(async () => {
+    setOrdersLoading(true);
+    try {
+      const params = { page: currentPage, limit: pageSize };
+      if (searchQuery) params.search = searchQuery;
+      if (statusFilter !== 'all') params.status = statusFilter;
+      const response = await apiClient.get('/purchase-orders', { params });
+      const rawData = response.data?.data || [];
+      const meta = response.data?.meta || {};
+      // Map backend fields to frontend format (same as ProcurementContext)
+      const data = rawData.map(po => ({
+        ...po,
+        po_number: po.order_number || po.po_number,
+        supplier_name: po.vendor_name || po.supplier_name,
+      }));
+      setPaginatedOrders(data);
+      setTotalOrders(meta.total || data.length);
+      setTotalPages(meta.total_pages || Math.ceil((meta.total || data.length) / pageSize));
+    } catch (e) {
+      console.error('Failed to load purchase orders', e);
+      setPaginatedOrders([]);
+    } finally {
+      setOrdersLoading(false);
+    }
+  }, [currentPage, searchQuery, statusFilter]);
+
+  useEffect(() => { fetchOrders(); }, [fetchOrders]);
+  useEffect(() => { setCurrentPage(1); }, [searchQuery, statusFilter]);
+
+  // Sync filteredOrders from server-paginated data
   useEffect(() => {
-    let filtered = purchaseOrders;
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(po => po.status === statusFilter);
-    }
-    if (searchQuery) {
-      filtered = filtered.filter(po =>
-        po.po_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        po.vendor_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        po.supplier_name?.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-    setFilteredOrders(filtered);
-  }, [purchaseOrders, searchQuery, statusFilter]);
+    setFilteredOrders(paginatedOrders);
+  }, [paginatedOrders]);
 
   // Calculate order total from line items
   const calculateOrderTotal = (lines) => {
@@ -288,6 +330,67 @@ export default function PurchaseOrders() {
       setNewPO({ ...newPO, lines: updatedLines, expected_delivery_date: newDeliveryDate, total_amount: calculateOrderTotal(updatedLines) });
     } else {
       setNewPO({ ...newPO, lines: updatedLines, total_amount: calculateOrderTotal(updatedLines) });
+    }
+  };
+
+  // Scan a receipt/check image and add matched products to order lines
+  const handleScanReceipt = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Reset input so the same file can be re-uploaded if needed
+    e.target.value = '';
+
+    setIsScanningReceipt(true);
+    setUnmatchedProducts([]);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await apiClient.post('/purchase-orders/scan-receipt', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const { matched = [], unmatched = [] } = res.data?.data || res.data || {};
+
+      if (matched.length > 0) {
+        // Build new lines from matched products, appended to existing non-empty lines
+        const existingLines = newPO.lines.filter(l => l.product_id || l.product_name);
+        const scannedLines = matched.map(item => ({
+          product_id: item.product_id,
+          product_name: item.product_name,
+          quantity: item.quantity || 1,
+          unit_price: item.unit_price || 0,
+          lead_time_days: 0,
+        }));
+        const mergedLines = existingLines.length > 0
+          ? [...existingLines, ...scannedLines]
+          : scannedLines;
+        setNewPO(prev => ({
+          ...prev,
+          lines: mergedLines,
+          total_amount: calculateOrderTotal(mergedLines),
+        }));
+        toast({
+          title: t('receipt_scanned') || 'Check skanerlandi',
+          description: `${matched.length} ta mahsulot qo'shildi`,
+        });
+      } else {
+        toast({
+          title: t('no_products_found') || 'Mahsulot topilmadi',
+          description: t('no_matching_products') || 'Checkdagi mahsulotlar katalogda topilmadi',
+          variant: 'destructive',
+        });
+      }
+
+      if (unmatched.length > 0) {
+        setUnmatchedProducts(unmatched);
+      }
+    } catch (err) {
+      toast({
+        title: t('error') || 'Xato',
+        description: err.response?.data?.message || err.message || 'Check skanerlanmadi',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsScanningReceipt(false);
     }
   };
 
@@ -449,7 +552,7 @@ export default function PurchaseOrders() {
       const totalAmount = subtotal + taxAmount;
       const poData = {
         ...newPO,
-        po_number: newPO.po_number || `PO-${Date.now()}`,
+        po_number: '',
         vendor_name: supplier?.name || newPO.vendor_name,
         subtotal: subtotal,
         total_amount: totalAmount,
@@ -460,6 +563,7 @@ export default function PurchaseOrders() {
       };
 
       await createPurchaseOrder(poData);
+      fetchOrders();
       setShowCreateModal(false);
 
       setNewPO({
@@ -473,9 +577,12 @@ export default function PurchaseOrders() {
         tax_percent: defaultTaxPercent,
         shipping_cost: 0,
         payment_terms: 'net_30',
+        vehicle_number: '',
+        requires_shipping: true,
         lines: [{ product_id: '', product_name: '', quantity: 1, unit_price: 0, lead_time_days: 0 }]
       });
       setIsDeliveryDateManual(false);
+      setUnmatchedProducts([]);
     } catch (error) {
       console.error('Error creating PO:', error);
     } finally {
@@ -576,6 +683,7 @@ export default function PurchaseOrders() {
     if (newStatus === 'cancelled') {
       await deletePurchaseOrder(poId);
     }
+    fetchOrders();
   };
 
   const handleCreateBill = async (poId) => {
@@ -668,7 +776,7 @@ export default function PurchaseOrders() {
               </div>
             </CardHeader>
             <CardContent className="p-0">
-              {isLoading ? (
+              {(isLoading || ordersLoading) ? (
                 <div className="flex items-center justify-center py-16">
                   <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
                 </div>
@@ -735,6 +843,7 @@ export default function PurchaseOrders() {
                                 <Button size="sm" variant="ghost" onClick={async () => {
                                   try {
                                     await approvePurchaseOrder(po.id);
+                                    fetchOrders();
                                   } catch (err) {
                                     const msg = err?.response?.data?.error?.message || err?.response?.data?.message || err?.message || '';
                                     if (msg.includes('NO_RECEIPT_WAREHOUSE')) {
@@ -769,6 +878,22 @@ export default function PurchaseOrders() {
                       ))}
                     </TableBody>
                   </Table>
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between px-4 py-3 border-t">
+                      <span className="text-sm text-slate-600">
+                        {t('showing') || 'Showing'} {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, totalOrders)} {t('of') || 'of'} {totalOrders}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>
+                          <ChevronLeft className="w-4 h-4" />
+                        </Button>
+                        <span className="text-sm font-medium">{currentPage} / {totalPages}</span>
+                        <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}>
+                          <ChevronRight className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -807,6 +932,8 @@ export default function PurchaseOrders() {
             tax_percent: defaultTaxPercent || 0,
             shipping_cost: 0,
             payment_terms: 'net_30',
+            vehicle_number: '',
+            requires_shipping: true,
             lines: [{ product_id: '', product_name: '', quantity: 1, unit_price: 0, lead_time_days: 0 }]
           });
         }
@@ -915,14 +1042,91 @@ export default function PurchaseOrders() {
               </div>
             </div>
 
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium mb-1 block">{t('vehicle_number') || 'Vehicle Number'}</label>
+                <div className="relative">
+                  <Truck className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input
+                    value={newPO.vehicle_number || ''}
+                    onChange={(e) => setNewPO({...newPO, vehicle_number: e.target.value})}
+                    placeholder="01 A 123 AA"
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+              <div className="flex items-end pb-1">
+                <div className="flex items-center gap-3">
+                  <Switch
+                    id="requires-shipping"
+                    checked={newPO.requires_shipping}
+                    onCheckedChange={(checked) => setNewPO({...newPO, requires_shipping: checked})}
+                  />
+                  <label htmlFor="requires-shipping" className="text-sm font-medium flex items-center gap-2 cursor-pointer">
+                    <Package className="w-4 h-4 text-slate-500" />
+                    {t('requires_shipping') || 'Requires Shipping'}
+                  </label>
+                </div>
+              </div>
+            </div>
+
             {/* Order Lines */}
             <div className="border-t pt-4">
+              {/* Hidden file input for receipt scan */}
+              <input
+                ref={receiptInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={handleScanReceipt}
+              />
               <div className="flex justify-between items-center mb-3">
                 <label className="text-base font-semibold">{t('order_items') || 'Order Items'}</label>
-                <Button size="sm" variant="outline" onClick={handleAddLine}>
-                  <Plus className="w-4 h-4 mr-1" /> {t('add_line') || 'Add Line'}
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => receiptInputRef.current?.click()}
+                    disabled={isScanningReceipt}
+                    className="border-amber-300 text-amber-700 hover:bg-amber-50"
+                  >
+                    {isScanningReceipt
+                      ? <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                      : <ScanLine className="w-4 h-4 mr-1" />}
+                    {isScanningReceipt
+                      ? (t('scanning') || 'Skanerlanmoqda...')
+                      : (t('scan_receipt') || 'Check yuklash')}
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={handleAddLine}>
+                    <Plus className="w-4 h-4 mr-1" /> {t('add_line') || 'Add Line'}
+                  </Button>
+                </div>
               </div>
+
+              {/* Unmatched products warning */}
+              {unmatchedProducts.length > 0 && (
+                <div className="mb-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-orange-500 mt-0.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-orange-800">
+                        {t('products_not_in_catalog') || 'Quyidagi mahsulotlar bizda yo\'q:'}
+                      </p>
+                      <ul className="mt-1 space-y-0.5">
+                        {unmatchedProducts.map((name, i) => (
+                          <li key={i} className="text-sm text-orange-700 truncate">• {name}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <button
+                      onClick={() => setUnmatchedProducts([])}
+                      className="text-orange-400 hover:text-orange-600 shrink-0"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
               <div className="space-y-2 max-h-60 overflow-y-auto">
                 {newPO.lines.map((line, index) => {
                   const selectedProduct = products.find(p => p.id === line.product_id);
@@ -933,21 +1137,13 @@ export default function PurchaseOrders() {
                     <div className="flex gap-2 items-end">
                       <div className="flex-[2] min-w-0">
                         {index === 0 && <label className="text-xs text-slate-500 mb-1 block">{t('product')}</label>}
-                        <Select
+                        <ProductCombobox
+                          products={products}
                           value={line.product_id || ''}
                           onValueChange={(value) => handleLineChange(index, 'product_id', value)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder={t('select_product') || 'Select product'} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {products.map((product) => (
-                              <SelectItem key={product.id} value={product.id}>
-                                {product.name} {product.has_variants && '(V)'} {product.lead_time_days > 0 && `(${product.lead_time_days} ${t('days') || 'days'})`}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          placeholder={t('select_product') || 'Mahsulot tanlang'}
+                          t={t}
+                        />
                       </div>
                       {hasVariants && (
                         <div className="flex-[2] min-w-0">
@@ -1153,7 +1349,7 @@ export default function PurchaseOrders() {
             </div>
 
             <div className="flex gap-3 pt-4">
-              <Button variant="outline" onClick={() => setShowCreateModal(false)} className="flex-1">
+              <Button variant="outline" onClick={() => { setShowCreateModal(false); setUnmatchedProducts([]); }} className="flex-1">
                 {t('cancel') || 'Cancel'}
               </Button>
               <Button
@@ -1453,6 +1649,7 @@ export default function PurchaseOrders() {
               onClick={async () => {
                 if (deleteConfirm) {
                   await deletePurchaseOrder(deleteConfirm.id);
+                  fetchOrders();
                   setDeleteConfirm(null);
                 }
               }}

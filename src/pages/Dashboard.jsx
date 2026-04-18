@@ -3,12 +3,10 @@ import React, { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   TrendingUp,
-  Users,
   DollarSign,
   Wallet,
   UserCheck,
   FileWarning,
-  Receipt,
 } from "lucide-react";
 
 import MetricCard from "@/components/dashboard/MetricCard";
@@ -123,7 +121,8 @@ export default function Dashboard() {
 
   // Revenue vs Expenses chart data (monthly)
   const revenueExpenseData = useMemo(() => {
-    const months = ["Yan", "Fev", "Mar", "Apr", "May", "Iyun", "Iyul", "Avg", "Sen", "Okt", "Noy", "Dek"];
+    const monthKeys = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
+    const months = monthKeys.map(k => t(k) || k);
     const monthMap = {};
     months.forEach((m) => {
       monthMap[m] = { month: m, revenue: 0, expenses: 0, profit: 0 };
@@ -193,7 +192,7 @@ export default function Dashboard() {
       <div className="p-4 md:p-6 lg:p-8 bg-gradient-to-br from-slate-50 via-white to-slate-50 min-h-screen flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
           <div className="w-10 h-10 border-3 border-[#6C5CE7] border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm text-slate-400">Yuklanmoqda...</p>
+          <p className="text-sm text-slate-400">{t("loading") || "Loading..."}</p>
         </div>
       </div>
     );
@@ -249,7 +248,7 @@ export default function Dashboard() {
             <MetricCard
               title={t("expenses") || "Xarajatlar"}
               value={formatCurrency(metrics.totalExpenses)}
-              change={metrics.totalRevenue > 0 ? `${((metrics.totalExpenses / metrics.totalRevenue) * 100).toFixed(0)}% daromaddan` : "—"}
+              change={metrics.totalRevenue > 0 ? `${((metrics.totalExpenses / metrics.totalRevenue) * 100).toFixed(0)}% ${t("of_revenue") || "of revenue"}` : "—"}
               trend={metrics.totalExpenses > metrics.totalRevenue * 0.7 ? "warning" : "neutral"}
               icon={Wallet}
               color="coral"
@@ -267,7 +266,7 @@ export default function Dashboard() {
             <MetricCard
               title={t("net_profit") || "Sof foyda"}
               value={formatCurrency(Math.abs(metrics.netProfit))}
-              change={metrics.netProfit >= 0 ? "Foydali" : "Zarar"}
+              change={metrics.netProfit >= 0 ? (t("profitable") || "Profitable") : (t("loss") || "Loss")}
               trend={metrics.netProfit >= 0 ? "up" : "down"}
               icon={TrendingUp}
               color={metrics.netProfit >= 0 ? "green" : "red"}
@@ -281,24 +280,24 @@ export default function Dashboard() {
             <MetricCard
               title={t("customers") || "Mijozlar"}
               value={metrics.totalCustomers.toLocaleString()}
-              change={`+${metrics.newThisMonth} yangi`}
+              change={`+${metrics.newThisMonth} ${t("new_lc") || "new"}`}
               trend="up"
               icon={UserCheck}
               color="teal"
-              subtitle={metrics.churnedCount > 0 ? `${metrics.churnedCount} yo'qolgan` : undefined}
+              subtitle={metrics.churnedCount > 0 ? `${metrics.churnedCount} ${t("churned") || "churned"}` : undefined}
             />
           </motion.div>
 
           {/* 6. Overdue Invoices */}
           <motion.div custom={5} initial="hidden" animate="visible" variants={fadeIn} className="h-full">
             <MetricCard
-              title="Muddati o'tgan"
+              title={t("overdue") || "Overdue"}
               value={`${metrics.overdueCount} ta`}
-              change={metrics.overdueTotal > 0 ? formatCurrency(metrics.overdueTotal) : "Hammasi to'langan"}
+              change={metrics.overdueTotal > 0 ? formatCurrency(metrics.overdueTotal) : (t("all_paid") || "All paid")}
               trend={metrics.overdueCount > 0 ? "warning" : "up"}
               icon={FileWarning}
               color={metrics.overdueCount > 0 ? "red" : "green"}
-              badge={metrics.overdueCount > 0 ? "SHOSHILINCH" : undefined}
+              badge={metrics.overdueCount > 0 ? (t("urgent") || "URGENT") : undefined}
               badgeColor="bg-red-100 text-red-700"
             />
           </motion.div>
@@ -308,7 +307,7 @@ export default function Dashboard() {
         <motion.div custom={6} initial="hidden" animate="visible" variants={fadeIn}>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <RevenueExpenseChart data={revenueExpenseData} />
-            <CashFlowWaterfall transactions={financialTransactions} />
+            <CashFlowWaterfall transactions={financialTransactions} customerInvoices={customerInvoices} vendorBills={vendorBills} />
           </div>
         </motion.div>
 
@@ -319,16 +318,15 @@ export default function Dashboard() {
               leads={leads}
               opportunities={opportunities}
               salesOrders={salesOrders}
-              customers={customers}
             />
-            <TopProductsChart salesOrders={salesOrders} inventory={inventory} />
+            <TopProductsChart />
           </div>
         </motion.div>
 
         {/* === Charts Section Row 3: Client Segments + Inventory === */}
         <motion.div custom={8} initial="hidden" animate="visible" variants={fadeIn}>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <ClientSegmentsDonut customers={customers} />
+            <ClientSegmentsDonut customers={customers} salesOrders={salesOrders} />
             <InventoryStackedBar inventory={inventory} />
           </div>
         </motion.div>
@@ -342,10 +340,11 @@ export default function Dashboard() {
               employees={employees}
               customerInvoices={customerInvoices}
             />
-            <TopClientsList customers={customers} salesOrders={salesOrders} />
+            <TopClientsList customers={customers} salesOrders={salesOrders} customerInvoices={customerInvoices} />
             <RecentTransactions
               financialTransactions={financialTransactions}
               customerInvoices={customerInvoices}
+              vendorBills={vendorBills}
             />
           </div>
         </motion.div>

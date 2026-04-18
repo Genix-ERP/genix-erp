@@ -47,12 +47,12 @@ export default function AIBusinessPulse({
   const radarData = useMemo(() => {
     const dimensions = businessHealth?.dimensions || {};
     return [
-      { axis: "Daromad", score: dimensions.revenue?.score || dimensions.sales?.score || 75 },
-      { axis: "Xarajat", score: dimensions.expenses?.score || dimensions.financial?.score || 70 },
-      { axis: "Inventar", score: dimensions.inventory?.score || 80 },
-      { axis: "Mijozlar", score: dimensions.customers?.score || dimensions.customer?.score || 65 },
-      { axis: "To'lovlar", score: dimensions.payments?.score || 72 },
-      { axis: "Xodimlar", score: dimensions.hr?.score || dimensions.employees?.score || 85 },
+      { axis: t("revenue") || "Revenue", score: dimensions.revenue?.score || dimensions.sales?.score || 75 },
+      { axis: t("expenses") || "Expenses", score: dimensions.expenses?.score || dimensions.financial?.score || 70 },
+      { axis: t("inventory") || "Inventory", score: dimensions.inventory?.score || 80 },
+      { axis: t("customers") || "Customers", score: dimensions.customers?.score || dimensions.customer?.score || 65 },
+      { axis: t("payments") || "Payments", score: dimensions.payments?.score || 72 },
+      { axis: t("employees") || "Employees", score: dimensions.hr?.score || dimensions.employees?.score || 85 },
     ];
   }, [businessHealth]);
 
@@ -87,12 +87,12 @@ export default function AIBusinessPulse({
                 </div>
                 <div>
                   <h3 className="text-sm font-semibold text-slate-900">AI Business Pulse</h3>
-                  <p className="text-[10px] text-slate-400">Real-time biznes salomatligi</p>
+                  <p className="text-[10px] text-slate-400">{t("realtime_business_health") || "Real-time business health"}</p>
                 </div>
               </div>
               <span className="animate-pulse-live text-[10px] font-bold text-[#6C5CE7] bg-[#6C5CE7]/10 px-2.5 py-1 rounded-full uppercase tracking-widest flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#6C5CE7]" />
-                JONLI
+                {t("live") || "LIVE"}
               </span>
             </div>
 
@@ -221,7 +221,7 @@ export default function AIBusinessPulse({
                             : t("low_impact") || "Past ta'sir"}
                       </span>
                       <button className="text-[11px] font-semibold text-[#6C5CE7] hover:text-[#5A4BD4] flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        Bajarish <ArrowRight className="w-3 h-3" />
+                        {t("execute") || "Execute"} <ArrowRight className="w-3 h-3" />
                       </button>
                     </div>
                   </div>

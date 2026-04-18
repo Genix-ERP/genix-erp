@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   FileText, Download, Loader2, CheckCircle2, AlertTriangle,
-  ChevronDown, ChevronRight, DollarSign,
+  ChevronDown, ChevronRight, ChevronLeft, DollarSign,
   TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, Scale
 } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -60,7 +60,14 @@ const getPeriodLabel = (period, language) => {
 };
 
 // Collapsible P&L section component (Odoo-style)
-function PnLSection({ title, items, total, formatCurrency, isCollapsible }) {
+// Helper to pick translated account name
+const pickAccountName = (account, language) => {
+  if (language === 'uz' && account.account_name_uz) return account.account_name_uz;
+  if (language === 'en' && account.account_name_en) return account.account_name_en;
+  return account.account_name;
+};
+
+function PnLSection({ title, items, total, formatCurrency, isCollapsible, language }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -86,7 +93,7 @@ function PnLSection({ title, items, total, formatCurrency, isCollapsible }) {
       {expanded && items.map((item, idx) => (
         <tr key={item.account_id || idx} className="border-b border-slate-100 bg-slate-50/50">
           <td className="py-2 px-4 pl-12 text-slate-600">
-            {item.account_code} {item.account_name}
+            {item.account_code} {pickAccountName(item, language)}
           </td>
           <td className="py-2 px-4 text-right font-mono text-slate-600 tabular-nums">
             {formatCurrency(item.amount)}
@@ -123,7 +130,7 @@ function BalanceSheetSection({ title, sections, total, formatCurrency, colorClas
               <tr key={acc.account_id || idx} className="border-t border-slate-100 hover:bg-slate-50">
                 <td className="py-2.5 px-4 pl-10 text-slate-700">
                   <span className="font-mono text-xs text-slate-400 mr-2">{acc.account_code}</span>
-                  {acc.account_name}
+                  {pickAccountName(acc, language)}
                 </td>
                 <td className="py-2.5 px-4 text-right font-mono text-slate-700 tabular-nums w-48">
                   {formatCurrency(acc.balance)}
@@ -169,9 +176,19 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
   const [exchangeDiffs, setExchangeDiffs] = useState(null);
   const [currencyDebt, setCurrencyDebt] = useState(null);
 
+  // Pagination states
+  const pageSize = 20;
+  const [currentPageTrial, setCurrentPageTrial] = useState(1);
+  const [currentPageExchange, setCurrentPageExchange] = useState(1);
+  const [currentPageCurrency, setCurrentPageCurrency] = useState(1);
+
   // Fetch all reports when period changes
   useEffect(() => {
     fetchReports();
+    // Reset pagination when period changes
+    setCurrentPageTrial(1);
+    setCurrentPageExchange(1);
+    setCurrentPageCurrency(1);
   }, [period]);
 
   const fetchReports = async () => {
@@ -254,7 +271,7 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
           <tr><th>Account</th><th class="amount">Debit</th><th class="amount">Credit</th></tr>
           ${trialBalance.accounts?.map(a => `
             <tr>
-              <td>${a.account_code} - ${a.account_name}</td>
+              <td>${a.account_code} - ${pickAccountName(a, language)}</td>
               <td class="amount">${formatCurrency(a.debit_balance)}</td>
               <td class="amount">${formatCurrency(a.credit_balance)}</td>
             </tr>
@@ -273,25 +290,25 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
           <tr><th></th><th class="amount">${getPeriodLabel(period, language)}</th></tr>
           ${incomeStatement.revenue?.length > 0 ? `
             <tr class="total-row"><td><strong>${language === 'uz' ? 'Daromad' : 'Revenue'}</strong></td><td class="amount"><strong>${formatCurrency(incomeStatement.total_revenue)}</strong></td></tr>
-            ${incomeStatement.revenue.map(a => `<tr><td style="padding-left:30px">${a.account_code} ${a.account_name}</td><td class="amount">${formatCurrency(a.amount)}</td></tr>`).join('')}
+            ${incomeStatement.revenue.map(a => `<tr><td style="padding-left:30px">${a.account_code} ${pickAccountName(a, language)}</td><td class="amount">${formatCurrency(a.amount)}</td></tr>`).join('')}
           ` : ''}
           ${incomeStatement.cost_of_sales?.length > 0 ? `
             <tr class="total-row"><td><strong>${language === 'uz' ? 'Sotish tannarxi' : 'Less Costs of Revenue'}</strong></td><td class="amount"><strong>${formatCurrency(incomeStatement.cost_of_sales.reduce((s,a) => s + a.amount, 0))}</strong></td></tr>
-            ${incomeStatement.cost_of_sales.map(a => `<tr><td style="padding-left:30px">${a.account_code} ${a.account_name}</td><td class="amount">${formatCurrency(a.amount)}</td></tr>`).join('')}
+            ${incomeStatement.cost_of_sales.map(a => `<tr><td style="padding-left:30px">${a.account_code} ${pickAccountName(a, language)}</td><td class="amount">${formatCurrency(a.amount)}</td></tr>`).join('')}
           ` : ''}
           <tr style="background:#e2e8f0;font-weight:bold"><td><strong>${language === 'uz' ? 'Yalpi foyda' : 'Gross Profit'}</strong></td><td class="amount"><strong>${formatCurrency(incomeStatement.gross_profit)}</strong></td></tr>
           ${incomeStatement.operating_expenses?.length > 0 ? `
             <tr class="total-row"><td><strong>${language === 'uz' ? 'Operatsion xarajatlar' : 'Less Operating Expenses'}</strong></td><td class="amount"><strong>${formatCurrency(incomeStatement.operating_expenses.reduce((s,a) => s + a.amount, 0))}</strong></td></tr>
-            ${incomeStatement.operating_expenses.map(a => `<tr><td style="padding-left:30px">${a.account_code} ${a.account_name}</td><td class="amount">${formatCurrency(a.amount)}</td></tr>`).join('')}
+            ${incomeStatement.operating_expenses.map(a => `<tr><td style="padding-left:30px">${a.account_code} ${pickAccountName(a, language)}</td><td class="amount">${formatCurrency(a.amount)}</td></tr>`).join('')}
           ` : ''}
           <tr style="background:#e2e8f0;font-weight:bold"><td><strong>${language === 'uz' ? 'Operatsion foyda' : 'Operating Income (or Loss)'}</strong></td><td class="amount"><strong>${formatCurrency(incomeStatement.operating_profit)}</strong></td></tr>
           ${incomeStatement.other_income?.length > 0 ? `
             <tr class="total-row"><td><strong>${language === 'uz' ? 'Boshqa daromadlar' : 'Plus Other Income'}</strong></td><td class="amount"><strong>${formatCurrency(incomeStatement.other_income.reduce((s,a) => s + a.amount, 0))}</strong></td></tr>
-            ${incomeStatement.other_income.map(a => `<tr><td style="padding-left:30px">${a.account_code} ${a.account_name}</td><td class="amount">${formatCurrency(a.amount)}</td></tr>`).join('')}
+            ${incomeStatement.other_income.map(a => `<tr><td style="padding-left:30px">${a.account_code} ${pickAccountName(a, language)}</td><td class="amount">${formatCurrency(a.amount)}</td></tr>`).join('')}
           ` : ''}
           ${incomeStatement.other_expenses?.length > 0 ? `
             <tr class="total-row"><td><strong>${language === 'uz' ? 'Boshqa xarajatlar' : 'Less Other Expenses'}</strong></td><td class="amount"><strong>${formatCurrency(incomeStatement.other_expenses.reduce((s,a) => s + a.amount, 0))}</strong></td></tr>
-            ${incomeStatement.other_expenses.map(a => `<tr><td style="padding-left:30px">${a.account_code} ${a.account_name}</td><td class="amount">${formatCurrency(a.amount)}</td></tr>`).join('')}
+            ${incomeStatement.other_expenses.map(a => `<tr><td style="padding-left:30px">${a.account_code} ${pickAccountName(a, language)}</td><td class="amount">${formatCurrency(a.amount)}</td></tr>`).join('')}
           ` : ''}
           <tr style="background:#e2e8f0;font-weight:bold"><td><strong>${language === 'uz' ? 'Soliqdan oldingi foyda' : 'Pre-tax Profit'}</strong></td><td class="amount"><strong>${formatCurrency(incomeStatement.pre_tax_profit || 0)}</strong></td></tr>
           <tr><td style="padding-left:30px">${language === 'uz' ? "Daromad solig'i (15%)" : 'Income Tax (15%)'}</td><td class="amount negative">-${formatCurrency(incomeStatement.income_tax || 0)}</td></tr>
@@ -305,11 +322,11 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
         <table>
           <tr><th></th><th class="amount">${language === 'uz' ? 'Balans' : 'Balance'}</th></tr>
           <tr class="total-row"><td><strong>${language === 'uz' ? 'Aktivlar' : 'Assets'}</strong></td><td class="amount"><strong>${formatCurrency(balanceSheet.total_assets)}</strong></td></tr>
-          ${balanceSheet.assets?.flatMap(s => s.accounts || []).map(a => `<tr><td style="padding-left:30px">${a.account_code} ${a.account_name}</td><td class="amount">${formatCurrency(a.balance)}</td></tr>`).join('') || ''}
+          ${balanceSheet.assets?.flatMap(s => s.accounts || []).map(a => `<tr><td style="padding-left:30px">${a.account_code} ${pickAccountName(a, language)}</td><td class="amount">${formatCurrency(a.balance)}</td></tr>`).join('') || ''}
           <tr class="total-row"><td><strong>${language === 'uz' ? 'Majburiyatlar' : 'Liabilities'}</strong></td><td class="amount"><strong>${formatCurrency(balanceSheet.total_liabilities)}</strong></td></tr>
-          ${balanceSheet.liabilities?.flatMap(s => s.accounts || []).map(a => `<tr><td style="padding-left:30px">${a.account_code} ${a.account_name}</td><td class="amount">${formatCurrency(a.balance)}</td></tr>`).join('') || ''}
+          ${balanceSheet.liabilities?.flatMap(s => s.accounts || []).map(a => `<tr><td style="padding-left:30px">${a.account_code} ${pickAccountName(a, language)}</td><td class="amount">${formatCurrency(a.balance)}</td></tr>`).join('') || ''}
           <tr class="total-row"><td><strong>${language === 'uz' ? 'Kapital' : 'Equity'}</strong></td><td class="amount"><strong>${formatCurrency(balanceSheet.total_equity)}</strong></td></tr>
-          ${balanceSheet.equity?.flatMap(s => s.accounts || []).map(a => `<tr><td style="padding-left:30px">${a.account_code} ${a.account_name}</td><td class="amount">${formatCurrency(a.balance)}</td></tr>`).join('') || ''}
+          ${balanceSheet.equity?.flatMap(s => s.accounts || []).map(a => `<tr><td style="padding-left:30px">${a.account_code} ${pickAccountName(a, language)}</td><td class="amount">${formatCurrency(a.balance)}</td></tr>`).join('') || ''}
           <tr style="background:#cbd5e1;font-weight:bold;font-size:1.1em"><td><strong>${language === 'uz' ? 'Majburiyatlar + Kapital' : 'Liabilities + Equity'}</strong></td><td class="amount"><strong>${formatCurrency((balanceSheet.total_liabilities || 0) + (balanceSheet.total_equity || 0))}</strong></td></tr>
         </table>
         ` : ''}
@@ -347,13 +364,29 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
   const getCategoryColor = (category) => {
     const colors = {
       asset: 'bg-blue-100 text-blue-800',
+      contra_asset: 'bg-blue-50 text-blue-600',
       liability: 'bg-red-100 text-red-800',
       equity: 'bg-purple-100 text-purple-800',
       revenue: 'bg-green-100 text-green-800',
-      expense: 'bg-orange-100 text-orange-800'
+      contra_revenue: 'bg-green-50 text-green-600',
+      expense: 'bg-orange-100 text-orange-800',
+      contra_expense: 'bg-orange-50 text-orange-600',
     };
     return colors[category] || 'bg-gray-100 text-gray-800';
   };
+
+  // Translate category name
+  const getCategoryLabel = (category) => {
+    const labels = {
+      uz: { asset: 'Aktiv', contra_asset: 'Kontra aktiv', liability: 'Majburiyat', equity: 'Kapital', revenue: 'Daromad', contra_revenue: 'Kontra daromad', expense: 'Xarajat', contra_expense: 'Kontra xarajat' },
+      ru: { asset: 'Актив', contra_asset: 'Контра актив', liability: 'Обязательство', equity: 'Капитал', revenue: 'Доход', contra_revenue: 'Контра доход', expense: 'Расход', contra_expense: 'Контра расход' },
+      en: { asset: 'Asset', contra_asset: 'Contra Asset', liability: 'Liability', equity: 'Equity', revenue: 'Revenue', contra_revenue: 'Contra Revenue', expense: 'Expense', contra_expense: 'Contra Expense' },
+    };
+    return labels[language]?.[category] || category;
+  };
+
+  // Get translated account name based on language (uses top-level pickAccountName helper)
+  const getAccountName = (account) => pickAccountName(account, language);
 
   return (
     <div className="space-y-6" ref={reportRef}>
@@ -467,13 +500,13 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {trialBalance.accounts.map((account, idx) => (
+                      {trialBalance.accounts.slice((currentPageTrial - 1) * pageSize, currentPageTrial * pageSize).map((account, idx) => (
                         <TableRow key={account.account_id || idx}>
                           <TableCell className="font-mono text-sm">{account.account_code}</TableCell>
-                          <TableCell>{account.account_name}</TableCell>
+                          <TableCell>{getAccountName(account)}</TableCell>
                           <TableCell>
                             <Badge className={getCategoryColor(account.category)} variant="secondary">
-                              {account.category}
+                              {getCategoryLabel(account.category)}
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right font-mono">
@@ -498,6 +531,24 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
                       </TableRow>
                     </TableBody>
                   </Table>
+                  {(() => {
+                    const totalCount = trialBalance.accounts.length;
+                    const totalPages = Math.ceil(totalCount / pageSize);
+                    return totalPages > 1 && (
+                      <div className="flex items-center justify-between px-4 py-3 border-t">
+                        <p className="text-sm text-slate-500">
+                          {(currentPageTrial - 1) * pageSize + 1}-{Math.min(currentPageTrial * pageSize, totalCount)} / {totalCount}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPageTrial === 1} onClick={() => setCurrentPageTrial(1)}>1</button>
+                          <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPageTrial === 1} onClick={() => setCurrentPageTrial(p => p - 1)}><ChevronLeft className="w-4 h-4" /></button>
+                          <span className="text-sm font-medium px-2">{currentPageTrial} / {totalPages}</span>
+                          <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPageTrial >= totalPages} onClick={() => setCurrentPageTrial(p => p + 1)}><ChevronRight className="w-4 h-4" /></button>
+                          <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPageTrial >= totalPages} onClick={() => setCurrentPageTrial(totalPages)}>{totalPages}</button>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               ) : (
                 <div className="text-center py-12 text-slate-500">
@@ -546,6 +597,7 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
                           total={incomeStatement.total_revenue}
                           formatCurrency={formatCurrency}
                           isCollapsible
+                          language={language}
                         />
                       )}
 
@@ -557,6 +609,7 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
                           total={incomeStatement.cost_of_sales.reduce((s, a) => s + a.amount, 0)}
                           formatCurrency={formatCurrency}
                           isCollapsible
+                          language={language}
                         />
                       )}
 
@@ -578,6 +631,7 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
                           total={incomeStatement.operating_expenses.reduce((s, a) => s + a.amount, 0)}
                           formatCurrency={formatCurrency}
                           isCollapsible
+                          language={language}
                         />
                       )}
 
@@ -599,6 +653,7 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
                           total={incomeStatement.other_income.reduce((s, a) => s + a.amount, 0)}
                           formatCurrency={formatCurrency}
                           isCollapsible
+                          language={language}
                         />
                       )}
 
@@ -610,6 +665,7 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
                           total={incomeStatement.other_expenses.reduce((s, a) => s + a.amount, 0)}
                           formatCurrency={formatCurrency}
                           isCollapsible
+                          language={language}
                         />
                       )}
 
@@ -918,44 +974,64 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
                   </div>
 
                   {/* Details Table */}
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>{language === 'uz' ? 'Sana' : 'Date'}</TableHead>
-                        <TableHead>{language === 'uz' ? 'Hujjat №' : 'Document #'}</TableHead>
-                        <TableHead>{language === 'uz' ? 'Kontragent' : 'Counterparty'}</TableHead>
-                        <TableHead>{language === 'uz' ? 'Valyuta' : 'Currency'}</TableHead>
-                        <TableHead className="text-right">{language === 'uz' ? 'Miqdor' : 'Amount'}</TableHead>
-                        <TableHead className="text-right">{language === 'uz' ? "Boshlang'ich kurs" : 'Initial Rate'}</TableHead>
-                        <TableHead className="text-right">{language === 'uz' ? 'Yakuniy kurs' : 'Final Rate'}</TableHead>
-                        <TableHead className="text-right">{language === 'uz' ? "Farq (so'mda)" : 'Diff (UZS)'}</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {exchangeDiffs.items.map((item) => (
-                        <TableRow key={item.id}>
-                          <TableCell>{item.date}</TableCell>
-                          <TableCell className="font-mono text-sm">{item.document_number || '—'}</TableCell>
-                          <TableCell className="text-sm">{item.counterparty || '—'}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{item.currency_code}</Badge>
-                          </TableCell>
-                          <TableCell className="text-right font-mono">
-                            {item.foreign_amount ? Number(item.foreign_amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
-                          </TableCell>
-                          <TableCell className="text-right font-mono">
-                            {item.initial_rate ? Number(item.initial_rate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
-                          </TableCell>
-                          <TableCell className="text-right font-mono">
-                            {item.final_rate ? Number(item.final_rate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
-                          </TableCell>
-                          <TableCell className={`text-right font-medium ${item.type === 'positive' ? 'text-green-600' : 'text-red-600'}`}>
-                            {item.type === 'positive' ? '+' : '-'}{formatCurrency(item.amount)}
-                          </TableCell>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>{language === 'uz' ? 'Sana' : 'Date'}</TableHead>
+                          <TableHead>{language === 'uz' ? 'Hujjat №' : 'Document #'}</TableHead>
+                          <TableHead>{language === 'uz' ? 'Kontragent' : 'Counterparty'}</TableHead>
+                          <TableHead>{language === 'uz' ? 'Valyuta' : 'Currency'}</TableHead>
+                          <TableHead className="text-right">{language === 'uz' ? 'Miqdor' : 'Amount'}</TableHead>
+                          <TableHead className="text-right">{language === 'uz' ? "Boshlang'ich kurs" : 'Initial Rate'}</TableHead>
+                          <TableHead className="text-right">{language === 'uz' ? 'Yakuniy kurs' : 'Final Rate'}</TableHead>
+                          <TableHead className="text-right">{language === 'uz' ? "Farq (so'mda)" : 'Diff (UZS)'}</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {exchangeDiffs.items.slice((currentPageExchange - 1) * pageSize, currentPageExchange * pageSize).map((item) => (
+                          <TableRow key={item.id}>
+                            <TableCell>{item.date}</TableCell>
+                            <TableCell className="font-mono text-sm">{item.document_number || '—'}</TableCell>
+                            <TableCell className="text-sm">{item.counterparty || '—'}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline">{item.currency_code}</Badge>
+                            </TableCell>
+                            <TableCell className="text-right font-mono">
+                              {item.foreign_amount ? Number(item.foreign_amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
+                            </TableCell>
+                            <TableCell className="text-right font-mono">
+                              {item.initial_rate ? Number(item.initial_rate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
+                            </TableCell>
+                            <TableCell className="text-right font-mono">
+                              {item.final_rate ? Number(item.final_rate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
+                            </TableCell>
+                            <TableCell className={`text-right font-medium ${item.type === 'positive' ? 'text-green-600' : 'text-red-600'}`}>
+                              {item.type === 'positive' ? '+' : '-'}{formatCurrency(item.amount)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                    {(() => {
+                      const totalCount = exchangeDiffs.items.length;
+                      const totalPages = Math.ceil(totalCount / pageSize);
+                      return totalPages > 1 && (
+                        <div className="flex items-center justify-between px-4 py-3 border-t">
+                          <p className="text-sm text-slate-500">
+                            {(currentPageExchange - 1) * pageSize + 1}-{Math.min(currentPageExchange * pageSize, totalCount)} / {totalCount}
+                          </p>
+                          <div className="flex items-center gap-2">
+                            <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPageExchange === 1} onClick={() => setCurrentPageExchange(1)}>1</button>
+                            <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPageExchange === 1} onClick={() => setCurrentPageExchange(p => p - 1)}><ChevronLeft className="w-4 h-4" /></button>
+                            <span className="text-sm font-medium px-2">{currentPageExchange} / {totalPages}</span>
+                            <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPageExchange >= totalPages} onClick={() => setCurrentPageExchange(p => p + 1)}><ChevronRight className="w-4 h-4" /></button>
+                            <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPageExchange >= totalPages} onClick={() => setCurrentPageExchange(totalPages)}>{totalPages}</button>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
                 </>
               ) : (
                 <div className="text-center py-12 text-slate-500">
@@ -1007,53 +1083,73 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
                   </div>
 
                   {/* Detail Table */}
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-slate-50">
-                        <TableHead>{language === 'uz' ? 'Hujjat' : 'Document'}</TableHead>
-                        <TableHead>{language === 'uz' ? 'Turi' : 'Type'}</TableHead>
-                        <TableHead>{language === 'uz' ? 'Hamkor' : 'Partner'}</TableHead>
-                        <TableHead>{language === 'uz' ? 'Valyuta' : 'Currency'}</TableHead>
-                        <TableHead className="text-right">{language === 'uz' ? 'Qoldiq' : 'Due'}</TableHead>
-                        <TableHead className="text-right">{language === 'uz' ? 'HF kursi' : 'Inv. Rate'}</TableHead>
-                        <TableHead className="text-right">{language === 'uz' ? 'Joriy kurs' : 'Curr. Rate'}</TableHead>
-                        <TableHead className="text-right">{language === 'uz' ? 'HF UZS' : 'Inv. UZS'}</TableHead>
-                        <TableHead className="text-right">{language === 'uz' ? 'Joriy UZS' : 'Curr. UZS'}</TableHead>
-                        <TableHead className="text-right">{language === 'uz' ? 'Farq' : 'Diff'}</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {currencyDebt.items.map((item, idx) => (
-                        <TableRow key={item.id || idx} className="hover:bg-slate-50">
-                          <TableCell className="font-medium">{item.invoice_number}</TableCell>
-                          <TableCell>
-                            <Badge variant={item.type === 'sales' ? 'default' : 'secondary'}>
-                              {item.type === 'sales'
-                                ? (language === 'uz' ? 'Sotish' : 'Sales')
-                                : (language === 'uz' ? 'Xarid' : 'Purchase')
-                              }
-                            </Badge>
-                          </TableCell>
-                          <TableCell>{item.partner_name}</TableCell>
-                          <TableCell><Badge variant="outline">{item.currency_code}</Badge></TableCell>
-                          <TableCell className="text-right font-mono">
-                            {new Intl.NumberFormat('uz-UZ', { maximumFractionDigits: 2 }).format(item.amount_due)}
-                          </TableCell>
-                          <TableCell className="text-right font-mono">
-                            {new Intl.NumberFormat('uz-UZ').format(item.invoice_rate)}
-                          </TableCell>
-                          <TableCell className="text-right font-mono">
-                            {new Intl.NumberFormat('uz-UZ').format(item.current_rate)}
-                          </TableCell>
-                          <TableCell className="text-right">{formatCurrency(item.invoice_uzs)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(item.current_uzs)}</TableCell>
-                          <TableCell className={`text-right font-medium ${item.diff >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                            {item.diff >= 0 ? '+' : ''}{formatCurrency(item.diff)}
-                          </TableCell>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-slate-50">
+                          <TableHead>{language === 'uz' ? 'Hujjat' : 'Document'}</TableHead>
+                          <TableHead>{language === 'uz' ? 'Turi' : 'Type'}</TableHead>
+                          <TableHead>{language === 'uz' ? 'Hamkor' : 'Partner'}</TableHead>
+                          <TableHead>{language === 'uz' ? 'Valyuta' : 'Currency'}</TableHead>
+                          <TableHead className="text-right">{language === 'uz' ? 'Qoldiq' : 'Due'}</TableHead>
+                          <TableHead className="text-right">{language === 'uz' ? 'HF kursi' : 'Inv. Rate'}</TableHead>
+                          <TableHead className="text-right">{language === 'uz' ? 'Joriy kurs' : 'Curr. Rate'}</TableHead>
+                          <TableHead className="text-right">{language === 'uz' ? 'HF UZS' : 'Inv. UZS'}</TableHead>
+                          <TableHead className="text-right">{language === 'uz' ? 'Joriy UZS' : 'Curr. UZS'}</TableHead>
+                          <TableHead className="text-right">{language === 'uz' ? 'Farq' : 'Diff'}</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {currencyDebt.items.slice((currentPageCurrency - 1) * pageSize, currentPageCurrency * pageSize).map((item, idx) => (
+                          <TableRow key={item.id || idx} className="hover:bg-slate-50">
+                            <TableCell className="font-medium">{item.invoice_number}</TableCell>
+                            <TableCell>
+                              <Badge variant={item.type === 'sales' ? 'default' : 'secondary'}>
+                                {item.type === 'sales'
+                                  ? (language === 'uz' ? 'Sotish' : 'Sales')
+                                  : (language === 'uz' ? 'Xarid' : 'Purchase')
+                                }
+                              </Badge>
+                            </TableCell>
+                            <TableCell>{item.partner_name}</TableCell>
+                            <TableCell><Badge variant="outline">{item.currency_code}</Badge></TableCell>
+                            <TableCell className="text-right font-mono">
+                              {new Intl.NumberFormat('uz-UZ', { maximumFractionDigits: 2 }).format(item.amount_due)}
+                            </TableCell>
+                            <TableCell className="text-right font-mono">
+                              {new Intl.NumberFormat('uz-UZ').format(item.invoice_rate)}
+                            </TableCell>
+                            <TableCell className="text-right font-mono">
+                              {new Intl.NumberFormat('uz-UZ').format(item.current_rate)}
+                            </TableCell>
+                            <TableCell className="text-right">{formatCurrency(item.invoice_uzs)}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(item.current_uzs)}</TableCell>
+                            <TableCell className={`text-right font-medium ${item.diff >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                              {item.diff >= 0 ? '+' : ''}{formatCurrency(item.diff)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                    {(() => {
+                      const totalCount = currencyDebt.items.length;
+                      const totalPages = Math.ceil(totalCount / pageSize);
+                      return totalPages > 1 && (
+                        <div className="flex items-center justify-between px-4 py-3 border-t">
+                          <p className="text-sm text-slate-500">
+                            {(currentPageCurrency - 1) * pageSize + 1}-{Math.min(currentPageCurrency * pageSize, totalCount)} / {totalCount}
+                          </p>
+                          <div className="flex items-center gap-2">
+                            <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPageCurrency === 1} onClick={() => setCurrentPageCurrency(1)}>1</button>
+                            <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPageCurrency === 1} onClick={() => setCurrentPageCurrency(p => p - 1)}><ChevronLeft className="w-4 h-4" /></button>
+                            <span className="text-sm font-medium px-2">{currentPageCurrency} / {totalPages}</span>
+                            <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPageCurrency >= totalPages} onClick={() => setCurrentPageCurrency(p => p + 1)}><ChevronRight className="w-4 h-4" /></button>
+                            <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPageCurrency >= totalPages} onClick={() => setCurrentPageCurrency(totalPages)}>{totalPages}</button>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
                 </>
               ) : (
                 <div className="text-center py-12 text-slate-500">

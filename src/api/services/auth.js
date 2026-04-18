@@ -220,6 +220,36 @@ export const authService = {
     return response.data.data;
   },
 
+  // Send OTP to phone via SMS for password reset
+  async sendPasswordResetOTP(phone, purpose = 'password_reset', language = 'uz') {
+    const response = await apiClient.post('/auth/send-phone-otp', {
+      phone,
+      purpose,
+      language,
+    });
+    return response.data.data;
+  },
+
+  // Verify phone OTP code for password reset
+  async verifyPasswordResetOTP(phone, otpCode, purpose = 'password_reset') {
+    const response = await apiClient.post('/auth/verify-phone-otp', {
+      phone,
+      otp_code: otpCode,
+      purpose,
+    });
+    return response.data.data;
+  },
+
+  // Reset password with phone OTP verification
+  async resetPasswordWithPhone(phone, otpCode, newPassword) {
+    const response = await apiClient.post('/auth/reset-password-phone', {
+      phone,
+      otp_code: otpCode,
+      new_password: newPassword,
+    });
+    return response.data.data;
+  },
+
   // Register with OTP verification
   async registerWithOTP(data) {
     // Generate tenant_code from company name if not provided
@@ -262,6 +292,27 @@ export const authService = {
       // Don't fail registration if org creation fails
     }
 
+    return response.data.data;
+  },
+
+  // Update email (no verification)
+  async updateEmail(email) {
+    const response = await apiClient.put('/auth/me/email', { email });
+    return response.data.data;
+  },
+
+  // Send phone OTP for phone number change
+  async sendPhoneOTP(phone) {
+    const response = await apiClient.post('/auth/me/phone/send-otp', { phone });
+    return response.data.data;
+  },
+
+  // Verify phone OTP and update phone number
+  async verifyPhoneOTP(phone, otpCode) {
+    const response = await apiClient.post('/auth/me/phone/verify-otp', {
+      phone,
+      otp_code: otpCode,
+    });
     return response.data.data;
   },
 

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,8 +54,11 @@ import {
   Globe,
   ChevronDown,
   ChevronUp,
+  Printer,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
-import { format, differenceInDays } from "date-fns";
+import { format, differenceInDays, startOfDay } from "date-fns";
 import { useSales } from "@/components/contexts/SalesContext";
 import { useCustomers } from "@/components/contexts/CustomersContext";
 import { useLanguage } from "@/components/contexts/LanguageContext";
@@ -64,6 +67,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { inventoryService } from "@/api/services/inventory";
 import { salesService } from "@/api/services/sales";
+import apiClient from "@/api/client";
 import { useCompany } from "@/components/contexts/CompanyContext";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { useAdminSettings } from "@/components/contexts/AdminSettingsContext";
@@ -76,8 +80,8 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
   const { activeCompany } = useCompany();
   const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
   const { getSetting } = useAdminSettings();
-  const { taxRates = [], journals = [], currencies = [], exchangeRates = [], getLatestExchangeRate } = useFinancials();
-  const bankCashJournals = journals.filter(j => j.type === 'bank' || j.type === 'cash');
+  const { taxRates = [], journals = [], paymentJournals = [], currencies = [], exchangeRates = [], getLatestExchangeRate } = useFinancials();
+  const bankCashJournals = paymentJournals.length > 0 ? paymentJournals : journals.filter(j => j.type === 'bank' || j.type === 'cash');
 
   // Get default tax from settings
   const defaultSalesTaxId = getSetting('sales.tax.default_tax_id', '');
@@ -104,6 +108,48 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalInvoices, setTotalInvoices] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [paginatedInvoices, setPaginatedInvoices] = useState([]);
+  const [invoicesLoading, setInvoicesLoading] = useState(false);
+  const pageSize = 20;
+
+  // Fetch invoices with server-side pagination
+  const fetchInvoices = useCallback(async () => {
+    setInvoicesLoading(true);
+    try {
+      const params = { page: currentPage, page_size: pageSize };
+      if (searchQuery) params.search = searchQuery;
+      if (statusFilter !== 'all') params.status = statusFilter;
+      if (typeFilter !== 'all') params.type = typeFilter;
+
+      const response = await apiClient.get('/sales-invoices', { params });
+      const data = response.data?.data || [];
+      const meta = response.data?.meta;
+      setPaginatedInvoices(data);
+      if (meta) {
+        setTotalInvoices(meta.total || 0);
+        setTotalPages(meta.total_pages || 1);
+      }
+    } catch (error) {
+      console.error('Failed to fetch invoices:', error);
+      setPaginatedInvoices([]);
+    } finally {
+      setInvoicesLoading(false);
+    }
+  }, [currentPage, searchQuery, statusFilter, typeFilter]);
+
+  useEffect(() => {
+    fetchInvoices();
+  }, [fetchInvoices]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter, typeFilter]);
 
   // Load products on mount
   useEffect(() => {
@@ -178,18 +224,8 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
     write_off_amount: 0,
   });
 
-  const filteredInvoices = useMemo(() => {
-    return invoices.filter((inv) => {
-      const matchesSearch =
-        inv.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        inv.customer_name?.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesStatus =
-        statusFilter === "all" || inv.payment_status === statusFilter;
-      const invType = inv.invoice_type || "invoice";
-      const matchesType = typeFilter === "all" || invType === typeFilter;
-      return matchesSearch && matchesStatus && matchesType;
-    });
-  }, [invoices, searchQuery, statusFilter, typeFilter]);
+  // Server-side filtering is done in fetchInvoices; just use paginatedInvoices directly
+  const filteredInvoices = paginatedInvoices;
 
   const stats = useMemo(() => {
     const today = new Date();
@@ -322,6 +358,7 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
       // Pass customer_name so it appears immediately in the list
       await createInvoice(data, formData.customer_name);
     }
+    await fetchInvoices();
     resetForm();
   };
 
@@ -410,7 +447,7 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
     try {
       await salesService.sendInvoice(invoice.id);
       // Refresh the invoice list
-      await getInvoice(invoice.id);
+      await fetchInvoices();
     } catch (err) {
       console.error("Failed to send invoice:", err);
     }
@@ -429,6 +466,237 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
     setShowPaymentModal(true);
   };
 
+  const handlePrintAllocationReceipt = (invoice, alloc) => {
+    if (!invoice || !alloc) return;
+    const paymentDate = alloc.payment_date
+      ? format(new Date(alloc.payment_date), 'dd.MM.yyyy')
+      : format(new Date(), 'dd.MM.yyyy');
+    const methodLabels = {
+      bank_transfer: language === 'ru' ? 'Банковский перевод' : language === 'uz' ? 'Bank o\'tkazmasi' : 'Bank Transfer',
+      cash: language === 'ru' ? 'Наличные' : language === 'uz' ? 'Naqd' : 'Cash',
+    };
+    const journalName = alloc.journal_name || '-';
+    const method = journalName.toLowerCase().includes('kassa') || journalName.toLowerCase().includes('cash') || journalName.toLowerCase().includes('нал') ? 'cash' : 'bank_transfer';
+
+    const html = `
+      <html>
+      <head>
+        <title>${t('payment_receipt')} - ${alloc.payment_number}</title>
+        <style>
+          body { font-family: 'Times New Roman', serif; padding: 40px; color: #000; font-size: 13px; max-width: 700px; margin: 0 auto; }
+          .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #000; padding-bottom: 15px; }
+          .header h1 { font-size: 20px; margin: 0 0 5px 0; text-transform: uppercase; letter-spacing: 1px; }
+          .header .receipt-number { font-size: 14px; color: #555; }
+          .receipt-body { margin: 20px 0; }
+          .row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dotted #ccc; }
+          .row .label { color: #555; font-weight: bold; width: 40%; }
+          .row .value { text-align: right; width: 58%; }
+          .amount-row { background: #f5f5f5; padding: 12px; margin: 15px 0; border: 1px solid #ddd; }
+          .amount-row .label { font-size: 15px; font-weight: bold; }
+          .amount-row .value { font-size: 20px; font-weight: bold; color: #16a34a; }
+          .signatures { display: flex; justify-content: space-between; margin-top: 60px; }
+          .signatures div { width: 45%; }
+          .sig-line { border-bottom: 1px solid #000; margin-top: 35px; margin-bottom: 4px; }
+          .sig-label { font-size: 11px; color: #666; }
+          .footer { text-align: center; margin-top: 40px; padding-top: 15px; border-top: 1px solid #ddd; color: #888; font-size: 11px; }
+          @media print { body { padding: 20px; } }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>${t('payment_receipt')}</h1>
+          <div class="receipt-number">
+            ${t('receipt_number') || 'Receipt No'}: <strong>${alloc.payment_number}</strong>
+          </div>
+        </div>
+
+        <div class="receipt-body">
+          <div class="row">
+            <span class="label">${t('receipt_date')}:</span>
+            <span class="value">${paymentDate}</span>
+          </div>
+
+          <div class="row">
+            <span class="label">${t('receipt_received_from')}:</span>
+            <span class="value"><strong>${invoice.customer_name || '-'}</strong></span>
+          </div>
+
+          <div class="row amount-row">
+            <span class="label">${t('receipt_amount')}:</span>
+            <span class="value">${formatCurrency(parseFloat(alloc.amount) || 0)}</span>
+          </div>
+
+          <div class="row">
+            <span class="label">${t('receipt_payment_method')}:</span>
+            <span class="value">${methodLabels[method] || method}</span>
+          </div>
+
+          <div class="row">
+            <span class="label">${t('receipt_journal')}:</span>
+            <span class="value">${journalName}</span>
+          </div>
+
+          <div class="row">
+            <span class="label">${t('receipt_invoice')}:</span>
+            <span class="value">${invoice.invoice_number}</span>
+          </div>
+
+          <div class="row">
+            <span class="label">${t('total_amount')}:</span>
+            <span class="value">${formatCurrency(invoice.total_amount || 0)}</span>
+          </div>
+
+          <div class="row">
+            <span class="label">${t('balance')}:</span>
+            <span class="value">${formatCurrency(invoice.balance || 0)}</span>
+          </div>
+        </div>
+
+        <div class="signatures">
+          <div>
+            <p><strong>${t('receipt_accountant')}:</strong></p>
+            <div class="sig-line"></div>
+            <p class="sig-label">${t('receipt_signature')}</p>
+          </div>
+          <div>
+            <p><strong>${t('receipt_director')}:</strong></p>
+            <div class="sig-line"></div>
+            <p class="sig-label">${t('receipt_signature')} / ${t('receipt_stamp_place')}</p>
+          </div>
+        </div>
+
+        <div class="footer">
+          ${t('receipt_thank_you')}
+        </div>
+      </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(html);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.print();
+    }
+  };
+
+  const handlePrintPaymentReceipt = (invoice, payment) => {
+    if (!invoice || !payment) return;
+    const paymentDate = payment.date
+      ? format(new Date(payment.date), 'dd.MM.yyyy')
+      : format(new Date(), 'dd.MM.yyyy');
+    const selectedJournal = bankCashJournals.find(j => j.id === payment.journal_id);
+    const methodLabels = {
+      bank_transfer: language === 'ru' ? 'Банковский перевод' : language === 'uz' ? 'Bank o\'tkazmasi' : 'Bank Transfer',
+      cash: language === 'ru' ? 'Наличные' : language === 'uz' ? 'Naqd' : 'Cash',
+    };
+    const method = selectedJournal?.type === 'cash' ? 'cash' : 'bank_transfer';
+
+    const html = `
+      <html>
+      <head>
+        <title>${t('payment_receipt')} - ${invoice.invoice_number}</title>
+        <style>
+          body { font-family: 'Times New Roman', serif; padding: 40px; color: #000; font-size: 13px; max-width: 700px; margin: 0 auto; }
+          .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #000; padding-bottom: 15px; }
+          .header h1 { font-size: 20px; margin: 0 0 5px 0; text-transform: uppercase; letter-spacing: 1px; }
+          .header .receipt-number { font-size: 14px; color: #555; }
+          .receipt-body { margin: 20px 0; }
+          .row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dotted #ccc; }
+          .row .label { color: #555; font-weight: bold; width: 40%; }
+          .row .value { text-align: right; width: 58%; }
+          .amount-row { background: #f5f5f5; padding: 12px; margin: 15px 0; border: 1px solid #ddd; }
+          .amount-row .label { font-size: 15px; font-weight: bold; }
+          .amount-row .value { font-size: 20px; font-weight: bold; color: #16a34a; }
+          .signatures { display: flex; justify-content: space-between; margin-top: 60px; }
+          .signatures div { width: 45%; }
+          .sig-line { border-bottom: 1px solid #000; margin-top: 35px; margin-bottom: 4px; }
+          .sig-label { font-size: 11px; color: #666; }
+          .footer { text-align: center; margin-top: 40px; padding-top: 15px; border-top: 1px solid #ddd; color: #888; font-size: 11px; }
+          @media print { body { padding: 20px; } }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>${t('payment_receipt')}</h1>
+          <div class="receipt-number">
+            ${t('receipt_invoice')}: <strong>${invoice.invoice_number}</strong>
+          </div>
+        </div>
+
+        <div class="receipt-body">
+          <div class="row">
+            <span class="label">${t('receipt_date')}:</span>
+            <span class="value">${paymentDate}</span>
+          </div>
+
+          <div class="row">
+            <span class="label">${t('receipt_received_from')}:</span>
+            <span class="value"><strong>${invoice.customer_name || '-'}</strong></span>
+          </div>
+
+          <div class="row amount-row">
+            <span class="label">${t('receipt_amount')}:</span>
+            <span class="value">${formatCurrency(parseFloat(payment.amount) || 0)}</span>
+          </div>
+
+          <div class="row">
+            <span class="label">${t('receipt_payment_method')}:</span>
+            <span class="value">${methodLabels[method] || method}</span>
+          </div>
+
+          ${selectedJournal ? `
+          <div class="row">
+            <span class="label">${t('receipt_journal')}:</span>
+            <span class="value">${selectedJournal.name}</span>
+          </div>` : ''}
+
+          <div class="row">
+            <span class="label">${t('receipt_invoice')}:</span>
+            <span class="value">${invoice.invoice_number}</span>
+          </div>
+
+          <div class="row">
+            <span class="label">${t('total_amount')}:</span>
+            <span class="value">${formatCurrency(invoice.total_amount || 0)}</span>
+          </div>
+
+          <div class="row">
+            <span class="label">${t('balance')}:</span>
+            <span class="value">${formatCurrency(Math.max(0, (invoice.balance || invoice.total_amount || 0) - (parseFloat(payment.amount) || 0)))}</span>
+          </div>
+        </div>
+
+        <div class="signatures">
+          <div>
+            <p><strong>${t('receipt_accountant')}:</strong></p>
+            <div class="sig-line"></div>
+            <p class="sig-label">${t('receipt_signature')}</p>
+          </div>
+          <div>
+            <p><strong>${t('receipt_director')}:</strong></p>
+            <div class="sig-line"></div>
+            <p class="sig-label">${t('receipt_signature')} / ${t('receipt_stamp_place')}</p>
+          </div>
+        </div>
+
+        <div class="footer">
+          ${t('receipt_thank_you')}
+        </div>
+      </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(html);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.print();
+    }
+  };
+
   const handlePaymentSubmit = async () => {
     if (selectedInvoice && parseFloat(paymentData.amount) > 0) {
       // Derive payment method from selected journal type
@@ -441,8 +709,14 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
         paymentData.date,
         paymentData.write_off ? paymentData.write_off_amount : 0
       );
+      await fetchInvoices();
+      // Store for receipt printing before clearing
+      const invoiceForReceipt = { ...selectedInvoice };
+      const paymentForReceipt = { ...paymentData };
       setShowPaymentModal(false);
       setSelectedInvoice(null);
+      // Auto-open print receipt
+      handlePrintPaymentReceipt(invoiceForReceipt, paymentForReceipt);
     }
   };
 
@@ -454,6 +728,7 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
   const confirmDelete = async () => {
     if (invoiceToDelete) {
       await deleteInvoice(invoiceToDelete.id);
+      await fetchInvoices();
       setShowDeleteConfirm(false);
       setInvoiceToDelete(null);
     }
@@ -523,7 +798,11 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
   };
 
   const getDaysUntilDue = (dueDate) => {
-    const days = differenceInDays(new Date(dueDate), new Date());
+    // Parse due_date as local date (YYYY-MM-DD) to avoid timezone issues
+    const [y, m, d] = String(dueDate).split('T')[0].split('-').map(Number);
+    const due = startOfDay(new Date(y, m - 1, d));
+    const today = startOfDay(new Date());
+    const days = differenceInDays(due, today);
     if (days < 0) return { text: `${Math.abs(days)} ${t("days_ago")}`, isOverdue: true };
     if (days === 0) return { text: t("today"), isOverdue: false };
     return { text: `${days} ${t("days_left")}`, isOverdue: false };
@@ -654,7 +933,7 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
       {/* Invoices List */}
       <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
         <CardContent className="p-0">
-          {isLoading ? (
+          {(isLoading || invoicesLoading) ? (
             <div className="flex items-center justify-center py-12">
               <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
             </div>
@@ -783,6 +1062,33 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                   })}
                 </TableBody>
               </Table>
+            </div>
+          )}
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-6 py-4 border-t">
+              <span className="text-sm text-slate-600">
+                {t('showing') || 'Showing'} {((currentPage - 1) * pageSize) + 1}–{Math.min(currentPage * pageSize, totalInvoices)} {t('of') || 'of'} {totalInvoices}
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage <= 1}
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                <span className="text-sm font-medium">{currentPage} / {totalPages}</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage >= totalPages}
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>
@@ -1355,6 +1661,18 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                           <span className={`font-medium ${alloc.status === 'confirmed' ? 'text-green-600' : 'text-amber-600'}`}>
                             {formatCurrency(alloc.amount)}
                           </span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-6 px-2 text-xs gap-1"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handlePrintAllocationReceipt(selectedInvoice, alloc);
+                            }}
+                          >
+                            <Printer className="w-3 h-3" />
+                            {t('print') || 'Print'}
+                          </Button>
                         </div>
                       </div>
                     ))}

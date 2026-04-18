@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Plus, Search, Wallet, DollarSign, ArrowUpRight, ArrowDownLeft, RefreshCw,
   Calendar, User, Receipt, Filter, Download, Printer, TrendingUp, TrendingDown,
-  PiggyBank, Banknote, ArrowRightLeft, CheckCircle, AlertTriangle, BookOpen, FileText
+  PiggyBank, Banknote, ArrowRightLeft, CheckCircle, AlertTriangle, BookOpen, FileText, FileSpreadsheet, X
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -61,6 +61,9 @@ export default function CashRegister() {
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [codeFilter, setCodeFilter] = useState("");
   const [selectedRegister, setSelectedRegister] = useState("all");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -116,23 +119,41 @@ export default function CashRegister() {
         o.partner_name?.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
+    if (codeFilter) {
+      const cf = codeFilter.toLowerCase();
+      filtered = filtered.filter(o => o.order_number?.toLowerCase().includes(cf));
+    }
     if (typeFilter !== "all") {
       filtered = filtered.filter(o => o.order_type === typeFilter);
     }
     if (selectedRegister !== "all") {
       filtered = filtered.filter(o => o.cash_register_id === selectedRegister);
     }
-    if (dateFilter === "today") {
-      filtered = filtered.filter(o => getDateStr(o) === today);
-    } else if (dateFilter === "week") {
-      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      filtered = filtered.filter(o => getDateStr(o) >= weekAgo);
-    } else if (dateFilter === "month") {
-      const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      filtered = filtered.filter(o => getDateStr(o) >= monthAgo);
+    if (dateFrom) {
+      filtered = filtered.filter(o => {
+        const d = getDateStr(o);
+        return d && d >= dateFrom;
+      });
+    }
+    if (dateTo) {
+      filtered = filtered.filter(o => {
+        const d = getDateStr(o);
+        return d && d <= dateTo;
+      });
+    }
+    if (!dateFrom && !dateTo) {
+      if (dateFilter === "today") {
+        filtered = filtered.filter(o => getDateStr(o) === today);
+      } else if (dateFilter === "week") {
+        const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        filtered = filtered.filter(o => getDateStr(o) >= weekAgo);
+      } else if (dateFilter === "month") {
+        const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        filtered = filtered.filter(o => getDateStr(o) >= monthAgo);
+      }
     }
     setFilteredOrders(filtered.sort((a, b) => new Date(b.order_date || b.date) - new Date(a.order_date || a.date)));
-  }, [cashOrders, searchQuery, typeFilter, dateFilter, selectedRegister, today, getDateStr]);
+  }, [cashOrders, searchQuery, codeFilter, typeFilter, dateFilter, dateFrom, dateTo, selectedRegister, today, getDateStr]);
 
   // Filter legacy transactions
   useEffect(() => {
@@ -223,6 +244,98 @@ export default function CashRegister() {
       return row;
     });
   })();
+
+  const activeFilterCount = (dateFrom ? 1 : 0) + (dateTo ? 1 : 0) + (codeFilter ? 1 : 0);
+  const clearAllFilters = () => { setDateFrom(''); setDateTo(''); setCodeFilter(''); setSearchQuery(''); setTypeFilter('all'); setDateFilter('all'); };
+
+  // Export to Excel
+  const handleExportExcel = async () => {
+    const ExcelJS = await import('exceljs');
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'GenixERP';
+    wb.created = new Date();
+    const sheetName = (t('cash_orders') || 'Kassa orderlari').substring(0, 31);
+    const ws = wb.addWorksheet(sheetName, {
+      pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
+    });
+    const HEADER_BG = '1E3A5F';
+    const HEADER_FG = 'FFFFFF';
+    const BORDER_CLR = 'CBD5E1';
+    const STRIPE_BG = 'F8FAFC';
+    const TOTAL_BG = 'EEF2FF';
+    const BRAND_BLUE = '4F46E5';
+    const thin = { style: 'thin', color: { argb: BORDER_CLR } };
+    const borders = { top: thin, bottom: thin, left: thin, right: thin };
+    const thickTop = { style: 'medium', color: { argb: BRAND_BLUE } };
+    ws.columns = [
+      { width: 5.5 }, { width: 24 }, { width: 13 }, { width: 10 }, { width: 24 },
+      { width: 24 }, { width: 40 }, { width: 20 }, { width: 13 },
+    ];
+    const periodText = `${dateFrom || '...'} — ${dateTo || '...'}`;
+    const titleRow = ws.addRow([t('cash_orders') || 'Kassa orderlari (PKO / RKO)']);
+    ws.mergeCells(`A${titleRow.number}:I${titleRow.number}`);
+    titleRow.getCell(1).font = { bold: true, size: 16, color: { argb: '1E293B' } };
+    titleRow.getCell(1).alignment = { vertical: 'middle' };
+    titleRow.height = 30;
+    const subRow = ws.addRow([`${periodText}  •  ${filteredOrders.length} ${t('entries_total') || 'yozuv'}`]);
+    ws.mergeCells(`A${subRow.number}:I${subRow.number}`);
+    subRow.getCell(1).font = { size: 10, color: { argb: '64748B' } };
+    subRow.height = 18;
+    ws.addRow([]);
+    const headers = ['№', t('cash_order_number') || 'Order #', t('date') || 'Sana', t('type') || 'Tur', t('counterparty') || 'Kontragent', t('accounting_account') || 'Schyot', t('description') || 'Tavsif', t('amount') || 'Summa', t('status') || 'Holat'];
+    const headerRow = ws.addRow(headers);
+    headerRow.height = 26;
+    headerRow.eachCell((cell) => {
+      cell.font = { bold: true, size: 11, color: { argb: HEADER_FG } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: HEADER_BG } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      cell.border = borders;
+    });
+    let sumAmount = 0;
+    filteredOrders.forEach((order, idx) => {
+      const amt = order.amount || 0;
+      sumAmount += order.order_type === 'pko' ? amt : -amt;
+      const isStripe = idx % 2 === 1;
+      const row = ws.addRow([
+        idx + 1,
+        order.order_number || '-',
+        order.order_date ? format(new Date(order.order_date), 'dd.MM.yyyy') : '-',
+        order.order_type === 'pko' ? 'PKO' : 'RKO',
+        order.partner_name || '-',
+        order.account_code || '5010',
+        order.description || '-',
+        amt,
+        order.status || '-',
+      ]);
+      row.eachCell((cell, colNumber) => {
+        cell.font = { size: 10 };
+        cell.border = borders;
+        cell.alignment = { vertical: 'middle' };
+        if (isStripe) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: STRIPE_BG } };
+        if (colNumber === 8) { cell.numFmt = '#,##0'; cell.alignment = { horizontal: 'right', vertical: 'middle' }; }
+        if (colNumber === 1) cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        if (colNumber === 2) cell.font = { size: 10, name: 'Consolas' };
+      });
+    });
+    const totRow = ws.addRow(['', '', '', '', '', '', t('total') || 'Jami:', Math.abs(sumAmount), '']);
+    totRow.height = 28;
+    totRow.eachCell((cell, colNumber) => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: TOTAL_BG } };
+      cell.border = { ...borders, top: { ...thickTop } };
+      cell.font = { bold: true, size: 11, color: { argb: '1E293B' } };
+      cell.alignment = { vertical: 'middle' };
+      if (colNumber === 8) { cell.numFmt = '#,##0'; cell.alignment = { horizontal: 'right', vertical: 'middle' }; }
+    });
+    ws.autoFilter = { from: { row: headerRow.number, column: 1 }, to: { row: headerRow.number, column: 9 } };
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `kassa_orderlari_${dateFrom || 'all'}_${dateTo || 'all'}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="space-y-6">
@@ -384,40 +497,101 @@ export default function CashRegister() {
 
         {/* ===== ORDERS TAB ===== */}
         <TabsContent value="orders">
-          {/* Filters */}
+          {/* Search + Filters */}
           <Card className="mb-4">
             <CardContent className="p-4">
-              <div className="flex flex-col sm:flex-row gap-4">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <Input
-                    placeholder={t('search_transaction') || 'Search...'}
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9"
-                  />
+              <div className="flex flex-col gap-3">
+                {/* Search row */}
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <Input
+                      placeholder={t('search_transaction') || 'Tranzaksiyani qidirish...'}
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-9 h-10 bg-slate-50 border-slate-200"
+                    />
+                  </div>
+                  <Select value={typeFilter} onValueChange={setTypeFilter}>
+                    <SelectTrigger className="w-[150px] h-10 bg-slate-50">
+                      <SelectValue placeholder={t('type') || 'Hammasi'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">{t('all') || 'Hammasi'}</SelectItem>
+                      <SelectItem value="pko">{t('pko_short') || 'PKO'}</SelectItem>
+                      <SelectItem value="rko">{t('rko_short') || 'RKO'}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={dateFilter} onValueChange={setDateFilter}>
+                    <SelectTrigger className="w-[150px] h-10 bg-slate-50">
+                      <SelectValue placeholder={t('period') || 'Hammasi'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">{t('all') || 'Hammasi'}</SelectItem>
+                      <SelectItem value="today">{t('today') || 'Bugun'}</SelectItem>
+                      <SelectItem value="week">{t('this_week') || 'Shu hafta'}</SelectItem>
+                      <SelectItem value="month">{t('this_month') || 'Shu oy'}</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-                <Select value={typeFilter} onValueChange={setTypeFilter}>
-                  <SelectTrigger className="w-[150px]">
-                    <SelectValue placeholder={t('type') || 'Type'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">{t('all') || 'All'}</SelectItem>
-                    <SelectItem value="pko">{t('pko_short') || 'PKO'}</SelectItem>
-                    <SelectItem value="rko">{t('rko_short') || 'RKO'}</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={dateFilter} onValueChange={setDateFilter}>
-                  <SelectTrigger className="w-[150px]">
-                    <SelectValue placeholder={t('period') || 'Period'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">{t('all') || 'All'}</SelectItem>
-                    <SelectItem value="today">{t('today') || 'Today'}</SelectItem>
-                    <SelectItem value="week">{t('this_week') || 'This Week'}</SelectItem>
-                    <SelectItem value="month">{t('this_month') || 'This Month'}</SelectItem>
-                  </SelectContent>
-                </Select>
+                {/* Always-visible filter row */}
+                <div className="flex flex-wrap items-end gap-3 p-3 bg-gradient-to-r from-slate-50 to-blue-50/40 rounded-xl border border-slate-200/80">
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-slate-500 flex items-center gap-1">
+                      <Calendar className="w-3 h-3" />
+                      {t('from_date') || 'Dan'}
+                    </label>
+                    <Input
+                      type="date"
+                      value={dateFrom}
+                      onChange={e => setDateFrom(e.target.value)}
+                      className="h-9 w-[155px] bg-white border-slate-200 focus:ring-2 focus:ring-blue-500/20 rounded-lg text-sm"
+                    />
+                  </div>
+                  <div className="flex items-end pb-[6px]">
+                    <span className="text-slate-400 text-sm font-medium">—</span>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-slate-500 flex items-center gap-1">
+                      <Calendar className="w-3 h-3" />
+                      {t('to_date') || 'Gacha'}
+                    </label>
+                    <Input
+                      type="date"
+                      value={dateTo}
+                      onChange={e => setDateTo(e.target.value)}
+                      className="h-9 w-[155px] bg-white border-slate-200 focus:ring-2 focus:ring-blue-500/20 rounded-lg text-sm"
+                    />
+                  </div>
+                  <div className="w-px h-8 bg-slate-200 mx-1 self-end mb-[2px] hidden sm:block" />
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-slate-500 flex items-center gap-1">
+                      <FileText className="w-3 h-3" />
+                      {t('number') || 'Raqam'}
+                    </label>
+                    <Input
+                      placeholder={t('order_code') || 'Kod...'}
+                      value={codeFilter}
+                      onChange={e => setCodeFilter(e.target.value)}
+                      className="h-9 w-[160px] bg-white border-slate-200 focus:ring-2 focus:ring-blue-500/20 rounded-lg text-sm"
+                    />
+                  </div>
+                  {activeFilterCount > 0 && (
+                    <Button variant="ghost" size="sm" onClick={clearAllFilters} className="h-9 text-slate-500 hover:text-red-500 gap-1 transition-colors">
+                      <X className="w-3.5 h-3.5" />
+                      {t('clear') || 'Tozalash'}
+                    </Button>
+                  )}
+                  <div className="flex-1" />
+                  <Button
+                    onClick={handleExportExcel}
+                    className="h-9 gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white shadow-md shadow-emerald-200/50 transition-all duration-200 hover:shadow-lg hover:shadow-emerald-200/60 rounded-lg px-4"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>{t('export') || 'Export'}</span>
+                    <FileSpreadsheet className="w-4 h-4 opacity-70" />
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>

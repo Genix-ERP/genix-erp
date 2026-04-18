@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { constructionService } from '@/api/services/construction';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { DollarSign, TrendingUp, TrendingDown, BarChart3, Percent, Wallet } from 'lucide-react';
+import { DollarSign, TrendingUp, TrendingDown, BarChart3, Percent, Wallet, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -38,6 +38,9 @@ const FinancialTab = ({ project }) => {
   const [paymentSchedule, setPaymentSchedule] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [currentPageBva, setCurrentPageBva] = useState(1);
+  const [currentPagePayments, setCurrentPagePayments] = useState(1);
+  const pageSize = 20;
 
   const load = useCallback(async () => {
     if (!project?.id) return;
@@ -265,7 +268,7 @@ const FinancialTab = ({ project }) => {
                     </tr>
                   </thead>
                   <tbody>
-                    {bvaRows.map((row, i) => {
+                    {bvaRows.slice((currentPageBva - 1) * pageSize, currentPageBva * pageSize).map((row, i) => {
                       const variance = (row.planned || 0) - (row.actual || 0);
                       const variancePct = row.planned > 0 ? ((row.actual / row.planned) * 100) : 0;
                       // Color coding: green (<80%), yellow (80-100%), red (>100%)
@@ -301,6 +304,20 @@ const FinancialTab = ({ project }) => {
                   </tbody>
                 </table>
               </div>
+              {Math.ceil(bvaRows.length / pageSize) > 1 && (
+                <div className="flex items-center justify-between px-4 py-3 border-t">
+                  <p className="text-sm text-slate-500">
+                    {(currentPageBva - 1) * pageSize + 1}-{Math.min(currentPageBva * pageSize, bvaRows.length)} / {bvaRows.length}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPageBva === 1} onClick={() => setCurrentPageBva(1)}>1</button>
+                    <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPageBva === 1} onClick={() => setCurrentPageBva(p => p - 1)}><ChevronLeft className="w-4 h-4" /></button>
+                    <span className="text-sm font-medium px-2">{currentPageBva} / {Math.ceil(bvaRows.length / pageSize)}</span>
+                    <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPageBva >= Math.ceil(bvaRows.length / pageSize)} onClick={() => setCurrentPageBva(p => p + 1)}><ChevronRight className="w-4 h-4" /></button>
+                    <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPageBva >= Math.ceil(bvaRows.length / pageSize)} onClick={() => setCurrentPageBva(Math.ceil(bvaRows.length / pageSize))}>{Math.ceil(bvaRows.length / pageSize)}</button>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </CardContent>
@@ -363,6 +380,7 @@ const FinancialTab = ({ project }) => {
               {t('no_payment_data') || "To'lov jadvali ma'lumotlari topilmadi"}
             </div>
           ) : (
+            <>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -377,7 +395,7 @@ const FinancialTab = ({ project }) => {
                   </tr>
                 </thead>
                 <tbody>
-                  {payments.map((item, i) => (
+                  {payments.slice((currentPagePayments - 1) * pageSize, currentPagePayments * pageSize).map((item, i) => (
                     <tr key={i} className="border-b hover:bg-slate-50">
                       <td className="py-2 px-3">{item.name || '—'}</td>
                       <td className="py-2 px-3">{item.partner_name || '—'}</td>
@@ -401,6 +419,21 @@ const FinancialTab = ({ project }) => {
                 </tbody>
               </table>
             </div>
+            {Math.ceil(payments.length / pageSize) > 1 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t">
+                <p className="text-sm text-slate-500">
+                  {(currentPagePayments - 1) * pageSize + 1}-{Math.min(currentPagePayments * pageSize, payments.length)} / {payments.length}
+                </p>
+                <div className="flex items-center gap-2">
+                  <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPagePayments === 1} onClick={() => setCurrentPagePayments(1)}>1</button>
+                  <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPagePayments === 1} onClick={() => setCurrentPagePayments(p => p - 1)}><ChevronLeft className="w-4 h-4" /></button>
+                  <span className="text-sm font-medium px-2">{currentPagePayments} / {Math.ceil(payments.length / pageSize)}</span>
+                  <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPagePayments >= Math.ceil(payments.length / pageSize)} onClick={() => setCurrentPagePayments(p => p + 1)}><ChevronRight className="w-4 h-4" /></button>
+                  <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPagePayments >= Math.ceil(payments.length / pageSize)} onClick={() => setCurrentPagePayments(Math.ceil(payments.length / pageSize))}>{Math.ceil(payments.length / pageSize)}</button>
+                </div>
+              </div>
+            )}
+            </>
           )}
         </CardContent>
       </Card>

@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
-  Plus, PackagePlus, Truck, ArrowRightLeft, Trash2, ChevronRight,
+  Plus, PackagePlus, Truck, ArrowRightLeft, Trash2, ChevronLeft, ChevronRight,
   CheckCircle2, Clock, XCircle, Search, RefreshCw,
   ArrowLeft, Eye, Play, AlertTriangle, FileText, Loader2,
   ClipboardList, Package, Pencil, Save, Copy, Calendar, Printer
@@ -117,6 +117,8 @@ export default function StockOperations() {
   const [stateFilter, setStateFilter] = useState('all');
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 20;
 
   // Detail view editing state
   const [editingLines, setEditingLines] = useState(false);
@@ -203,6 +205,9 @@ export default function StockOperations() {
   }, [activeDirection]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // Reset page when filters or direction change
+  useEffect(() => { setCurrentPage(1); }, [searchQuery, stateFilter, activeDirection]);
 
   const getCount = (direction, state) => {
     return summary
@@ -677,6 +682,7 @@ export default function StockOperations() {
                 )}
               </div>
             ) : (
+              <>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -690,7 +696,7 @@ export default function StockOperations() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredOps.map(op => (
+                  {filteredOps.slice((currentPage - 1) * pageSize, currentPage * pageSize).map(op => (
                     <TableRow key={op.id} className="cursor-pointer hover:bg-slate-50" onClick={() => openDetail(op)}>
                       <TableCell className="font-mono font-semibold text-sm">{op.name}</TableCell>
                       <TableCell>
@@ -716,6 +722,23 @@ export default function StockOperations() {
                   ))}
                 </TableBody>
               </Table>
+              {Math.ceil(filteredOps.length / pageSize) > 1 && (
+                <div className="flex items-center justify-between px-4 py-3 border-t">
+                  <span className="text-sm text-slate-600">
+                    {t('showing') || 'Showing'} {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, filteredOps.length)} {t('of') || 'of'} {filteredOps.length}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>
+                      <ChevronLeft className="w-4 h-4" />
+                    </Button>
+                    <span className="text-sm font-medium">{currentPage} / {Math.ceil(filteredOps.length / pageSize)}</span>
+                    <Button variant="outline" size="sm" disabled={currentPage >= Math.ceil(filteredOps.length / pageSize)} onClick={() => setCurrentPage(p => p + 1)}>
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+              </>
             )}
           </CardContent>
         </Card>

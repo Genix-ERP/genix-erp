@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { useCompany } from './CompanyContext';
+import { useInstalledApps } from './InstalledAppsContext';
 import { cargoService } from '@/api/services/cargo';
 
 const CargoContext = createContext();
@@ -14,6 +15,8 @@ export const useCargoContext = () => {
 
 export const CargoProvider = ({ children }) => {
   const { activeCompany } = useCompany();
+  const { isAppInstalled } = useInstalledApps();
+  const cargoInstalled = isAppInstalled('cargo');
 
   // Shipments state
   const [shipments, setShipments] = useState([]);
@@ -39,13 +42,13 @@ export const CargoProvider = ({ children }) => {
   // Use backend API (true) or localStorage (false)
   const [useBackend, setUseBackend] = useState(true);
 
-  // Load data from backend or localStorage
+  // Load data from backend or localStorage (only if cargo app is installed)
   useEffect(() => {
-    if (!activeCompany?.id) return;
+    if (!activeCompany?.id || !cargoInstalled) return;
 
     loadShipments();
     loadCashSummary();
-  }, [activeCompany?.id]);
+  }, [activeCompany?.id, cargoInstalled]);
 
   // Load shipments
   const loadShipments = async () => {

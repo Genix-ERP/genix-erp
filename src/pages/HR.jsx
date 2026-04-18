@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { hrService } from "@/api/services/hr";
 import { aiService } from "@/api/services/ai";
 import apiClient from "@/api/client";
+import { formatPhoneInput, parsePhoneInput } from "@/utils/formatCurrency";
 import { useToast } from "@/components/ui/use-toast";
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,6 +39,9 @@ import {
   Send,
   ChevronsUpDown,
   FolderTree,
+  AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
 // Import universal ERP components
@@ -72,10 +76,12 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useModules } from "@/components/contexts/ModulesContext";
+import { useCompany } from "@/components/contexts/CompanyContext";
 import { useInstalledApps } from "@/components/contexts/InstalledAppsContext";
 import { useEmployeePermissions, AVAILABLE_MODULES } from "@/components/contexts/EmployeePermissionsContext";
 import { PERMISSION_MATRIX } from "@/config/permissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 
 export default function HR() {
   const { language } = useLanguage();
@@ -85,12 +91,17 @@ export default function HR() {
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
   const { getEmployeePermissions, updateEmployeePermissions } = useEmployeePermissions();
   const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
+  const { activeCompany, companies: userCompanies } = useCompany();
 
   const [employees, setEmployees] = useState([]);
   const [filteredEmployees, setFilteredEmployees] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalEmployees, setTotalEmployees] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const pageSize = 20;
   const [insights, setInsights] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
@@ -102,6 +113,7 @@ export default function HR() {
   const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submittingRef = useRef(false);
   const [isAssessingRisk, setIsAssessingRisk] = useState(false);
   const [employeeDeductions, setEmployeeDeductions] = useState([]);
   const [salaryCalc, setSalaryCalc] = useState(null);
@@ -181,6 +193,7 @@ export default function HR() {
     phone: '+998',
     job_title: '',
     job_position_id: '',
+    role_id: '',
     department: '',
     hire_date: new Date().toISOString().split('T')[0],
     salary: '',
@@ -188,7 +201,7 @@ export default function HR() {
     performance_score: 3,
     turnover_risk: 'low',
     permission: 'important',
-    organization_ids: []
+    organization_ids: [],
   });
   const [organizations, setOrganizations] = useState([]);
   const [departments, setDepartments] = useState([]);
@@ -223,7 +236,7 @@ export default function HR() {
   const handleSendCredentials = async (employee, method) => {
     try {
       const password = generatePassword();
-      await apiClient.post('/users/send-credentials', {
+      await apiClient.post('/send-credentials', {
         email: employee.email,
         password: password,
         method: method === 'phone' ? 'sms' : 'email',
@@ -317,7 +330,16 @@ Only return the JSON, no other text.`;
 
   const loadEmployees = useCallback(async () => {
     try {
-      const data = await hrService.listEmployees({ sort_by: 'hire_date', sort_order: 'DESC' });
+      const params = { sort_by: 'hire_date', sort_order: 'DESC', page: currentPage, limit: pageSize };
+      if (searchQuery) params.search = searchQuery;
+      if (statusFilter !== 'all') params.status = statusFilter;
+      if (departmentFilter !== 'all') params.department = departmentFilter;
+      // Use apiClient directly to get pagination meta
+      const response = await apiClient.get('/employees', { params });
+      const data = response.data?.data || [];
+      const meta = response.data?.meta || {};
+      setTotalEmployees(meta.total || data.length);
+      setTotalPages(meta.total_pages || Math.ceil((meta.total || data.length) / pageSize));
       // Map backend response to frontend format
       const mapped = (data || []).map(emp => ({
         id: emp.id,
@@ -325,6 +347,7 @@ Only return the JSON, no other text.`;
         email: emp.email || '',
         phone: emp.phone || '',
         job_title: emp.job_title || '',
+        department_id: emp.department_id || '',
         department: emp.department || 'other',
         hire_date: emp.hire_date,
         salary: emp.salary || 0,
@@ -340,7 +363,7 @@ Only return the JSON, no other text.`;
     } catch (error) {
       console.error("Error loading employees:", error);
     }
-  }, [assessTurnoverRisk]);
+  }, [assessTurnoverRisk, currentPage, searchQuery, statusFilter, departmentFilter]);
 
   const generateInsights = useCallback(async () => {
     try {
@@ -379,6 +402,7 @@ Only return the JSON, no other text.`;
   }, [employees]);
 
   const handleAddEmployee = async () => {
+    if (submittingRef.current) return;
     if (!newEmployee.full_name || !newEmployee.phone) {
       toast({
         title: t('error') || 'Xato',
@@ -388,33 +412,18 @@ Only return the JSON, no other text.`;
       return;
     }
 
+    submittingRef.current = true;
     setIsSubmitting(true);
     try {
-      // Auto-generate 8-character alphanumeric password
-      const password = generatePassword();
-
-      // Create user account only if email is provided
-      const nameParts = (newEmployee.full_name || '').trim().split(' ').filter(Boolean);
-      const firstName = nameParts[0] || 'User';
-      const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : firstName;
-
-      if (newEmployee.email) {
-        await apiClient.post('/users', {
-          email: newEmployee.email,
-          password: password,
-          first_name: firstName,
-          last_name: lastName,
-          phone: newEmployee.phone || '',
-        });
-      }
-
-      // User created successfully, now create employee record
+      // Backend auto-creates user account when employee is created
       const employeeData = {
         full_name: newEmployee.full_name,
         email: newEmployee.email || '',
         phone: newEmployee.phone || '',
         job_title: newEmployee.job_title,
         department: newEmployee.department,
+        department_id: newEmployee.department || '',
+        job_position_id: newEmployee.job_position_id || '',
         hire_date: newEmployee.hire_date,
         salary: parseFloat(newEmployee.salary) || 0,
         status: newEmployee.status,
@@ -440,20 +449,6 @@ Only return the JSON, no other text.`;
         }
       }
 
-      // Assign role to employee (auto-applies permissions)
-      if (newEmployee.job_title && createdEmployee?.id) {
-        const selectedRole = roles.find(r => r.name === newEmployee.job_title);
-        if (selectedRole) {
-          try {
-            await apiClient.post(`/roles/${selectedRole.id}/assign`, {
-              employee_id: createdEmployee.id,
-            });
-          } catch (roleErr) {
-            console.error("Error assigning role:", roleErr);
-          }
-        }
-      }
-
       toast({
         title: t('success') || 'Muvaffaqiyatli',
         description: t('employee_created_success') || 'Xodim va foydalanuvchi hisobi yaratildi.',
@@ -462,27 +457,21 @@ Only return the JSON, no other text.`;
       setShowAddModal(false);
       setNewEmployee({
         full_name: '', email: '', phone: '+998', job_title: '',
+        job_position_id: '', role_id: '',
         department: '', hire_date: new Date().toISOString().split('T')[0],
         salary: '', status: 'active', performance_score: 3,
-        turnover_risk: 'low', permission: 'important', organization_ids: []
+        turnover_risk: 'low', permission: 'important', organization_ids: activeCompany?.id ? [activeCompany.id] : []
       });
       await loadEmployees();
     } catch (error) {
       console.error("Error adding employee:", error);
-      if (error.response?.status === 409) {
-        toast({
-          title: t('error') || 'Xato',
-          description: t('email_already_exists') || 'Bu email bilan foydalanuvchi allaqachon mavjud.',
-          variant: 'destructive',
-        });
-      } else {
-        toast({
-          title: t('error') || 'Xato',
-          description: error.response?.data?.error?.message || error.message || t('employee_add_error') || "Xodim qo'shishda xatolik yuz berdi",
-          variant: 'destructive',
-        });
-      }
+      toast({
+        title: t('error') || 'Xato',
+        description: error.response?.data?.error?.message || error.response?.data?.message || error.message || "Xodim qo'shishda xatolik yuz berdi",
+        variant: 'destructive',
+      });
     } finally {
+      submittingRef.current = false;
       setIsSubmitting(false);
     }
   };
@@ -523,8 +512,13 @@ Only return the JSON, no other text.`;
   };
 
   const handleEditEmployee = async (employee) => {
+    let phone = employee.phone || '+998';
+    if (phone && !phone.startsWith('+')) {
+      phone = phone.startsWith('998') ? '+' + phone : '+998' + phone;
+    }
     setSelectedEmployee({
       ...employee,
+      phone,
       salary: employee.salary || '',
       organization_ids: [],
       _orig_org_ids: []
@@ -555,6 +549,8 @@ Only return the JSON, no other text.`;
         phone: selectedEmployee.phone || '',
         job_title: selectedEmployee.job_title,
         department: selectedEmployee.department,
+        department_id: selectedEmployee.department_id || selectedEmployee.department || '',
+        job_position_id: selectedEmployee.job_position_id || '',
         hire_date: selectedEmployee.hire_date,
         salary: parseFloat(selectedEmployee.salary) || 0,
         status: selectedEmployee.status,
@@ -621,6 +617,7 @@ Only return the JSON, no other text.`;
   // Local state for editing permissions before saving
   const [editingPermissions, setEditingPermissions] = useState({});
   const [permissionsSaved, setPermissionsSaved] = useState(false);
+  const [employeeRoleInfo, setEmployeeRoleInfo] = useState({ role_id: null, role_name: '' });
   const permSavedTimeoutRef = useRef(null);
 
   useEffect(() => {
@@ -682,10 +679,13 @@ Only return the JSON, no other text.`;
       setSelectedEmployee(employee);
       setEditingPermissions({});
       setPermissionsSaved(false);
+      setEmployeeRoleInfo({ role_id: null, role_name: '' });
       setShowPermissionsModal(true);
 
-      // Load current permissions from backend
-      const currentPerms = await getEmployeePermissions(employee.id);
+      // Load current permissions from backend (with role info)
+      const result = await getEmployeePermissions(employee.id, { withRoleInfo: true });
+      const currentPerms = result.permissions || {};
+      setEmployeeRoleInfo({ role_id: result.role_id, role_name: result.role_name });
 
       // If no permissions set yet, initialize based on employee's permission level
       if (Object.keys(currentPerms).length === 0 && employee.permission) {
@@ -696,10 +696,10 @@ Only return the JSON, no other text.`;
       }
     } catch (error) {
       console.error('Error opening permissions modal:', error);
-      // Still open the modal even if there's an error initializing permissions
       setSelectedEmployee(employee);
       setEditingPermissions({});
       setPermissionsSaved(false);
+      setEmployeeRoleInfo({ role_id: null, role_name: '' });
       setShowPermissionsModal(true);
     }
   };
@@ -811,24 +811,12 @@ Only return the JSON, no other text.`;
 
     setIsSubmitting(true);
     try {
-      // Delete the employee
       await hrService.deleteEmployee(selectedEmployee.id);
 
-      // Also delete the associated user if they have an email
-      if (selectedEmployee.email) {
-        try {
-          // Find user by email and delete
-          const usersResponse = await apiClient.get('/users', {
-            params: { search: selectedEmployee.email }
-          });
-          const user = usersResponse.data?.data?.find(u => u.email === selectedEmployee.email);
-          if (user) {
-            await apiClient.delete(`/users/${user.id}`);
-          }
-        } catch (userError) {
-          console.warn('Could not delete associated user:', userError.message);
-        }
-      }
+      toast({
+        title: t('success') || 'Muvaffaqiyatli',
+        description: t('employee_deleted') || "Xodim o'chirildi",
+      });
 
       setShowDeleteDialog(false);
       setSelectedEmployee(null);
@@ -880,22 +868,18 @@ Only return the JSON, no other text.`;
     }
   }, [employees.length]);
 
+  // Server handles search/status/department filtering; just sync filteredEmployees
   useEffect(() => {
-    let filtered = employees;
-    if (searchQuery) {
-      filtered = filtered.filter(e => e.full_name.toLowerCase().includes(searchQuery.toLowerCase()) || e.job_title.toLowerCase().includes(searchQuery.toLowerCase()));
-    }
-    if (departmentFilter !== "all") {
-      filtered = filtered.filter(e => e.department === departmentFilter);
-    }
-    if (statusFilter !== "all") {
-      filtered = filtered.filter(e => e.status === statusFilter);
-    }
-    setFilteredEmployees(filtered);
-  }, [employees, searchQuery, departmentFilter, statusFilter]);
+    setFilteredEmployees(employees);
+  }, [employees]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, departmentFilter, statusFilter]);
   
   const metrics = {
-    totalEmployees: employees.length,
+    totalEmployees: totalEmployees || employees.length,
     activeEmployees: employees.filter(e => e.status === 'active').length,
     totalSalaries: employees.filter(e => e.status === 'active').reduce((sum, e) => sum + (parseFloat(e.salary) || 0), 0),
   };
@@ -988,7 +972,7 @@ Only return the JSON, no other text.`;
                 <SelectContent>
                   <SelectItem value="all">{t('all_departments')}</SelectItem>
                   {departments.map(dept => (
-                    <SelectItem key={dept.id} value={dept.name}>{dept.name}</SelectItem>
+                    <SelectItem key={dept.id} value={dept.id}>{dept.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -1004,7 +988,12 @@ Only return the JSON, no other text.`;
               <div className="flex gap-2">
                 {canCreate(MODULES.HR) && (
                   <Button
-                    onClick={() => setShowAddModal(true)}
+                    onClick={() => {
+                      if (activeCompany?.id) {
+                        setNewEmployee(prev => ({...prev, organization_ids: [activeCompany.id]}));
+                      }
+                      setShowAddModal(true);
+                    }}
                     className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white hover:opacity-90"
                   >
                     <Plus className="w-4 h-4 mr-2" />
@@ -1079,18 +1068,6 @@ Only return the JSON, no other text.`;
                               {t('manage_permissions') || 'Manage Permissions'}
                             </DropdownMenuItem>
                           )}
-                          {e.status !== 'terminated' && e.email && (
-                            <DropdownMenuItem onClick={() => handleSendCredentials(e, 'email')}>
-                              <Mail className="mr-2 h-4 w-4" />
-                              {t('send_email') || 'Send email'}
-                            </DropdownMenuItem>
-                          )}
-                          {e.status !== 'terminated' && e.phone && (
-                            <DropdownMenuItem onClick={() => handleSendCredentials(e, 'phone')}>
-                              <Send className="mr-2 h-4 w-4" />
-                              {t('send_sms') || 'Send SMS'}
-                            </DropdownMenuItem>
-                          )}
                           {canDelete(MODULES.HR) && (
                             <DropdownMenuItem
                               onClick={() => handleDeleteClick(e)}
@@ -1107,6 +1084,22 @@ Only return the JSON, no other text.`;
                 ))}
               </TableBody>
             </Table>
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t mt-2">
+                <span className="text-sm text-slate-600">
+                  {t('showing') || 'Showing'} {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, totalEmployees)} {t('of') || 'of'} {totalEmployees}
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>
+                    <ChevronLeft className="w-4 h-4" />
+                  </Button>
+                  <span className="text-sm font-medium">{currentPage} / {totalPages}</span>
+                  <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}>
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -1158,7 +1151,6 @@ Only return the JSON, no other text.`;
                 <div className="space-y-1">
                   <Label className="text-xs">{t('email')}</Label>
                   <Input
-                    type="email"
                     value={newEmployee.email}
                     onChange={e => setNewEmployee({...newEmployee, email: e.target.value})}
                     placeholder={t('enter_email')}
@@ -1167,9 +1159,9 @@ Only return the JSON, no other text.`;
                 <div className="space-y-1">
                   <Label className="text-xs">{t('phone')} *</Label>
                   <Input
-                    value={newEmployee.phone}
-                    onChange={e => setNewEmployee({...newEmployee, phone: e.target.value})}
-                    placeholder="+998"
+                    value={formatPhoneInput(newEmployee.phone)}
+                    onChange={e => setNewEmployee({...newEmployee, phone: parsePhoneInput(e.target.value)})}
+                    placeholder="+998 XX XXX XXXX"
                   />
                 </div>
                 <div className="space-y-1">
@@ -1195,7 +1187,7 @@ Only return the JSON, no other text.`;
                     <SelectTrigger><SelectValue placeholder={t('select_department') || 'Select dept'} /></SelectTrigger>
                     <SelectContent>
                       {departments.map(dept => (
-                        <SelectItem key={dept.id} value={dept.name}>{dept.name}</SelectItem>
+                        <SelectItem key={dept.id} value={dept.id}>{dept.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -1211,9 +1203,10 @@ Only return the JSON, no other text.`;
                 <div className="space-y-1">
                   <Label className="text-xs">{t('salary')}</Label>
                   <Input
-                    type="number"
-                    value={newEmployee.salary}
-                    onChange={e => setNewEmployee({...newEmployee, salary: e.target.value})}
+                    type="text"
+                    inputMode="decimal"
+                    value={formatPriceInput(newEmployee.salary)}
+                    onChange={e => setNewEmployee({...newEmployee, salary: parsePriceInput(e.target.value)})}
                     placeholder="0.00"
                   />
                 </div>
@@ -1230,41 +1223,48 @@ Only return the JSON, no other text.`;
                     </SelectContent>
                   </Select>
                 </div>
-                {organizations.length > 0 && (
+                {userCompanies.length > 0 && (
                   <div className="col-span-2 space-y-1">
-                    <Label className="text-xs">{t('companies') || 'Companies'}</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" className="w-full justify-between font-normal">
-                          <span className="truncate">
-                            {newEmployee.organization_ids.length > 0
-                              ? organizations.filter(o => newEmployee.organization_ids.includes(o.id)).map(o => o.name).join(', ')
-                              : (t('select_companies') || 'Select companies')}
-                          </span>
-                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-[--radix-popover-trigger-width] p-1" align="start">
-                        <div className="max-h-36 overflow-y-auto">
-                          {organizations.map(org => (
-                            <label key={org.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-100 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={newEmployee.organization_ids.includes(org.id)}
-                                onChange={(e) => {
-                                  const ids = e.target.checked
-                                    ? [...newEmployee.organization_ids, org.id]
-                                    : newEmployee.organization_ids.filter(id => id !== org.id);
-                                  setNewEmployee({...newEmployee, organization_ids: ids});
-                                }}
-                                className="rounded border-slate-300"
-                              />
-                              <span className="text-sm">{org.name}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </PopoverContent>
-                    </Popover>
+                    <Label className="text-xs">{t('companies') || 'Kompaniyalar'}</Label>
+                    {userCompanies.length === 1 ? (
+                      <Input value={userCompanies[0].company_name || userCompanies[0].name} disabled className="bg-slate-50" />
+                    ) : (
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className="w-full justify-between font-normal h-10">
+                            <span className="truncate text-sm">
+                              {newEmployee.organization_ids.length === 0
+                                ? (t('select_companies') || 'Kompaniyalarni tanlang')
+                                : `${newEmployee.organization_ids.length} / ${userCompanies.length} ${t('companies_selected') || 'kompaniya tanlangan'}`}
+                            </span>
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[--radix-popover-trigger-width] p-1" align="start">
+                          <div className="max-h-56 overflow-y-auto">
+                            {userCompanies.map(org => {
+                              const checked = newEmployee.organization_ids.includes(org.id);
+                              return (
+                                <label key={org.id} className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer ${checked ? 'bg-blue-50' : 'hover:bg-slate-100'}`}>
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={(e) => {
+                                      const ids = e.target.checked
+                                        ? [...newEmployee.organization_ids, org.id]
+                                        : newEmployee.organization_ids.filter(id => id !== org.id);
+                                      setNewEmployee({...newEmployee, organization_ids: ids});
+                                    }}
+                                    className="rounded border-slate-300"
+                                  />
+                                  <span className="text-sm truncate">{org.company_name || org.name}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    )}
                   </div>
                 )}
               </div>
@@ -1316,14 +1316,14 @@ Only return the JSON, no other text.`;
                       <Phone className="w-4 h-4" />
                       {t('phone') || 'Phone'}
                     </div>
-                    <p className="font-medium">{selectedEmployee.phone || '-'}</p>
+                    <p className="font-medium">{selectedEmployee.phone ? formatPhoneInput(selectedEmployee.phone.startsWith('+') ? selectedEmployee.phone : (selectedEmployee.phone.startsWith('998') ? '+' + selectedEmployee.phone : '+998' + selectedEmployee.phone)) : '-'}</p>
                   </div>
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 text-slate-500 text-sm">
                       <Briefcase className="w-4 h-4" />
                       {t('department') || 'Department'}
                     </div>
-                    <Badge variant="outline">{selectedEmployee.department || '-'}</Badge>
+                    <Badge variant="outline">{departments.find(d => d.id === selectedEmployee.department_id || d.id === selectedEmployee.department)?.name || selectedEmployee.department || '-'}</Badge>
                   </div>
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 text-slate-500 text-sm">
@@ -1448,7 +1448,6 @@ Only return the JSON, no other text.`;
                   <div className="space-y-2">
                     <Label>{t('email')}</Label>
                     <Input
-                      type="email"
                       value={selectedEmployee.email}
                       onChange={e => setSelectedEmployee({...selectedEmployee, email: e.target.value})}
                       placeholder={t('enter_email')}
@@ -1457,9 +1456,9 @@ Only return the JSON, no other text.`;
                   <div className="space-y-2">
                     <Label>{t('phone')}</Label>
                     <Input
-                      value={selectedEmployee.phone}
-                      onChange={e => setSelectedEmployee({...selectedEmployee, phone: e.target.value})}
-                      placeholder="+998"
+                      value={formatPhoneInput(selectedEmployee.phone)}
+                      onChange={e => setSelectedEmployee({...selectedEmployee, phone: parsePhoneInput(e.target.value)})}
+                      placeholder="+998 XX XXX XXXX"
                     />
                   </div>
                 </div>
@@ -1468,17 +1467,34 @@ Only return the JSON, no other text.`;
                   <div className="space-y-2">
                     <Label>{t('department')}</Label>
                     <Select
-                      value={selectedEmployee.department}
-                      onValueChange={value => setSelectedEmployee({...selectedEmployee, department: value})}
+                      value={selectedEmployee.department_id || selectedEmployee.department || ''}
+                      onValueChange={value => setSelectedEmployee({...selectedEmployee, department: value, department_id: value})}
                     >
                       <SelectTrigger><SelectValue placeholder={t('select_department') || "Bo'limni tanlang"} /></SelectTrigger>
                       <SelectContent>
                         {departments.map(dept => (
-                          <SelectItem key={dept.id} value={dept.name}>{dept.name}</SelectItem>
+                          <SelectItem key={dept.id} value={dept.id}>{dept.name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
+                  <div className="space-y-2">
+                    <Label>{t('job_position') || 'Lavozim'}</Label>
+                    <Select
+                      value={selectedEmployee.job_position_id || ''}
+                      onValueChange={value => setSelectedEmployee({...selectedEmployee, job_position_id: value})}
+                    >
+                      <SelectTrigger><SelectValue placeholder={t('select_job_position') || 'Lavozimni tanlang'} /></SelectTrigger>
+                      <SelectContent>
+                        {jobPositions.map(jp => (
+                          <SelectItem key={jp.id} value={jp.id}>{jp.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>{t('hire_date')}</Label>
                     <Input
@@ -1487,15 +1503,13 @@ Only return the JSON, no other text.`;
                       onChange={e => setSelectedEmployee({...selectedEmployee, hire_date: e.target.value})}
                     />
                   </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>{t('salary')}</Label>
                     <Input
-                      type="number"
-                      value={selectedEmployee.salary}
-                      onChange={e => setSelectedEmployee({...selectedEmployee, salary: e.target.value})}
+                      type="text"
+                      inputMode="decimal"
+                      value={formatPriceInput(selectedEmployee.salary)}
+                      onChange={e => setSelectedEmployee({...selectedEmployee, salary: parsePriceInput(e.target.value)})}
                       placeholder="0.00"
                     />
                   </div>
@@ -1515,41 +1529,48 @@ Only return the JSON, no other text.`;
                   </div>
                 </div>
 
-                {organizations.length > 0 && (
+                {userCompanies.length > 0 && (
                   <div className="space-y-2">
                     <Label>{t('companies') || 'Kompaniyalar'}</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" className="w-full justify-between font-normal">
-                          <span className="truncate">
-                            {(selectedEmployee.organization_ids || []).length > 0
-                              ? organizations.filter(o => (selectedEmployee.organization_ids || []).includes(o.id)).map(o => o.name).join(', ')
-                              : (t('select_companies') || 'Kompaniyalarni tanlang')}
-                          </span>
-                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-[--radix-popover-trigger-width] p-1" align="start">
-                        <div className="max-h-48 overflow-y-auto">
-                          {organizations.map(org => (
-                            <label key={org.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-100 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={(selectedEmployee.organization_ids || []).includes(org.id)}
-                                onChange={(e) => {
-                                  const ids = e.target.checked
-                                    ? [...(selectedEmployee.organization_ids || []), org.id]
-                                    : (selectedEmployee.organization_ids || []).filter(id => id !== org.id);
-                                  setSelectedEmployee({...selectedEmployee, organization_ids: ids});
-                                }}
-                                className="rounded border-slate-300"
-                              />
-                              <span className="text-sm">{org.name}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </PopoverContent>
-                    </Popover>
+                    {userCompanies.length === 1 ? (
+                      <Input value={userCompanies[0].company_name || userCompanies[0].name} disabled className="bg-slate-50" />
+                    ) : (
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className="w-full justify-between font-normal h-10">
+                            <span className="truncate text-sm">
+                              {(selectedEmployee.organization_ids || []).length === 0
+                                ? (t('select_companies') || 'Kompaniyalarni tanlang')
+                                : `${(selectedEmployee.organization_ids || []).length} / ${userCompanies.length} ${t('companies_selected') || 'kompaniya tanlangan'}`}
+                            </span>
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[--radix-popover-trigger-width] p-1" align="start">
+                          <div className="max-h-56 overflow-y-auto">
+                            {userCompanies.map(org => {
+                              const checked = (selectedEmployee.organization_ids || []).includes(org.id);
+                              return (
+                                <label key={org.id} className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer ${checked ? 'bg-blue-50' : 'hover:bg-slate-100'}`}>
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={(e) => {
+                                      const ids = e.target.checked
+                                        ? [...(selectedEmployee.organization_ids || []), org.id]
+                                        : (selectedEmployee.organization_ids || []).filter(id => id !== org.id);
+                                      setSelectedEmployee({...selectedEmployee, organization_ids: ids});
+                                    }}
+                                    className="rounded border-slate-300"
+                                  />
+                                  <span className="text-sm truncate">{org.company_name || org.name}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    )}
                   </div>
                 )}
 
@@ -1605,13 +1626,29 @@ Only return the JSON, no other text.`;
                   </div>
                   <div>
                     <span className="text-xl">{t('manage_permissions') || 'Manage Permissions'}</span>
-                    <p className="text-sm font-normal text-slate-500 mt-0.5">{selectedEmployee?.full_name} - {selectedEmployee?.job_title}</p>
+                    <p className="text-sm font-normal text-slate-500 mt-0.5">
+                      {selectedEmployee?.full_name} - {selectedEmployee?.job_title}
+                      {employeeRoleInfo.role_name && (
+                        <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
+                          {t('role')}: {employeeRoleInfo.role_name}
+                        </span>
+                      )}
+                    </p>
                   </div>
                 </DialogTitle>
               </div>
             </DialogHeader>
             {selectedEmployee && (
               <div className="flex-1 overflow-hidden flex flex-col">
+                {/* Role sync warning */}
+                {employeeRoleInfo.role_name && (
+                  <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 mx-1 mt-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    <span>
+                      {t('role_sync_warning') || `Bu xodim "${employeeRoleInfo.role_name}" roliga ega. Ruxsatlarni o'zgartirish shu roldagi barcha xodimlarga ta'sir qiladi.`}
+                    </span>
+                  </div>
+                )}
                 {/* Quick Actions Bar */}
                 <div className="flex items-center justify-between py-4 bg-gradient-to-r from-slate-50 to-white px-1">
                   <div className="flex items-center gap-2">

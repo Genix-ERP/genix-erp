@@ -80,10 +80,10 @@ export default function InventoryStackedBar({ inventory }) {
     <div className="glass-card rounded-2xl p-5 h-full transition-all duration-300">
       <div className="mb-4">
         <h3 className="text-sm font-semibold text-slate-900">
-          Ombor holati
+          {t("inventory_status") || "Inventory Status"}
         </h3>
         <p className="text-xs text-slate-400 mt-0.5">
-          Omborlar bo'yicha
+          {t("by_warehouses") || "By warehouses"}
         </p>
       </div>
 

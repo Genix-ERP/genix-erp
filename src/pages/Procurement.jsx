@@ -37,7 +37,7 @@ import {
   MessageSquareWarning,
 } from 'lucide-react';
 import { format } from 'date-fns';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { analyzeProcurement } from '@/api/services/aiAnalytics';
 import { formatAxisTick } from '@/utils/formatCurrency';
 
@@ -55,6 +55,7 @@ import PriceHistory from '@/components/procurement/PriceHistory';
 import PurchaseRequisitions from '@/components/procurement/PurchaseRequisitions';
 import GoodsReceipt from '@/components/procurement/GoodsReceipt';
 import PurchaseOrders from '@/components/procurement/PurchaseOrders';
+import PriceComparison from '@/components/procurement/PriceComparison';
 
 export default function Procurement() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -355,7 +356,7 @@ export default function Procurement() {
       const totalAmount = calculateOrderTotal(newPO.lines);
       const poData = {
         ...newPO,
-        po_number: newPO.po_number || `PO-${Date.now()}`,
+        po_number: '',
         vendor_name: supplier?.name || newPO.vendor_name,
         total_amount: totalAmount,
         status: 'draft',
@@ -585,6 +586,15 @@ export default function Procurement() {
               <span className="sm:hidden">GR</span>
             </TabsTrigger>
 
+            <TabsTrigger
+              value="price-comparison"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+            >
+              <Award className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('price_comparison') || 'Narx solishtirish'}</span>
+              <span className="sm:hidden">PC</span>
+            </TabsTrigger>
+
           </TabsList>
 
           {/* Dashboard Tab */}
@@ -735,13 +745,17 @@ export default function Procurement() {
                     <CardTitle>{t('purchases_by_supplier') || 'Purchases by Supplier'}</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <ResponsiveContainer width="100%" height={250}>
-                      <BarChart data={chartData}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="vendor" fontSize={11} angle={-45} textAnchor="end" height={80} />
-                        <YAxis fontSize={12} width={55} tickFormatter={formatAxisTick} />
+                    <ResponsiveContainer width="100%" height={Math.max(250, chartData.length * 45)}>
+                      <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 20, top: 5, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                        <XAxis type="number" fontSize={12} tickFormatter={formatAxisTick} />
+                        <YAxis dataKey="vendor" type="category" fontSize={12} width={140} tick={{ fill: '#334155' }} />
                         <Tooltip formatter={(value) => [formatCurrency(value), t('amount') || 'Amount']} />
-                        <Bar dataKey="value" name={t('amount') || 'Amount'} fill="#8b5cf6" radius={[8, 8, 0, 0]} />
+                        <Bar dataKey="value" name={t('amount') || 'Amount'} radius={[0, 6, 6, 0]}>
+                          {chartData.map((_, i) => (
+                            <Cell key={i} fill={['#8b5cf6', '#6366f1', '#a78bfa', '#7c3aed', '#818cf8'][i % 5]} />
+                          ))}
+                        </Bar>
                       </BarChart>
                     </ResponsiveContainer>
                   </CardContent>
@@ -815,6 +829,11 @@ export default function Procurement() {
           {/* Goods Receipt Tab */}
           <TabsContent value="goods-receipt" className="mt-6">
             <GoodsReceipt />
+          </TabsContent>
+
+          {/* Price Comparison Tab */}
+          <TabsContent value="price-comparison" className="mt-6">
+            <PriceComparison />
           </TabsContent>
 
         </Tabs>
