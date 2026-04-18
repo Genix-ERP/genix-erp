@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Plus, Trash2, CheckCircle, XCircle, ArrowLeft, FileText, Zap, Eye, Download, PenLine, Ban, Loader2, ChevronUp, ChevronDown, Send, Save, X } from 'lucide-react';
+import { Plus, Trash2, CheckCircle, XCircle, ArrowLeft, FileText, Zap, Eye, Download, PenLine, Ban, Loader2, ChevronUp, ChevronDown, Send, Save, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -34,7 +34,21 @@ const EMPTY_FORM = {
   period_from: '',
   period_to: '',
   notes: '',
+  // Forma 2 coefficient & period month/year extensions
+  f2_transport_pct: 5,
+  f2_other_pct: 17,
+  f2_materials_returned: 0,
+  period_month_from: '',
+  period_month_to: '',
+  period_year: '',
 };
+
+const MONTH_OPTIONS_RU = [
+  { value: 1, label: 'январь' }, { value: 2, label: 'февраль' }, { value: 3, label: 'март' },
+  { value: 4, label: 'апрель' }, { value: 5, label: 'май' }, { value: 6, label: 'июнь' },
+  { value: 7, label: 'июль' }, { value: 8, label: 'август' }, { value: 9, label: 'сентябрь' },
+  { value: 10, label: 'октябрь' }, { value: 11, label: 'ноябрь' }, { value: 12, label: 'декабрь' },
+];
 
 const CHANGE_REASONS = [
   { value: 'project_changed', label: "Loyiha o'zgardi" },
@@ -48,6 +62,28 @@ const FormsTab = ({ project }) => {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { formatCurrency } = useCurrencyFormatter();
+
+  // Validate required client fields in a given form object
+  const REQUIRED_CLIENT_FIELDS = ['client_name', 'client_stir', 'client_bank_name', 'client_bank_account', 'client_mfo', 'client_address'];
+  const CLIENT_FIELD_LABELS = {
+    client_name: language === 'ru' ? 'Наименование заказчика' : language === 'uz' ? 'Buyurtmachi nomi' : 'Client Name',
+    client_stir: language === 'ru' ? 'ИНН (СТИР)' : 'STIR (TIN)',
+    client_bank_name: language === 'ru' ? 'Название банка' : language === 'uz' ? 'Bank nomi' : 'Bank Name',
+    client_bank_account: language === 'ru' ? 'Расчётный счёт' : language === 'uz' ? 'Hisob raqami' : 'Settlement Account',
+    client_mfo: 'MFO',
+    client_address: language === 'ru' ? 'Юридический адрес' : language === 'uz' ? 'Yuridik manzil' : 'Legal Address',
+  };
+
+  const validateClientFields = (formData) => {
+    const missing = REQUIRED_CLIENT_FIELDS.filter(f => !formData?.[f]?.trim());
+    if (missing.length === 0) return null;
+    const labels = missing.map(f => CLIENT_FIELD_LABELS[f] || f).join(', ');
+    return language === 'ru'
+      ? `Заполните данные заказчика: ${labels}`
+      : language === 'uz'
+        ? `Buyurtmachi ma'lumotlarini to'ldiring: ${labels}`
+        : `Fill in client details: ${labels}`;
+  };
 
   const TYPE_LABELS = {
     ks2: t('forma_2') || 'Forma 2 (KS-2)',
@@ -68,6 +104,10 @@ const FormsTab = ({ project }) => {
   const [stages, setStages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ act_type: '', state: '' });
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 20;
 
   // Sorting state
   const [sortField, setSortField] = useState('created_date');
@@ -97,14 +137,35 @@ const FormsTab = ({ project }) => {
   const [editRowForm, setEditRowForm] = useState({});
   const [buildings, setBuildings] = useState([]);
 
+  // Client requisite defaults from project
+  const defaultClientFields = {
+    client_name: project?.client_name || '',
+    client_phone: project?.client_phone || '',
+    client_address: project?.client_address || '',
+    client_bank_name: project?.client_bank_name || '',
+    client_bank_account: project?.client_bank_account || '',
+    client_mfo: project?.client_mfo || '',
+    client_stir: project?.client_stir || '',
+    client_okonh: project?.client_okonh || '',
+    contract_number: project?.contract_number || '',
+    object_full_name: project?.object_full_name || '',
+    client_director_name: project?.client_director_name || '',
+    client_chief_accountant_name: project?.client_chief_accountant_name || '',
+  };
+
   // Auto-generate modals
   const [showAutoGenModal, setShowAutoGenModal] = useState(false);
-  const [autoGenForm, setAutoGenForm] = useState({ subcontract_id: '', period_from: '', period_to: '' });
+  const [autoGenForm, setAutoGenForm] = useState({ subcontract_id: '', period_from: '', period_to: '', ...defaultClientFields });
   const [autoGenSaving, setAutoGenSaving] = useState(false);
+  const [autoGenPreview, setAutoGenPreview] = useState(null); // preview data, null = not yet fetched
+  const [autoGenLoadingPreview, setAutoGenLoadingPreview] = useState(false);
+  const [showAutoGenConfirm, setShowAutoGenConfirm] = useState(false);
+  const [showAutoGenClientFields, setShowAutoGenClientFields] = useState(false);
 
   const [showGenF3Modal, setShowGenF3Modal] = useState(false);
-  const [genF3Form, setGenF3Form] = useState({ subcontract_id: '', period_from: '', period_to: '' });
+  const [genF3Form, setGenF3Form] = useState({ subcontract_id: '', period_from: '', period_to: '', ...defaultClientFields });
   const [genF3Saving, setGenF3Saving] = useState(false);
+  const [showGenF3ClientFields, setShowGenF3ClientFields] = useState(false);
 
   // Detail view state
   const [selectedAct, setSelectedAct] = useState(null);
@@ -125,11 +186,15 @@ const FormsTab = ({ project }) => {
   // Delete dialog state
   const [deleteTarget, setDeleteTarget] = useState(null);
 
+  // Form-2 detail tab state (smeta lines vs actual materials)
+  const [f2DetailTab, setF2DetailTab] = useState('smeta');
+
   const FORMS_TYPES = ['ks2', 'ks3', 'hidden_work'];
 
   const load = useCallback(async () => {
     if (!project?.id) return;
     setLoading(true);
+    setCurrentPage(1);
     try {
       const params = {};
       if (filters.state) params.state = filters.state;
@@ -157,6 +222,7 @@ const FormsTab = ({ project }) => {
 
   const loadActDetail = async (actId, actType) => {
     setDetailLoading(true);
+    setF2DetailTab('smeta');
     try {
       if (actType === 'hidden_work') {
         const detail = await constructionService.getF19Detail(project.id, actId);
@@ -169,6 +235,7 @@ const FormsTab = ({ project }) => {
       } else {
         act = await constructionService.getF2(project.id, actId);
       }
+      console.log('[loadActDetail] fetched act:', { actId, actType, act, id: act?.id, keys: act ? Object.keys(act) : null });
       setSelectedAct(act);
     } catch (e) {
       toast.error(e?.response?.data?.error?.message || e?.response?.data?.message || 'Xatolik yuz berdi');
@@ -215,13 +282,31 @@ const FormsTab = ({ project }) => {
       if (exists) {
         return prev.filter(l => l.estimate_line_id !== line.estimate_line_id);
       }
-      return [...prev, { ...line, qty_period: 0 }];
+      return [...prev, {
+        ...line,
+        qty_period: 0,
+        // Forma 2 per-line cost-split + hierarchy extensions
+        labor_amount: 0,
+        equipment_amount: 0,
+        materials_amount: 0,
+        cables_amount: 0,
+        norm_code: '',
+        line_number_display: '',
+        is_section_header: false,
+        section_name: '',
+      }];
     });
   };
 
   const updateSelectedLineQty = (estimateLineId, qty) => {
     setSelectedLines(prev => prev.map(l =>
       l.estimate_line_id === estimateLineId ? { ...l, qty_period: parseFloat(qty) || 0 } : l
+    ));
+  };
+
+  const updateSelectedLineField = (estimateLineId, field, value) => {
+    setSelectedLines(prev => prev.map(l =>
+      l.estimate_line_id === estimateLineId ? { ...l, [field]: value } : l
     ));
   };
 
@@ -241,6 +326,13 @@ const FormsTab = ({ project }) => {
         period_from: form.period_from,
         period_to: form.period_to,
         notes: form.notes,
+        // Forma 2 act-level coefficients and reporting period month/year
+        f2_transport_pct: form.f2_transport_pct !== '' ? parseFloat(form.f2_transport_pct) : 5,
+        f2_other_pct: form.f2_other_pct !== '' ? parseFloat(form.f2_other_pct) : 17,
+        f2_materials_returned: form.f2_materials_returned ? parseFloat(form.f2_materials_returned) : 0,
+        period_month_from: form.period_month_from ? parseInt(form.period_month_from, 10) : 0,
+        period_month_to: form.period_month_to ? parseInt(form.period_month_to, 10) : 0,
+        period_year: form.period_year ? parseInt(form.period_year, 10) : 0,
         lines: linesWithQty.map(l => ({
           estimate_line_id: l.estimate_line_id,
           name: l.name,
@@ -248,6 +340,15 @@ const FormsTab = ({ project }) => {
           quantity: l.qty_period,
           unit_rate: l.unit_rate,
           qty_smeta: l.qty_smeta,
+          // Forma 2 per-line cost split & hierarchy
+          labor_amount: parseFloat(l.labor_amount) || 0,
+          equipment_amount: parseFloat(l.equipment_amount) || 0,
+          materials_amount: parseFloat(l.materials_amount) || 0,
+          cables_amount: parseFloat(l.cables_amount) || 0,
+          norm_code: l.norm_code || '',
+          line_number_display: l.line_number_display || '',
+          is_section_header: !!l.is_section_header,
+          section_name: l.section_name || '',
         })),
       };
       await constructionService.createF2(project.id, payload);
@@ -372,7 +473,32 @@ const FormsTab = ({ project }) => {
     setEditRowForm({});
   };
 
-  const handleAutoGenerate = async () => {
+  // Step 1: fetch preview only (no DB write)
+  const handleAutoGeneratePreview = async () => {
+    const clientError = validateClientFields(autoGenForm);
+    if (clientError) { toast.error(clientError); setShowAutoGenClientFields(true); return; }
+    if (!autoGenForm.period_from || !autoGenForm.period_to) {
+      toast.error("Davrni kiriting"); return;
+    }
+    setAutoGenLoadingPreview(true);
+    try {
+      const preview = await constructionService.previewAutoGenerateKS2(project.id, {
+        subcontract_id: autoGenForm.subcontract_id ? Number(autoGenForm.subcontract_id) : 0,
+        period_from: autoGenForm.period_from,
+        period_to: autoGenForm.period_to,
+      });
+      setAutoGenPreview(preview);
+      setShowAutoGenModal(false);
+      setShowAutoGenConfirm(true);
+    } catch (e) {
+      toast.error(e?.response?.data?.error?.message || e?.response?.data?.message || 'Xatolik yuz berdi');
+    } finally {
+      setAutoGenLoadingPreview(false);
+    }
+  };
+
+  // Step 2: user confirmed -> persist the KS-2
+  const handleAutoGenerateConfirm = async () => {
     if (!autoGenForm.period_from || !autoGenForm.period_to) {
       toast.error("Davrni kiriting"); return;
     }
@@ -382,8 +508,21 @@ const FormsTab = ({ project }) => {
         subcontract_id: autoGenForm.subcontract_id ? Number(autoGenForm.subcontract_id) : 0,
         period_from: autoGenForm.period_from,
         period_to: autoGenForm.period_to,
+        client_name: autoGenForm.client_name,
+        client_phone: autoGenForm.client_phone,
+        client_address: autoGenForm.client_address,
+        client_bank_name: autoGenForm.client_bank_name,
+        client_bank_account: autoGenForm.client_bank_account,
+        client_mfo: autoGenForm.client_mfo,
+        client_stir: autoGenForm.client_stir,
+        client_okonh: autoGenForm.client_okonh,
+        contract_number: autoGenForm.contract_number,
+        object_full_name: autoGenForm.object_full_name,
+        client_director_name: autoGenForm.client_director_name,
+        client_chief_accountant_name: autoGenForm.client_chief_accountant_name,
       });
-      setShowAutoGenModal(false);
+      setShowAutoGenConfirm(false);
+      setAutoGenPreview(null);
       toast.success('KS-2 avtomatik yaratildi');
       load();
     } catch (e) {
@@ -393,7 +532,16 @@ const FormsTab = ({ project }) => {
     }
   };
 
+  // Go back from the confirm dialog to edit parameters
+  const handleAutoGenerateBack = () => {
+    setShowAutoGenConfirm(false);
+    setAutoGenPreview(null);
+    setShowAutoGenModal(true);
+  };
+
   const handleGenerateF3 = async () => {
+    const clientError = validateClientFields(genF3Form);
+    if (clientError) { toast.error(clientError); setShowGenF3ClientFields(true); return; }
     if (!genF3Form.period_from || !genF3Form.period_to) {
       toast.error("Davrni kiriting"); return;
     }
@@ -403,6 +551,18 @@ const FormsTab = ({ project }) => {
         subcontract_id: genF3Form.subcontract_id ? Number(genF3Form.subcontract_id) : 0,
         period_from: genF3Form.period_from,
         period_to: genF3Form.period_to,
+        client_name: genF3Form.client_name,
+        client_phone: genF3Form.client_phone,
+        client_address: genF3Form.client_address,
+        client_bank_name: genF3Form.client_bank_name,
+        client_bank_account: genF3Form.client_bank_account,
+        client_mfo: genF3Form.client_mfo,
+        client_stir: genF3Form.client_stir,
+        client_okonh: genF3Form.client_okonh,
+        contract_number: genF3Form.contract_number,
+        object_full_name: genF3Form.object_full_name,
+        client_director_name: genF3Form.client_director_name,
+        client_chief_accountant_name: genF3Form.client_chief_accountant_name,
       });
       setShowGenF3Modal(false);
       toast.success('KS-3 (Forma 3) yaratildi');
@@ -469,15 +629,35 @@ const FormsTab = ({ project }) => {
     }
   };
 
+  const resolveActId = (act) => {
+    if (!act) return null;
+    const candidates = [act.id, act.act_id, act.ID, act.f2_id, act.f3_id];
+    for (const v of candidates) {
+      if (v === null || v === undefined) continue;
+      const s = String(v).trim();
+      if (!s || s === 'undefined' || s === 'null' || s === 'NaN') continue;
+      const n = Number(s);
+      if (Number.isFinite(n) && n > 0) return n;
+      return s;
+    }
+    return null;
+  };
+
   const handleExportPDF = async (act) => {
+    const actId = resolveActId(act);
+    if (!actId) {
+      console.warn('[handleExportPDF] act has no id; received:', act);
+      toast.error("Akt ID topilmadi. Iltimos, sahifani yangilang va qayta urinib ko'ring.");
+      return;
+    }
     try {
       let blob;
       if (act.act_type === 'ks2') {
-        blob = await constructionService.exportF2PDF(act.id);
+        blob = await constructionService.exportF2PDF(project?.id, actId);
       } else if (act.act_type === 'ks3') {
-        blob = await constructionService.exportF3PDF(act.id);
+        blob = await constructionService.exportF3PDF(project?.id, actId);
       } else if (act.act_type === 'hidden_work') {
-        blob = await constructionService.exportF19PDF(act.id);
+        blob = await constructionService.exportF19PDF(project?.id, actId);
       }
       if (!blob) return;
       const url = URL.createObjectURL(blob);
@@ -492,107 +672,34 @@ const FormsTab = ({ project }) => {
   };
 
   const handleExportXLSX = async (act) => {
-    if (act.act_type !== 'ks2') return;
+    const actId = resolveActId(act);
+    if (!actId) {
+      console.warn('[handleExportXLSX] act has no id; received:', act);
+      toast.error("Akt ID topilmadi. Iltimos, sahifani yangilang va qayta urinib ko'ring.");
+      return;
+    }
     try {
-      const ExcelJS = (await import('exceljs')).default;
-      const wb = new ExcelJS.Workbook();
-      const ws = wb.addWorksheet('Форма 2 (КС-2)');
-
-      const titleFont = { name: 'Times New Roman', size: 12, bold: true };
-      const headerFont = { name: 'Times New Roman', size: 10, bold: true };
-      const dataFont = { name: 'Times New Roman', size: 10 };
-      const numFmt = '#,##0.00';
-      const headerFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'D6E4F0' } };
-      const totalFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FCE4D6' } };
-      const thinBorder = {
-        top: { style: 'thin', color: { argb: 'B4C6E7' } },
-        left: { style: 'thin', color: { argb: 'B4C6E7' } },
-        bottom: { style: 'thin', color: { argb: 'B4C6E7' } },
-        right: { style: 'thin', color: { argb: 'B4C6E7' } },
-      };
-
-      ws.columns = [
-        { width: 6 }, { width: 40 }, { width: 12 }, { width: 14 }, { width: 14 }, { width: 16 }, { width: 18 }, { width: 18 },
-      ];
-
-      // Title
-      ws.mergeCells('A1:H1');
-      const t1 = ws.getCell('A1');
-      t1.value = 'АКТ ПРИЁМКИ ВЫПОЛНЕННЫХ РАБОТ (Форма 2 / КС-2)';
-      t1.font = titleFont; t1.alignment = { horizontal: 'center' };
-
-      // Info rows
-      const info = [
-        ['Объект:', act.project_name || ''],
-        ['Подрядчик:', act.subcontract_name || ''],
-        ['Акт №:', act.act_number || ''],
-        ['Период:', `${act.period_from || ''} — ${act.period_to || ''}`],
-      ];
-      info.forEach((row, i) => {
-        ws.getCell(`A${3 + i}`).value = row[0];
-        ws.getCell(`A${3 + i}`).font = { ...dataFont, bold: true };
-        ws.mergeCells(`B${3 + i}:D${3 + i}`);
-        ws.getCell(`B${3 + i}`).value = row[1];
-        ws.getCell(`B${3 + i}`).font = dataFont;
-      });
-
-      // Table header (row 8)
-      const headers = ['№', 'Наименование работ', 'Ед. изм.', 'Кол-во по смете', 'Кол-во за период', 'Цена ед.', 'Стоимость', 'Примечание'];
-      const hdrRow = ws.getRow(8);
-      headers.forEach((v, i) => {
-        const cell = hdrRow.getCell(i + 1);
-        cell.value = v; cell.font = headerFont; cell.fill = headerFill; cell.border = thinBorder;
-        cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-      });
-
-      // Data rows
-      const lines = act.lines || [];
-      lines.forEach((line, idx) => {
-        const r = ws.getRow(9 + idx);
-        const vals = [idx + 1, line.name || '', line.uom || '', line.qty_smeta || 0, line.quantity || 0, line.unit_rate || 0, line.total_amount || 0, line.note || ''];
-        vals.forEach((v, i) => {
-          const cell = r.getCell(i + 1);
-          cell.value = v; cell.font = dataFont; cell.border = thinBorder;
-          if (i === 0) cell.alignment = { horizontal: 'center' };
-          if (i >= 3 && i <= 6 && typeof v === 'number') cell.numFmt = numFmt;
-        });
-      });
-
-      // Totals
-      const totalRowIdx = 9 + lines.length;
-      const subtotal = act.amount_total || lines.reduce((s, l) => s + (l.total_amount || 0), 0);
-      const vatPct = act.vat_pct || 12;
-      const vatAmt = act.vat_amount || subtotal * vatPct / 100;
-      const totalWithVat = act.amount_total_with_vat || subtotal + vatAmt;
-
-      const totals = [
-        ['Итого', subtotal],
-        [`НДС (${vatPct}%)`, vatAmt],
-        ['Итого с НДС', totalWithVat],
-      ];
-      totals.forEach((row, i) => {
-        const r = ws.getRow(totalRowIdx + i);
-        ws.mergeCells(`A${totalRowIdx + i}:F${totalRowIdx + i}`);
-        r.getCell(1).value = row[0]; r.getCell(1).font = headerFont; r.getCell(1).alignment = { horizontal: 'right' };
-        r.getCell(7).value = row[1]; r.getCell(7).font = headerFont; r.getCell(7).numFmt = numFmt;
-        for (let c = 1; c <= 8; c++) { r.getCell(c).fill = totalFill; r.getCell(c).border = thinBorder; }
-      });
-
-      // Signature area
-      const sigRow = totalRowIdx + totals.length + 2;
-      ws.getCell(`A${sigRow}`).value = 'Подрядчик: _______________'; ws.getCell(`A${sigRow}`).font = dataFont;
-      ws.getCell(`E${sigRow}`).value = 'Заказчик: _______________'; ws.getCell(`E${sigRow}`).font = dataFont;
-
-      const buf = await wb.xlsx.writeBuffer();
-      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      let blob;
+      if (act.act_type === 'ks2') {
+        blob = await constructionService.exportF2XLSX(project.id, actId);
+      } else if (act.act_type === 'ks3') {
+        blob = await constructionService.exportF3XLSX(project.id, actId);
+      } else if (act.act_type === 'hidden_work') {
+        blob = await constructionService.exportF19XLSX(project.id, actId);
+      } else {
+        toast.error("Bu akt turi uchun XLSX eksport qo'llab-quvvatlanmaydi");
+        return;
+      }
+      if (!blob) return;
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `Forma2_${act.act_number || act.id}.xlsx`;
+      const prefix = act.act_type === 'ks3' ? 'Forma3' : act.act_type === 'hidden_work' ? 'Forma19' : 'Forma2';
+      a.download = `${prefix}_${act.act_number || actId}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
-      toast.error('XLSX yuklab olishda xatolik');
+      toast.error(e?.response?.data?.error?.message || e?.response?.data?.message || 'XLSX yuklab olishda xatolik');
     }
   };
 
@@ -781,6 +888,12 @@ const FormsTab = ({ project }) => {
             <Badge className={STATE_COLORS[f19Act.state]}>{STATE_LABELS[f19Act.state] || f19Act.state}</Badge>
           </div>
           <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => handleExportPDF(f19Act)}>
+              <Download className="w-4 h-4 mr-1" /> PDF
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => handleExportXLSX(f19Act)}>
+              <Download className="w-4 h-4 mr-1" /> XLSX
+            </Button>
             {f19Act.state === 'draft' && (
               <>
                 <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={handleApproveF19}>
@@ -1007,7 +1120,7 @@ const FormsTab = ({ project }) => {
                 <Download className="w-4 h-4 mr-1" /> PDF
               </Button>
             )}
-            {selectedAct.act_type === 'ks2' && (
+            {(selectedAct.act_type === 'ks2' || selectedAct.act_type === 'ks3') && (
               <Button variant="outline" size="sm" onClick={() => handleExportXLSX(selectedAct)}>
                 <Download className="w-4 h-4 mr-1" /> XLSX
               </Button>
@@ -1041,8 +1154,162 @@ const FormsTab = ({ project }) => {
         {/* Signing panel - only show when pending */}
         {selectedAct.state === 'pending' && <SignaturePanel act={selectedAct} />}
 
-        {/* Lines table */}
-        {(selectedAct.lines || []).length > 0 && (
+        {/* KS-2 Detail Tabs: Smeta lines + Actual materials */}
+        {selectedAct.act_type === 'ks2' && (
+          <>
+            {/* Tab switcher */}
+            <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
+              <button
+                onClick={() => setF2DetailTab('smeta')}
+                className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${f2DetailTab === 'smeta' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                {t('smeta_lines') || 'Smeta ishlar'} ({(selectedAct.lines || []).length})
+              </button>
+              <button
+                onClick={() => setF2DetailTab('materials')}
+                className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${f2DetailTab === 'materials' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                {t('actual_materials') || 'Fakt materiallar'} ({(selectedAct.material_usage || []).length})
+              </button>
+            </div>
+
+            {/* Tab content: Smeta lines */}
+            {f2DetailTab === 'smeta' && (selectedAct.lines || []).length > 0 && (
+              <Card>
+                <CardHeader><CardTitle>{t('smeta_lines') || 'Smeta ishlar'}</CardTitle></CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b text-slate-500">
+                          <th className="text-left py-2 px-3">№</th>
+                          <th className="text-left py-2 px-3">{t('name') || 'Nomi'}</th>
+                          <th className="text-left py-2 px-3">{t('uom') || "O'lchov"}</th>
+                          <th className="text-right py-2 px-3">{t('qty_smeta') || 'Smeta miqdori'}</th>
+                          <th className="text-right py-2 px-3">{t('qty_period') || 'Davr miqdori'}</th>
+                          <th className="text-right py-2 px-3">{t('unit_rate') || 'Birlik narxi'}</th>
+                          <th className="text-right py-2 px-3">{t('total_amount') || 'Jami'}</th>
+                          <th className="text-left py-2 px-3">{t('note') || 'Izoh'}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(selectedAct.lines || []).map((line, idx) => {
+                          const isEditing = editingLineId === line.id;
+                          const isDraft = selectedAct.state === 'draft';
+                          return (
+                            <tr
+                              key={line.id || idx}
+                              className={`border-b hover:bg-slate-50 ${isDraft ? 'cursor-pointer' : ''} ${isEditing ? 'bg-blue-50' : ''}`}
+                              onClick={() => { if (isDraft && !isEditing) startEditLine(line); }}
+                            >
+                              <td className="py-2 px-3 text-slate-400">{line.sort_order || idx + 1}</td>
+                              <td className="py-2 px-3">{line.name}</td>
+                              <td className="py-2 px-3">{line.uom || '—'}</td>
+                              <td className="py-2 px-3 text-right text-slate-500">{line.qty_smeta || '—'}</td>
+                              <td className="py-2 px-3 text-right">
+                                {isEditing ? (
+                                  <Input
+                                    type="number"
+                                    step="0.0001"
+                                    value={editLineForm.qty_period}
+                                    onChange={e => setEditLineForm(f => ({ ...f, qty_period: e.target.value }))}
+                                    onKeyDown={e => { if (e.key === 'Enter') saveEditLine(selectedAct.id, line.id); if (e.key === 'Escape') cancelEditLine(); }}
+                                    className="w-28 h-7 text-right text-sm"
+                                    autoFocus
+                                    onClick={e => e.stopPropagation()}
+                                  />
+                                ) : line.quantity}
+                              </td>
+                              <td className="py-2 px-3 text-right">{formatCurrency(line.unit_rate || 0)}</td>
+                              <td className="py-2 px-3 text-right font-medium">
+                                {isEditing
+                                  ? formatCurrency((parseFloat(editLineForm.qty_period) || 0) * (line.unit_rate || 0))
+                                  : formatCurrency(line.total_amount || 0)}
+                              </td>
+                              <td className="py-2 px-3 text-slate-500">
+                                {isEditing ? (
+                                  <Input
+                                    value={editLineForm.note}
+                                    onChange={e => setEditLineForm(f => ({ ...f, note: e.target.value }))}
+                                    onKeyDown={e => { if (e.key === 'Enter') saveEditLine(selectedAct.id, line.id); if (e.key === 'Escape') cancelEditLine(); }}
+                                    className="h-7 text-sm"
+                                    placeholder="Izoh..."
+                                    onClick={e => e.stopPropagation()}
+                                  />
+                                ) : (line.note || '')}
+                              </td>
+                              {isEditing && (
+                                <td className="py-2 px-3">
+                                  <div className="flex gap-1">
+                                    <Button size="sm" className="h-7 px-2" onClick={(e) => { e.stopPropagation(); saveEditLine(selectedAct.id, line.id); }}>
+                                      <CheckCircle className="w-3 h-3" />
+                                    </Button>
+                                    <Button size="sm" variant="ghost" className="h-7 px-2" onClick={(e) => { e.stopPropagation(); cancelEditLine(); }}>
+                                      <XCircle className="w-3 h-3" />
+                                    </Button>
+                                  </div>
+                                </td>
+                              )}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+            {f2DetailTab === 'smeta' && (selectedAct.lines || []).length === 0 && (
+              <Card>
+                <CardContent className="py-8 text-center text-slate-400">
+                  {t('no_smeta_lines') || 'Smeta qatorlari topilmadi'}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Tab content: Actual materials used */}
+            {f2DetailTab === 'materials' && (
+              <Card>
+                <CardHeader><CardTitle>{t('actual_materials') || 'Fakt ishlatilgan materiallar'}</CardTitle></CardHeader>
+                <CardContent>
+                  {(selectedAct.material_usage || []).length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b text-slate-500">
+                            <th className="text-left py-2 px-3">№</th>
+                            <th className="text-left py-2 px-3">{t('material_name') || 'Material nomi'}</th>
+                            <th className="text-left py-2 px-3">{t('uom') || "O'lchov"}</th>
+                            <th className="text-right py-2 px-3">{t('quantity_used') || 'Ishlatilgan miqdor'}</th>
+                            <th className="text-left py-2 px-3">{t('notes') || 'Izoh'}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(selectedAct.material_usage || []).map((mu, idx) => (
+                            <tr key={mu.id || idx} className="border-b hover:bg-slate-50">
+                              <td className="py-2 px-3 text-slate-400">{idx + 1}</td>
+                              <td className="py-2 px-3 font-medium">{mu.product_name}</td>
+                              <td className="py-2 px-3">{mu.uom || '—'}</td>
+                              <td className="py-2 px-3 text-right font-semibold">{mu.quantity_used}</td>
+                              <td className="py-2 px-3 text-slate-500">{mu.notes || ''}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="py-8 text-center text-slate-400">
+                      {t('no_materials_used') || 'Bu davr uchun ishlatilgan materiallar topilmadi'}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+          </>
+        )}
+
+        {/* Non-KS2 lines table (KS-3, etc.) */}
+        {selectedAct.act_type !== 'ks2' && (selectedAct.lines || []).length > 0 && (
           <Card>
             <CardHeader><CardTitle>{t('act_lines') || 'Akt qatorlari'}</CardTitle></CardHeader>
             <CardContent>
@@ -1053,77 +1320,22 @@ const FormsTab = ({ project }) => {
                       <th className="text-left py-2 px-3">№</th>
                       <th className="text-left py-2 px-3">{t('name') || 'Nomi'}</th>
                       <th className="text-left py-2 px-3">{t('uom') || "O'lchov"}</th>
-                      {selectedAct.act_type === 'ks2' && <th className="text-right py-2 px-3">{t('qty_smeta') || 'Smeta miqdori'}</th>}
-                      <th className="text-right py-2 px-3">{selectedAct.act_type === 'ks2' ? (t('qty_period') || 'Davr miqdori') : (t('quantity') || 'Miqdor')}</th>
+                      <th className="text-right py-2 px-3">{t('quantity') || 'Miqdor'}</th>
                       <th className="text-right py-2 px-3">{t('unit_rate') || 'Birlik narxi'}</th>
                       <th className="text-right py-2 px-3">{t('total_amount') || 'Jami'}</th>
-                      {selectedAct.act_type === 'ks2' && <th className="text-left py-2 px-3">{t('note') || 'Izoh'}</th>}
                     </tr>
                   </thead>
                   <tbody>
-                    {(selectedAct.lines || []).map((line, idx) => {
-                      const isEditing = editingLineId === line.id;
-                      const isDraft = selectedAct.state === 'draft';
-                      const isKs2 = selectedAct.act_type === 'ks2';
-                      return (
-                        <tr
-                          key={line.id || idx}
-                          className={`border-b hover:bg-slate-50 ${isDraft && isKs2 ? 'cursor-pointer' : ''} ${isEditing ? 'bg-blue-50' : ''}`}
-                          onClick={() => { if (isDraft && isKs2 && !isEditing) startEditLine(line); }}
-                        >
-                          <td className="py-2 px-3 text-slate-400">{line.sort_order || idx + 1}</td>
-                          <td className="py-2 px-3">{line.name}</td>
-                          <td className="py-2 px-3">{line.uom || '—'}</td>
-                          {isKs2 && <td className="py-2 px-3 text-right text-slate-500">{line.qty_smeta || '—'}</td>}
-                          <td className="py-2 px-3 text-right">
-                            {isEditing ? (
-                              <Input
-                                type="number"
-                                step="0.0001"
-                                value={editLineForm.qty_period}
-                                onChange={e => setEditLineForm(f => ({ ...f, qty_period: e.target.value }))}
-                                onKeyDown={e => { if (e.key === 'Enter') saveEditLine(selectedAct.id, line.id); if (e.key === 'Escape') cancelEditLine(); }}
-                                className="w-28 h-7 text-right text-sm"
-                                autoFocus
-                                onClick={e => e.stopPropagation()}
-                              />
-                            ) : line.quantity}
-                          </td>
-                          <td className="py-2 px-3 text-right">{formatCurrency(line.unit_rate || 0)}</td>
-                          <td className="py-2 px-3 text-right font-medium">
-                            {isEditing
-                              ? formatCurrency((parseFloat(editLineForm.qty_period) || 0) * (line.unit_rate || 0))
-                              : formatCurrency(line.total_amount || 0)}
-                          </td>
-                          {isKs2 && (
-                            <td className="py-2 px-3 text-slate-500">
-                              {isEditing ? (
-                                <Input
-                                  value={editLineForm.note}
-                                  onChange={e => setEditLineForm(f => ({ ...f, note: e.target.value }))}
-                                  onKeyDown={e => { if (e.key === 'Enter') saveEditLine(selectedAct.id, line.id); if (e.key === 'Escape') cancelEditLine(); }}
-                                  className="h-7 text-sm"
-                                  placeholder="Izoh..."
-                                  onClick={e => e.stopPropagation()}
-                                />
-                              ) : (line.note || '')}
-                            </td>
-                          )}
-                          {isEditing && (
-                            <td className="py-2 px-3">
-                              <div className="flex gap-1">
-                                <Button size="sm" className="h-7 px-2" onClick={(e) => { e.stopPropagation(); saveEditLine(selectedAct.id, line.id); }}>
-                                  <CheckCircle className="w-3 h-3" />
-                                </Button>
-                                <Button size="sm" variant="ghost" className="h-7 px-2" onClick={(e) => { e.stopPropagation(); cancelEditLine(); }}>
-                                  <XCircle className="w-3 h-3" />
-                                </Button>
-                              </div>
-                            </td>
-                          )}
-                        </tr>
-                      );
-                    })}
+                    {(selectedAct.lines || []).map((line, idx) => (
+                      <tr key={line.id || idx} className="border-b hover:bg-slate-50">
+                        <td className="py-2 px-3 text-slate-400">{line.sort_order || idx + 1}</td>
+                        <td className="py-2 px-3">{line.name}</td>
+                        <td className="py-2 px-3">{line.uom || '—'}</td>
+                        <td className="py-2 px-3 text-right">{line.quantity}</td>
+                        <td className="py-2 px-3 text-right">{formatCurrency(line.unit_rate || 0)}</td>
+                        <td className="py-2 px-3 text-right font-medium">{formatCurrency(line.total_amount || 0)}</td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -1216,8 +1428,8 @@ const FormsTab = ({ project }) => {
                 <SelectItem value="cancelled">{t('cancelled') || 'Bekor qilingan'}</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline" onClick={() => setShowAutoGenModal(true)}><Zap className="w-4 h-4 mr-2" /> {t('auto_ks2') || 'KS-2 avto'}</Button>
-            <Button variant="outline" onClick={() => setShowGenF3Modal(true)}><FileText className="w-4 h-4 mr-2" /> {t('gen_ks3') || 'KS-3 yaratish'}</Button>
+            <Button variant="outline" onClick={() => { setAutoGenForm({ subcontract_id: '', period_from: '', period_to: '', ...defaultClientFields }); setShowAutoGenClientFields(false); setShowAutoGenModal(true); }}><Zap className="w-4 h-4 mr-2" /> {t('auto_ks2') || 'KS-2 avto'}</Button>
+            <Button variant="outline" onClick={() => { setGenF3Form({ subcontract_id: '', period_from: '', period_to: '', ...defaultClientFields }); setShowGenF3ClientFields(false); setShowGenF3Modal(true); }}><FileText className="w-4 h-4 mr-2" /> {t('gen_ks3') || 'KS-3 yaratish'}</Button>
             <Button variant="outline" className="text-orange-600 border-orange-300" onClick={() => { setF19CreateForm({ building_id: '', period_from: '', period_to: '', notes: '' }); setShowF19CreateModal(true); }}>
               <Plus className="w-4 h-4 mr-2" /> {t('create_f19') || 'Forma 19'}
             </Button>
@@ -1259,7 +1471,11 @@ const FormsTab = ({ project }) => {
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedActs.map(act => (
+                  {(() => {
+                    const totalCount = sortedActs.length;
+                    const totalPages = Math.ceil(totalCount / pageSize);
+                    const paginatedItems = sortedActs.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+                    return paginatedItems.map(act => (
                     <tr key={act.id} className="border-b hover:bg-slate-50">
                       <td className="py-2 px-3 font-medium">{act.name}{act.act_number ? ` #${act.act_number}` : ''}</td>
                       <td className="py-2 px-3"><Badge className={TYPE_COLORS[act.act_type]}>{TYPE_LABELS[act.act_type] || act.act_type}</Badge></td>
@@ -1279,9 +1495,28 @@ const FormsTab = ({ project }) => {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    ));
+                  })()}
                 </tbody>
               </table>
+              {(() => {
+                const totalCount = sortedActs.length;
+                const totalPages = Math.ceil(totalCount / pageSize);
+                return totalPages > 1 && (
+                  <div className="flex items-center justify-between px-4 py-3 border-t">
+                    <p className="text-sm text-slate-500">
+                      {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, totalCount)} / {totalCount}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}>1</button>
+                      <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft className="w-4 h-4" /></button>
+                      <span className="text-sm font-medium px-2">{currentPage} / {totalPages}</span>
+                      <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}><ChevronRight className="w-4 h-4" /></button>
+                      <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(totalPages)}>{totalPages}</button>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
         </CardContent>
@@ -1314,6 +1549,85 @@ const FormsTab = ({ project }) => {
               <div><Label>{t('period_from') || 'Boshlanish'} *</Label><Input type="date" value={form.period_from} onChange={e => setForm(f => ({ ...f, period_from: e.target.value }))} /></div>
               <div><Label>{t('period_to') || 'Tugash'} *</Label><Input type="date" value={form.period_to} onChange={e => setForm(f => ({ ...f, period_to: e.target.value }))} /></div>
             </div>
+
+            {/* Forma 2 reporting period (for XLSX/PDF header "отчётный период с ... по ...") */}
+            <div className="border rounded-md p-3 bg-slate-50 space-y-3">
+              <p className="text-sm font-semibold text-slate-700">Forma 2 uchun hisobot davri / Отчётный период (Форма 2)</p>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <Label className="text-xs">Oy (dan) / Месяц (с)</Label>
+                  <Select
+                    value={form.period_month_from ? String(form.period_month_from) : ''}
+                    onValueChange={v => setForm(f => ({ ...f, period_month_from: v }))}
+                  >
+                    <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                    <SelectContent>
+                      {MONTH_OPTIONS_RU.map(m => <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs">Oy (gacha) / Месяц (по)</Label>
+                  <Select
+                    value={form.period_month_to ? String(form.period_month_to) : ''}
+                    onValueChange={v => setForm(f => ({ ...f, period_month_to: v }))}
+                  >
+                    <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                    <SelectContent>
+                      {MONTH_OPTIONS_RU.map(m => <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs">Yil / Год</Label>
+                  <Input
+                    type="number"
+                    min="2000"
+                    max="2100"
+                    value={form.period_year}
+                    onChange={e => setForm(f => ({ ...f, period_year: e.target.value }))}
+                    placeholder={String(new Date().getFullYear())}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <Label className="text-xs">Transport xarajati % / Транспорт %</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={form.f2_transport_pct}
+                    onChange={e => setForm(f => ({ ...f, f2_transport_pct: e.target.value }))}
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">Materiallarni yetkazish xarajati</p>
+                </div>
+                <div>
+                  <Label className="text-xs">Yo'qotish / Bayram % / Потери, праздники %</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={form.f2_other_pct}
+                    onChange={e => setForm(f => ({ ...f, f2_other_pct: e.target.value }))}
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">Yo'qotish / buzilish / bayram kunlari uchun qo'shimcha %</p>
+                </div>
+                <div>
+                  <Label className="text-xs">Qaytarilgan materiallar / Возврат материалов</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={form.f2_materials_returned}
+                    onChange={e => setForm(f => ({ ...f, f2_materials_returned: e.target.value }))}
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">Umumiy summadan chegiriladi</p>
+                </div>
+              </div>
+              <p className="text-[11px] text-slate-500 italic">
+                Koeffitsientlar har bir Forma yaratilganda so'raladi — ular ishchi zarpalatasiga / material narxiga
+                yo'qotilgan yoki shikastlangan mahsulotlar va bayram kunlari uchun qo'shilib narxga qo'shiladi.
+              </p>
+            </div>
+
             <div><Label>{t('notes') || 'Izohlar'}</Label><Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} /></div>
 
             {/* Estimate lines picker */}
@@ -1332,12 +1646,17 @@ const FormsTab = ({ project }) => {
                       <thead>
                         <tr className="border-b bg-slate-50 text-slate-500">
                           <th className="py-2 px-2 w-8"></th>
+                          <th className="text-left py-2 px-2 w-20">№ / Норма</th>
                           <th className="text-left py-2 px-2">{t('name') || 'Nomi'}</th>
                           <th className="text-left py-2 px-2">{t('uom') || "O'lchov"}</th>
-                          <th className="text-right py-2 px-2">{t('qty_smeta') || 'Smeta miqdori'}</th>
-                          <th className="text-right py-2 px-2">{t('unit_rate') || 'Birlik narxi'}</th>
-                          <th className="text-right py-2 px-2 w-32">{t('qty_period') || 'Davr miqdori'}</th>
-                          <th className="text-right py-2 px-2">{t('line_total') || 'Qator jami'}</th>
+                          <th className="text-right py-2 px-2">{t('qty_smeta') || 'Smeta'}</th>
+                          <th className="text-right py-2 px-2">{t('unit_rate') || 'Narx'}</th>
+                          <th className="text-right py-2 px-2 w-28">{t('qty_period') || 'Davr'}</th>
+                          <th className="text-right py-2 px-2 w-28">З/плата</th>
+                          <th className="text-right py-2 px-2 w-28">ЭММ</th>
+                          <th className="text-right py-2 px-2 w-28">Материалы</th>
+                          <th className="text-right py-2 px-2 w-28">Кабели</th>
+                          <th className="text-right py-2 px-2">{t('line_total') || 'Jami'}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1346,7 +1665,8 @@ const FormsTab = ({ project }) => {
                           const selectedLine = selectedLines.find(l => l.estimate_line_id === line.estimate_line_id);
                           const lineTotal = isSelected ? (selectedLine?.qty_period || 0) * line.unit_rate : 0;
                           return (
-                            <tr key={line.estimate_line_id} className={`border-b hover:bg-slate-50 ${isSelected ? 'bg-blue-50' : ''}`}>
+                            <React.Fragment key={line.estimate_line_id}>
+                            <tr className={`border-b hover:bg-slate-50 ${isSelected ? 'bg-blue-50' : ''}`}>
                               <td className="py-2 px-2 text-center">
                                 <input
                                   type="checkbox"
@@ -1354,6 +1674,17 @@ const FormsTab = ({ project }) => {
                                   onChange={() => toggleEstimateLine(line)}
                                   className="rounded border-slate-300"
                                 />
+                              </td>
+                              <td className="py-2 px-2">
+                                {isSelected ? (
+                                  <Input
+                                    type="text"
+                                    value={selectedLine?.norm_code || ''}
+                                    onChange={e => updateSelectedLineField(line.estimate_line_id, 'norm_code', e.target.value)}
+                                    placeholder="Е1-1"
+                                    className="w-20 h-7 text-xs"
+                                  />
+                                ) : '—'}
                               </td>
                               <td className="py-2 px-2">{line.name}</td>
                               <td className="py-2 px-2">{line.uom || '—'}</td>
@@ -1367,12 +1698,98 @@ const FormsTab = ({ project }) => {
                                     min="0"
                                     value={selectedLine?.qty_period || ''}
                                     onChange={e => updateSelectedLineQty(line.estimate_line_id, e.target.value)}
-                                    className="w-28 h-7 text-right text-sm"
+                                    className="w-24 h-7 text-right text-sm"
+                                  />
+                                ) : '—'}
+                              </td>
+                              <td className="py-2 px-2 text-right">
+                                {isSelected ? (
+                                  <Input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={selectedLine?.labor_amount || ''}
+                                    onChange={e => updateSelectedLineField(line.estimate_line_id, 'labor_amount', parseFloat(e.target.value) || 0)}
+                                    className="w-24 h-7 text-right text-xs"
+                                  />
+                                ) : '—'}
+                              </td>
+                              <td className="py-2 px-2 text-right">
+                                {isSelected ? (
+                                  <Input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={selectedLine?.equipment_amount || ''}
+                                    onChange={e => updateSelectedLineField(line.estimate_line_id, 'equipment_amount', parseFloat(e.target.value) || 0)}
+                                    className="w-24 h-7 text-right text-xs"
+                                  />
+                                ) : '—'}
+                              </td>
+                              <td className="py-2 px-2 text-right">
+                                {isSelected ? (
+                                  <Input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={selectedLine?.materials_amount || ''}
+                                    onChange={e => updateSelectedLineField(line.estimate_line_id, 'materials_amount', parseFloat(e.target.value) || 0)}
+                                    className="w-24 h-7 text-right text-xs"
+                                  />
+                                ) : '—'}
+                              </td>
+                              <td className="py-2 px-2 text-right">
+                                {isSelected ? (
+                                  <Input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={selectedLine?.cables_amount || ''}
+                                    onChange={e => updateSelectedLineField(line.estimate_line_id, 'cables_amount', parseFloat(e.target.value) || 0)}
+                                    className="w-24 h-7 text-right text-xs"
                                   />
                                 ) : '—'}
                               </td>
                               <td className="py-2 px-2 text-right font-medium">{isSelected ? formatCurrency(lineTotal) : '—'}</td>
                             </tr>
+                            {isSelected && (
+                              <tr className="border-b bg-blue-50/40">
+                                <td></td>
+                                <td colSpan={11} className="py-1 px-2">
+                                  <div className="flex items-center gap-4 text-xs text-slate-600">
+                                    <label className="flex items-center gap-1">
+                                      <input
+                                        type="checkbox"
+                                        checked={!!selectedLine?.is_section_header}
+                                        onChange={e => updateSelectedLineField(line.estimate_line_id, 'is_section_header', e.target.checked)}
+                                        className="rounded border-slate-300"
+                                      />
+                                      <span>РАЗДЕЛ (bo'lim sarlavhasi)</span>
+                                    </label>
+                                    {selectedLine?.is_section_header && (
+                                      <Input
+                                        type="text"
+                                        value={selectedLine?.section_name || ''}
+                                        onChange={e => updateSelectedLineField(line.estimate_line_id, 'section_name', e.target.value)}
+                                        placeholder="Bo'lim nomi (masalan: РАЗДЕЛ 1. Монтажные работы)"
+                                        className="flex-1 h-7 text-xs"
+                                      />
+                                    )}
+                                    <label className="flex items-center gap-1">
+                                      <span>№ qator:</span>
+                                      <Input
+                                        type="text"
+                                        value={selectedLine?.line_number_display || ''}
+                                        onChange={e => updateSelectedLineField(line.estimate_line_id, 'line_number_display', e.target.value)}
+                                        placeholder="1.1"
+                                        className="w-20 h-7 text-xs"
+                                      />
+                                    </label>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                            </React.Fragment>
                           );
                         })}
                       </tbody>
@@ -1435,7 +1852,7 @@ const FormsTab = ({ project }) => {
 
       {/* Auto-generate KS-2 Modal */}
       <Dialog open={showAutoGenModal} onOpenChange={setShowAutoGenModal}>
-        <DialogContent className="max-w-md" aria-describedby={undefined}>
+        <DialogContent className="max-w-lg" aria-describedby={undefined}>
           <DialogHeader><DialogTitle>{t('auto_generate_ks2') || 'KS-2 avtomatik yaratish'}</DialogTitle><DialogDescription className="sr-only">Auto KS-2</DialogDescription></DialogHeader>
           <div className="space-y-4">
             <div><Label>{t('subcontractor') || 'Subpudratchi'}</Label>
@@ -1451,17 +1868,140 @@ const FormsTab = ({ project }) => {
               <div><Label>{t('period_from') || 'Boshlanish'} *</Label><Input type="date" value={autoGenForm.period_from} onChange={e => setAutoGenForm(f => ({ ...f, period_from: e.target.value }))} /></div>
               <div><Label>{t('period_to') || 'Tugash'} *</Label><Input type="date" value={autoGenForm.period_to} onChange={e => setAutoGenForm(f => ({ ...f, period_to: e.target.value }))} /></div>
             </div>
+
+            {/* Buyurtmachi rekvizitlari */}
+            <div className="border rounded-md bg-slate-50">
+              <button type="button" className="w-full flex items-center justify-between p-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 rounded-md transition-colors" onClick={() => setShowAutoGenClientFields(p => !p)}>
+                <span>{language === 'ru' ? 'Реквизиты заказчика (Форма 2)' : language === 'uz' ? 'Buyurtmachi rekvizitlari (Forma 2 uchun)' : 'Client Details (for Form 2)'}</span>
+                {showAutoGenClientFields ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+              {showAutoGenClientFields && (
+                <div className="px-3 pb-3 space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label>{language === 'ru' ? 'Наименование' : language === 'uz' ? 'Mijoz nomi' : 'Client Name'} *</Label><Input value={autoGenForm.client_name} onChange={e => setAutoGenForm(f => ({ ...f, client_name: e.target.value }))} placeholder={language === 'ru' ? 'ООО "..."' : 'MChJ "..."'} /></div>
+                    <div><Label>{language === 'ru' ? 'Телефон' : language === 'uz' ? 'Telefon' : 'Phone'}</Label><Input value={autoGenForm.client_phone} onChange={e => setAutoGenForm(f => ({ ...f, client_phone: e.target.value }))} placeholder="+998" /></div>
+                  </div>
+                  <div><Label>{language === 'ru' ? 'Юридический адрес' : language === 'uz' ? 'Yuridik manzil' : 'Legal Address'} *</Label><Input value={autoGenForm.client_address} onChange={e => setAutoGenForm(f => ({ ...f, client_address: e.target.value }))} placeholder={language === 'ru' ? 'г. Ташкент, ...' : 'Toshkent sh., ...'} /></div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label>{language === 'ru' ? 'Банк' : language === 'uz' ? 'Bank nomi' : 'Bank Name'} *</Label><Input value={autoGenForm.client_bank_name} onChange={e => setAutoGenForm(f => ({ ...f, client_bank_name: e.target.value }))} placeholder={language === 'ru' ? 'АКБ "..."' : 'AKB "..."'} /></div>
+                    <div><Label>{language === 'ru' ? 'Расчётный счёт' : language === 'uz' ? 'Hisob raqami' : 'Account'} *</Label><Input value={autoGenForm.client_bank_account} onChange={e => setAutoGenForm(f => ({ ...f, client_bank_account: e.target.value }))} placeholder="2020 8000 ..." /></div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div><Label>MFO *</Label><Input value={autoGenForm.client_mfo} onChange={e => setAutoGenForm(f => ({ ...f, client_mfo: e.target.value }))} placeholder="00440" /></div>
+                    <div><Label>STIR *</Label><Input value={autoGenForm.client_stir} onChange={e => setAutoGenForm(f => ({ ...f, client_stir: e.target.value }))} placeholder="123456789" /></div>
+                    <div><Label>OKONH</Label><Input value={autoGenForm.client_okonh} onChange={e => setAutoGenForm(f => ({ ...f, client_okonh: e.target.value }))} placeholder="61124" /></div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label>{language === 'ru' ? 'Номер договора' : language === 'uz' ? 'Shartnoma raqami' : 'Contract №'}</Label><Input value={autoGenForm.contract_number} onChange={e => setAutoGenForm(f => ({ ...f, contract_number: e.target.value }))} placeholder="№ 12/2025" /></div>
+                    <div><Label>{language === 'ru' ? 'Наименование объекта' : language === 'uz' ? 'Obyekt nomi' : 'Object Name'}</Label><Input value={autoGenForm.object_full_name} onChange={e => setAutoGenForm(f => ({ ...f, object_full_name: e.target.value }))} /></div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label>{language === 'ru' ? 'Директор (Ф.И.О)' : language === 'uz' ? 'Direktor (F.I.Sh)' : 'Director'}</Label><Input value={autoGenForm.client_director_name} onChange={e => setAutoGenForm(f => ({ ...f, client_director_name: e.target.value }))} /></div>
+                    <div><Label>{language === 'ru' ? 'Гл. бухгалтер' : language === 'uz' ? 'Bosh hisobchi' : 'Chief Accountant'}</Label><Input value={autoGenForm.client_chief_accountant_name} onChange={e => setAutoGenForm(f => ({ ...f, client_chief_accountant_name: e.target.value }))} /></div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowAutoGenModal(false)}>{t('cancel') || 'Bekor qilish'}</Button>
-            <Button onClick={handleAutoGenerate} disabled={autoGenSaving}>{autoGenSaving ? 'Yaratilmoqda...' : 'Yaratish'}</Button>
+            <Button onClick={handleAutoGeneratePreview} disabled={autoGenLoadingPreview}>
+              {autoGenLoadingPreview ? 'Tekshirilmoqda...' : (t('next') || "Keyingi")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Auto-generate KS-2 CONFIRM Modal (step 2) */}
+      <Dialog open={showAutoGenConfirm} onOpenChange={(o) => { if (!o) { setShowAutoGenConfirm(false); setAutoGenPreview(null); } }}>
+        <DialogContent className="max-w-3xl" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>{t('confirm_ks2') || "Ko'rib chiqing va tasdiqlang"}</DialogTitle>
+            <DialogDescription className="sr-only">Confirm KS-2 generation</DialogDescription>
+          </DialogHeader>
+          {autoGenPreview && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="p-3 bg-slate-50 rounded">
+                  <p className="text-xs text-slate-500">{t('act_name') || 'Akt nomi'}</p>
+                  <p className="font-semibold">{autoGenPreview.proposed_name}</p>
+                </div>
+                <div className="p-3 bg-slate-50 rounded">
+                  <p className="text-xs text-slate-500">{t('period') || 'Davr'}</p>
+                  <p className="font-semibold text-sm">{autoGenPreview.period_from} — {autoGenPreview.period_to}</p>
+                </div>
+                <div className="p-3 bg-blue-50 rounded">
+                  <p className="text-xs text-blue-600">{t('lines_count') || 'Qatorlar'}</p>
+                  <p className="font-semibold text-blue-700">{autoGenPreview.lines_count}</p>
+                </div>
+                <div className="p-3 bg-green-50 rounded">
+                  <p className="text-xs text-green-600">{t('total_with_vat') || 'Jami (QQS bilan)'}</p>
+                  <p className="font-semibold text-green-700">{formatCurrency(autoGenPreview.amount_total_with_vat || 0)}</p>
+                </div>
+              </div>
+
+              <div className="border rounded max-h-80 overflow-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 sticky top-0">
+                    <tr className="border-b text-slate-500">
+                      <th className="text-left py-2 px-3">№</th>
+                      <th className="text-left py-2 px-3">{t('name') || 'Nomi'}</th>
+                      <th className="text-left py-2 px-3">{t('unit') || 'Birlik'}</th>
+                      <th className="text-right py-2 px-3">{t('qty_smeta') || 'Smeta soni'}</th>
+                      <th className="text-right py-2 px-3">{t('quantity') || 'Bajarilgan'}</th>
+                      <th className="text-right py-2 px-3">{t('unit_rate') || 'Narx'}</th>
+                      <th className="text-right py-2 px-3">{t('total') || 'Summa'}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(autoGenPreview.lines || []).map((ln, i) => (
+                      <tr key={i} className="border-b hover:bg-slate-50">
+                        <td className="py-2 px-3 text-slate-400">{i + 1}</td>
+                        <td className="py-2 px-3">{ln.name}</td>
+                        <td className="py-2 px-3">{ln.uom || '—'}</td>
+                        <td className="py-2 px-3 text-right">{ln.qty_smeta || 0}</td>
+                        <td className="py-2 px-3 text-right font-medium">{ln.quantity || 0}</td>
+                        <td className="py-2 px-3 text-right">{formatCurrency(ln.unit_rate || 0)}</td>
+                        <td className="py-2 px-3 text-right font-medium">{formatCurrency(ln.line_total || 0)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-slate-50 font-medium border-t-2">
+                      <td colSpan={6} className="py-2 px-3 text-right">{t('subtotal') || 'Oraliq summa'}:</td>
+                      <td className="py-2 px-3 text-right">{formatCurrency(autoGenPreview.amount_total || 0)}</td>
+                    </tr>
+                    <tr className="bg-slate-50 text-slate-500 text-xs">
+                      <td colSpan={6} className="py-1 px-3 text-right">QQS ({autoGenPreview.vat_pct || 12}%):</td>
+                      <td className="py-1 px-3 text-right">{formatCurrency(autoGenPreview.vat_amount || 0)}</td>
+                    </tr>
+                    <tr className="bg-green-50 font-semibold">
+                      <td colSpan={6} className="py-2 px-3 text-right text-green-700">{t('total_with_vat') || 'Jami (QQS bilan)'}:</td>
+                      <td className="py-2 px-3 text-right text-green-700">{formatCurrency(autoGenPreview.amount_total_with_vat || 0)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              <p className="text-xs text-slate-500">
+                {t('confirm_ks2_note') || "Tasdiqlagandan so'ng akt yaratiladi va qoralama holatida saqlanadi. Keyin imzo jarayonidan o'tkazish mumkin."}
+              </p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={handleAutoGenerateBack} disabled={autoGenSaving}>
+              <ArrowLeft className="w-4 h-4 mr-1" /> {t('back') || 'Ortga'}
+            </Button>
+            <Button onClick={handleAutoGenerateConfirm} disabled={autoGenSaving} className="bg-green-600 hover:bg-green-700">
+              {autoGenSaving ? 'Yaratilmoqda...' : (t('confirm_and_create') || 'Tasdiqlash va yaratish')}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Generate Forma 3 (KS-3) Modal */}
       <Dialog open={showGenF3Modal} onOpenChange={setShowGenF3Modal}>
-        <DialogContent className="max-w-md" aria-describedby={undefined}>
+        <DialogContent className="max-w-lg" aria-describedby={undefined}>
           <DialogHeader><DialogTitle>{t('gen_ks3') || 'KS-3 (Forma 3) yaratish'}</DialogTitle><DialogDescription className="sr-only">Generate KS-3</DialogDescription></DialogHeader>
           <div className="space-y-4">
             <p className="text-sm text-slate-500">{t('gen_ks3_desc') || "Imzolangan KS-2 aktlar asosida KS-3 hisoboti yaratiladi"}</p>
@@ -1478,10 +2018,44 @@ const FormsTab = ({ project }) => {
               <div><Label>{t('period_from') || 'Boshlanish'} *</Label><Input type="date" value={genF3Form.period_from} onChange={e => setGenF3Form(f => ({ ...f, period_from: e.target.value }))} /></div>
               <div><Label>{t('period_to') || 'Tugash'} *</Label><Input type="date" value={genF3Form.period_to} onChange={e => setGenF3Form(f => ({ ...f, period_to: e.target.value }))} /></div>
             </div>
+
+            {/* Buyurtmachi rekvizitlari */}
+            <div className="border rounded-md bg-slate-50">
+              <button type="button" className="w-full flex items-center justify-between p-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 rounded-md transition-colors" onClick={() => setShowGenF3ClientFields(p => !p)}>
+                <span>{language === 'ru' ? 'Реквизиты заказчика (Форма 3)' : language === 'uz' ? 'Buyurtmachi rekvizitlari (Forma 3 uchun)' : 'Client Details (for Form 3)'}</span>
+                {showGenF3ClientFields ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+              {showGenF3ClientFields && (
+                <div className="px-3 pb-3 space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label>{language === 'ru' ? 'Наименование' : language === 'uz' ? 'Mijoz nomi' : 'Client Name'} *</Label><Input value={genF3Form.client_name} onChange={e => setGenF3Form(f => ({ ...f, client_name: e.target.value }))} placeholder={language === 'ru' ? 'ООО "..."' : 'MChJ "..."'} /></div>
+                    <div><Label>{language === 'ru' ? 'Телефон' : language === 'uz' ? 'Telefon' : 'Phone'}</Label><Input value={genF3Form.client_phone} onChange={e => setGenF3Form(f => ({ ...f, client_phone: e.target.value }))} placeholder="+998" /></div>
+                  </div>
+                  <div><Label>{language === 'ru' ? 'Юридический адрес' : language === 'uz' ? 'Yuridik manzil' : 'Legal Address'} *</Label><Input value={genF3Form.client_address} onChange={e => setGenF3Form(f => ({ ...f, client_address: e.target.value }))} placeholder={language === 'ru' ? 'г. Ташкент, ...' : 'Toshkent sh., ...'} /></div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label>{language === 'ru' ? 'Банк' : language === 'uz' ? 'Bank nomi' : 'Bank Name'} *</Label><Input value={genF3Form.client_bank_name} onChange={e => setGenF3Form(f => ({ ...f, client_bank_name: e.target.value }))} placeholder={language === 'ru' ? 'АКБ "..."' : 'AKB "..."'} /></div>
+                    <div><Label>{language === 'ru' ? 'Расчётный счёт' : language === 'uz' ? 'Hisob raqami' : 'Account'} *</Label><Input value={genF3Form.client_bank_account} onChange={e => setGenF3Form(f => ({ ...f, client_bank_account: e.target.value }))} placeholder="2020 8000 ..." /></div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div><Label>MFO *</Label><Input value={genF3Form.client_mfo} onChange={e => setGenF3Form(f => ({ ...f, client_mfo: e.target.value }))} placeholder="00440" /></div>
+                    <div><Label>STIR *</Label><Input value={genF3Form.client_stir} onChange={e => setGenF3Form(f => ({ ...f, client_stir: e.target.value }))} placeholder="123456789" /></div>
+                    <div><Label>OKONH</Label><Input value={genF3Form.client_okonh} onChange={e => setGenF3Form(f => ({ ...f, client_okonh: e.target.value }))} placeholder="61124" /></div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label>{language === 'ru' ? 'Номер договора' : language === 'uz' ? 'Shartnoma raqami' : 'Contract №'}</Label><Input value={genF3Form.contract_number} onChange={e => setGenF3Form(f => ({ ...f, contract_number: e.target.value }))} placeholder="№ 12/2025" /></div>
+                    <div><Label>{language === 'ru' ? 'Наименование объекта' : language === 'uz' ? 'Obyekt nomi' : 'Object Name'}</Label><Input value={genF3Form.object_full_name} onChange={e => setGenF3Form(f => ({ ...f, object_full_name: e.target.value }))} /></div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label>{language === 'ru' ? 'Директор (Ф.И.О)' : language === 'uz' ? 'Direktor (F.I.Sh)' : 'Director'}</Label><Input value={genF3Form.client_director_name} onChange={e => setGenF3Form(f => ({ ...f, client_director_name: e.target.value }))} /></div>
+                    <div><Label>{language === 'ru' ? 'Гл. бухгалтер' : language === 'uz' ? 'Bosh hisobchi' : 'Chief Accountant'}</Label><Input value={genF3Form.client_chief_accountant_name} onChange={e => setGenF3Form(f => ({ ...f, client_chief_accountant_name: e.target.value }))} /></div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowGenF3Modal(false)}>{t('cancel') || 'Bekor qilish'}</Button>
-            <Button onClick={handleGenerateF3} disabled={genF3Saving}>{genF3Saving ? 'Yaratilmoqda...' : 'Yaratish'}</Button>
+            <Button onClick={handleGenerateF3} disabled={genF3Saving}>{genF3Saving ? 'Yaratilmoqda...' : (language === 'ru' ? 'Создать' : 'Yaratish')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Plus, Search, FileCheck, AlertTriangle, CheckCircle2, FileText,
   Users, Trash2, RefreshCw, Eye, ArrowLeft, Printer, Loader2,
-  Send, Mail, MessageCircle, ChevronDown, ChevronRight, Link2, Check, Copy, Bell,
+  Send, Mail, MessageCircle, ChevronDown, ChevronRight, ChevronLeft, Link2, Check, Copy, Bell,
   Package, Truck, Download
 } from "lucide-react";
 import { exportReconciliationToExcel } from '@/utils/exportReconciliationExcel';
@@ -49,6 +49,8 @@ export default function ActSverka() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 20;
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -133,6 +135,18 @@ export default function ActSverka() {
     }
     return result;
   }, [reconciliationActs, searchQuery, statusFilter]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter]);
+
+  // Pagination
+  const totalCount = filteredActs.length;
+  const totalPages = Math.ceil(totalCount / pageSize);
+  const paginatedActs = useMemo(() => {
+    return filteredActs.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  }, [filteredActs, currentPage, pageSize]);
 
   // Filtered contacts for dropdown
   const filteredContacts = useMemo(() => {
@@ -392,10 +406,10 @@ export default function ActSverka() {
         labels: {
           reconciliation_act: t('reconciliation_act') || 'Akt sverka',
           period: t('period') || 'Davr',
-          opening_balance: t('opening_balance') || 'Davr boshi qoldiq',
-          total_debit: t('total_debit') || 'Jami debet',
-          total_credit: t('total_credit') || 'Jami kredit',
-          closing_balance: t('closing_balance') || 'Davr oxiri qoldiq',
+          opening_balance: language === 'uz' ? 'Davr boshi qoldiq' : language === 'ru' ? 'Начальный остаток' : 'Opening Balance',
+          total_debit: language === 'uz' ? 'Jami sotilgan' : language === 'ru' ? 'Всего продано' : 'Total Sold',
+          total_credit: language === 'uz' ? 'Jami to\'langan' : language === 'ru' ? 'Всего оплачено' : 'Total Paid',
+          closing_balance: language === 'uz' ? 'Davr oxiri qoldiq' : language === 'ru' ? 'Конечный остаток' : 'Closing Balance',
           date: t('date') || 'Sana',
           document: t('document') || 'Hujjat',
           description: t('description') || 'Tavsif',
@@ -405,9 +419,9 @@ export default function ActSverka() {
           quantity: t('quantity') || 'Miqdor',
           unit_price: t('unit_price') || 'Narx',
           item_total: t('total') || 'Jami',
-          debit: t('debit') || 'Debet',
-          credit: t('credit') || 'Kredit',
-          balance: t('balance') || 'Balans',
+          debit: language === 'uz' ? 'Sotilgan' : language === 'ru' ? 'Продано' : 'Sold',
+          credit: language === 'uz' ? 'To\'langan' : language === 'ru' ? 'Оплачено' : 'Paid',
+          balance: language === 'uz' ? 'Qoldiq' : language === 'ru' ? 'Остаток' : 'Balance',
           period_turnover: t('period_turnover') || "Davr bo'yicha aylanma",
           on_behalf_org: t('print_on_behalf_org') || 'Tashkilot nomidan',
           on_behalf_partner: t('print_on_behalf_partner') || 'Kontragent nomidan',
@@ -660,13 +674,13 @@ export default function ActSverka() {
               </Card>
               <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60">
                 <CardContent className="p-4">
-                  <p className="text-xs text-slate-500 mb-1">{t('total_debit') || 'Jami debet'}</p>
+                  <p className="text-xs text-slate-500 mb-1">{language === 'uz' ? 'Jami sotilgan' : language === 'ru' ? 'Всего продано' : 'Total Sold'}</p>
                   <p className="text-lg font-bold text-blue-600">{formatCurrency(act.our_debit_total || 0)}</p>
                 </CardContent>
               </Card>
               <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60">
                 <CardContent className="p-4">
-                  <p className="text-xs text-slate-500 mb-1">{t('total_credit') || 'Jami kredit'}</p>
+                  <p className="text-xs text-slate-500 mb-1">{language === 'uz' ? 'Jami to\'langan' : language === 'ru' ? 'Всего оплачено' : 'Total Paid'}</p>
                   <p className="text-lg font-bold text-red-600">{formatCurrency(act.our_credit_total || 0)}</p>
                 </CardContent>
               </Card>
@@ -687,9 +701,9 @@ export default function ActSverka() {
                     <TableHead className="w-[100px] text-xs font-semibold">{t('date') || 'Sana'}</TableHead>
                     <TableHead className="w-[140px] text-xs font-semibold">{t('document') || 'Hujjat'}</TableHead>
                     <TableHead className="text-xs font-semibold">{t('description') || 'Tavsif'}</TableHead>
-                    <TableHead className="w-[130px] text-right text-xs font-semibold">{t('debit') || 'Debet'}</TableHead>
-                    <TableHead className="w-[130px] text-right text-xs font-semibold">{t('credit') || 'Kredit'}</TableHead>
-                    <TableHead className="w-[140px] text-right text-xs font-semibold">{t('balance') || 'Qoldiq'}</TableHead>
+                    <TableHead className="w-[130px] text-right text-xs font-semibold">{language === 'uz' ? 'Sotilgan' : language === 'ru' ? 'Продано' : 'Sold'}</TableHead>
+                    <TableHead className="w-[130px] text-right text-xs font-semibold">{language === 'uz' ? 'To\'langan' : language === 'ru' ? 'Оплачено' : 'Paid'}</TableHead>
+                    <TableHead className="w-[140px] text-right text-xs font-semibold">{language === 'uz' ? 'Qoldiq' : language === 'ru' ? 'Остаток' : 'Balance'}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1208,22 +1222,23 @@ export default function ActSverka() {
               </p>
             </div>
           ) : (
+            <>
             <Table>
               <TableHeader>
                 <TableRow className="bg-slate-50">
                   <TableHead>{t('counterparty') || 'Kontragent'}</TableHead>
                   <TableHead>{t('period') || 'Davr'}</TableHead>
-                  <TableHead className="text-right">{t('opening') || 'Boshlanish'}</TableHead>
-                  <TableHead className="text-right">{t('debit') || 'Debet'}</TableHead>
-                  <TableHead className="text-right">{t('credit') || 'Kredit'}</TableHead>
-                  <TableHead className="text-right">{t('closing') || 'Tugash'}</TableHead>
+                  <TableHead className="text-right">{language === 'uz' ? 'Boshlang\'ich' : language === 'ru' ? 'Начальный' : 'Opening'}</TableHead>
+                  <TableHead className="text-right">{language === 'uz' ? 'Jami sotilgan' : language === 'ru' ? 'Всего продано' : 'Total Sold'}</TableHead>
+                  <TableHead className="text-right">{language === 'uz' ? 'Jami to\'langan' : language === 'ru' ? 'Всего оплачено' : 'Total Paid'}</TableHead>
+                  <TableHead className="text-right">{language === 'uz' ? 'Qoldiq' : language === 'ru' ? 'Остаток' : 'Balance'}</TableHead>
                   <TableHead className="text-center">{t('status') || 'Holat'}</TableHead>
                   <TableHead className="text-center">Javob</TableHead>
                   <TableHead className="text-center">{t('actions') || 'Amallar'}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredActs.map((act) => {
+                {paginatedActs.map((act) => {
                   const closingBalance = (act.opening_balance || 0) + (act.our_debit_total || 0) - (act.our_credit_total || 0);
                   return (
                     <TableRow
@@ -1270,6 +1285,21 @@ export default function ActSverka() {
                 })}
               </TableBody>
             </Table>
+            {Math.ceil(filteredActs.length / pageSize) > 1 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t">
+                <p className="text-sm text-slate-500">
+                  {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, filteredActs.length)} / {filteredActs.length}
+                </p>
+                <div className="flex items-center gap-2">
+                  <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}>1</button>
+                  <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft className="w-4 h-4" /></button>
+                  <span className="text-sm font-medium px-2">{currentPage} / {Math.ceil(filteredActs.length / pageSize)}</span>
+                  <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= Math.ceil(filteredActs.length / pageSize)} onClick={() => setCurrentPage(p => p + 1)}><ChevronRight className="w-4 h-4" /></button>
+                  <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= Math.ceil(filteredActs.length / pageSize)} onClick={() => setCurrentPage(Math.ceil(filteredActs.length / pageSize))}>{Math.ceil(filteredActs.length / pageSize)}</button>
+                </div>
+              </div>
+            )}
+            </>
           )}
         </CardContent>
       </Card>

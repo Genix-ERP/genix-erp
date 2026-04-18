@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { constructionService } from '@/api/services/construction';
+import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -37,7 +38,9 @@ import {
   Building2,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
   FolderOpen,
+  Package,
 } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -83,6 +86,10 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
   // Source type filter for estimates list
   const [sourceTypeFilter, setSourceTypeFilter] = useState('all');
 
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 20;
+
   // Import/Export
   const [showImportModal, setShowImportModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
@@ -117,7 +124,19 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
       }
 
       // Bulk create all lines (replace existing if re-importing to same estimate)
-      await constructionService.bulkCreateEstimateLines(estId, lines, { replace: isExisting });
+      const bulkResult = await constructionService.bulkCreateEstimateLines(estId, lines, { replace: isExisting, sourceType: sourceType || '' });
+
+      // Show toast if products were auto-created from resource lines
+      if (bulkResult?.products_created > 0) {
+        toast.success(`${bulkResult.products_created} ${t('products_auto_created') || "ta mahsulot avtomatik yaratildi"}`);
+      }
+
+      // Show toast if Forma 2 was auto-created from VOR/Edinich estimate
+      if (bulkResult?.forma2_created) {
+        toast.success(t('forma2_auto_created') || "Forma 2 (KS-2) avtomatik yaratildi", {
+          description: t('forma2_auto_created_desc') || "Smetadan barcha qatorlar bilan qoralama Forma 2 yaratildi",
+        });
+      }
 
       // Auto-create construction stages from BOP section headers
       if (sourceType === 'vor' && sectionNames?.length > 0) {
@@ -198,6 +217,11 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
       .then(data => setProducts(data || []))
       .catch(() => setProducts([]));
   }, [project?.id]);
+
+  // Reset pagination when filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [sourceTypeFilter]);
 
   // Load lines for an estimate
   const loadEstimateLines = async (estimateId) => {
@@ -621,7 +645,11 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
           ) : (
             <ScrollArea className="h-[600px]">
               <div className="p-4 space-y-3">
-                {filteredEstimates.map((est) => {
+                {(() => {
+                  const totalCount = filteredEstimates.length;
+                  const totalPages = Math.ceil(totalCount / pageSize);
+                  const paginatedEstimates = filteredEstimates.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+                  return paginatedEstimates.map((est) => {
                   const isExpanded = expandedEstimate === est.id;
                   const lines = estimateLines[est.id] || [];
                   const isLoadingLines = linesLoading === est.id;
@@ -672,6 +700,24 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                   <DropdownMenuItem onClick={() => handleApprove(est)}>
                                     <CheckCircle className="w-4 h-4 mr-2 text-green-600" />
                                     {t('approve') || 'Tasdiqlash'}
+                                  </DropdownMenuItem>
+                                )}
+                                {est.source_type === 'resurs' && (
+                                  <DropdownMenuItem onClick={async () => {
+                                    try {
+                                      const result = await constructionService.createProductsFromEstimate(est.id);
+                                      if (result?.products_created > 0) {
+                                        toast.success(`${result.products_created} ${t('products_created_success') || "ta mahsulot yaratildi"}`);
+                                      } else {
+                                        toast.info(t('all_products_already_exist') || "Barcha mahsulotlar allaqachon mavjud");
+                                      }
+                                    } catch (err) {
+                                      console.error(err);
+                                      toast.error(t('error_occurred') || 'Xatolik yuz berdi');
+                                    }
+                                  }}>
+                                    <Package className="w-4 h-4 mr-2 text-green-600" />
+                                    {t('create_products') || "Mahsulotlar yaratish"}
                                   </DropdownMenuItem>
                                 )}
                                 <DropdownMenuItem onClick={() => handleDuplicate(est)}>
@@ -852,7 +898,26 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                       )}
                     </div>
                   );
-                })}
+                  });
+                })()}
+                {(() => {
+                  const totalCount = filteredEstimates.length;
+                  const totalPages = Math.ceil(totalCount / pageSize);
+                  return totalPages > 1 && (
+                    <div className="flex items-center justify-between px-4 py-3 border-t">
+                      <p className="text-sm text-slate-500">
+                        {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, totalCount)} / {totalCount}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}>1</button>
+                        <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft className="w-4 h-4" /></button>
+                        <span className="text-sm font-medium px-2">{currentPage} / {totalPages}</span>
+                        <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}><ChevronRight className="w-4 h-4" /></button>
+                        <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(totalPages)}>{totalPages}</button>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </ScrollArea>
           )}

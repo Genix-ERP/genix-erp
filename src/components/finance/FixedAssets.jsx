@@ -8,7 +8,8 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Plus, Building2, Car, Monitor, Cpu, Wrench, Package,
   TrendingDown, Calendar, DollarSign, Edit2, Trash2,
-  Calculator, FileText, AlertTriangle, CheckCircle2, Settings, ArrowRight
+  Calculator, FileText, AlertTriangle, CheckCircle2, Settings, ArrowRight,
+  ChevronLeft, ChevronRight
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -72,6 +73,8 @@ export default function FixedAssets() {
   const [selectedAsset, setSelectedAsset] = useState(null);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 20;
   const [activeTab, setActiveTab] = useState("assets");
   const [isSaving, setIsSaving] = useState(false);
   const [maintenanceForm, setMaintenanceForm] = useState({
@@ -150,6 +153,11 @@ export default function FixedAssets() {
     }
     return filtered;
   }, [fixedAssets, categoryFilter, statusFilter]);
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [categoryFilter, statusFilter]);
 
   // Calculate depreciation for an asset
   const calculateDepreciation = (asset) => {
@@ -591,7 +599,14 @@ export default function FixedAssets() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          {filteredAssets.length === 0 ? (
+          {(() => {
+            const totalCount = filteredAssets.length;
+            const totalPages = Math.ceil(totalCount / pageSize);
+            const paginatedAssets = filteredAssets.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+            return (
+              <>
+          {totalCount === 0 ? (
             <div className="text-center py-16 px-6">
               <div className="w-20 h-20 bg-gradient-to-br from-slate-100 to-slate-200 rounded-2xl flex items-center justify-center mx-auto mb-6">
                 <Building2 className="w-10 h-10 text-slate-400" />
@@ -612,6 +627,7 @@ export default function FixedAssets() {
               )}
             </div>
           ) : (
+            <>
             <Table>
               <TableHeader>
                 <TableRow className="bg-slate-50">
@@ -628,7 +644,7 @@ export default function FixedAssets() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredAssets.map((asset) => {
+                {paginatedAssets.map((asset) => {
                   const categoryInfo = getCategoryInfo(asset.category);
                   const CategoryIcon = categoryInfo.icon;
                   const depreciableAmount = (asset.acquisition_cost || 0) - (asset.salvage_value || 0);
@@ -706,7 +722,25 @@ export default function FixedAssets() {
                 })}
               </TableBody>
             </Table>
+            {Math.ceil(filteredAssets.length / pageSize) > 1 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t">
+                <p className="text-sm text-slate-500">
+                  {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, filteredAssets.length)} / {filteredAssets.length}
+                </p>
+                <div className="flex items-center gap-2">
+                  <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}>1</button>
+                  <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft className="w-4 h-4" /></button>
+                  <span className="text-sm font-medium px-2">{currentPage} / {Math.ceil(filteredAssets.length / pageSize)}</span>
+                  <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= Math.ceil(filteredAssets.length / pageSize)} onClick={() => setCurrentPage(p => p + 1)}><ChevronRight className="w-4 h-4" /></button>
+                  <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= Math.ceil(filteredAssets.length / pageSize)} onClick={() => setCurrentPage(Math.ceil(filteredAssets.length / pageSize))}>{Math.ceil(filteredAssets.length / pageSize)}</button>
+                </div>
+              </div>
+            )}
+            </>
           )}
+          </>
+            );
+          })()}
         </CardContent>
       </Card>
 

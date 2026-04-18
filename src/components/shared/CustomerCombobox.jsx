@@ -13,20 +13,18 @@ import {
 } from "@/components/ui/command";
 import apiClient from "@/api/client";
 
-export default function ProductCombobox({ products: initialProducts = [], value, onValueChange, placeholder = "Mahsulot tanlang", t = (k) => k }) {
+export default function CustomerCombobox({ customers: initialCustomers = [], value, onValueChange, placeholder = "Mijozni tanlang", t = (k) => k }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
-  // Remember the last selected product so the label stays after search clears
   const [lastSelected, setLastSelected] = useState(null);
   const debounceRef = useRef(null);
 
-  // Use initial products when no search, search results when searching
-  const displayProducts = search.length >= 2 ? searchResults : initialProducts;
-  const selectedProduct = [...initialProducts, ...searchResults, ...(lastSelected ? [lastSelected] : [])].find((p) => p.id === value);
+  // Use initial customers when no search, search results when searching
+  const displayCustomers = search.length >= 2 ? searchResults : initialCustomers;
+  const selectedCustomer = [...initialCustomers, ...searchResults, ...(lastSelected ? [lastSelected] : [])].find((c) => c.id === value);
 
-  // Clear lastSelected when value is externally cleared
   useEffect(() => {
     if (!value) setLastSelected(null);
   }, [value]);
@@ -43,8 +41,9 @@ export default function ProductCombobox({ products: initialProducts = [], value,
     debounceRef.current = setTimeout(async () => {
       setIsSearching(true);
       try {
-        const res = await apiClient.get('/products', { params: { search, limit: 50 } });
-        setSearchResults(res.data?.data || []);
+        const res = await apiClient.get('/contacts', { params: { search, limit: 50, type: 'customer' } });
+        const data = res.data?.data || res.data || [];
+        setSearchResults(Array.isArray(data) ? data : data.items || []);
       } catch {
         setSearchResults([]);
       }
@@ -53,6 +52,10 @@ export default function ProductCombobox({ products: initialProducts = [], value,
 
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [search]);
+
+  const getDisplayName = (customer) => {
+    return customer?.company_name || customer?.name || '';
+  };
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -64,12 +67,12 @@ export default function ProductCombobox({ products: initialProducts = [], value,
           className="w-full justify-between font-normal h-9 px-3 text-sm"
         >
           <span className="truncate">
-            {selectedProduct ? selectedProduct.name : placeholder}
+            {selectedCustomer ? getDisplayName(selectedCustomer) : placeholder}
           </span>
           <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[300px] p-0" align="start">
+      <PopoverContent className="w-[350px] p-0" align="start">
         <Command shouldFilter={false}>
           <CommandInput
             placeholder={t('search') || "Qidirish..."}
@@ -81,17 +84,17 @@ export default function ProductCombobox({ products: initialProducts = [], value,
               <div className="flex items-center justify-center py-6">
                 <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
               </div>
-            ) : displayProducts.length === 0 ? (
+            ) : displayCustomers.length === 0 ? (
               <CommandEmpty>{search.length >= 2 ? (t('not_found') || "Topilmadi") : (t('type_to_search') || "Qidirish uchun yozing...")}</CommandEmpty>
             ) : (
               <CommandGroup>
-                {displayProducts.map((product) => (
+                {displayCustomers.map((customer) => (
                   <CommandItem
-                    key={product.id}
-                    value={product.id}
+                    key={customer.id}
+                    value={customer.id}
                     onSelect={() => {
-                      setLastSelected(product);
-                      onValueChange(product.id, product);
+                      setLastSelected(customer);
+                      onValueChange(customer.id, customer);
                       setOpen(false);
                       setSearch("");
                     }}
@@ -99,10 +102,10 @@ export default function ProductCombobox({ products: initialProducts = [], value,
                     <Check
                       className={cn(
                         "mr-2 h-4 w-4",
-                        value === product.id ? "opacity-100" : "opacity-0"
+                        value === customer.id ? "opacity-100" : "opacity-0"
                       )}
                     />
-                    <span className="truncate">{product.name}</span>
+                    <span className="truncate">{getDisplayName(customer)}</span>
                   </CommandItem>
                 ))}
               </CommandGroup>

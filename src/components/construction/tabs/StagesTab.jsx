@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { constructionService } from '@/api/services/construction';
+import inventoryService from '@/api/services/inventory';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -9,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Plus, Edit, Trash2, Layers, X, ChevronDown, ChevronRight, Package } from 'lucide-react';
+import { Plus, Edit, Trash2, Layers, X, ChevronDown, ChevronRight, ChevronLeft, Package, Truck, Users, ShieldCheck } from 'lucide-react';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -46,6 +47,8 @@ const StagesTab = ({ project }) => {
   const [stages, setStages] = useState([]);
   const [subStagesMap, setSubStagesMap] = useState({}); // { [stageId]: SubStage[] }
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 20;
 
   // Stage modal
   const [showModal, setShowModal] = useState(false);
@@ -70,14 +73,44 @@ const StagesTab = ({ project }) => {
   const [showMaterialModal, setShowMaterialModal] = useState(false);
   const [materialSubStageId, setMaterialSubStageId] = useState(null);
   const [materialForm, setMaterialForm] = useState({ product_id: '', product_name: '', uom: 'шт', quantity: '', unit_cost: '' });
-  const [products, setProducts] = useState([]);
+  const [inventoryProducts, setInventoryProducts] = useState([]);
+  // Estimate resources for equipment/employee tabs
+  const [estimateEquipmentResources, setEstimateEquipmentResources] = useState([]);
+  const [estimateLaborResources, setEstimateLaborResources] = useState([]);
+  // Unified modal tab: 'materials' | 'equipment' | 'employee'
+  const [modalTab, setModalTab] = useState('materials');
+  // Equipment/Employee form (shared)
+  const [equipmentForm, setEquipmentForm] = useState({ name: '', work_unit: 'soat', quantity: '', unit_price: '' });
+  // Sub-stage equipment data (includes both equipment and employee/labor entries)
+  const [subStageEquipment, setSubStageEquipment] = useState({});
+  const [equipmentLoading, setEquipmentLoading] = useState(null);
 
-  // Load project materials for dropdown
+  // Load inventory products + estimate resources for dropdowns
   useEffect(() => {
     if (!project?.id) return;
-    constructionService.listProjectMaterials(project.id)
-      .then(data => setProducts(data || []))
-      .catch(() => setProducts([]));
+    // Load inventory products (deduplicate by product_id, aggregate stock)
+    inventoryService.listInventory({ limit: 500 })
+      .then(d => {
+        const map = {};
+        (d || []).forEach(item => {
+          if (map[item.product_id]) {
+            map[item.product_id].quantity_on_hand += item.quantity_on_hand || 0;
+            map[item.product_id].quantity_available += item.quantity_available || 0;
+            map[item.product_id].quantity_reserved += item.quantity_reserved || 0;
+          } else {
+            map[item.product_id] = { ...item };
+          }
+        });
+        setInventoryProducts(Object.values(map));
+      })
+      .catch(() => setInventoryProducts([]));
+    // Load estimate resources by type for equipment/employee dropdowns
+    constructionService.listEstimateResources(project.id, 'equipment')
+      .then(d => setEstimateEquipmentResources(d || []))
+      .catch(() => setEstimateEquipmentResources([]));
+    constructionService.listEstimateResources(project.id, 'labor')
+      .then(d => setEstimateLaborResources(d || []))
+      .catch(() => setEstimateLaborResources([]));
   }, [project?.id]);
 
   const loadAllSubStages = useCallback(async (stageList) => {
@@ -109,6 +142,10 @@ const StagesTab = ({ project }) => {
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [stages.length]);
+
   const reloadSubStages = async (stageId) => {
     try {
       const data = await constructionService.listSubStages(stageId);
@@ -131,6 +168,31 @@ const StagesTab = ({ project }) => {
     }
   };
 
+  const loadSubStageEquipment = async (subStageId) => {
+    setEquipmentLoading(subStageId);
+    try {
+      const data = await constructionService.listSubStageEquipment(subStageId);
+      setSubStageEquipment(prev => ({ ...prev, [subStageId]: data || [] }));
+    } catch (e) {
+      console.error('Failed to load sub-stage equipment:', e);
+      setSubStageEquipment(prev => ({ ...prev, [subStageId]: [] }));
+    } finally {
+      setEquipmentLoading(null);
+    }
+  };
+
+  const handleDeleteEquipment = async (equipmentId, subStageId) => {
+    try {
+      await constructionService.deleteSubStageEquipment(equipmentId);
+      await loadSubStageEquipment(subStageId);
+      const stageId = findStageForSubStage(subStageId);
+      if (stageId) await reloadSubStages(stageId);
+    } catch (e) {
+      console.error('Failed to delete equipment:', e);
+      toast.error(t('error_occurred'));
+    }
+  };
+
   const toggleSubStageMaterials = (subStageId) => {
     if (expandedSubStage === subStageId) {
       setExpandedSubStage(null);
@@ -139,12 +201,17 @@ const StagesTab = ({ project }) => {
       if (!subStageMaterials[subStageId]) {
         loadSubStageMaterials(subStageId);
       }
+      if (!subStageEquipment[subStageId]) {
+        loadSubStageEquipment(subStageId);
+      }
     }
   };
 
   const openAddMaterial = (subStageId) => {
     setMaterialSubStageId(subStageId);
     setMaterialForm({ product_id: '', product_name: '', uom: 'шт', quantity: '', unit_cost: '' });
+    setEquipmentForm({ name: '', work_unit: 'soat', quantity: '', unit_price: '' });
+    setModalTab('materials');
     setShowMaterialModal(true);
   };
 
@@ -158,12 +225,51 @@ const StagesTab = ({ project }) => {
         quantity: parseFloat(materialForm.quantity) || 0,
         unit_cost: parseFloat(parsePriceInput(materialForm.unit_cost)) || 0,
       });
+      // If product selected from inventory, create reservation
+      if (materialForm.product_id) {
+        const stageId = findStageForSubStage(materialSubStageId);
+        try {
+          await inventoryService.createReservation({
+            project_id: project.id,
+            stage_id: stageId || 0,
+            substage_id: materialSubStageId,
+            product_id: materialForm.product_id,
+            quantity: parseFloat(materialForm.quantity) || 0,
+            unit_cost: parseFloat(parsePriceInput(materialForm.unit_cost)) || 0,
+          });
+        } catch (reserveErr) {
+          console.error('Reservation creation failed:', reserveErr);
+        }
+      }
       setShowMaterialModal(false);
       await loadSubStageMaterials(materialSubStageId);
-      // Reload sub-stages to update material_count/material_total
       const stageId = findStageForSubStage(materialSubStageId);
       if (stageId) await reloadSubStages(stageId);
-      // Reload stages to update material_total on stage card
+      const data = await constructionService.listStages(project.id);
+      setStages(data || []);
+    } catch (e) {
+      toast.error(t('error_occurred'));
+    }
+  };
+
+  const handleAddEquipment = async () => {
+    if (!equipmentForm.name.trim() || !materialSubStageId) return;
+    try {
+      const qty = parseFloat(equipmentForm.quantity) || 0;
+      const price = parseFloat(parsePriceInput(equipmentForm.unit_price)) || 0;
+      await constructionService.createSubStageEquipment(materialSubStageId, {
+        name: equipmentForm.name,
+        type: modalTab === 'employee' ? 'employee' : 'equipment',
+        work_unit: equipmentForm.work_unit || 'soat',
+        quantity: qty,
+        plan_quantity: qty,
+        unit_price: price,
+      });
+      setShowMaterialModal(false);
+      await loadSubStageMaterials(materialSubStageId);
+      await loadSubStageEquipment(materialSubStageId);
+      const stageId = findStageForSubStage(materialSubStageId);
+      if (stageId) await reloadSubStages(stageId);
       const data = await constructionService.listStages(project.id);
       setStages(data || []);
     } catch (e) {
@@ -423,7 +529,14 @@ const StagesTab = ({ project }) => {
             </div>
           ) : (
             <div className="space-y-3">
-              {stages.map((stage) => {
+              {(() => {
+                const totalCount = stages.length;
+                const totalPages = Math.ceil(totalCount / pageSize);
+                const paginatedItems = stages.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+                return (
+                  <>
+                    {paginatedItems.map((stage) => {
                 const subs = subStagesMap[stage.id] || [];
                 const pct = getProgress(stage);
                 const overBudget = stage.actual_amount > stage.planned_budget && stage.planned_budget > 0;
@@ -453,13 +566,33 @@ const StagesTab = ({ project }) => {
                               </span>
                             )}
                           </div>
-                          {/* Material total for stage */}
-                          {stage.material_total > 0 && (
-                            <div className="flex items-center gap-2 mb-3 text-sm">
-                              <Package className="w-4 h-4 text-amber-500" />
-                              <span className="text-amber-700 font-medium">
-                                {t('materials')}: {formatCurrency(stage.material_total)}
-                              </span>
+                          {/* Material / equipment / labor totals for stage */}
+                          {(stage.material_total > 0 || stage.equipment_total > 0 || stage.labor_total > 0) && (
+                            <div className="flex items-center flex-wrap gap-x-4 gap-y-1 mb-3 text-sm">
+                              {stage.material_total > 0 && (
+                                <div className="flex items-center gap-1.5">
+                                  <Package className="w-4 h-4 text-amber-500" />
+                                  <span className="text-amber-700 font-medium">
+                                    {t('materials')}: {formatCurrency(stage.material_total)}
+                                  </span>
+                                </div>
+                              )}
+                              {stage.equipment_total > 0 && (
+                                <div className="flex items-center gap-1.5">
+                                  <Truck className="w-4 h-4 text-blue-500" />
+                                  <span className="text-blue-700 font-medium">
+                                    {t('equipment') || 'Texnika'}: {formatCurrency(stage.equipment_total)}
+                                  </span>
+                                </div>
+                              )}
+                              {stage.labor_total > 0 && (
+                                <div className="flex items-center gap-1.5">
+                                  <Users className="w-4 h-4 text-green-500" />
+                                  <span className="text-green-700 font-medium">
+                                    {t('labor') || 'Ishchi kuchi'}: {formatCurrency(stage.labor_total)}
+                                  </span>
+                                </div>
+                              )}
                             </div>
                           )}
                           {/* Progress bar */}
@@ -525,6 +658,17 @@ const StagesTab = ({ project }) => {
                           const isExpanded = expandedSubStage === sub.id;
                           const materials = subStageMaterials[sub.id] || [];
                           const isLoadingMats = materialsLoading === sub.id;
+                          const allEquipment = subStageEquipment[sub.id] || [];
+                          const equipmentItems = allEquipment.filter(e => e.type !== 'employee');
+                          const laborItems = allEquipment.filter(e => e.type === 'employee');
+                          const isLoadingEquip = equipmentLoading === sub.id;
+                          const equipmentTotalLocal = equipmentItems.reduce((s, e) => s + (e.total_cost || (e.quantity || e.plan_quantity || 0) * (e.unit_price || 0)), 0);
+                          const laborTotalLocal = laborItems.reduce((s, e) => s + (e.total_cost || (e.quantity || e.plan_quantity || 0) * (e.unit_price || 0)), 0);
+                          // Prefer backend-provided aggregates (shown without needing to expand); fall back to client values after loading
+                          const equipmentCountDisplay = equipmentItems.length > 0 ? equipmentItems.length : (sub.equipment_count || 0);
+                          const equipmentTotalDisplay = equipmentItems.length > 0 ? equipmentTotalLocal : (sub.equipment_total || 0);
+                          const laborCountDisplay = laborItems.length > 0 ? laborItems.length : (sub.labor_count || 0);
+                          const laborTotalDisplay = laborItems.length > 0 ? laborTotalLocal : (sub.labor_total || 0);
 
                           return (
                             <div key={sub.id}>
@@ -549,11 +693,23 @@ const StagesTab = ({ project }) => {
                                     </Select>
                                   </div>
                                   <span className="text-sm">{sub.name}</span>
-                                  {sub.material_total > 0 && (
-                                    <span className="text-xs text-amber-600 font-medium ml-auto mr-2">
-                                      {sub.material_count} mat. &middot; {formatCurrency(sub.material_total)}
-                                    </span>
-                                  )}
+                                  <div className="flex items-center gap-2 ml-auto mr-2 text-xs font-medium">
+                                    {sub.material_total > 0 && (
+                                      <span className="text-amber-600">
+                                        {sub.material_count} mat. &middot; {formatCurrency(sub.material_total)}
+                                      </span>
+                                    )}
+                                    {equipmentTotalDisplay > 0 && (
+                                      <span className="text-blue-600">
+                                        {equipmentCountDisplay} tex. &middot; {formatCurrency(equipmentTotalDisplay)}
+                                      </span>
+                                    )}
+                                    {laborTotalDisplay > 0 && (
+                                      <span className="text-green-600">
+                                        {laborCountDisplay} ish. &middot; {formatCurrency(laborTotalDisplay)}
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                                 <div className="flex items-center gap-1">
                                   <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isExpanded ? 'rotate-0' : '-rotate-90'}`} />
@@ -567,47 +723,155 @@ const StagesTab = ({ project }) => {
                                 </div>
                               </div>
 
-                              {/* Expanded materials list */}
+                              {/* Expanded materials/equipment/labor list */}
                               {isExpanded && (
-                                <div className="ml-4 mt-1 mb-2 border rounded bg-white p-2 space-y-1">
-                                  {isLoadingMats ? (
-                                    <p className="text-xs text-slate-400 py-2 text-center">{t('loading')}</p>
-                                  ) : materials.length === 0 ? (
-                                    <p className="text-xs text-slate-400 py-2 text-center">{t('no_items')}</p>
-                                  ) : (
-                                    <table className="w-full text-xs">
-                                      <thead>
-                                        <tr className="border-b text-slate-500">
-                                          <th className="text-left py-1 px-1">{t('name')}</th>
-                                          <th className="text-right py-1 px-1">{t('unit')}</th>
-                                          <th className="text-right py-1 px-1">{t('quantity')}</th>
-                                          <th className="text-right py-1 px-1">{t('unit_cost')}</th>
-                                          <th className="text-right py-1 px-1">{t('total')}</th>
-                                          <th className="w-8"></th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {materials.map(mat => (
-                                          <tr key={mat.id} className="border-b border-slate-50 hover:bg-slate-50 group">
-                                            <td className="py-1 px-1">{mat.product_name}</td>
-                                            <td className="py-1 px-1 text-right text-slate-500">{mat.uom}</td>
-                                            <td className="py-1 px-1 text-right">{mat.quantity}</td>
-                                            <td className="py-1 px-1 text-right">{formatCurrency(mat.unit_cost)}</td>
-                                            <td className="py-1 px-1 text-right font-medium">{formatCurrency(mat.total_cost)}</td>
-                                            <td className="py-1 px-1 text-center">
-                                              <Button
-                                                variant="ghost" size="sm"
-                                                className="h-5 w-5 p-0 text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100"
-                                                onClick={() => handleDeleteMaterial(mat.id, sub.id)}
-                                              >
-                                                <Trash2 className="w-3 h-3" />
-                                              </Button>
-                                            </td>
+                                <div className="ml-4 mt-1 mb-2 border rounded bg-white p-2 space-y-3">
+                                  {/* Materials section */}
+                                  <div>
+                                    <div className="text-sm font-semibold text-amber-700 mb-1 flex items-center gap-1">
+                                      <Package className="w-3.5 h-3.5" />
+                                      {t('materials') || 'Materiallar'}
+                                    </div>
+                                    {isLoadingMats ? (
+                                      <p className="text-sm text-slate-400 py-2 text-center">{t('loading')}</p>
+                                    ) : materials.length === 0 ? (
+                                      <p className="text-sm text-slate-400 py-2 text-center">{t('no_items')}</p>
+                                    ) : (
+                                      <table className="w-full text-sm">
+                                        <thead>
+                                          <tr className="border-b text-slate-500">
+                                            <th className="text-left py-1.5 px-2">{t('name')}</th>
+                                            <th className="text-right py-1.5 px-2">{t('unit')}</th>
+                                            <th className="text-right py-1.5 px-2">{t('quantity')}</th>
+                                            <th className="text-right py-1.5 px-2">{t('unit_cost')}</th>
+                                            <th className="text-right py-1.5 px-2">{t('total')}</th>
+                                            <th className="w-8"></th>
                                           </tr>
-                                        ))}
-                                      </tbody>
-                                    </table>
-                                  )}
+                                        </thead>
+                                        <tbody>
+                                          {materials.map(mat => (
+                                            <tr key={mat.id} className="border-b border-slate-50 hover:bg-slate-50 group">
+                                              <td className="py-1.5 px-2">{mat.product_name}</td>
+                                              <td className="py-1.5 px-2 text-right text-slate-500">{mat.uom}</td>
+                                              <td className="py-1.5 px-2 text-right">{mat.quantity}</td>
+                                              <td className="py-1.5 px-2 text-right">{formatCurrency(mat.unit_cost)}</td>
+                                              <td className="py-1.5 px-2 text-right font-medium">{formatCurrency(mat.total_cost)}</td>
+                                              <td className="py-1.5 px-2 text-center">
+                                                <Button
+                                                  variant="ghost" size="sm"
+                                                  className="h-5 w-5 p-0 text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100"
+                                                  onClick={() => handleDeleteMaterial(mat.id, sub.id)}
+                                                >
+                                                  <Trash2 className="w-3 h-3" />
+                                                </Button>
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    )}
+                                  </div>
+
+                                  {/* Equipment section */}
+                                  <div>
+                                    <div className="text-sm font-semibold text-blue-700 mb-1 flex items-center gap-1">
+                                      <Truck className="w-3.5 h-3.5" />
+                                      {t('rf_equipment') || 'Texnika'}
+                                    </div>
+                                    {isLoadingEquip ? (
+                                      <p className="text-sm text-slate-400 py-2 text-center">{t('loading')}</p>
+                                    ) : equipmentItems.length === 0 ? (
+                                      <p className="text-sm text-slate-400 py-2 text-center">{t('no_items')}</p>
+                                    ) : (
+                                      <table className="w-full text-sm">
+                                        <thead>
+                                          <tr className="border-b text-slate-500">
+                                            <th className="text-left py-1.5 px-2">{t('name')}</th>
+                                            <th className="text-right py-1.5 px-2">{t('unit')}</th>
+                                            <th className="text-right py-1.5 px-2">{t('quantity')}</th>
+                                            <th className="text-right py-1.5 px-2">{t('unit_cost')}</th>
+                                            <th className="text-right py-1.5 px-2">{t('total')}</th>
+                                            <th className="w-8"></th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {equipmentItems.map(eq => {
+                                            const qty = eq.quantity || eq.plan_quantity || 0;
+                                            const total = eq.total_cost || qty * (eq.unit_price || 0);
+                                            return (
+                                              <tr key={eq.id} className="border-b border-slate-50 hover:bg-slate-50 group">
+                                                <td className="py-1.5 px-2">{eq.name}</td>
+                                                <td className="py-1.5 px-2 text-right text-slate-500">{eq.work_unit}</td>
+                                                <td className="py-1.5 px-2 text-right">{qty}</td>
+                                                <td className="py-1.5 px-2 text-right">{formatCurrency(eq.unit_price)}</td>
+                                                <td className="py-1.5 px-2 text-right font-medium">{formatCurrency(total)}</td>
+                                                <td className="py-1.5 px-2 text-center">
+                                                  <Button
+                                                    variant="ghost" size="sm"
+                                                    className="h-5 w-5 p-0 text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100"
+                                                    onClick={() => handleDeleteEquipment(eq.id, sub.id)}
+                                                  >
+                                                    <Trash2 className="w-3 h-3" />
+                                                  </Button>
+                                                </td>
+                                              </tr>
+                                            );
+                                          })}
+                                        </tbody>
+                                      </table>
+                                    )}
+                                  </div>
+
+                                  {/* Labor section */}
+                                  <div>
+                                    <div className="text-sm font-semibold text-green-700 mb-1 flex items-center gap-1">
+                                      <Users className="w-3.5 h-3.5" />
+                                      {t('rf_employee') || 'Ishchi kuchi'}
+                                    </div>
+                                    {isLoadingEquip ? (
+                                      <p className="text-sm text-slate-400 py-2 text-center">{t('loading')}</p>
+                                    ) : laborItems.length === 0 ? (
+                                      <p className="text-sm text-slate-400 py-2 text-center">{t('no_items')}</p>
+                                    ) : (
+                                      <table className="w-full text-sm">
+                                        <thead>
+                                          <tr className="border-b text-slate-500">
+                                            <th className="text-left py-1.5 px-2">{t('name')}</th>
+                                            <th className="text-right py-1.5 px-2">{t('unit')}</th>
+                                            <th className="text-right py-1.5 px-2">{t('quantity')}</th>
+                                            <th className="text-right py-1.5 px-2">{t('unit_cost')}</th>
+                                            <th className="text-right py-1.5 px-2">{t('total')}</th>
+                                            <th className="w-8"></th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {laborItems.map(lb => {
+                                            const qty = lb.quantity || lb.plan_quantity || 0;
+                                            const total = lb.total_cost || qty * (lb.unit_price || 0);
+                                            return (
+                                              <tr key={lb.id} className="border-b border-slate-50 hover:bg-slate-50 group">
+                                                <td className="py-1.5 px-2">{lb.name}</td>
+                                                <td className="py-1.5 px-2 text-right text-slate-500">{lb.work_unit}</td>
+                                                <td className="py-1.5 px-2 text-right">{qty}</td>
+                                                <td className="py-1.5 px-2 text-right">{formatCurrency(lb.unit_price)}</td>
+                                                <td className="py-1.5 px-2 text-right font-medium">{formatCurrency(total)}</td>
+                                                <td className="py-1.5 px-2 text-center">
+                                                  <Button
+                                                    variant="ghost" size="sm"
+                                                    className="h-5 w-5 p-0 text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100"
+                                                    onClick={() => handleDeleteEquipment(lb.id, sub.id)}
+                                                  >
+                                                    <Trash2 className="w-3 h-3" />
+                                                  </Button>
+                                                </td>
+                                              </tr>
+                                            );
+                                          })}
+                                        </tbody>
+                                      </table>
+                                    )}
+                                  </div>
+
                                   <Button
                                     variant="outline" size="sm"
                                     className="h-7 text-xs w-full mt-1"
@@ -625,7 +889,24 @@ const StagesTab = ({ project }) => {
                     )}
                   </div>
                 );
-              })}
+                    })}
+                    {Math.ceil(stages.length / pageSize) > 1 && (
+                      <div className="flex items-center justify-between px-4 py-3 border-t">
+                        <p className="text-sm text-slate-500">
+                          {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, stages.length)} / {stages.length}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}>1</button>
+                          <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft className="w-4 h-4" /></button>
+                          <span className="text-sm font-medium px-2">{currentPage} / {Math.ceil(stages.length / pageSize)}</span>
+                          <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= Math.ceil(stages.length / pageSize)} onClick={() => setCurrentPage(p => p + 1)}><ChevronRight className="w-4 h-4" /></button>
+                          <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= Math.ceil(stages.length / pageSize)} onClick={() => setCurrentPage(Math.ceil(stages.length / pageSize))}>{Math.ceil(stages.length / pageSize)}</button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           )}
         </CardContent>
@@ -707,109 +988,270 @@ const StagesTab = ({ project }) => {
         </DialogContent>
       </Dialog>
 
-      {/* Add Material Modal */}
+      {/* Add Material / Equipment / Employee Modal */}
       <Dialog open={showMaterialModal} onOpenChange={setShowMaterialModal}>
-        <DialogContent aria-describedby={undefined}>
+        <DialogContent aria-describedby={undefined} className="max-w-lg">
           <DialogHeader>
             <DialogTitle>{t('add')}</DialogTitle>
             <DialogDescription className="sr-only">{t('add')}</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label>{t('product')}</Label>
-              {products.length > 0 ? (
+
+          {/* Tab Switcher */}
+          <div className="flex border-b border-slate-200 -mx-6 px-6">
+            {[
+              { key: 'materials', label: t('rf_materials') || 'Materiallar', icon: Package, color: 'amber' },
+              { key: 'equipment', label: t('rf_equipment') || 'Texnika', icon: Truck, color: 'blue' },
+              { key: 'employee', label: t('rf_employee') || 'Ishchi kuchi', icon: Users, color: 'green' },
+            ].map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => setModalTab(tab.key)}
+                className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                  modalTab === tab.key
+                    ? `border-${tab.color}-500 text-${tab.color}-600`
+                    : 'border-transparent text-slate-500 hover:text-slate-700'
+                }`}
+                style={modalTab === tab.key ? {
+                  borderBottomColor: tab.color === 'amber' ? '#f59e0b' : tab.color === 'blue' ? '#3b82f6' : '#22c55e',
+                  color: tab.color === 'amber' ? '#d97706' : tab.color === 'blue' ? '#2563eb' : '#16a34a',
+                } : {}}
+              >
+                <tab.icon className="w-4 h-4" />
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* ─── Materials Tab ─── */}
+          {modalTab === 'materials' && (
+            <div className="space-y-4">
+              <div>
+                <Label>{t('select_product') || 'Mahsulot tanlang'}</Label>
                 <Select
-                  value={materialForm.product_name || 'custom'}
+                  value={materialForm.product_id || undefined}
                   onValueChange={(val) => {
-                    if (val === 'custom') {
-                      setMaterialForm(f => ({ ...f, product_id: '', product_name: '', uom: 'шт', unit_cost: '' }));
-                    } else {
-                      const p = products.find(pr => pr.product_name === val);
-                      if (p) {
-                        setMaterialForm(f => ({
-                          ...f,
-                          product_id: p.product_id || '',
-                          product_name: p.product_name,
-                          uom: p.uom || 'шт',
-                          unit_cost: p.unit_cost ? String(p.unit_cost) : '',
-                        }));
-                      }
+                    const p = inventoryProducts.find(ip => ip.product_id === val);
+                    if (p) {
+                      setMaterialForm(f => ({
+                        ...f,
+                        product_id: p.product_id,
+                        product_name: p.product_name,
+                        uom: 'шт',
+                        unit_cost: p.unit_cost ? String(p.unit_cost) : '',
+                      }));
                     }
                   }}
                 >
-                  <SelectTrigger><SelectValue placeholder={t('select_product')} /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="custom">{t('other')}</SelectItem>
-                    {products.map(p => {
-                      const remaining = (p.approved_quantity || 0) - (p.assigned_quantity || 0);
-                      return (
-                        <SelectItem key={p.product_id || p.id} value={p.product_name}>
-                          {p.product_name}{p.uom ? ` (${p.uom})` : ''}
-                          {p.approved_quantity > 0 && (
-                            <span className="text-slate-400 ml-1">— {remaining.toFixed(1)} {t('remaining')}</span>
-                          )}
-                        </SelectItem>
-                      );
-                    })}
+                  <SelectTrigger><SelectValue placeholder={t('select_product') || 'Mahsulot tanlang'} /></SelectTrigger>
+                  <SelectContent className="max-h-[300px]">
+                    {inventoryProducts.map(p => (
+                      <SelectItem key={p.product_id} value={p.product_id}>
+                        {p.product_name} — {t('stock') || 'Zaxira'}: {p.quantity_available ?? p.quantity_on_hand ?? 0}
+                        {p.unit_cost ? ` (${formatCurrency(p.unit_cost)})` : ''}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
-              ) : (
-                <Input
-                  value={materialForm.product_name}
-                  onChange={e => setMaterialForm(f => ({ ...f, product_name: e.target.value }))}
-                  placeholder={t('product_name')}
-                />
+                {materialForm.product_id && (
+                  <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                    <ShieldCheck className="w-3 h-3" />
+                    {t('from_inventory') || 'Inventorydan — zaxira so\'rovi yaratiladi'}
+                  </p>
+                )}
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <Label>{t('unit')}</Label>
+                  <Input
+                    value={materialForm.uom}
+                    onChange={e => setMaterialForm(f => ({ ...f, uom: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label>{t('quantity')}</Label>
+                  <Input
+                    type="number" step="0.0001" min="0"
+                    value={materialForm.quantity}
+                    onChange={e => setMaterialForm(f => ({ ...f, quantity: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label>{t('unit_cost')}</Label>
+                  <Input
+                    value={materialForm.unit_cost}
+                    onChange={e => setMaterialForm(f => ({ ...f, unit_cost: formatPriceInput(e.target.value) }))}
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+              {materialForm.quantity && materialForm.unit_cost && (
+                <div className="flex justify-between items-center pt-2 border-t text-sm">
+                  <span className="text-slate-500">{t('total')}</span>
+                  <span className="font-semibold">
+                    {formatCurrency((parseFloat(materialForm.quantity) || 0) * (parseFloat(parsePriceInput(materialForm.unit_cost)) || 0))}
+                  </span>
+                </div>
               )}
-              {/* Show custom name input if 'custom' selected or products empty */}
-              {products.length > 0 && !products.some(p => p.product_name === materialForm.product_name) && (
-                <Input
-                  className="mt-2"
-                  value={materialForm.product_name}
-                  onChange={e => setMaterialForm(f => ({ ...f, product_name: e.target.value }))}
-                  placeholder={t('product_name')}
-                />
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowMaterialModal(false)}>{t('cancel')}</Button>
+                <Button onClick={handleAddMaterial} disabled={!materialForm.product_id}>
+                  {t('add')}
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+
+          {/* ─── Equipment Tab (МАШ.-Ч from estimates) ─── */}
+          {modalTab === 'equipment' && (
+            <div className="space-y-4">
+              <div>
+                <Label>{t('select_equipment') || 'Texnika tanlang'}</Label>
+                {estimateEquipmentResources.length > 0 ? (
+                  <Select
+                    value={equipmentForm.name || undefined}
+                    onValueChange={(val) => {
+                      const r = estimateEquipmentResources.find(res => res.name === val);
+                      if (r) {
+                        // Prefer equipment_rate, fall back to unit_rate, then labor/material rate
+                        const rate = r.equipment_rate || r.unit_rate || r.labor_rate || r.material_rate || 0;
+                        setEquipmentForm(f => ({
+                          ...f,
+                          name: r.name,
+                          work_unit: 'soat',
+                          unit_price: rate ? formatPriceInput(String(rate)) : '',
+                        }));
+                      }
+                    }}
+                  >
+                    <SelectTrigger><SelectValue placeholder={t('select_equipment') || 'Texnika tanlang'} /></SelectTrigger>
+                    <SelectContent className="max-h-[300px] max-w-[450px]">
+                      {estimateEquipmentResources.map(r => {
+                        const rate = r.equipment_rate || r.unit_rate || r.labor_rate || r.material_rate || 0;
+                        return (
+                          <SelectItem key={r.id} value={r.name} title={r.name}>
+                            <span className="truncate block max-w-[380px]">{r.name}</span>
+                            <span className="text-xs text-slate-400 ml-1">{rate ? formatCurrency(rate) : ''}</span>
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p className="text-sm text-slate-500 py-2">{t('no_equipment_resources') || 'Smeta resurslarida texnika topilmadi'}</p>
+                )}
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <Label>{t('rf_work_unit') || 'Birlik'}</Label>
+                  <Select value={equipmentForm.work_unit} onValueChange={v => setEquipmentForm(f => ({ ...f, work_unit: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="soat">{t('rf_hour') || 'Soat'}</SelectItem>
+                      <SelectItem value="kun">{t('rf_day') || 'Kun'}</SelectItem>
+                      <SelectItem value="smena">{t('rf_shift') || 'Smena'}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>{t('quantity') || 'Miqdor'}</Label>
+                  <Input type="number" step="0.01" min="0" value={equipmentForm.quantity}
+                    onChange={e => setEquipmentForm(f => ({ ...f, quantity: e.target.value }))} />
+                </div>
+                <div>
+                  <Label>{t('rf_unit_price') || 'Narxi'}</Label>
+                  <Input value={equipmentForm.unit_price}
+                    onChange={e => setEquipmentForm(f => ({ ...f, unit_price: formatPriceInput(e.target.value) }))} placeholder="0" />
+                </div>
+              </div>
+              {equipmentForm.quantity && equipmentForm.unit_price && (
+                <div className="flex justify-between items-center pt-2 border-t text-sm">
+                  <span className="text-blue-600">{t('total')}: {formatCurrency((parseFloat(equipmentForm.quantity) || 0) * (parseFloat(parsePriceInput(equipmentForm.unit_price)) || 0))}</span>
+                </div>
               )}
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowMaterialModal(false)}>{t('cancel')}</Button>
+                <Button onClick={handleAddEquipment} disabled={!equipmentForm.name.trim()}>
+                  {t('add')}
+                </Button>
+              </DialogFooter>
             </div>
-            <div className="grid grid-cols-3 gap-3">
+          )}
+
+          {/* ─── Employee Tab (ЧЕЛ.-Ч from estimates) ─── */}
+          {modalTab === 'employee' && (
+            <div className="space-y-4">
               <div>
-                <Label>{t('unit')}</Label>
-                <Input
-                  value={materialForm.uom}
-                  onChange={e => setMaterialForm(f => ({ ...f, uom: e.target.value }))}
-                />
+                <Label>{t('select_employee_resource') || 'Ishchi kuchi tanlang'}</Label>
+                {estimateLaborResources.length > 0 ? (
+                  <Select
+                    value={equipmentForm.name || undefined}
+                    onValueChange={(val) => {
+                      const r = estimateLaborResources.find(res => res.name === val);
+                      if (r) {
+                        // Prefer labor_rate, fall back to unit_rate, then equipment/material rate
+                        const rate = r.labor_rate || r.unit_rate || r.equipment_rate || r.material_rate || 0;
+                        setEquipmentForm(f => ({
+                          ...f,
+                          name: r.name,
+                          work_unit: 'soat',
+                          unit_price: rate ? formatPriceInput(String(rate)) : '',
+                        }));
+                      }
+                    }}
+                  >
+                    <SelectTrigger><SelectValue placeholder={t('select_employee_resource') || 'Ishchi kuchi tanlang'} /></SelectTrigger>
+                    <SelectContent className="max-h-[300px] max-w-[450px]">
+                      {estimateLaborResources.map(r => {
+                        const rate = r.labor_rate || r.unit_rate || r.equipment_rate || r.material_rate || 0;
+                        return (
+                          <SelectItem key={r.id} value={r.name} title={r.name}>
+                            <span className="truncate block max-w-[380px]">{r.name}</span>
+                            <span className="text-xs text-slate-400 ml-1">{rate ? formatCurrency(rate) : ''}</span>
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p className="text-sm text-slate-500 py-2">{t('no_labor_resources') || 'Smeta resurslarida ishchi kuchi topilmadi'}</p>
+                )}
               </div>
-              <div>
-                <Label>{t('quantity')}</Label>
-                <Input
-                  type="number" step="0.0001" min="0"
-                  value={materialForm.quantity}
-                  onChange={e => setMaterialForm(f => ({ ...f, quantity: e.target.value }))}
-                />
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <Label>{t('rf_work_unit') || 'Birlik'}</Label>
+                  <Select value={equipmentForm.work_unit} onValueChange={v => setEquipmentForm(f => ({ ...f, work_unit: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="soat">{t('rf_hour') || 'Soat'}</SelectItem>
+                      <SelectItem value="kun">{t('rf_day') || 'Kun'}</SelectItem>
+                      <SelectItem value="smena">{t('rf_shift') || 'Smena'}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>{t('quantity') || 'Miqdor'}</Label>
+                  <Input type="number" step="0.01" min="0" value={equipmentForm.quantity}
+                    onChange={e => setEquipmentForm(f => ({ ...f, quantity: e.target.value }))} />
+                </div>
+                <div>
+                  <Label>{t('rf_unit_price') || 'Narxi'}</Label>
+                  <Input value={equipmentForm.unit_price}
+                    onChange={e => setEquipmentForm(f => ({ ...f, unit_price: formatPriceInput(e.target.value) }))} placeholder="0" />
+                </div>
               </div>
-              <div>
-                <Label>{t('unit_cost')}</Label>
-                <Input
-                  value={materialForm.unit_cost}
-                  onChange={e => setMaterialForm(f => ({ ...f, unit_cost: formatPriceInput(e.target.value) }))}
-                  placeholder="0"
-                />
-              </div>
+              {equipmentForm.quantity && equipmentForm.unit_price && (
+                <div className="flex justify-between items-center pt-2 border-t text-sm">
+                  <span className="text-green-600">{t('total')}: {formatCurrency((parseFloat(equipmentForm.quantity) || 0) * (parseFloat(parsePriceInput(equipmentForm.unit_price)) || 0))}</span>
+                </div>
+              )}
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowMaterialModal(false)}>{t('cancel')}</Button>
+                <Button onClick={handleAddEquipment} disabled={!equipmentForm.name.trim()}>
+                  {t('add')}
+                </Button>
+              </DialogFooter>
             </div>
-            {materialForm.quantity && materialForm.unit_cost && (
-              <div className="flex justify-between items-center pt-2 border-t text-sm">
-                <span className="text-slate-500">{t('total')}</span>
-                <span className="font-semibold">
-                  {formatCurrency((parseFloat(materialForm.quantity) || 0) * (parseFloat(parsePriceInput(materialForm.unit_cost)) || 0))}
-                </span>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowMaterialModal(false)}>{t('cancel')}</Button>
-            <Button onClick={handleAddMaterial} disabled={!materialForm.product_name.trim()}>
-              {t('add')}
-            </Button>
-          </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
 

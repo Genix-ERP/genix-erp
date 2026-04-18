@@ -5,7 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
   Search, FileText, Clock, CheckCircle, AlertCircle, AlertTriangle,
-  Building2, Receipt, Ban, DollarSign, CreditCard, Eye, Calendar, Download, FileSpreadsheet, X
+  Building2, Receipt, Ban, DollarSign, CreditCard, Eye, Calendar, Download, FileSpreadsheet, X,
+  ChevronLeft, ChevronRight
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -39,12 +40,47 @@ export default function FinanceVendorBills() {
   const [isPaying, setIsPaying] = useState(false);
   const [backendStats, setBackendStats] = useState(null);
 
+  // Server-side pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalBills, setTotalBills] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [paginatedBills, setPaginatedBills] = useState([]);
+  const [billsLoading, setBillsLoading] = useState(false);
+  const pageSize = 20;
+
+  const fetchBills = useCallback(async () => {
+    setBillsLoading(true);
+    try {
+      const params = { page: currentPage, page_size: pageSize };
+      if (searchQuery) params.search = searchQuery;
+      if (statusFilter !== 'all') params.status = statusFilter === 'not_paid' ? 'posted' : statusFilter;
+      if (dateFrom) params.date_from = dateFrom;
+      if (dateTo) params.date_to = dateTo;
+      const result = await financeService.listPurchaseInvoices(params);
+      const bills = Array.isArray(result?.data) ? result.data : Array.isArray(result) ? result : [];
+      setPaginatedBills(bills);
+      const meta = result?.meta || {};
+      setTotalBills(meta.total || bills.length);
+      setTotalPages(meta.total_pages || Math.ceil((meta.total || bills.length) / pageSize));
+    } catch (e) {
+      console.error('Failed to load vendor bills', e);
+      setPaginatedBills([]);
+    } finally {
+      setBillsLoading(false);
+    }
+  }, [currentPage, searchQuery, statusFilter, dateFrom, dateTo]);
+
+  useEffect(() => { fetchBills(); }, [fetchBills]);
+
+  // Reset page when filters change
+  useEffect(() => { setCurrentPage(1); }, [searchQuery, statusFilter, dateFrom, dateTo, codeFilter]);
+
   // Fetch backend stats on mount
   useEffect(() => {
     financeService.getPurchaseInvoiceStats()
       .then(data => setBackendStats(data))
       .catch(() => setBackendStats(null));
-  }, [vendorBills]);
+  }, [paginatedBills]);
 
   const isOverdue = (bill) => {
     // Use backend-computed is_overdue if available
@@ -84,23 +120,9 @@ export default function FinanceVendorBills() {
   const activeFilterCount = (dateFrom ? 1 : 0) + (dateTo ? 1 : 0) + (codeFilter ? 1 : 0);
   const clearAllFilters = () => { setDateFrom(''); setDateTo(''); setCodeFilter(''); setSearchQuery(''); setStatusFilter('all'); };
 
-  // Filter bills
+  // Filter bills (server handles search, status, date filters; only code filter is client-side)
   const filteredBills = useMemo(() => {
-    let filtered = vendorBills || [];
-
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(bill =>
-        bill.invoice_number?.toLowerCase().includes(query) ||
-        bill.bill_number?.toLowerCase().includes(query) ||
-        bill.vendor_name?.toLowerCase().includes(query) ||
-        bill.partner_name?.toLowerCase().includes(query) ||
-        bill.vendor_invoice_number?.toLowerCase().includes(query) ||
-        bill.reference?.toLowerCase().includes(query) ||
-        bill.origin?.toLowerCase().includes(query)
-      );
-    }
-
+    let filtered = paginatedBills;
     if (codeFilter) {
       const cf = codeFilter.toLowerCase();
       filtered = filtered.filter(bill =>
@@ -108,30 +130,8 @@ export default function FinanceVendorBills() {
         bill.bill_number?.toLowerCase().includes(cf)
       );
     }
-
-    if (dateFrom) {
-      filtered = filtered.filter(bill => {
-        const d = (bill.invoice_date || bill.bill_date || bill.created_at)?.split('T')[0];
-        return d && d >= dateFrom;
-      });
-    }
-    if (dateTo) {
-      filtered = filtered.filter(bill => {
-        const d = (bill.invoice_date || bill.bill_date || bill.created_at)?.split('T')[0];
-        return d && d <= dateTo;
-      });
-    }
-
-    if (statusFilter !== "all") {
-      filtered = filtered.filter(bill => {
-        const payStatus = getPaymentStatus(bill);
-        if (statusFilter === 'overdue') return isOverdue(bill);
-        return payStatus === statusFilter;
-      });
-    }
-
     return filtered;
-  }, [vendorBills, searchQuery, codeFilter, dateFrom, dateTo, statusFilter]);
+  }, [paginatedBills, codeFilter]);
 
   // Summary stats - use backend stats if available, otherwise compute client-side
   const summaryStats = useMemo(() => {
@@ -443,7 +443,7 @@ export default function FinanceVendorBills() {
                   {t('vendor_bills') || 'Yetkazib beruvchi hisob-fakturalari'}
                 </CardTitle>
                 <p className="text-sm text-slate-500 mt-1">
-                  {filteredBills.length} {t('bills') || 'faktura'}
+                  {totalBills} {t('bills') || 'faktura'}
                 </p>
               </div>
             </div>
@@ -536,7 +536,7 @@ export default function FinanceVendorBills() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          {isLoading ? (
+          {(isLoading || billsLoading) ? (
             <div className="flex items-center justify-center py-16">
               <div className="text-center">
                 <div className="w-8 h-8 border-4 border-[var(--genix-purple)] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
@@ -658,6 +658,22 @@ export default function FinanceVendorBills() {
                   })}
                 </TableBody>
               </Table>
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between px-4 py-3 border-t">
+                  <span className="text-sm text-slate-600">
+                    {t('showing') || 'Showing'} {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, totalBills)} {t('of') || 'of'} {totalBills}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>
+                      <ChevronLeft className="w-4 h-4" />
+                    </Button>
+                    <span className="text-sm font-medium">{currentPage} / {totalPages}</span>
+                    <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}>
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </CardContent>

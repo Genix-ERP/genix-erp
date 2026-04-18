@@ -23,8 +23,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Plus, Search, ShoppingBag, Package, Truck,
   CheckCircle, FileText, Receipt, RotateCcw, Upload, Download, Eye, Printer, X,
-  ClipboardList, MessageSquareWarning, CreditCard
+  ClipboardList, MessageSquareWarning, CreditCard, ChevronLeft, ChevronRight
 } from 'lucide-react';
+import apiClient from '@/api/client';
 import { format } from 'date-fns';
 import { salesService } from '@/api/services/sales';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -75,6 +76,14 @@ export default function Orders({
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [orderToDelete, setOrderToDelete] = useState(null);
 
+  // Server-side pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalOrders, setTotalOrders] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [paginatedOrders, setPaginatedOrders] = useState([]);
+  const [poLoading, setPoLoading] = useState(false);
+  const pageSize = 20;
+
   // Check if an order has returns
   const orderHasReturns = useCallback((orderId) => {
     return returns.some(r => r.sales_order_id === orderId);
@@ -88,20 +97,34 @@ export default function Orders({
     return invoices.some(inv => inv.sales_order_id === order.id && inv.status !== 'cancelled');
   }, [invoices]);
 
-  // Filter orders
+  // Server-side fetch for orders
+  const fetchOrders = useCallback(async () => {
+    setPoLoading(true);
+    try {
+      const params = { page: currentPage, page_size: pageSize };
+      if (searchQuery) params.search = searchQuery;
+      if (statusFilter !== 'all') params.status = statusFilter;
+      const response = await apiClient.get('/sales-orders', { params });
+      const data = response.data?.data || [];
+      const meta = response.data?.meta || {};
+      setPaginatedOrders(data);
+      setTotalOrders(meta.total || data.length);
+      setTotalPages(meta.total_pages || Math.ceil((meta.total || data.length) / pageSize));
+    } catch (e) {
+      console.error('Failed to load sales orders', e);
+      setPaginatedOrders([]);
+    } finally {
+      setPoLoading(false);
+    }
+  }, [currentPage, searchQuery, statusFilter]);
+
+  useEffect(() => { fetchOrders(); }, [fetchOrders]);
+  useEffect(() => { setCurrentPage(1); }, [searchQuery, statusFilter]);
+
+  // Sync filteredOrders from paginated data
   useEffect(() => {
-    let filtered = salesOrders || [];
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(o => o.status === statusFilter);
-    }
-    if (searchQuery) {
-      filtered = filtered.filter(o =>
-        o.order_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        o.customer_name?.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-    setFilteredOrders(filtered);
-  }, [salesOrders, searchQuery, statusFilter]);
+    setFilteredOrders(paginatedOrders);
+  }, [paginatedOrders]);
 
   const getStatusColor = (status) => {
     const statusColors = {
@@ -119,6 +142,7 @@ export default function Orders({
   const handleDeleteConfirm = async () => {
     if (orderToDelete && onDeleteOrder) {
       await onDeleteOrder(orderToDelete.id);
+      fetchOrders();
     }
     setShowDeleteDialog(false);
     setOrderToDelete(null);
@@ -204,7 +228,7 @@ export default function Orders({
               </div>
             </CardHeader>
             <CardContent className="p-0">
-              {ordersLoading ? (
+              {(ordersLoading || poLoading) ? (
                 <div className="flex items-center justify-center py-16">
                   <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
                 </div>
@@ -297,6 +321,22 @@ export default function Orders({
                       ))}
                     </TableBody>
                   </Table>
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between px-4 py-3 border-t">
+                      <span className="text-sm text-slate-600">
+                        {t('showing') || 'Showing'} {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, totalOrders)} {t('of') || 'of'} {totalOrders}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>
+                          <ChevronLeft className="w-4 h-4" />
+                        </Button>
+                        <span className="text-sm font-medium">{currentPage} / {totalPages}</span>
+                        <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}>
+                          <ChevronRight className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>

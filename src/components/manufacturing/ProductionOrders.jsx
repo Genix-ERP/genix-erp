@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useManufacturing } from '@/components/contexts/ManufacturingContext';
 import { useInventory } from '@/components/contexts/InventoryContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,7 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Play, Pause, CheckCircle, X, Calendar, RefreshCw, Clock, DollarSign, Cog, Eye, ArrowRight, Package, Trash2 } from 'lucide-react';
+import { Plus, Search, Play, Pause, CheckCircle, X, Calendar, RefreshCw, Clock, DollarSign, Cog, Eye, ArrowRight, Package, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import apiClient from '@/api/client';
 import { format } from 'date-fns';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -39,7 +40,7 @@ export default function ProductionOrders() {
     refreshData,
     manufacturingCategories
   } = useManufacturing();
-  const { refreshData: refreshInventory } = useInventory();
+  const { refreshData: refreshInventory, products: inventoryProducts, warehouses } = useInventory();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -48,6 +49,43 @@ export default function ProductionOrders() {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [products, setProducts] = useState([]);
   const [boms, setBoms] = useState([]);
+
+  // Server-side pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalOrders, setTotalOrders] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [paginatedOrders, setPaginatedOrders] = useState([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const pageSize = 20;
+
+  const fetchOrders = useCallback(async () => {
+    setOrdersLoading(true);
+    try {
+      const params = { page: currentPage, limit: pageSize, sort_by: 'created_at', sort_order: 'desc' };
+      if (searchQuery) params.search = searchQuery;
+      if (statusFilter !== 'all') params.status = statusFilter;
+      const response = await apiClient.get('/production-orders', { params });
+      const data = response.data?.data || [];
+      const meta = response.data?.meta || {};
+      setPaginatedOrders(data);
+      setTotalOrders(meta.total || data.length);
+      setTotalPages(meta.total_pages || Math.ceil((meta.total || data.length) / pageSize));
+    } catch (e) {
+      console.error('Failed to load production orders', e);
+      setPaginatedOrders([]);
+    } finally {
+      setOrdersLoading(false);
+    }
+  }, [currentPage, searchQuery, statusFilter]);
+
+  useEffect(() => { fetchOrders(); }, [fetchOrders]);
+  useEffect(() => { setCurrentPage(1); }, [searchQuery, statusFilter]);
+
+  // Split output state
+  const [showSplitModal, setShowSplitModal] = useState(false);
+  const [splitPoId, setSplitPoId] = useState(null);
+  const [splitItems, setSplitItems] = useState([{ product_id: '', quantity: '', warehouse_id: '' }]);
+  const [splitSubmitting, setSplitSubmitting] = useState(false);
 
   // Default manufacturing stages (used when no BOM/routing available)
   const DEFAULT_STAGES = [
@@ -152,23 +190,8 @@ export default function ProductionOrders() {
     }
   }, [newOrder.product_id, boms]);
 
-  const filteredOrders = useMemo(() => {
-    let filtered = productionOrders;
-
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(o => o.status === statusFilter);
-    }
-
-    if (searchQuery) {
-      filtered = filtered.filter(o =>
-        o.product_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        o.code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        o.name?.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-
-    return filtered;
-  }, [productionOrders, searchQuery, statusFilter]);
+  // Server handles search/status filtering; use paginated data directly
+  const filteredOrders = paginatedOrders;
 
   const handleCreateOrder = async () => {
     try {
@@ -176,6 +199,7 @@ export default function ProductionOrders() {
         ...newOrder,
         quantity_planned: parseFloat(newOrder.quantity_planned)
       };
+      console.log('Creating order with has_split_output:', orderData.has_split_output, 'full data:', JSON.stringify(orderData));
       // Only include bom_id if selected
       if (!orderData.bom_id) {
         delete orderData.bom_id;
@@ -190,6 +214,7 @@ export default function ProductionOrders() {
       }
       await createProductionOrder(orderData);
       setShowCreateModal(false);
+      fetchOrders();
 
       // Reset form
       setNewOrder({
@@ -240,6 +265,7 @@ export default function ProductionOrders() {
         default:
           break;
       }
+      fetchOrders();
     } catch (error) {
       console.error('Error updating order status:', error);
     }
@@ -350,6 +376,14 @@ export default function ProductionOrders() {
     const currentIndex = getCurrentStageIndex(currentStage, stages);
     if (currentIndex < stages.length - 1) {
       const nextStage = stages[currentIndex + 1].key;
+
+      // When advancing to the last stage ('done'), check if split output is needed
+      console.log('Advance stage:', { nextStage, has_split_output: order.has_split_output, status: order.status, orderId });
+      if (nextStage === 'done' && order.has_split_output) {
+        openSplitModal(orderId);
+        return;
+      }
+
       try {
         await updateProductionOrder(orderId, { current_stage: nextStage });
         // Update selected order if viewing
@@ -362,6 +396,63 @@ export default function ProductionOrders() {
       }
     }
   };
+
+  // Split output helpers
+  const openSplitModal = async (orderId) => {
+    // Ensure the PO is in 'packaging' status before showing the modal
+    try {
+      await updateProductionOrder(orderId, {
+        current_stage: 'packaging',
+        status: 'packaging',
+        progress_percent: 95
+      });
+      if (selectedOrder?.id === orderId) {
+        setSelectedOrder(prev => ({ ...prev, current_stage: 'packaging', status: 'packaging' }));
+      }
+    } catch (error) {
+      console.error('Error moving to packaging:', error);
+      // Even if the status update fails, still try to show the modal
+    }
+    setSplitPoId(orderId);
+    setSplitItems([{ product_id: '', quantity: '', warehouse_id: '' }]);
+    setShowSplitModal(true);
+  };
+
+  const handleSplitSubmit = async () => {
+    const validItems = splitItems.filter(it => it.product_id && parseFloat(it.quantity) > 0);
+    if (!validItems.length) return;
+
+    setSplitSubmitting(true);
+    try {
+      // Make sure PO is in packaging status before calling completeSplitOutput
+      try {
+        await updateProductionOrder(splitPoId, { status: 'packaging' });
+      } catch (e) { /* ignore - might already be in packaging */ }
+
+      await productionOrdersService.completeSplitOutput(splitPoId, {
+        items: validItems.map(it => ({
+          product_id: it.product_id,
+          quantity: parseFloat(it.quantity),
+          ...(it.warehouse_id ? { warehouse_id: it.warehouse_id } : {}),
+        })),
+      });
+      toast.success(language === 'uz' ? 'Mahsulotlarga bo\'lish yakunlandi' : language === 'ru' ? 'Разделение на продукты завершено' : 'Split output completed');
+      setShowSplitModal(false);
+      setSplitPoId(null);
+      setShowViewModal(false);
+      setSelectedOrder(null);
+      refreshData();
+      refreshInventory();
+    } catch (err) {
+      console.error('Split output error:', err);
+      toast.error('Failed: ' + (err.response?.data?.error || err.message));
+    }
+    setSplitSubmitting(false);
+  };
+
+  const addSplitItem = () => setSplitItems(prev => [...prev, { product_id: '', quantity: '', warehouse_id: '' }]);
+  const removeSplitItem = (idx) => setSplitItems(prev => prev.filter((_, i) => i !== idx));
+  const updateSplitItem = (idx, field, value) => setSplitItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: value } : it));
 
   const handleRecordOutput = async (orderId, goodQty, rejectQty, packageCount) => {
     try {
@@ -397,7 +488,7 @@ export default function ProductionOrders() {
             <div className="flex items-center justify-between">
               <CardTitle className="text-xl font-bold">{t('production_orders') || 'Production Orders'}</CardTitle>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={refreshData}>
+                <Button variant="outline" size="sm" onClick={() => { refreshData(); fetchOrders(); }}>
                   <RefreshCw className="w-4 h-4 mr-2" /> {t('refresh') || 'Refresh'}
                 </Button>
                 {canCreate(MODULES.MANUFACTURING) && (
@@ -437,7 +528,7 @@ export default function ProductionOrders() {
         </CardHeader>
 
         <CardContent className="p-0">
-          {isLoading ? (
+          {(isLoading || ordersLoading) ? (
             <div className="flex items-center justify-center py-16">
               <div className="text-center">
                 <div className="w-8 h-8 border-4 border-slate-800 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
@@ -564,7 +655,7 @@ export default function ProductionOrders() {
                               <Button size="sm" variant="ghost"
                                 onClick={() => {
                                   if (window.confirm(t('confirm_delete') || 'Delete this production order?')) {
-                                    deleteProductionOrder(order.id);
+                                    deleteProductionOrder(order.id).then(() => fetchOrders());
                                   }
                                 }}
                                 title={t('delete') || 'Delete'}
@@ -579,6 +670,22 @@ export default function ProductionOrders() {
                   })}
                 </TableBody>
               </Table>
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between px-4 py-3 border-t">
+                  <span className="text-sm text-slate-600">
+                    {t('showing') || 'Showing'} {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, totalOrders)} {t('of') || 'of'} {totalOrders}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>
+                      <ChevronLeft className="w-4 h-4" />
+                    </Button>
+                    <span className="text-sm font-medium">{currentPage} / {totalPages}</span>
+                    <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}>
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </CardContent>
@@ -849,7 +956,7 @@ export default function ProductionOrders() {
                   </div>
                 )}
                 {/* Advance Stage Button */}
-                {selectedOrder.current_stage !== 'done' && selectedOrder.status === 'in_progress' && (
+                {selectedOrder.current_stage !== 'done' && selectedOrder.current_stage !== 'packaging' && selectedOrder.status === 'in_progress' && (
                   <div className="mt-4 flex justify-center">
                     <Button
                       onClick={() => handleAdvanceStage(selectedOrder.id, selectedOrder.current_stage, selectedOrder)}
@@ -857,6 +964,22 @@ export default function ProductionOrders() {
                     >
                       <ArrowRight className="w-4 h-4 mr-2" />
                       {t('advance_to_next_stage') || "Keyingi bosqichga o'tish"}
+                    </Button>
+                  </div>
+                )}
+                {/* Split Output Button - shows when order has split output and reached final stages */}
+                {selectedOrder.has_split_output && selectedOrder.status !== 'completed' && (
+                  selectedOrder.current_stage === 'done' ||
+                  selectedOrder.current_stage === 'packaging' ||
+                  selectedOrder.status === 'packaging'
+                ) && (
+                  <div className="mt-4 flex justify-center">
+                    <Button
+                      onClick={() => openSplitModal(selectedOrder.id)}
+                      className="bg-gradient-to-r from-green-600 to-green-700"
+                    >
+                      <Package className="w-4 h-4 mr-2" />
+                      {language === 'uz' ? 'Mahsulotlarga bo\'lish' : language === 'ru' ? 'Разделить на продукты' : 'Split into Products'}
                     </Button>
                   </div>
                 )}
@@ -878,6 +1001,95 @@ export default function ProductionOrders() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Split Output Modal */}
+      <Dialog open={showSplitModal} onOpenChange={setShowSplitModal}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {language === 'uz' ? 'Mahsulotlarga bo\'lish' : language === 'ru' ? 'Разделить на продукты' : 'Split Output — Packaging'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-slate-500">
+              {language === 'uz'
+                ? 'Ommaviy mahsulot qanday qadoq mahsulotlarga bo\'linganini kiriting.'
+                : language === 'ru'
+                ? 'Укажите, на какие упакованные продукты разделяется выпуск.'
+                : 'Enter how the bulk output is split into packaged products.'}
+            </p>
+
+            {splitItems.map((item, idx) => (
+              <div key={idx} className="grid grid-cols-12 gap-2 items-end border border-slate-100 rounded-lg p-3">
+                <div className="col-span-5 space-y-1">
+                  <label className="text-xs font-medium">{language === 'uz' ? 'Mahsulot' : language === 'ru' ? 'Продукт' : 'Product'} *</label>
+                  <select
+                    className="w-full border border-slate-200 rounded-md px-2 py-1.5 text-sm bg-white"
+                    value={item.product_id}
+                    onChange={(e) => updateSplitItem(idx, 'product_id', e.target.value)}
+                  >
+                    <option value="">— {language === 'uz' ? 'tanlang' : language === 'ru' ? 'выбрать' : 'select'} —</option>
+                    {(inventoryProducts || products || []).filter(p => p.can_be_sold || p.is_sellable).map(p => (
+                      <option key={p.id} value={p.id}>{p.name} {p.weight ? `(${p.weight} kg)` : ''}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="col-span-3 space-y-1">
+                  <label className="text-xs font-medium">{language === 'uz' ? 'Miqdori' : language === 'ru' ? 'Кол-во' : 'Quantity'} *</label>
+                  <Input
+                    type="number"
+                    min="0.0001"
+                    step="any"
+                    value={item.quantity}
+                    onChange={(e) => updateSplitItem(idx, 'quantity', e.target.value)}
+                    placeholder="0"
+                  />
+                </div>
+                <div className="col-span-3 space-y-1">
+                  <label className="text-xs font-medium">{language === 'uz' ? 'Sklad' : language === 'ru' ? 'Склад' : 'Warehouse'}</label>
+                  <select
+                    className="w-full border border-slate-200 rounded-md px-2 py-1.5 text-sm bg-white"
+                    value={item.warehouse_id}
+                    onChange={(e) => updateSplitItem(idx, 'warehouse_id', e.target.value)}
+                  >
+                    <option value="">{language === 'uz' ? 'Tanlang' : language === 'ru' ? 'Выбрать' : 'Select'}</option>
+                    {(warehouses || []).map(w => (
+                      <option key={w.id} value={w.id}>{w.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="col-span-1 flex justify-center">
+                  {splitItems.length > 1 && (
+                    <Button variant="ghost" size="sm" onClick={() => removeSplitItem(idx)} className="text-red-500 hover:text-red-700 p-1 h-auto">
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            <Button variant="outline" size="sm" onClick={addSplitItem} className="w-full border-dashed">
+              + {language === 'uz' ? 'Qator qo\'shish' : language === 'ru' ? 'Добавить строку' : 'Add row'}
+            </Button>
+
+            <div className="flex gap-3 pt-2">
+              <Button variant="outline" onClick={() => setShowSplitModal(false)} className="flex-1">
+                {language === 'uz' ? 'Bekor qilish' : language === 'ru' ? 'Отмена' : 'Cancel'}
+              </Button>
+              <Button
+                onClick={handleSplitSubmit}
+                disabled={splitSubmitting || !splitItems.some(it => it.product_id && parseFloat(it.quantity) > 0)}
+                className="flex-1 bg-green-600 hover:bg-green-700"
+              >
+                <CheckCircle className="w-4 h-4 mr-2" />
+                {splitSubmitting
+                  ? (language === 'uz' ? 'Saqlanmoqda...' : language === 'ru' ? 'Сохранение...' : 'Saving...')
+                  : (language === 'uz' ? 'Yakunlash' : language === 'ru' ? 'Завершить' : 'Complete Packaging')}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
