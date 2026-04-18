@@ -312,7 +312,7 @@ export default function PriceLabelPrinting() {
       <!DOCTYPE html>
       <html>
       <head>
-        <title>${t('price_labels')} - Yuksalish ERP</title>
+        <title>${t('price_labels')} - Genix ERP</title>
         <style>
           @page { size: A4; margin: 5mm; }
           @media print { body { margin: 0; } .no-print { display: none; } }

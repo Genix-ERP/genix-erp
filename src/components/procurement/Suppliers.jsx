@@ -8,7 +8,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTranslation } from "@/components/utils/translations";
 import { useLanguage } from "@/components/contexts/LanguageContext";
-import { formatPhoneInput, parsePhoneInput } from '@/utils/formatCurrency';
 import {
   Select,
   SelectContent,
@@ -594,9 +593,9 @@ export default function Suppliers() {
                 <LabelWithHelp htmlFor="supplier_phone" label={t('phone')} helpText={t('help_supplier_phone')} />
                 <Input
                   id="supplier_phone"
-                  value={formatPhoneInput(formData.phone)}
-                  onChange={(e) => setFormData({ ...formData, phone: parsePhoneInput(e.target.value) })}
-                  placeholder="+998 XX XXX XXXX"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  placeholder="+998 XX XXX XX XX"
                 />
               </div>
             </div>

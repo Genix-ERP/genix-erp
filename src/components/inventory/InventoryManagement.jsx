@@ -1035,7 +1035,7 @@ export default function InventoryManagement() {
               <LabelWithHelp
                 label={`${t('quantity')} (${t('use_negative_for_decrease')})`}
                 required
-                helpText={t('help_adjust_quantity') || "Tuzatish miqdori. Ijobiy son zaxirani oshiradi, manfiy son kamaytiradi. Masalan: +10 qo'shadi, -5 ayiradi."}
+                helpText={t('help_adjust_quantity') || "Tuzatish miqdori. Ijobiy son zaxirani oshiradi, manfiy son kamaytiradi. +10 qo'shadi, -5 ayiradi."}
               />
               <Input
                 type="number"

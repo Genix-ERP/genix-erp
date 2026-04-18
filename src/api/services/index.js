@@ -39,6 +39,7 @@ export {
   costCalculationsService
 } from './manufacturing';
 
+export { default as subscriptionService } from './subscription';
 // Re-export the API client
 export { default as apiClient } from '../client';
 export { setTokens, clearTokens, getAccessToken, getRefreshToken } from '../client';

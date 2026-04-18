@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
   AlertDialog,
@@ -1157,10 +1158,9 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label>{t('quantity') || 'Miqdor'}</Label>
-                    <Input
-                      type="number" step="0.0001" min="0"
+                    <NumberInput
                       value={lineForm.quantity}
-                      onChange={(e) => setLineForm({ ...lineForm, quantity: e.target.value })}
+                      onChange={(raw) => setLineForm({ ...lineForm, quantity: raw })}
                     />
                   </div>
                   <div>
@@ -1228,12 +1228,11 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                           </div>
                           <div className="w-24 flex-shrink-0">
                             {idx === 0 && <label className="text-xs text-slate-500 mb-1 block">{t('qty') || 'Miqdor'}</label>}
-                            <Input
-                              type="number" step="0.0001" min="0"
+                            <NumberInput
                               placeholder="0"
                               value={row.quantity}
-                              onChange={(e) => {
-                                setAddLines(prev => prev.map((r, i) => i === idx ? { ...r, quantity: e.target.value } : r));
+                              onChange={(raw) => {
+                                setAddLines(prev => prev.map((r, i) => i === idx ? { ...r, quantity: raw } : r));
                               }}
                             />
                           </div>

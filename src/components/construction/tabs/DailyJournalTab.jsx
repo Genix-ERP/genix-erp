@@ -3,6 +3,7 @@ import { constructionService } from '@/api/services/construction';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
   AlertDialog,
@@ -439,10 +440,10 @@ const DailyJournalTab = ({ project, buildings = [] }) => {
                 </div>
                 <div>
                   <Label className="text-xs">{t('expected_budget') || 'Kutilgan byudjet'}</Label>
-                  <Input
-                    type="number" min="0" step="0.01" className="h-8"
+                  <NumberInput
+                    className="h-8"
                     value={form.expected_budget}
-                    onChange={(e) => setForm({ ...form, expected_budget: e.target.value })}
+                    onChange={(raw) => setForm({ ...form, expected_budget: raw })}
                     placeholder="0"
                   />
                 </div>

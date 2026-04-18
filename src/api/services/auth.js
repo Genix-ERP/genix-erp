@@ -45,15 +45,11 @@ export const authService = {
     return response.data.data;
   },
 
-  // Login with email or phone + password
-  async login(identifier, password, tenantId = null) {
-    const payload = { password };
-    // Auto-detect: @ means email, otherwise phone
-    if (identifier.includes('@')) {
-      payload.email = identifier;
-    } else {
-      payload.phone = identifier;
-    }
+  // Login with optional tenant_id for multi-tenant scenarios
+  async login(email, password, tenantId = null, isPhone = false) {
+    const payload = isPhone
+      ? { phone: email.replace(/\s/g, ''), password }
+      : { email, password };
     if (tenantId) {
       payload.tenant_id = tenantId;
     }
@@ -202,9 +198,11 @@ export const authService = {
   },
 
   // Send OTP to email for verification
-  async sendOTP(email, purpose = 'registration', language = 'uz') {
+  // Send OTP — to phone (SMS) if phone provided, otherwise to email
+  async sendOTP(emailOrPhone, purpose = 'registration', language = 'uz') {
+    const isPhone = /^\+?[\d\s\-()]{7,}$/.test(emailOrPhone) && !emailOrPhone.includes('@');
     const response = await apiClient.post('/auth/send-otp', {
-      email,
+      ...(isPhone ? { phone: emailOrPhone } : { email: emailOrPhone }),
       purpose,
       language,
     });
@@ -212,9 +210,10 @@ export const authService = {
   },
 
   // Verify OTP code
-  async verifyOTP(email, otpCode, purpose = 'registration') {
+  async verifyOTP(emailOrPhone, otpCode, purpose = 'registration') {
+    const isPhone = /^\+?[\d\s\-()]{7,}$/.test(emailOrPhone) && !emailOrPhone.includes('@');
     const response = await apiClient.post('/auth/verify-otp', {
-      email,
+      ...(isPhone ? { phone: emailOrPhone } : { email: emailOrPhone }),
       otp_code: otpCode,
       purpose,
     });
@@ -259,7 +258,8 @@ export const authService = {
     const tenantCode = data.tenantCode || `${baseCode}_${randomSuffix}`;
 
     const response = await apiClient.post('/auth/register-with-otp', {
-      email: data.email,
+      phone: data.phone || undefined,
+      email: data.email || undefined,
       password: data.password,
       first_name: data.firstName,
       last_name: data.lastName,

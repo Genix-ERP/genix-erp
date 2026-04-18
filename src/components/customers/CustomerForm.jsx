@@ -134,9 +134,8 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
                   <LabelWithHelp htmlFor="phone" label={t('phone')} helpText={t('help_customer_phone')} />
                   <Input
                     id="phone"
-                    value={formatPhoneInput(formData.phone)}
-                    onChange={(e) => handleChange("phone", parsePhoneInput(e.target.value))}
-                    placeholder="+998 XX XXX XXXX"
+                    value={formData.phone}
+                    onChange={(e) => handleChange("phone", e.target.value)}
                   />
                 </div>
               </div>

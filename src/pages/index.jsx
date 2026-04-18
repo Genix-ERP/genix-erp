@@ -20,6 +20,7 @@ function lazyRetry(importFn) {
 
 const Login = lazyRetry(() => import('./Login'));
 const SharedReconciliation = lazyRetry(() => import('./SharedReconciliation'));
+const Register = lazyRetry(() => import('./Register'));
 const AcceptInvite = lazyRetry(() => import('./AcceptInvite'));
 const Dashboard = lazyRetry(() => import('./Dashboard'));
 const AIAssistant = lazyRetry(() => import('./AIAssistant'));
@@ -54,6 +55,8 @@ const Construction = lazyRetry(() => import('./Construction'));
 const OperationTypeDetail = lazyRetry(() => import('./OperationTypeDetail'));
 const ForgotPassword = lazyRetry(() => import('./ForgotPassword'));
 const ResetPassword = lazyRetry(() => import('./ResetPassword'));
+const PaymentSuccess = lazyRetry(() => import('./PaymentSuccess'));
+const PaymentError = lazyRetry(() => import('./PaymentError'));
 
 const SuspenseFallback = (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
@@ -193,9 +196,12 @@ function PagesContent() {
         <Suspense fallback={SuspenseFallback}>
         <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
             <Route path="/accept-invite" element={<AcceptInvite />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/payment-success" element={<PaymentSuccess />} />
+            <Route path="/payment-error" element={<PaymentError />} />
             <Route path="/shared/reconciliation/:token" element={<SharedReconciliation />} />
             <Route
                 path="/"

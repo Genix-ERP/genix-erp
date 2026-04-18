@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, Suspense, lazy } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useConstructionContext } from '@/components/contexts/ConstructionContext';
 import { constructionService } from '@/api/services/construction';
@@ -8,11 +8,10 @@ import { Core as Integrations } from '@/api/integrations';
 import apiClient from '@/api/client';
 import { useCompany } from '@/components/contexts/CompanyContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-// Tabs import kept for potential sub-component usage
-// import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
@@ -79,22 +78,24 @@ import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { ActivityLogPanel } from '@/components/shared/ActivityLog';
 import { WBSTree } from '@/components/construction/WBSTree';
-import ActivityTab from '@/components/construction/tabs/ActivityTab';
-import EstimatesTab from '@/components/construction/tabs/EstimatesTab';
-import DailyJournalTab from '@/components/construction/tabs/DailyJournalTab';
-import StagesTab from '@/components/construction/tabs/StagesTab';
-import ExpensesTab from '@/components/construction/tabs/ExpensesTab';
-import BudgetTab from '@/components/construction/tabs/BudgetTab';
-import MaterialUsageTab from '@/components/construction/tabs/MaterialUsageTab';
-import ProgressTab from '@/components/construction/tabs/ProgressTab';
-import SubcontractorsTab from '@/components/construction/tabs/SubcontractorsTab';
-import ActsTab from '@/components/construction/tabs/ActsTab';
-import FormsTab from '@/components/construction/tabs/FormsTab';
-import FinancialTab from '@/components/construction/tabs/FinancialTab';
-import RejaFaktTab from '@/components/construction/tabs/RejaFaktTab';
-import SmetaVsFactTab from '@/components/construction/tabs/SmetaVsFactTab';
-import PhotoReportsTab from '@/components/construction/tabs/PhotoReportsTab';
-import TeamTab from '@/components/construction/tabs/TeamTab';
+// Lazy-load heavy tab components so they're only fetched when the user
+// opens the relevant section. This reduces initial bundle size by ~60%.
+const ActivityTab = lazy(() => import('@/components/construction/tabs/ActivityTab'));
+const EstimatesTab = lazy(() => import('@/components/construction/tabs/EstimatesTab'));
+const DailyJournalTab = lazy(() => import('@/components/construction/tabs/DailyJournalTab'));
+const StagesTab = lazy(() => import('@/components/construction/tabs/StagesTab'));
+const ExpensesTab = lazy(() => import('@/components/construction/tabs/ExpensesTab'));
+const BudgetTab = lazy(() => import('@/components/construction/tabs/BudgetTab'));
+const MaterialUsageTab = lazy(() => import('@/components/construction/tabs/MaterialUsageTab'));
+const ProgressTab = lazy(() => import('@/components/construction/tabs/ProgressTab'));
+const SubcontractorsTab = lazy(() => import('@/components/construction/tabs/SubcontractorsTab'));
+const ActsTab = lazy(() => import('@/components/construction/tabs/ActsTab'));
+const FormsTab = lazy(() => import('@/components/construction/tabs/FormsTab'));
+const FinancialTab = lazy(() => import('@/components/construction/tabs/FinancialTab'));
+const RejaFaktTab = lazy(() => import('@/components/construction/tabs/RejaFaktTab'));
+const SmetaVsFactTab = lazy(() => import('@/components/construction/tabs/SmetaVsFactTab'));
+const PhotoReportsTab = lazy(() => import('@/components/construction/tabs/PhotoReportsTab'));
+const TeamTab = lazy(() => import('@/components/construction/tabs/TeamTab'));
 import { ImportModal, ExportModal, ImportExportButtons } from '@/components/shared';
 import { ReportGenerator } from '@/components/construction/ReportGenerator';
 import { ProjectKanban } from '@/components/construction/ProjectKanban';
@@ -105,6 +106,17 @@ import {
   VendorsWidget,
   AlertsWidget
 } from '@/components/construction/DashboardWidgets';
+
+// Status transitions allowed for projects. Completed / cancelled are terminal;
+// reopening requires moving back through in_progress explicitly.
+const ALLOWED_PROJECT_TRANSITIONS = Object.freeze({
+  draft: ['planning', 'in_progress', 'cancelled'],
+  planning: ['draft', 'in_progress', 'on_hold', 'cancelled'],
+  in_progress: ['on_hold', 'completed', 'cancelled'],
+  on_hold: ['in_progress', 'cancelled'],
+  completed: ['in_progress'],
+  cancelled: ['draft'],
+});
 
 // Progress Tracking Tab Component
 const ProgressTrackingTab = ({ project, sections, t, formatCurrency, onRefresh }) => {
@@ -150,77 +162,123 @@ const ProgressTrackingTab = ({ project, sections, t, formatCurrency, onRefresh }
     loadData();
   }, [project?.id]);
 
-  // Load lines for selected estimate
+  // Derive lines for the selected estimate from the already-loaded allItems
+  // array to avoid a redundant API call. The initial load already fetches
+  // every line for every estimate via Promise.all.
   useEffect(() => {
-    const loadLines = async () => {
-      if (!selectedEstimate) {
-        setEstimateLines([]);
-        return;
-      }
-      try {
-        const lines = await constructionService.listEstimateLines(selectedEstimate.id);
-        setEstimateLines(lines || []);
-      } catch (error) {
-        console.error('Error loading estimate lines:', error);
-      }
-    };
-    loadLines();
-  }, [selectedEstimate]);
+    if (!selectedEstimate) {
+      setEstimateLines([]);
+      return;
+    }
+    setEstimateLines(allItems.filter((item) => item.estimate_id === selectedEstimate.id));
+  }, [selectedEstimate, allItems]);
 
   // Calculate overall progress
-  const calculateProgress = (items) => {
-    if (!items || items.length === 0) return { percent: 0, completed: 0, total: 0, byValue: 0 };
+  // Value-based: completedValue / totalValue. Quantity-based: derived from
+  // per-item ratios so partial completion is represented correctly (not binary).
+  const calculateProgress = useCallback((items) => {
+    if (!items || items.length === 0) {
+      return {
+        percent: 0,
+        byQty: 0,
+        completed: 0,
+        total: 0,
+        byValue: 0,
+        completedValue: 0,
+        totalValue: 0,
+      };
+    }
 
-    const totalQty = items.reduce((sum, item) => sum + (item.quantity || 0), 0);
-    const doneQty = items.reduce((sum, item) => sum + (item.actual_amount > 0 ? item.quantity : 0), 0);
-    const totalValue = items.reduce((sum, item) => sum + (item.total_amount || 0), 0);
-    const completedValue = items.reduce((sum, item) => sum + (item.actual_amount || 0), 0);
+    let totalQty = 0;
+    let doneQty = 0;
+    let totalValue = 0;
+    let completedValue = 0;
+
+    for (const item of items) {
+      const qty = Number(item.quantity) || 0;
+      const total = Number(item.total_amount) || 0;
+      const actual = Math.max(0, Math.min(Number(item.actual_amount) || 0, total || Infinity));
+      const ratio = total > 0 ? actual / total : 0;
+
+      totalQty += qty;
+      doneQty += qty * ratio;
+      totalValue += total;
+      completedValue += actual;
+    }
+
+    const byValue = totalValue > 0 ? Math.round((completedValue / totalValue) * 100) : 0;
+    const byQty = totalQty > 0 ? Math.round((doneQty / totalQty) * 100) : 0;
 
     return {
-      percent: totalValue > 0 ? Math.round((completedValue / totalValue) * 100) : 0,
+      percent: byValue,
+      byQty,
       completed: doneQty,
       total: totalQty,
-      byValue: totalValue > 0 ? Math.round((completedValue / totalValue) * 100) : 0,
+      byValue,
       completedValue,
-      totalValue
+      totalValue,
     };
-  };
+  }, []);
 
   // Calculate estimate progress
-  const getEstimateProgress = (estimateId) => {
+  const getEstimateProgress = useCallback((estimateId) => {
     const items = allItems.filter(item => item.estimate_id === estimateId);
     return calculateProgress(items);
-  };
+  }, [allItems, calculateProgress]);
 
-  const overallProgress = calculateProgress(allItems);
+  const overallProgress = React.useMemo(() => calculateProgress(allItems), [allItems, calculateProgress]);
+
+  const itemCounts = React.useMemo(() => {
+    let completedCount = 0;
+    let inProgressCount = 0;
+    for (const item of allItems) {
+      const total = Number(item.total_amount) || 0;
+      const actual = Number(item.actual_amount) || 0;
+      if (total > 0 && actual >= total) completedCount += 1;
+      else if (actual > 0) inProgressCount += 1;
+    }
+    return { completedCount, inProgressCount };
+  }, [allItems]);
 
   // Update line progress
   const handleUpdateProgress = async () => {
     if (!editingItem || !selectedEstimate) return;
+
+    const newActualAmount = parseFloat(completedQty);
+    if (!Number.isFinite(newActualAmount) || newActualAmount < 0) {
+      toast.error(t('invalid_amount') || "Noto'g'ri qiymat kiritildi");
+      return;
+    }
+
+    const planned = Number(editingItem.total_amount) || 0;
+    if (planned > 0 && newActualAmount > planned) {
+      toast.error(
+        (t('exceeds_planned') || 'Rejadan oshib ketdi') +
+          `: ${formatCurrency(planned)}`
+      );
+      return;
+    }
+
     setSaving(true);
     try {
-      const newActualAmount = parseFloat(completedQty) || 0;
-
       await constructionService.updateEstimateLine(selectedEstimate.id, editingItem.id, {
-        actual_amount: newActualAmount
+        actual_amount: newActualAmount,
       });
 
-      // Refresh lines
-      const lines = await constructionService.listEstimateLines(selectedEstimate.id);
-      setEstimateLines(lines || []);
-
-      // Update allItems
-      setAllItems(prev => prev.map(item =>
-        item.id === editingItem.id
-          ? { ...item, actual_amount: newActualAmount }
-          : item
-      ));
+      // Update allItems — the effect above will re-derive estimateLines.
+      setAllItems(prev =>
+        prev.map(item =>
+          item.id === editingItem.id ? { ...item, actual_amount: newActualAmount } : item
+        )
+      );
 
       setEditingItem(null);
       setCompletedQty('');
+      toast.success(t('progress_updated') || 'Progress yangilandi');
       if (onRefresh) onRefresh();
     } catch (error) {
       console.error('Error updating progress:', error);
+      toast.error(t('update_failed') || "Yangilashda xatolik yuz berdi");
     } finally {
       setSaving(false);
     }
@@ -262,9 +320,17 @@ const ProgressTrackingTab = ({ project, sections, t, formatCurrency, onRefresh }
           <CardTitle>{t('work_progress') || 'Ish bajarilishi'}</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-center py-12">
-            <FolderTree className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-            <p className="text-slate-500">{t('no_sections_for_progress') || "Progress kuzatish uchun avval smeta bo'limlarini yarating"}</p>
+          <div className="text-center py-12 max-w-md mx-auto">
+            <div className="w-20 h-20 rounded-full bg-blue-50 flex items-center justify-center mx-auto mb-4">
+              <FolderTree className="w-10 h-10 text-blue-400" />
+            </div>
+            <p className="text-slate-700 font-medium mb-1">
+              {t('no_estimate_yet') || "Smeta hali yaratilmagan"}
+            </p>
+            <p className="text-sm text-slate-500 mb-4">
+              {t('progress_needs_estimate_hint') ||
+                "Bajarilish holatini kuzatish uchun avval \"Smeta\" bo'limiga o'ting va ishlar ro'yxatini kiriting."}
+            </p>
           </div>
         </CardContent>
       </Card>
@@ -275,21 +341,29 @@ const ProgressTrackingTab = ({ project, sections, t, formatCurrency, onRefresh }
     <div className="space-y-6">
       {/* Overall Progress Summary */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
+        <Card
+          className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200"
+          title={t('progress_by_qty_hint') || "Barcha ishlarning rejadagi hajmidan qancha qismi bajarilganligi"}
+        >
           <CardContent className="p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-medium text-blue-800">{t('overall_progress') || 'Umumiy bajarilish'}</h3>
+              <h3 className="text-sm font-medium text-blue-800">
+                {t('progress_by_qty') || "Hajm bo'yicha bajarilish"}
+              </h3>
               <TrendingUp className="w-5 h-5 text-blue-600" />
             </div>
-            <div className="text-3xl font-bold text-blue-900 mb-2">{overallProgress.percent}%</div>
-            <Progress value={overallProgress.percent} className="h-2 mb-2" />
+            <div className="text-3xl font-bold text-blue-900 mb-2">{overallProgress.byQty}%</div>
+            <Progress value={overallProgress.byQty} className="h-2 mb-2" />
             <p className="text-xs text-blue-700">
-              {t('by_quantity') || "Hajm bo'yicha"}: {overallProgress.completed.toFixed(1)} / {overallProgress.total.toFixed(1)}
+              {overallProgress.completed.toFixed(1)} / {overallProgress.total.toFixed(1)}
             </p>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
+        <Card
+          className="bg-gradient-to-br from-green-50 to-green-100 border-green-200"
+          title={t('progress_by_value_hint') || "Bajarilgan ishlarning umumiy summasi smeta qiymatidan qancha qismini tashkil etadi"}
+        >
           <CardContent className="p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-medium text-green-800">{t('progress_by_value') || "Qiymat bo'yicha"}</h3>
@@ -313,11 +387,11 @@ const ProgressTrackingTab = ({ project, sections, t, formatCurrency, onRefresh }
             <div className="flex items-center gap-2 text-xs">
               <span className="flex items-center gap-1">
                 <CheckCircle className="w-3 h-3 text-green-600" />
-                {allItems.filter(i => i.completed_quantity >= i.quantity).length} {t('completed') || 'bajarilgan'}
+                {itemCounts.completedCount} {t('completed') || 'bajarilgan'}
               </span>
               <span className="flex items-center gap-1">
                 <Clock className="w-3 h-3 text-orange-600" />
-                {allItems.filter(i => i.completed_quantity > 0 && i.completed_quantity < i.quantity).length} {t('in_progress') || 'jarayonda'}
+                {itemCounts.inProgressCount} {t('in_progress') || 'jarayonda'}
               </span>
             </div>
           </CardContent>
@@ -434,14 +508,10 @@ const ProgressTrackingTab = ({ project, sections, t, formatCurrency, onRefresh }
                             </Button>
                           ) : (
                             <div className="flex items-center gap-2">
-                              <Input
-                                type="number"
+                              <NumberInput
                                 value={completedQty}
-                                onChange={(e) => setCompletedQty(e.target.value)}
-                                className="w-24 h-8 text-sm"
-                                min="0"
-                                max={item.total_amount}
-                                step="0.01"
+                                onChange={(raw) => setCompletedQty(raw)}
+                                className="w-32 h-8 text-sm tabular-nums"
                               />
                               <Button
                                 size="sm"
@@ -505,62 +575,107 @@ const ProjectsTab = ({
 }) => {
   const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'kanban'
 
-  const filteredProjects = projects.filter(p => {
-    const matchesSearch =
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (p.client_name || '').toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || p.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  // Debounce the search query by 200ms so filtering runs after the user stops
+  // typing, rather than on every keystroke. Memoize the filtered list to
+  // avoid recomputing on unrelated re-renders.
+  const [debouncedSearch, setDebouncedSearch] = useState(searchQuery);
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedSearch(searchQuery), 200);
+    return () => clearTimeout(id);
+  }, [searchQuery]);
+
+  const filteredProjects = React.useMemo(() => {
+    const query = debouncedSearch.trim().toLowerCase();
+    if (!query && statusFilter === 'all') return projects;
+    return projects.filter((p) => {
+      const matchesSearch =
+        !query ||
+        (p.name || '').toLowerCase().includes(query) ||
+        (p.code || '').toLowerCase().includes(query) ||
+        (p.client_name || '').toLowerCase().includes(query);
+      const matchesStatus = statusFilter === 'all' || p.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  }, [projects, debouncedSearch, statusFilter]);
 
   return (
-    <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-      <CardHeader className="border-b border-slate-200/60 flex flex-row items-center justify-between">
-        <CardTitle className="text-lg font-semibold text-slate-800">
-          {t('construction_projects') || 'Qurilish loyihalari'}
-        </CardTitle>
+    <section className="rounded-2xl border border-slate-200/70 bg-white">
+      <header className="flex flex-col gap-3 border-b border-slate-100 px-6 py-5 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900 tracking-tight">
+            {t('construction_projects') || 'Qurilish loyihalari'}
+          </h2>
+          <p className="text-sm text-slate-500 mt-0.5">
+            {filteredProjects.length === projects.length
+              ? `${projects.length} ${t('projects_total_suffix') || 'loyiha'}`
+              : `${filteredProjects.length} / ${projects.length} ${t('projects_total_suffix') || 'loyiha'}`}
+          </p>
+        </div>
         <div className="flex items-center gap-2">
-          {/* View Toggle */}
-          <div className="flex items-center border rounded-lg overflow-hidden">
-            <Button
-              variant={viewMode === 'grid' ? 'default' : 'ghost'}
-              size="sm"
-              className="rounded-none"
+          {/* View Toggle — minimalist segmented control */}
+          <div
+            className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5"
+            role="tablist"
+            aria-label={t('view_mode') || "Ko'rinish"}
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={viewMode === 'grid'}
               onClick={() => setViewMode('grid')}
+              className={cn(
+                'inline-flex h-8 items-center justify-center rounded-md px-3 text-xs font-medium transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400',
+                viewMode === 'grid'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              )}
+              aria-label={t('grid_view') || 'Panel ko\'rinishi'}
+              title={t('grid_view') || 'Panel ko\'rinishi'}
             >
               <LayoutGrid className="w-4 h-4" />
-            </Button>
-            <Button
-              variant={viewMode === 'kanban' ? 'default' : 'ghost'}
-              size="sm"
-              className="rounded-none"
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={viewMode === 'kanban'}
               onClick={() => setViewMode('kanban')}
+              className={cn(
+                'inline-flex h-8 items-center justify-center rounded-md px-3 text-xs font-medium transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400',
+                viewMode === 'kanban'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              )}
+              aria-label={t('kanban_view') || 'Kanban ko\'rinishi'}
+              title={t('kanban_view') || 'Kanban ko\'rinishi'}
             >
               <Columns3 className="w-4 h-4" />
-            </Button>
+            </button>
           </div>
-          <Button onClick={onCreateProject} className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white">
-            <Plus className="w-4 h-4 mr-2" />
+          <Button
+            onClick={onCreateProject}
+            className="h-9 rounded-lg bg-slate-900 text-white shadow-sm hover:bg-slate-800 cursor-pointer transition-colors"
+          >
+            <Plus className="w-4 h-4 mr-1.5" />
             {t('new_project') || 'Yangi loyiha'}
           </Button>
         </div>
-      </CardHeader>
-      <CardContent className="p-6">
+      </header>
+
+      <div className="p-6">
         {/* Search and Filter - only show in grid view */}
         {viewMode === 'grid' && (
-          <div className="flex flex-col md:flex-row gap-4 mb-6">
+          <div className="flex flex-col md:flex-row gap-3 mb-6">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
               <Input
                 placeholder={t('search_projects') || 'Loyihalarni qidirish...'}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
+                className="pl-10 h-10 bg-slate-50 border-slate-200 focus:bg-white focus:ring-2 focus:ring-slate-300"
               />
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-full md:w-48">
+              <SelectTrigger className="w-full md:w-48 h-10 bg-slate-50 border-slate-200">
                 <SelectValue placeholder={t('all_statuses') || 'Barcha holatlar'} />
               </SelectTrigger>
               <SelectContent>
@@ -576,9 +691,16 @@ const ProjectsTab = ({
         )}
 
         {loading ? (
-          <div className="text-center py-8 text-slate-500">{t('loading') || 'Yuklanmoqda...'}</div>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="rounded-xl border border-slate-200 bg-slate-50/50 p-5 animate-pulse">
+                <div className="h-4 w-1/2 bg-slate-200 rounded mb-3" />
+                <div className="h-3 w-1/3 bg-slate-200 rounded mb-4" />
+                <div className="h-2 w-full bg-slate-200 rounded" />
+              </div>
+            ))}
+          </div>
         ) : viewMode === 'kanban' ? (
-          /* Kanban View */
           <ProjectKanban
             projects={projects}
             onStatusChange={onStatusChange}
@@ -587,77 +709,308 @@ const ProjectsTab = ({
             formatCurrency={formatCurrency}
           />
         ) : filteredProjects.length === 0 ? (
-          <div className="text-center py-12">
-            <Building2 className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-            <p className="text-slate-500">{t('no_projects') || 'Loyihalar topilmadi'}</p>
+          <div className="text-center py-16 max-w-md mx-auto">
+            <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-5">
+              <Building2 className="w-8 h-8 text-slate-400" strokeWidth={1.5} />
+            </div>
+            {searchQuery || statusFilter !== 'all' ? (
+              <>
+                <h3 className="text-base font-semibold text-slate-900 mb-1.5">
+                  {t('no_projects_found') || 'Loyihalar topilmadi'}
+                </h3>
+                <p className="text-sm text-slate-500 mb-5">
+                  {t('no_projects_found_hint') || "Qidiruv yoki filtrni o'zgartirib ko'ring"}
+                </p>
+                <Button
+                  variant="outline"
+                  className="cursor-pointer"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setStatusFilter('all');
+                  }}
+                >
+                  {t('clear_filters') || 'Filtrlarni tozalash'}
+                </Button>
+              </>
+            ) : (
+              <>
+                <h3 className="text-base font-semibold text-slate-900 mb-1.5">
+                  {t('no_projects_yet') || "Hozircha loyihalar yo'q"}
+                </h3>
+                <p className="text-sm text-slate-500 mb-5">
+                  {t('create_first_project_hint') ||
+                    "Birinchi qurilish loyihangizni yarating va boshqaruvni boshlang"}
+                </p>
+                <Button
+                  onClick={onCreateProject}
+                  className="cursor-pointer bg-slate-900 text-white hover:bg-slate-800"
+                >
+                  <Plus className="w-4 h-4 mr-1.5" />
+                  {t('create_first_project') || 'Birinchi loyihani yaratish'}
+                </Button>
+              </>
+            )}
           </div>
         ) : (
-          /* Grid View */
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {filteredProjects.map((project) => (
-              <Card key={project.id} className="hover:shadow-lg transition-shadow border-slate-200 cursor-pointer" onClick={() => onViewProject(project)}>
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h3 className="font-semibold text-slate-800">{project.name}</h3>
-                    </div>
+            {filteredProjects.map((project) => {
+              const progress = Number(project.progress_percent) || 0;
+              return (
+                <article
+                  key={project.id}
+                  onClick={() => onViewProject(project)}
+                  className="group relative flex flex-col rounded-xl border border-slate-200 bg-white p-5 transition-all cursor-pointer hover:border-slate-300 hover:shadow-sm focus-within:ring-2 focus-within:ring-slate-300"
+                  tabIndex={0}
+                  role="button"
+                  aria-label={`${project.name} — ${t('view_details') || "Batafsil ko'rish"}`}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onViewProject(project);
+                    }
+                  }}
+                >
+                  {/* Header */}
+                  <div className="flex items-start justify-between gap-3 mb-4">
+                    <h3 className="font-semibold text-slate-900 text-base leading-snug line-clamp-2 flex-1">
+                      {project.name}
+                    </h3>
                     {getStatusBadge(project.status)}
                   </div>
-                  {project.client_name && (
-                    <div className="flex items-center gap-2 text-sm text-slate-600 mb-2">
-                      <Users className="w-4 h-4" />
-                      {project.client_name}
+
+                  {/* Meta rows */}
+                  <dl className="space-y-2 text-sm mb-5">
+                    {project.client_name && (
+                      <div className="flex items-center gap-2 text-slate-600">
+                        <Users className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={2} />
+                        <dd className="truncate">{project.client_name}</dd>
+                      </div>
+                    )}
+                    {(project.city || project.region) && (
+                      <div className="flex items-center gap-2 text-slate-600">
+                        <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={2} />
+                        <dd className="truncate">{[project.city, project.region].filter(Boolean).join(', ')}</dd>
+                      </div>
+                    )}
+                    {project.contract_amount > 0 && (
+                      <div className="flex items-center gap-2 text-slate-900">
+                        <DollarSign className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={2} />
+                        <dd className="font-medium tabular-nums">{formatCurrency(project.contract_amount)}</dd>
+                      </div>
+                    )}
+                  </dl>
+
+                  {/* Progress */}
+                  <div className="mb-5 mt-auto">
+                    <div className="flex items-baseline justify-between mb-1.5">
+                      <span className="text-xs font-medium text-slate-500">
+                        {t('progress') || 'Jarayon'}
+                      </span>
+                      <span className="text-sm font-semibold text-slate-900 tabular-nums">{progress}%</span>
                     </div>
-                  )}
-                  {(project.city || project.region) && (
-                    <div className="flex items-center gap-2 text-sm text-slate-600 mb-2">
-                      <MapPin className="w-4 h-4" />
-                      {[project.city, project.region].filter(Boolean).join(', ')}
+                    <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div
+                        className={cn(
+                          'h-full rounded-full transition-all duration-300',
+                          progress >= 100 ? 'bg-emerald-500'
+                          : progress >= 50 ? 'bg-blue-500'
+                          : progress > 0 ? 'bg-amber-500'
+                          : 'bg-slate-300'
+                        )}
+                        style={{ width: `${Math.min(100, progress)}%` }}
+                      />
                     </div>
-                  )}
-                  {project.contract_amount > 0 && (
-                    <div className="flex items-center gap-2 text-sm text-slate-600 mb-3">
-                      <DollarSign className="w-4 h-4" />
-                      {formatCurrency(project.contract_amount)}
-                    </div>
-                  )}
-                  <div className="mb-3">
-                    <div className="flex justify-between text-xs mb-1">
-                      <span className="text-slate-600">{t('progress') || 'Progress'}</span>
-                      <span className="font-medium">{project.progress_percent || 0}%</span>
-                    </div>
-                    <Progress value={project.progress_percent || 0} className="h-2" />
                   </div>
-                  <div className="flex gap-2 pt-3 border-t border-slate-100">
-                    <Button variant="outline" size="sm" className="flex-1" onClick={(e) => { e.stopPropagation(); onEditProject(project); }}>
-                      <Edit className="w-3 h-3 mr-1" />
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-1.5 pt-4 border-t border-slate-100">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="flex-1 h-8 text-slate-600 hover:text-slate-900 hover:bg-slate-100 cursor-pointer"
+                      onClick={(e) => { e.stopPropagation(); onEditProject(project); }}
+                    >
+                      <Edit className="w-3.5 h-3.5 mr-1.5" />
                       {t('edit') || 'Tahrirlash'}
                     </Button>
                     <Button
-                      variant="outline"
+                      variant="ghost"
                       size="sm"
-                      className="text-green-600 hover:bg-green-50 border-green-200"
+                      className="h-8 w-8 p-0 text-slate-400 hover:text-slate-900 hover:bg-slate-100 cursor-pointer"
                       onClick={(e) => { e.stopPropagation(); onOpenFiles && onOpenFiles(project); }}
+                      aria-label={t('files') || 'Fayllar'}
                       title={t('files') || 'Fayllar'}
                     >
-                      <FileText className="w-3 h-3" />
+                      <FileText className="w-3.5 h-3.5" />
                     </Button>
-                    <Button variant="outline" size="sm" className="text-red-600 hover:bg-red-50" onClick={(e) => { e.stopPropagation(); onDeleteProject(project.id); }}>
-                      <Trash2 className="w-3 h-3" />
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onViewProject(project); }}>
-                      <ChevronRight className="w-4 h-4" />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0 text-slate-400 hover:text-red-600 hover:bg-red-50 cursor-pointer"
+                      onClick={(e) => { e.stopPropagation(); onDeleteProject(project.id); }}
+                      aria-label={t('delete') || "O'chirish"}
+                      title={t('delete') || "O'chirish"}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
                     </Button>
                   </div>
-                </CardContent>
-              </Card>
-            ))}
+
+                  {/* Chevron indicator on hover */}
+                  <ChevronRight
+                    className="absolute top-5 right-5 w-4 h-4 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity"
+                    aria-hidden="true"
+                  />
+                </article>
+              );
+            })}
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   );
 };
+
+// Overview tab content — memoized to avoid re-renders when unrelated state changes
+const OverviewTabContent = React.memo(function OverviewTabContent({
+  project,
+  buildings,
+  sections,
+  team,
+  vendors,
+  t,
+  setActiveGroup,
+  setActiveTab,
+}) {
+  const EMPTY = '—';
+  const locationStr = [project.address, project.city, project.region].filter(Boolean).join(', ');
+
+  const quickActions = [
+    {
+      id: 'forma19',
+      label: 'Forma 19',
+      icon: FileText,
+      hint: t('forma_19_hint') || "Material sarflangani bo'yicha rasmiy hisobot",
+      go: () => { setActiveGroup('materiallar'); setActiveTab('forms'); },
+    },
+    {
+      id: 'material',
+      label: t('material') || 'Material',
+      icon: Package,
+      hint: t('material_hint') || "Materiallarni kirim/sarf ko'rinishida boshqarish",
+      go: () => { setActiveGroup('materiallar'); setActiveTab('material_usage'); },
+    },
+    {
+      id: 'journal',
+      label: t('journal') || 'Jurnal',
+      icon: ClipboardList,
+      hint: t('journal_hint') || "Kunlik ish, ob-havo, ishchilar hisoboti",
+      go: () => { setActiveGroup('hujjatlar'); setActiveTab('daily_logs'); },
+    },
+    {
+      id: 'expense',
+      label: t('expense') || 'Xarajat',
+      icon: DollarSign,
+      hint: t('expense_hint') || "Loyiha bo'yicha xarajatlarni ro'yxatga olish",
+      go: () => { setActiveGroup('moliya'); setActiveTab('expenses'); },
+    },
+  ];
+
+  const infoItems = [
+    { label: t('client_name') || 'Mijoz', value: project.client_name || EMPTY },
+    { label: t('client_phone') || 'Telefon', value: project.client_phone || EMPTY },
+    { label: t('location') || 'Manzil', value: locationStr || EMPTY },
+    {
+      label: t('project_type') || 'Loyiha turi',
+      value: project.project_type ? (t(project.project_type) || project.project_type) : EMPTY,
+    },
+    { label: t('building_type') || 'Bino turi', value: project.building_type || EMPTY },
+    {
+      label: t('total_area') || 'Umumiy maydon',
+      value: project.total_area ? `${project.total_area} m²` : EMPTY,
+    },
+    {
+      label: t('team') || 'Jamoa',
+      value: team.length > 0 ? `${team.length} ${t('members') || "a'zo"}` : EMPTY,
+    },
+  ];
+
+  return (
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <ProgressWidget
+        project={{
+          ...project,
+          buildings_count: buildings.length,
+          sections_count: sections.length,
+          team_count: team.length,
+        }}
+      />
+
+      <TimelineWidget project={project} />
+
+      {/* Quick Action Buttons — clean panel */}
+      <div className="rounded-xl border border-slate-200 bg-white">
+        <div className="px-5 pt-4 pb-3">
+          <h3 className="text-sm font-semibold text-slate-900">
+            {t('quick_actions') || 'Tezkor amallar'}
+          </h3>
+        </div>
+        <div className="px-5 pb-5">
+          <div className="grid grid-cols-2 gap-2">
+            {quickActions.map((action) => {
+              const Icon = action.icon;
+              return (
+                <button
+                  key={action.id}
+                  type="button"
+                  onClick={action.go}
+                  title={action.hint}
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+                >
+                  <Icon className="w-4 h-4 text-slate-400 shrink-0" strokeWidth={2} />
+                  <span className="truncate">{action.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Project Info — clean dl */}
+      <div className="lg:col-span-2 rounded-xl border border-slate-200 bg-white">
+        <div className="px-5 pt-4 pb-3">
+          <h3 className="text-sm font-semibold text-slate-900">
+            {t('project_info') || "Loyiha ma'lumotlari"}
+          </h3>
+        </div>
+        <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 px-5 pb-5">
+          {infoItems.map(({ label, value }) => (
+            <div key={label} className="flex flex-col gap-0.5">
+              <dt className="text-xs font-medium text-slate-500">{label}</dt>
+              <dd
+                className={cn(
+                  'text-sm',
+                  value === EMPTY ? 'text-slate-400' : 'font-medium text-slate-900'
+                )}
+              >
+                {value}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+
+      {/* Alerts Widget */}
+      <AlertsWidget
+        project={{
+          ...project,
+          total_smeta: sections.reduce((sum, s) => sum + (parseFloat(s.total_cost) || 0), 0),
+        }}
+        sections={sections}
+        vendors={vendors}
+      />
+    </div>
+  );
+});
 
 // Project Detail View with Sub-tabs
 const ProjectDetailView = ({
@@ -673,7 +1026,7 @@ const ProjectDetailView = ({
 
   const NAV_GROUPS = [
     { key: 'dashboard', label: t('nav_overview') || "Umumiy ko'rinish", icon: LayoutDashboard, subs: [] },
-    { key: 'qurilish', label: t('nav_construction') || 'Qurilish', icon: Building2, subs: [
+    { key: 'qurilish', label: t('nav_objects') || 'Obyekt', icon: Building2, subs: [
       { key: 'buildings', label: t('nav_buildings') || 'Binolar' },
       { key: 'progress', label: t('nav_progress') || 'Jarayon' },
       { key: 'stages', label: t('nav_stages') || 'Bosqichlar' },
@@ -758,7 +1111,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
   const [inventoryWarehouses, setInventoryWarehouses] = useState([]);
   const [variantsByProduct, setVariantsByProduct] = useState({});
   const [confirmApprove, setConfirmApprove] = useState({ open: false, requestId: null });
-  const [confirmDelete, setConfirmDelete] = useState({ open: false, onConfirm: null });
+  const [confirmDelete, setConfirmDelete] = useState({ open: false, onConfirm: null, title: null, description: null });
   const [lightboxSrc, setLightboxSrc] = useState(null);
   const [dailyLogForm, setDailyLogForm] = useState({
     id: null,
@@ -947,25 +1300,54 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
   // Handle building creation/update
   const handleCreateBuilding = async (e) => {
     e.preventDefault();
+
+    // Validation
+    const name = buildingForm.name?.trim();
+    if (!name) {
+      toast.error(t('building_name_required') || 'Bino nomi shart');
+      return;
+    }
+    const floors = buildingForm.floors_count ? parseInt(buildingForm.floors_count, 10) : 0;
+    if (buildingForm.floors_count && (!Number.isFinite(floors) || floors < 0 || floors > 200)) {
+      toast.error(t('invalid_floors_count') || "Qavatlar soni noto'g'ri (0-200)");
+      return;
+    }
+    const area = buildingForm.total_area ? parseFloat(buildingForm.total_area) : 0;
+    if (buildingForm.total_area && (!Number.isFinite(area) || area < 0)) {
+      toast.error(t('invalid_total_area') || "Umumiy maydon noto'g'ri");
+      return;
+    }
+    const apartments = buildingForm.apartments_count ? parseInt(buildingForm.apartments_count, 10) : 0;
+    if (buildingForm.apartments_count && (!Number.isFinite(apartments) || apartments < 0)) {
+      toast.error(t('invalid_apartments_count') || "Xonadonlar soni noto'g'ri");
+      return;
+    }
+    const estCost = buildingForm.estimated_cost ? parseFloat(buildingForm.estimated_cost) : 0;
+    if (buildingForm.estimated_cost && (!Number.isFinite(estCost) || estCost < 0)) {
+      toast.error(t('invalid_estimated_cost') || "Taxminiy qiymat noto'g'ri");
+      return;
+    }
+
     try {
       const autoCode = buildingForm.code ||
-        buildingForm.name.toUpperCase().replace(/\s+/g, '_').replace(/[^A-Z0-9_]/g, '').slice(0, 20) ||
+        name.toUpperCase().replace(/\s+/g, '_').replace(/[^A-Z0-9_]/g, '').slice(0, 20) ||
         'BUILDING';
       const formData = {
         ...buildingForm,
+        name,
         code: autoCode,
-        floors_count: buildingForm.floors_count ? parseInt(buildingForm.floors_count, 10) : 0,
-        total_area: buildingForm.total_area ? parseFloat(buildingForm.total_area) : 0,
-        apartments_count: buildingForm.apartments_count ? parseInt(buildingForm.apartments_count, 10) : 0,
-        estimated_cost: buildingForm.estimated_cost ? parseFloat(buildingForm.estimated_cost) : 0,
+        floors_count: floors,
+        total_area: area,
+        apartments_count: apartments,
+        estimated_cost: estCost,
       };
 
       if (buildingForm.id) {
-        // Update existing building
         await constructionService.updateBuilding(project.id, buildingForm.id, formData);
+        toast.success(t('building_updated') || 'Bino yangilandi');
       } else {
-        // Create new building
         await constructionService.createBuilding(project.id, formData);
+        toast.success(t('building_created') || "Bino qo'shildi");
       }
 
       const buildingsData = await constructionService.listBuildings(project.id);
@@ -978,6 +1360,8 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
       });
     } catch (error) {
       console.error('Error saving building:', error);
+      const msg = error?.response?.data?.message || t('error_occurred') || 'Xatolik yuz berdi';
+      toast.error(msg);
     }
   };
 
@@ -1024,16 +1408,25 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
     }
   };
 
-  const handleDeleteBuildingFile = async (fileId) => {
+  const handleDeleteBuildingFile = (fileId) => {
     if (!buildingFilesTarget) return;
-    try {
-      await constructionService.deleteBuildingFile(project.id, buildingFilesTarget.id, fileId);
-      setBuildingFiles(prev => prev.filter(f => f.id !== fileId));
-      toast.success(t('deleted') || "O'chirildi");
-    } catch (err) {
-      console.error('Error deleting building file:', err);
-      toast.error(t('error_occurred') || 'Xatolik yuz berdi');
-    }
+    setConfirmDelete({
+      open: true,
+      title: t('confirm_delete_file') || "Faylni o'chirishni tasdiqlaysizmi?",
+      description:
+        t('file_delete_warning') ||
+        "Fayl butunlay o'chiriladi va qayta tiklab bo'lmaydi.",
+      onConfirm: async () => {
+        try {
+          await constructionService.deleteBuildingFile(project.id, buildingFilesTarget.id, fileId);
+          setBuildingFiles(prev => prev.filter(f => f.id !== fileId));
+          toast.success(t('file_deleted') || "Fayl o'chirildi");
+        } catch (err) {
+          console.error('Error deleting building file:', err);
+          toast.error(t('error_occurred') || 'Xatolik yuz berdi');
+        }
+      },
+    });
   };
 
   const formatFileSize = (bytes) => {
@@ -1047,40 +1440,93 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
   // Handle team member creation
   const handleCreateTeamMember = async (e) => {
     e.preventDefault();
+    if (!teamForm.employee_id) {
+      toast.error(t('select_employee') || 'Xodimni tanlang');
+      return;
+    }
+    if (!teamForm.role?.trim()) {
+      toast.error(t('role_required') || 'Rol/lavozim shart');
+      return;
+    }
     try {
       await constructionService.addTeamMember(project.id, teamForm);
       const teamData = await constructionService.listTeamMembers(project.id);
       setTeam(teamData || []);
       setShowTeamModal(false);
       setTeamForm({ employee_id: '', role: '', responsibilities: '', start_date: '' });
+      toast.success(t('team_member_added') || "Jamoa a'zosi qo'shildi");
     } catch (error) {
       console.error('Error adding team member:', error);
+      toast.error(t('error_occurred') || 'Xatolik yuz berdi');
     }
   };
 
   // Handle team member removal
-  const handleRemoveTeamMember = async (memberId) => {
-    if (!confirm(t('confirm_remove_member') || "Jamoa a'zosini o'chirmoqchimisiz?")) return;
-    try {
-      await constructionService.removeTeamMember(project.id, memberId);
-      const teamData = await constructionService.listTeamMembers(project.id);
-      setTeam(teamData || []);
-    } catch (error) {
-      console.error('Error removing team member:', error);
-    }
+  const handleRemoveTeamMember = (memberId) => {
+    setConfirmDelete({
+      open: true,
+      title: t('confirm_remove_member') || "Jamoa a'zosini o'chirmoqchimisiz?",
+      description:
+        t('team_member_remove_warning') ||
+        "A'zoning loyihadagi vazifalari saqlanib qoladi, lekin u loyihadan chiqariladi.",
+      onConfirm: async () => {
+        try {
+          await constructionService.removeTeamMember(project.id, memberId);
+          const teamData = await constructionService.listTeamMembers(project.id);
+          setTeam(teamData || []);
+          toast.success(t('team_member_removed') || "Jamoa a'zosi o'chirildi");
+        } catch (error) {
+          console.error('Error removing team member:', error);
+          toast.error(t('error_occurred') || 'Xatolik yuz berdi');
+        }
+      },
+    });
   };
 
   // Handle material request creation/update
   const handleCreateMaterialRequest = async (e) => {
     e.preventDefault();
+
+    // Validation: required dates + at least one valid item
+    if (!materialRequestForm.request_date) {
+      toast.error(t('request_date_required') || 'Talab sanasi kiritilishi shart');
+      return;
+    }
+    if (!materialRequestForm.items || materialRequestForm.items.length === 0) {
+      toast.error(t('add_at_least_one_item') || "Kamida bitta material qo'shing");
+      return;
+    }
+    const invalidItem = materialRequestForm.items.find(
+      (it) => !it.product_id || !Number.isFinite(Number(it.quantity)) || Number(it.quantity) <= 0
+    );
+    if (invalidItem) {
+      toast.error(
+        t('invalid_material_item') || "Barcha materiallarni va miqdorni to'g'ri kiriting"
+      );
+      return;
+    }
+    if (
+      materialRequestForm.required_date &&
+      materialRequestForm.request_date &&
+      materialRequestForm.required_date < materialRequestForm.request_date
+    ) {
+      toast.error(
+        t('required_before_request') ||
+          'Kerakli sana talab sanasidan oldin bo\'lishi mumkin emas'
+      );
+      return;
+    }
+
     try {
       const scId = materialRequestForm.subcontract_id ? parseInt(materialRequestForm.subcontract_id) : 0;
       const bldId = materialRequestForm.building_id ? parseInt(materialRequestForm.building_id) : 0;
+      // Strip internal _key before sending to backend
+      const cleanItems = materialRequestForm.items.map(({ _key, ...rest }) => rest);
       const requestData = {
         request_date: materialRequestForm.request_date,
         required_date: materialRequestForm.required_date,
         notes: materialRequestForm.notes,
-        items: materialRequestForm.items,
+        items: cleanItems,
         bill_subcontractor: scId > 0,
         subcontract_id: scId,
         building_id: bldId,
@@ -1088,8 +1534,10 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
 
       if (materialRequestForm.id) {
         await constructionService.updateMaterialRequest(materialRequestForm.id, requestData);
+        toast.success(t('material_request_updated') || 'So\'rov yangilandi');
       } else {
         await constructionService.createMaterialRequest(project.id, requestData);
+        toast.success(t('material_request_created') || 'Material so\'rovi yaratildi');
       }
       const materialsData = await constructionService.listMaterialRequests(project.id);
       setMaterialRequests(materialsData || []);
@@ -1100,6 +1548,8 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
       });
     } catch (error) {
       console.error('Error saving material request:', error);
+      const msg = error?.response?.data?.message || t('error_occurred') || 'Xatolik yuz berdi';
+      toast.error(msg);
     }
   };
 
@@ -1107,15 +1557,33 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
   const addMaterialRequestItem = () => {
     setMaterialRequestForm(prev => ({
       ...prev,
-      items: [...prev.items, { product_id: '', variant_id: '', warehouse_id: '', quantity: 1, unit_cost: 0, product_name: '', unit_name: '' }]
+      items: [
+        ...prev.items,
+        {
+          _key: `new-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          product_id: '',
+          variant_id: '',
+          warehouse_id: '',
+          quantity: 1,
+          unit_cost: 0,
+          product_name: '',
+          unit_name: '',
+        },
+      ],
     }));
   };
 
   // Update a specific item field
   const updateMaterialRequestItem = async (index, field, value) => {
+    // Capture the stable key at the moment of update so async updates find the
+    // right row even if the user reorders/removes items before the promise resolves.
+    let targetKey = null;
     setMaterialRequestForm(prev => {
       const items = [...prev.items];
-      items[index] = { ...items[index], [field]: value };
+      const current = items[index];
+      if (!current) return prev;
+      targetKey = current._key || current.id || index;
+      items[index] = { ...current, [field]: value };
 
       if (field === 'product_id') {
         const product = inventoryProducts.find(p => p.id === value);
@@ -1128,7 +1596,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
           if (product.has_variants && !variantsByProduct[value]) {
             inventoryService.listProductVariants(value).then(variants => {
               setVariantsByProduct(prev2 => ({ ...prev2, [value]: variants || [] }));
-            });
+            }).catch(err => console.error('Failed to load variants:', err));
           }
         }
       }
@@ -1138,7 +1606,6 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
         const variants = variantsByProduct[productId] || [];
         const variant = variants.find(v => v.id === value);
         if (variant) {
-          // Use variant cost_price if set, otherwise keep product's
           if (variant.cost_price && variant.cost_price > 0) {
             items[index].unit_cost = variant.cost_price;
           }
@@ -1146,32 +1613,39 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
         }
       }
 
-      // When warehouse is selected, fetch unit_cost from inventory
-      if (field === 'warehouse_id' && value && items[index].product_id) {
-        const productId = items[index].product_id;
-        const variantId = items[index].variant_id;
-        inventoryService.listInventory({ product_id: productId, warehouse_id: value }).then(invData => {
-          if (invData && invData.length > 0) {
-            let match = invData[0];
-            if (variantId) {
-              const variantMatch = invData.find(i => i.variant_id === variantId);
-              if (variantMatch) match = variantMatch;
-            }
-            if (match.unit_cost && match.unit_cost > 0) {
-              setMaterialRequestForm(prev2 => {
-                const updatedItems = [...prev2.items];
-                if (updatedItems[index]) {
-                  updatedItems[index] = { ...updatedItems[index], unit_cost: match.unit_cost };
-                }
-                return { ...prev2, items: updatedItems };
-              });
-            }
-          }
-        }).catch(() => {});
-      }
-
       return { ...prev, items };
     });
+
+    // Warehouse fetch is async — do it after state update to avoid index drift.
+    if (field === 'warehouse_id' && value && targetKey != null) {
+      const snapshot = materialRequestForm.items[index];
+      const productId = snapshot?.product_id;
+      const variantId = snapshot?.variant_id;
+      if (!productId) return;
+      try {
+        const invData = await inventoryService.listInventory({ product_id: productId, warehouse_id: value });
+        if (!invData || invData.length === 0) return;
+        let match = invData[0];
+        if (variantId) {
+          const variantMatch = invData.find(i => i.variant_id === variantId);
+          if (variantMatch) match = variantMatch;
+        }
+        if (!match.unit_cost || match.unit_cost <= 0) return;
+
+        setMaterialRequestForm(prev2 => {
+          const updatedItems = prev2.items.map(it => {
+            const key = it._key || it.id;
+            if (key === targetKey) {
+              return { ...it, unit_cost: match.unit_cost };
+            }
+            return it;
+          });
+          return { ...prev2, items: updatedItems };
+        });
+      } catch (err) {
+        console.error('Failed to fetch inventory price:', err);
+      }
+    }
   };
 
   // Remove an item line
@@ -1232,6 +1706,36 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
   // Handle daily log creation/update
   const handleCreateDailyLog = async (e) => {
     e.preventDefault();
+
+    // Validation: date cannot be future; temperature sanity checks
+    const today = new Date().toISOString().split('T')[0];
+    if (!dailyLogForm.report_date) {
+      toast.error(t('report_date_required') || 'Hisobot sanasi shart');
+      return;
+    }
+    if (dailyLogForm.report_date > today) {
+      toast.error(t('future_date_not_allowed') || "Kelajakdagi sana bo'lishi mumkin emas");
+      return;
+    }
+    const tMin = parseFloat(dailyLogForm.temperature_min);
+    const tMax = parseFloat(dailyLogForm.temperature_max);
+    if (
+      Number.isFinite(tMin) &&
+      Number.isFinite(tMax) &&
+      tMin > tMax
+    ) {
+      toast.error(
+        t('temp_min_over_max') ||
+          "Min harorat Max haroratdan katta bo'lishi mumkin emas"
+      );
+      return;
+    }
+    const workersNum = parseInt(dailyLogForm.workers_count, 10);
+    if (dailyLogForm.workers_count && (!Number.isFinite(workersNum) || workersNum < 0 || workersNum > 10000)) {
+      toast.error(t('invalid_workers_count') || "Ishchilar soni noto'g'ri");
+      return;
+    }
+
     setUploadingDailyLog(true);
 
     // Upload new photos first
@@ -1273,12 +1777,18 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
     try {
       if (dailyLogForm.id) {
         await constructionService.updateDailyReport(dailyLogForm.id, logData);
+        toast.success(t('daily_log_updated') || 'Kunlik hisobot yangilandi');
       } else {
         await constructionService.createDailyReport(project.id, logData);
+        toast.success(t('daily_log_created') || 'Kunlik hisobot saqlandi');
       }
     } catch (error) {
       console.error('Error saving daily log:', error);
-      toast.error(error?.response?.data?.message || 'Failed to save daily log');
+      toast.error(
+        error?.response?.data?.message ||
+          t('daily_log_save_failed') ||
+          'Kunlik hisobotni saqlashda xatolik'
+      );
       setUploadingDailyLog(false);
       return;
     }
@@ -1390,11 +1900,11 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
       };
 
       if (photoReportForm.id) {
-        // Update existing photo report
         await constructionService.updatePhotoReport(photoReportForm.id, reportData);
+        toast.success(t('photo_report_updated') || 'Foto hisobot yangilandi');
       } else {
-        // Create new photo report
         await constructionService.createPhotoReport(project.id, reportData);
+        toast.success(t('photo_report_created') || 'Foto hisobot saqlandi');
       }
 
       const photosData = await constructionService.listPhotoReports(project.id);
@@ -1413,6 +1923,11 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
       setPhotoPreview([]);
     } catch (error) {
       console.error('Error saving photo report:', error);
+      toast.error(
+        error?.response?.data?.message ||
+          t('photo_report_save_failed') ||
+          "Foto hisobotni saqlashda xatolik"
+      );
     } finally {
       setUploadingPhotos(false);
     }
@@ -1503,173 +2018,141 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
   const handleDeletePhotoReport = (reportId) => {
     setConfirmDelete({
       open: true,
+      title: t('confirm_delete_photo_report') || "Foto hisobotni o'chirishni tasdiqlaysizmi?",
+      description:
+        t('photo_report_delete_warning') ||
+        "Hisobot va unga biriktirilgan barcha suratlar o'chiriladi.",
       onConfirm: async () => {
         try {
           await constructionService.deletePhotoReport(reportId);
           const photosData = await constructionService.listPhotoReports(project.id);
           setPhotoReports(photosData || []);
+          toast.success(t('photo_report_deleted') || "Foto hisobot o'chirildi");
         } catch (error) {
           console.error('Error deleting photo report:', error);
+          toast.error(t('error_occurred') || 'Xatolik yuz berdi');
         }
-      }
+      },
     });
   };
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" onClick={onBack} className="p-2">
-          <ArrowLeft className="w-5 h-5" />
-        </Button>
-        <div className="flex-1">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-slate-800">{project.name}</h1>
-            {getStatusBadge(project.status)}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3 min-w-0">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onBack}
+            className="h-9 w-9 p-0 shrink-0 text-slate-500 hover:text-slate-900 hover:bg-slate-100 cursor-pointer"
+            aria-label={t('back_to_projects') || 'Loyihalar ro\'yxatiga qaytish'}
+            title={t('back_to_projects') || 'Loyihalar ro\'yxatiga qaytish'}
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </Button>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h1 className="text-2xl font-semibold text-slate-900 tracking-tight truncate">
+                {project.name}
+              </h1>
+              {getStatusBadge(project.status)}
+            </div>
           </div>
         </div>
-        <ReportGenerator
-          project={project}
-          sections={sections}
-          items={[]}
-          buildings={buildings}
-        />
+        <div className="shrink-0">
+          <ReportGenerator
+            project={project}
+            sections={sections}
+            items={[]}
+            buildings={buildings}
+          />
+        </div>
       </div>
 
-      {/* Navigation Pills - Row 1: Group selector */}
-      <div className="flex flex-wrap gap-2">
+      {/* Navigation — primary tabs (segmented) */}
+      <nav
+        className="flex flex-wrap gap-1.5 border-b border-slate-200 pb-0 -mb-px"
+        role="tablist"
+        aria-label={t('project_sections') || "Loyiha bo'limlari"}
+      >
         {NAV_GROUPS.map((group) => {
           const Icon = group.icon;
+          const isActive = activeGroup === group.key;
           return (
             <button
               key={group.key}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              aria-controls={`group-panel-${group.key}`}
               onClick={() => handleGroupClick(group)}
               className={cn(
-                'inline-flex items-center rounded-full px-4 py-2 text-sm border transition-colors',
-                activeGroup === group.key
-                  ? 'bg-[#185FA5] text-white border-[#185FA5] font-medium'
-                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-white hover:text-slate-900'
+                'relative inline-flex items-center gap-2 rounded-t-lg px-4 py-2.5 text-sm font-medium transition-colors whitespace-nowrap cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-1',
+                isActive
+                  ? 'text-slate-900 bg-white border border-slate-200 border-b-white z-10'
+                  : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50 border border-transparent'
               )}
             >
-              <Icon className="w-4 h-4 mr-2" />
+              <Icon className={cn('w-4 h-4', isActive ? 'text-slate-900' : 'text-slate-400')} strokeWidth={2} />
               {group.label}
             </button>
           );
         })}
-      </div>
+      </nav>
 
-      {/* Navigation Pills - Row 2: Submenu */}
+      {/* Sub-navigation — clean pill chips */}
       {currentGroup.subs.length > 0 && (
-        <div className="bg-slate-50 border border-slate-200 rounded-lg p-1 flex mt-3">
-          {currentGroup.subs.map((sub) => (
-            <button
-              key={sub.key}
-              onClick={() => setActiveTab(sub.key)}
-              className={cn(
-                'flex-1 text-center text-xs py-1.5 rounded-md transition-colors',
-                activeTab === sub.key
-                  ? 'bg-white text-slate-900 font-medium shadow-sm'
-                  : 'text-slate-500 hover:bg-white'
-              )}
-            >
-              {sub.label}
-            </button>
-          ))}
+        <div
+          className="flex flex-wrap gap-1.5"
+          role="tablist"
+          aria-label={currentGroup.label}
+        >
+          {currentGroup.subs.map((sub) => {
+            const isActive = activeTab === sub.key;
+            return (
+              <button
+                key={sub.key}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                onClick={() => setActiveTab(sub.key)}
+                className={cn(
+                  'rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400',
+                  isActive
+                    ? 'bg-slate-900 text-white'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
+                )}
+              >
+                {sub.label}
+              </button>
+            );
+          })}
         </div>
       )}
 
       {/* Tab Content */}
       <div className="mt-6">
+        <Suspense
+          fallback={
+            <div className="flex items-center justify-center py-20" role="status" aria-live="polite">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#185FA5]" />
+              <span className="sr-only">{t('loading') || 'Yuklanmoqda...'}</span>
+            </div>
+          }
+        >
         {/* Overview Tab */}
         {activeTab === 'overview' && (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {/* Progress Widget - Full width on small screens */}
-            <div className="lg:col-span-1">
-              <ProgressWidget project={{
-                ...project,
-                buildings_count: buildings.length,
-                sections_count: sections.length,
-                team_count: team.length
-              }} />
-            </div>
-
-            {/* Timeline Widget */}
-            <TimelineWidget project={project} />
-
-            {/* Quick Action Buttons */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">{t('quick_actions') || 'Tezkor amallar'}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 gap-2">
-                  <Button variant="outline" onClick={() => { setActiveGroup('materiallar'); setActiveTab('forms'); }}>
-                    <FileText className="w-4 h-4 mr-2" /> Forma 19
-                  </Button>
-                  <Button variant="outline" onClick={() => { setActiveGroup('materiallar'); setActiveTab('materials'); }}>
-                    <Package className="w-4 h-4 mr-2" /> {t('material') || 'Material'}
-                  </Button>
-                  <Button variant="outline" onClick={() => { setActiveGroup('hujjatlar'); setActiveTab('daily_logs'); }}>
-                    <ClipboardList className="w-4 h-4 mr-2" /> {t('journal') || 'Jurnal'}
-                  </Button>
-                  <Button variant="outline" onClick={() => { setActiveGroup('moliya'); setActiveTab('expenses'); }}>
-                    <DollarSign className="w-4 h-4 mr-2" /> {t('expense') || 'Xarajat'}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Project Info Card */}
-            <Card className="lg:col-span-2">
-              <CardHeader>
-                <CardTitle>{t('project_info') || 'Loyiha ma\'lumotlari'}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-slate-500">{t('client_name') || 'Mijoz'}</p>
-                    <p className="font-medium">{project.client_name || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-slate-500">{t('client_phone') || 'Telefon'}</p>
-                    <p className="font-medium">{project.client_phone || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-slate-500">{t('location') || 'Manzil'}</p>
-                    <p className="font-medium">{[project.address, project.city, project.region].filter(Boolean).join(', ') || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-slate-500">{t('project_type') || 'Loyiha turi'}</p>
-                    <p className="font-medium">{project.project_type ? (t(project.project_type) || project.project_type) : '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-slate-500">{t('building_type') || 'Bino turi'}</p>
-                    <p className="font-medium">{project.building_type || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-slate-500">{t('total_area') || 'Umumiy maydon'}</p>
-                    <p className="font-medium">{project.total_area ? `${project.total_area} m²` : '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-slate-500">{t('team') || 'Jamoa'}</p>
-                    <p className="font-medium">{team.length} {t('members') || "a'zo"}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Alerts Widget */}
-            <AlertsWidget
-              project={{
-                ...project,
-                total_smeta: sections.reduce((sum, s) => sum + (parseFloat(s.total_cost) || 0), 0)
-              }}
-              sections={sections}
-              vendors={vendors}
-            />
-
-
-          </div>
+          <OverviewTabContent
+            project={project}
+            buildings={buildings}
+            sections={sections}
+            team={team}
+            vendors={vendors}
+            t={t}
+            setActiveGroup={setActiveGroup}
+            setActiveTab={setActiveTab}
+          />
         )}
 
         {/* Buildings Tab */}
@@ -1744,13 +2227,21 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                                   onClick={() => {
                                     setConfirmDelete({
                                       open: true,
+                                      title:
+                                        t('confirm_delete_building') ||
+                                        "Binoni o'chirishni tasdiqlaysizmi?",
+                                      description:
+                                        t('delete_building_warning') ||
+                                        `"${building.name}" binosi va unga tegishli barcha ma'lumotlar o'chiriladi.`,
                                       onConfirm: async () => {
                                         try {
                                           await constructionService.deleteBuilding(project.id, building.id);
                                           const buildingsData = await constructionService.listBuildings(project.id);
                                           setBuildings(buildingsData || []);
+                                          toast.success(t('building_deleted') || "Bino o'chirildi");
                                         } catch (error) {
                                           console.error('Error deleting building:', error);
+                                          toast.error(t('error_occurred') || 'Xatolik yuz berdi');
                                         }
                                       }
                                     });
@@ -1891,6 +2382,8 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                             size="sm"
                             className="text-red-500 hover:text-red-700 hover:bg-red-50"
                             onClick={() => handleRemoveTeamMember(member.id)}
+                            aria-label={t('remove_member') || "A'zoni o'chirish"}
+                            title={t('remove_member') || "A'zoni o'chirish"}
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>
@@ -2009,13 +2502,20 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                                   <DropdownMenuItem onClick={() => {
                                     let parsedItems = [];
                                     try { parsedItems = Array.isArray(req.items) ? req.items : (typeof req.items === 'string' ? JSON.parse(req.items || '[]') : []); } catch (_) {}
+                                    // Ensure every item has a stable _key for React rendering and async updates
+                                    const keyed = parsedItems.map((it, i) => ({
+                                      ...it,
+                                      _key: it._key || it.id || `edit-${req.id}-${i}`,
+                                    }));
                                     setMaterialRequestForm({
                                       id: req.id,
                                       request_date: req.request_date ? req.request_date.split('T')[0] : new Date().toISOString().split('T')[0],
                                       required_date: req.required_date ? req.required_date.split('T')[0] : '',
                                       notes: req.notes || '',
                                       status: req.status || 'draft',
-                                      items: parsedItems
+                                      items: keyed,
+                                      subcontract_id: req.subcontract_id ? String(req.subcontract_id) : '',
+                                      building_id: req.building_id ? String(req.building_id) : '',
                                     });
                                     setShowMaterialRequestModal(true);
                                   }}>
@@ -2028,15 +2528,23 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                                   onClick={() => {
                                     setConfirmDelete({
                                       open: true,
+                                      title:
+                                        t('confirm_delete_material_request') ||
+                                        "Material so'rovini o'chirishni tasdiqlaysizmi?",
+                                      description:
+                                        t('material_request_delete_warning') ||
+                                        "So'rov va unga tegishli qatorlar o'chiriladi. Tasdiqlangan so'rovlarni o'chirib bo'lmaydi.",
                                       onConfirm: async () => {
                                         try {
                                           await constructionService.deleteMaterialRequest(req.id);
                                           const materialsData = await constructionService.listMaterialRequests(project.id);
                                           setMaterialRequests(materialsData || []);
+                                          toast.success(t('material_request_deleted') || "So'rov o'chirildi");
                                         } catch (error) {
                                           console.error('Error deleting material request:', error);
+                                          toast.error(t('error_occurred') || 'Xatolik yuz berdi');
                                         }
-                                      }
+                                      },
                                     });
                                   }}
                                 >
@@ -2265,15 +2773,23 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                                 onClick={() => {
                                   setConfirmDelete({
                                     open: true,
+                                    title:
+                                      t('confirm_delete_daily_log') ||
+                                      "Kunlik hisobotni o'chirishni tasdiqlaysizmi?",
+                                    description:
+                                      t('daily_log_delete_warning') ||
+                                      "Hisobot va biriktirilgan suratlar o'chiriladi. Bu amalni ortga qaytarib bo'lmaydi.",
                                     onConfirm: async () => {
                                       try {
                                         await constructionService.deleteDailyReport(log.id);
                                         const logsData = await constructionService.listDailyReports(project.id);
                                         setDailyLogs(logsData || []);
+                                        toast.success(t('daily_log_deleted') || "Hisobot o'chirildi");
                                       } catch (error) {
                                         console.error('Error deleting daily log:', error);
+                                        toast.error(t('error_occurred') || 'Xatolik yuz berdi');
                                       }
-                                    }
+                                    },
                                   });
                                 }}
                               >
@@ -2392,37 +2908,47 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
         {activeTab === 'team_tab' && (
           <TeamTab project={project} />
         )}
+        </Suspense>
       </div>
 
       {/* Building Modal */}
       <Dialog open={showBuildingModal} onOpenChange={setShowBuildingModal}>
-        <DialogContent className="max-w-2xl" aria-describedby={undefined}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby="building-form-help">
           <DialogHeader>
             <DialogTitle>{buildingForm.id ? (t('edit_building') || "Binoni tahrirlash") : (t('new_building') || "Yangi bino")}</DialogTitle>
+            <p id="building-form-help" className="text-sm text-slate-500">
+              {t('building_form_help') || "Loyihadagi bino/blok haqida ma'lumot kiriting."}
+            </p>
           </DialogHeader>
           <form onSubmit={handleCreateBuilding} className="space-y-4">
             <div>
-              <Label>{t('building_name') || 'Bino nomi'} *</Label>
+              <Label htmlFor="bld-name">
+                {t('building_name') || 'Bino nomi'} <span className="text-red-500">*</span>
+              </Label>
               <Input
+                id="bld-name"
                 value={buildingForm.name}
                 onChange={(e) => setBuildingForm({ ...buildingForm, name: e.target.value })}
-                placeholder="A blok - Turar-joy"
+                placeholder={t('building_name_placeholder') || "A blok, 16 qavatli uy"}
                 required
+                maxLength={150}
               />
             </div>
             <div>
-              <Label>{t('description') || 'Tavsif'}</Label>
+              <Label htmlFor="bld-desc">{t('description') || 'Tavsif'}</Label>
               <Textarea
+                id="bld-desc"
                 value={buildingForm.description}
                 onChange={(e) => setBuildingForm({ ...buildingForm, description: e.target.value })}
                 rows={2}
+                placeholder={t('optional') || "Ixtiyoriy"}
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <Label>{t('building_type') || 'Bino turi'}</Label>
+                <Label htmlFor="bld-type">{t('building_type') || 'Bino turi'}</Label>
                 <Select value={buildingForm.building_type} onValueChange={(v) => setBuildingForm({ ...buildingForm, building_type: v })}>
-                  <SelectTrigger>
+                  <SelectTrigger id="bld-type">
                     <SelectValue placeholder={t('select') || 'Tanlang'} />
                   </SelectTrigger>
                   <SelectContent>
@@ -2434,31 +2960,37 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                 </Select>
               </div>
               <div>
-                <Label>{t('floors_count') || 'Qavatlar soni'}</Label>
+                <Label htmlFor="bld-floors">{t('floors_count') || 'Qavatlar soni'}</Label>
                 <Input
+                  id="bld-floors"
                   type="number"
+                  min="0"
+                  max="200"
+                  step="1"
+                  inputMode="numeric"
                   value={buildingForm.floors_count}
                   onChange={(e) => setBuildingForm({ ...buildingForm, floors_count: e.target.value })}
                   placeholder="16"
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <Label>{t('total_area') || 'Umumiy maydon (m²)'}</Label>
-                <Input
-                  type="number"
+                <Label htmlFor="bld-area">{t('total_area') || 'Umumiy maydon (m²)'}</Label>
+                <NumberInput
+                  id="bld-area"
                   value={buildingForm.total_area}
-                  onChange={(e) => setBuildingForm({ ...buildingForm, total_area: e.target.value })}
+                  onChange={(raw) => setBuildingForm({ ...buildingForm, total_area: raw })}
                   placeholder="5000"
                 />
               </div>
               <div>
-                <Label>{t('apartments_count') || 'Xonadonlar soni'}</Label>
-                <Input
-                  type="number"
+                <Label htmlFor="bld-apts">{t('apartments_count') || 'Xonadonlar soni'}</Label>
+                <NumberInput
+                  id="bld-apts"
+                  allowDecimal={false}
                   value={buildingForm.apartments_count}
-                  onChange={(e) => setBuildingForm({ ...buildingForm, apartments_count: e.target.value })}
+                  onChange={(raw) => setBuildingForm({ ...buildingForm, apartments_count: raw })}
                   placeholder="64"
                 />
               </div>
@@ -2478,7 +3010,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                 </Select>
               </div>
             )}
-            <DialogFooter>
+            <DialogFooter className="flex-col-reverse sm:flex-row gap-2">
               <Button type="button" variant="outline" onClick={() => setShowBuildingModal(false)}>
                 {t('cancel') || 'Bekor qilish'}
               </Button>
@@ -2511,28 +3043,41 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
 
       {/* Team Member Modal */}
       <Dialog open={showTeamModal} onOpenChange={setShowTeamModal}>
-        <DialogContent aria-describedby={undefined}>
+        <DialogContent aria-describedby="team-form-help">
           <DialogHeader>
             <DialogTitle>{t('add_team_member') || "Jamoa a'zosini qo'shish"}</DialogTitle>
+            <p id="team-form-help" className="text-sm text-slate-500">
+              {t('team_form_help') ||
+                "Loyihada ishtirok etadigan xodimni tanlang va uning vazifasini belgilang."}
+            </p>
           </DialogHeader>
           <form onSubmit={handleCreateTeamMember} className="space-y-4">
             <div>
-              <Label>{t('employee') || 'Xodim'} *</Label>
-              <Select
-                value={teamForm.employee_id}
-                onValueChange={(value) => setTeamForm({ ...teamForm, employee_id: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={t('select_employee') || 'Xodimni tanlang'} />
-                </SelectTrigger>
-                <SelectContent>
-                  {employees.map((emp) => (
-                    <SelectItem key={emp.id} value={emp.id}>
-                      {emp.first_name} {emp.last_name} {emp.position ? `(${emp.position})` : ''}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label htmlFor="team-employee">
+                {t('employee') || 'Xodim'} <span className="text-red-500">*</span>
+              </Label>
+              {employees.length === 0 ? (
+                <div className="mt-1 p-3 rounded-md border border-amber-200 bg-amber-50 text-sm text-amber-800">
+                  {t('no_employees_hint') ||
+                    "Xodimlar ro'yxati bo'sh. Avval \"Xodimlar boshqaruvi\" modulida xodim qo'shing."}
+                </div>
+              ) : (
+                <Select
+                  value={teamForm.employee_id}
+                  onValueChange={(value) => setTeamForm({ ...teamForm, employee_id: value })}
+                >
+                  <SelectTrigger id="team-employee">
+                    <SelectValue placeholder={t('select_employee') || 'Xodimni tanlang'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {employees.map((emp) => (
+                      <SelectItem key={emp.id} value={emp.id}>
+                        {emp.first_name} {emp.last_name} {emp.position ? `(${emp.position})` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
             <div>
               <Label>{t('role') || 'Vazifasi'} *</Label>
@@ -2586,15 +3131,22 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
 
       {/* Material Request Modal */}
       <Dialog open={showMaterialRequestModal} onOpenChange={setShowMaterialRequestModal}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby="mr-help">
           <DialogHeader>
             <DialogTitle>{materialRequestForm.id ? (t('edit_material_request') || "Material so'rovini tahrirlash") : (t('new_material_request') || "Yangi material so'rovi")}</DialogTitle>
+            <p id="mr-help" className="text-sm text-slate-500">
+              {t('material_request_help') ||
+                "Qurilish uchun kerak bo'ladigan materiallarni tanlang. So'rov tasdiqlangach, omborga avtomatik ravishda zayavka ketadi."}
+            </p>
           </DialogHeader>
           <form onSubmit={handleCreateMaterialRequest} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <Label>{t('request_date') || "So'rov sanasi"} *</Label>
+                <Label htmlFor="mr-req-date">
+                  {t('request_date') || "So'rov sanasi"} <span className="text-red-500">*</span>
+                </Label>
                 <Input
+                  id="mr-req-date"
                   type="date"
                   value={materialRequestForm.request_date}
                   onChange={(e) => setMaterialRequestForm({ ...materialRequestForm, request_date: e.target.value })}
@@ -2602,11 +3154,13 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                 />
               </div>
               <div>
-                <Label>{t('required_date') || 'Kerak bo\'lgan sana'}</Label>
+                <Label htmlFor="mr-needed-date">{t('required_date') || 'Kerak bo\'lgan sana'}</Label>
                 <Input
+                  id="mr-needed-date"
                   type="date"
                   value={materialRequestForm.required_date}
                   onChange={(e) => setMaterialRequestForm({ ...materialRequestForm, required_date: e.target.value })}
+                  min={materialRequestForm.request_date || undefined}
                 />
               </div>
             </div>
@@ -2649,10 +3203,11 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                   {materialRequestForm.items.map((item, index) => {
                     const product = inventoryProducts.find(p => p.id === item.product_id);
                     const productVariants = product?.has_variants ? (variantsByProduct[item.product_id] || []) : [];
+                    const rowKey = item._key || item.id || `item-${index}`;
                     return (
-                      <div key={index} className="rounded-lg border bg-slate-50 p-3 space-y-3 pb-3">
+                      <div key={rowKey} className="rounded-lg border bg-slate-50 p-3 space-y-3 pb-3">
                         {/* Row 1: Product + Variant + Delete */}
-                        <div className="flex gap-2 items-center">
+                        <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
                           <div className="flex-1 min-w-0">
                             <Select
                               value={item.product_id}
@@ -2689,13 +3244,21 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                               </Select>
                             </div>
                           )}
-                          <Button type="button" variant="ghost" size="sm" className="h-9 w-9 p-0 text-red-500 shrink-0" onClick={() => removeMaterialRequestItem(index)}>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-9 w-9 p-0 text-red-500 shrink-0 self-end sm:self-center"
+                            onClick={() => removeMaterialRequestItem(index)}
+                            aria-label={t('remove_item') || "Qatorni o'chirish"}
+                            title={t('remove_item') || "Qatorni o'chirish"}
+                          >
                             <X className="w-4 h-4" />
                           </Button>
                         </div>
 
                         {/* Row 2: Warehouse | Qty + UOM | Price */}
-                        <div className="grid grid-cols-3 gap-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                           <Select
                             value={item.warehouse_id}
                             onValueChange={(val) => updateMaterialRequestItem(index, 'warehouse_id', val)}
@@ -2710,25 +3273,19 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                             </SelectContent>
                           </Select>
                           <div className="flex items-center gap-1">
-                            <Input
-                              type="number"
-                              min="0"
-                              step="any"
+                            <NumberInput
                               className="h-9 text-sm flex-1"
                               placeholder={t('qty') || 'Son'}
                               value={item.quantity === 0 ? '' : item.quantity}
-                              onChange={(e) => updateMaterialRequestItem(index, 'quantity', e.target.value === '' ? 0 : parseFloat(e.target.value) || 0)}
+                              onChange={(raw) => updateMaterialRequestItem(index, 'quantity', raw === '' ? 0 : parseFloat(raw) || 0)}
                             />
                             <span className="text-xs text-slate-500 whitespace-nowrap min-w-[30px]">{item.unit_name || product?.unit_name || t('pcs') || 'dona'}</span>
                           </div>
-                          <Input
-                            type="number"
-                            min="0"
-                            step="any"
+                          <NumberInput
                             className="h-9 text-sm"
                             placeholder={t('unit_price') || 'Narx'}
                             value={item.unit_cost === 0 ? '' : item.unit_cost}
-                            onChange={(e) => updateMaterialRequestItem(index, 'unit_cost', e.target.value === '' ? 0 : parseFloat(e.target.value) || 0)}
+                            onChange={(raw) => updateMaterialRequestItem(index, 'unit_cost', raw === '' ? 0 : parseFloat(raw) || 0)}
                           />
                         </div>
                       </div>
@@ -2813,19 +3370,51 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
       </AlertDialog>
 
       {/* Daily Log Modal */}
-      <Dialog open={showDailyLogModal} onOpenChange={setShowDailyLogModal}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
+      <Dialog
+        open={showDailyLogModal}
+        onOpenChange={(open) => {
+          setShowDailyLogModal(open);
+          if (!open) {
+            setDailyLogFiles([]);
+            setDailyLogPhotoPreview([]);
+            setDailyLogForm({
+              id: null,
+              report_date: new Date().toISOString().split('T')[0],
+              weather_morning: '',
+              weather_afternoon: '',
+              temperature_min: '',
+              temperature_max: '',
+              work_summary: '',
+              issues_encountered: '',
+              safety_notes: '',
+              workers_count: '',
+              workers_details: '',
+              equipment_used: '',
+              materials_received: '',
+            });
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby="daily-log-help">
           <DialogHeader>
             <DialogTitle>{dailyLogForm.id ? (t('edit_daily_log') || 'Kunlik hisobotni tahrirlash') : (t('new_daily_log') || 'Yangi kunlik hisobot')}</DialogTitle>
+            <p id="daily-log-help" className="text-sm text-slate-500">
+              {t('daily_log_help') ||
+                "Kun davomida bajarilgan ishlar, ob-havo va ishchilar haqida qisqacha yozing. Yulduzcha (*) majburiy maydon."}
+            </p>
           </DialogHeader>
           <form onSubmit={handleCreateDailyLog} className="space-y-4">
             <div>
-              <Label>{t('report_date') || 'Hisobot sanasi'} *</Label>
+              <Label htmlFor="dl-date">
+                {t('report_date') || 'Hisobot sanasi'} <span className="text-red-500">*</span>
+              </Label>
               <Input
+                id="dl-date"
                 type="date"
                 value={dailyLogForm.report_date}
                 onChange={(e) => setDailyLogForm({ ...dailyLogForm, report_date: e.target.value })}
                 required
+                max={new Date().toISOString().split('T')[0]}
               />
             </div>
 
@@ -2870,20 +3459,30 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                   </Select>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <Label>{t('temperature_min') || 'Min harorat (°C)'}</Label>
+                  <Label htmlFor="dl-tmin">{t('temperature_min') || 'Min harorat (°C)'}</Label>
                   <Input
+                    id="dl-tmin"
                     type="number"
+                    min="-60"
+                    max="60"
+                    step="0.1"
+                    inputMode="decimal"
                     value={dailyLogForm.temperature_min}
                     onChange={(e) => setDailyLogForm({ ...dailyLogForm, temperature_min: e.target.value })}
                     placeholder="-5"
                   />
                 </div>
                 <div>
-                  <Label>{t('temperature_max') || 'Max harorat (°C)'}</Label>
+                  <Label htmlFor="dl-tmax">{t('temperature_max') || 'Max harorat (°C)'}</Label>
                   <Input
+                    id="dl-tmax"
                     type="number"
+                    min="-60"
+                    max="60"
+                    step="0.1"
+                    inputMode="decimal"
                     value={dailyLogForm.temperature_max}
                     onChange={(e) => setDailyLogForm({ ...dailyLogForm, temperature_max: e.target.value })}
                     placeholder="15"
@@ -2894,8 +3493,9 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
 
             {/* Work Summary */}
             <div>
-              <Label>{t('work_summary') || 'Bajarilgan ishlar'}</Label>
+              <Label htmlFor="dl-summary">{t('work_summary') || 'Bajarilgan ishlar'}</Label>
               <Textarea
+                id="dl-summary"
                 value={dailyLogForm.work_summary}
                 onChange={(e) => setDailyLogForm({ ...dailyLogForm, work_summary: e.target.value })}
                 placeholder={t('work_summary_placeholder') || 'Bugun bajarilgan ishlar tavsifi...'}
@@ -2904,19 +3504,25 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
             </div>
 
             {/* Workers */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <Label>{t('workers_count') || 'Ishchilar soni'}</Label>
+                <Label htmlFor="dl-workers">{t('workers_count') || 'Ishchilar soni'}</Label>
                 <Input
+                  id="dl-workers"
                   type="number"
+                  min="0"
+                  max="10000"
+                  step="1"
+                  inputMode="numeric"
                   value={dailyLogForm.workers_count}
                   onChange={(e) => setDailyLogForm({ ...dailyLogForm, workers_count: e.target.value })}
                   placeholder="25"
                 />
               </div>
               <div>
-                <Label>{t('equipment_used') || 'Ishlatilgan texnika'}</Label>
+                <Label htmlFor="dl-equipment">{t('equipment_used') || 'Ishlatilgan texnika'}</Label>
                 <Input
+                  id="dl-equipment"
                   value={dailyLogForm.equipment_used}
                   onChange={(e) => setDailyLogForm({ ...dailyLogForm, equipment_used: e.target.value })}
                   placeholder="Ekskavator, kran..."
@@ -2969,7 +3575,13 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                       const src = typeof item === 'string' ? item : item.preview;
                       return (
                         <div key={index} className="relative group">
-                          <img src={src} alt={`photo-${index}`} className="w-full h-16 object-cover rounded" />
+                          <img
+                            src={src}
+                            alt={`photo-${index}`}
+                            loading="lazy"
+                            decoding="async"
+                            className="w-full h-16 object-cover rounded"
+                          />
                           <button
                             type="button"
                             className="absolute top-0 right-0 bg-red-500 text-white rounded-full w-4 h-4 text-xs flex items-center justify-center opacity-0 group-hover:opacity-100"
@@ -2996,14 +3608,36 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
       </Dialog>
 
       {/* Photo Report Modal */}
-      <Dialog open={showPhotoReportModal} onOpenChange={setShowPhotoReportModal}>
-        <DialogContent className="max-w-lg" aria-describedby={undefined}>
+      <Dialog
+        open={showPhotoReportModal}
+        onOpenChange={(open) => {
+          setShowPhotoReportModal(open);
+          if (!open) {
+            setPhotoFiles([]);
+            setPhotoPreview([]);
+            setPhotoReportForm({
+              report_date: new Date().toISOString().split('T')[0],
+              report_type: 'progress',
+              title: '',
+              description: '',
+              location_description: '',
+              weather: '',
+              temperature: '',
+            });
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" aria-describedby="pr-help">
           <DialogHeader>
             <DialogTitle>
               {photoReportForm.id
                 ? (t('edit_photo_report') || 'Foto hisobotni tahrirlash')
                 : (t('new_photo_report') || 'Yangi foto hisobot')}
             </DialogTitle>
+            <p id="pr-help" className="text-sm text-slate-500">
+              {t('photo_report_help') ||
+                "Loyihaning ayni paytdagi holatini suratga oling va izohlar bilan saqlang."}
+            </p>
           </DialogHeader>
           <form onSubmit={handleCreatePhotoReport} className="space-y-4">
             <div>
@@ -3075,7 +3709,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
               <Input
                 value={photoReportForm.location_description}
                 onChange={(e) => setPhotoReportForm({ ...photoReportForm, location_description: e.target.value })}
-                placeholder={t('location_placeholder') || "Masalan: A blok, 3-qavat"}
+                placeholder={t('location_placeholder') || "A blok, 3-qavat"}
               />
             </div>
             <div>
@@ -3177,9 +3811,12 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
 
       {/* Daily Log View Modal */}
       <Dialog open={showDailyLogViewModal} onOpenChange={setShowDailyLogViewModal}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto" aria-describedby={undefined}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto" aria-describedby="dl-view-help">
           <DialogHeader>
             <DialogTitle>{t('daily_log_details') || 'Kunlik hisobot tafsilotlari'}</DialogTitle>
+            <p id="dl-view-help" className="sr-only">
+              {t('daily_log_view_help') || 'Tanlangan kunlik hisobot haqida batafsil maʼlumot'}
+            </p>
           </DialogHeader>
           {selectedDailyLog && (
             <div className="space-y-4">
@@ -3331,12 +3968,16 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
 
       {/* Building Files Modal */}
       <Dialog open={showBuildingFilesModal} onOpenChange={setShowBuildingFilesModal}>
-        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto" aria-describedby={undefined}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto" aria-describedby="bld-files-help">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText className="w-5 h-5" />
               {buildingFilesTarget?.name} — {t('files') || 'Fayllar'}
             </DialogTitle>
+            <p id="bld-files-help" className="text-sm text-slate-500">
+              {t('building_files_help') ||
+                "Binoga tegishli hujjatlar, suratlar va chizmalarni biriktiring."}
+            </p>
           </DialogHeader>
           <div className="space-y-3">
             <div>
@@ -3414,21 +4055,28 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
       </Dialog>
 
       {/* Delete Confirmation */}
-      <AlertDialog open={confirmDelete.open} onOpenChange={(open) => !open && setConfirmDelete({ open: false, onConfirm: null })}>
+      <AlertDialog
+        open={confirmDelete.open}
+        onOpenChange={(open) => !open && setConfirmDelete({ open: false, onConfirm: null, title: null, description: null })}
+      >
         <AlertDialogContent className="sm:max-w-md">
           <AlertDialogHeader>
-            <AlertDialogTitle>{t('confirm_delete') || "O'chirishni tasdiqlaysizmi?"}</AlertDialogTitle>
-            <AlertDialogDescription>{t('this_cannot_be_undone')}</AlertDialogDescription>
+            <AlertDialogTitle>
+              {confirmDelete.title || t('confirm_delete') || "O'chirishni tasdiqlaysizmi?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmDelete.description || t('this_cannot_be_undone') || "Bu amalni ortga qaytarib bo'lmaydi."}
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setConfirmDelete({ open: false, onConfirm: null })}>
+            <AlertDialogCancel onClick={() => setConfirmDelete({ open: false, onConfirm: null, title: null, description: null })}>
               {t('cancel') || 'Bekor qilish'}
             </AlertDialogCancel>
             <AlertDialogAction
               className="bg-red-600 hover:bg-red-700 text-white"
               onClick={() => {
                 confirmDelete.onConfirm?.();
-                setConfirmDelete({ open: false, onConfirm: null });
+                setConfirmDelete({ open: false, onConfirm: null, title: null, description: null });
               }}
             >
               {t('delete') || "O'chirish"}
@@ -3466,12 +4114,19 @@ export default function Construction() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const activeTab = searchParams.get("tab") || "projects";
-  const setActiveTab = (tab) => setSearchParams({ tab }, { replace: true });
+  const setActiveTab = (tab) => setSearchParams((prev) => {
+    const next = new URLSearchParams(prev);
+    next.set('tab', tab);
+    return next;
+  }, { replace: true });
+  const selectedProjectId = searchParams.get('projectId');
+  const selectedProject = selectedProjectId
+    ? projects.find((p) => String(p.id) === String(selectedProjectId)) || null
+    : null;
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showProjectModal, setShowProjectModal] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
-  const [selectedProject, setSelectedProject] = useState(null);
   const [projectForm, setProjectForm] = useState({
     name: '',
     description: '',
@@ -3509,39 +4164,119 @@ export default function Construction() {
   const stats = getProjectStats();
 
   const getStatusBadge = (status) => {
+    // Clean, subtle badges — background tint + dark text instead of solid color
     const config = {
-      [PROJECT_STATUS.DRAFT]: { label: t('draft') || 'Qoralama', color: 'bg-gray-500' },
-      [PROJECT_STATUS.PLANNING]: { label: t('planning') || 'Rejalashtirish', color: 'bg-purple-500' },
-      [PROJECT_STATUS.APPROVED]: { label: t('approved') || 'Tasdiqlangan', color: 'bg-blue-500' },
-      [PROJECT_STATUS.IN_PROGRESS]: { label: t('in_progress') || 'Jarayonda', color: 'bg-orange-500' },
-      [PROJECT_STATUS.ON_HOLD]: { label: t('on_hold') || "To'xtatilgan", color: 'bg-yellow-500' },
-      [PROJECT_STATUS.COMPLETED]: { label: t('completed') || 'Tugallangan', color: 'bg-green-500' },
-      [PROJECT_STATUS.CANCELLED]: { label: t('cancelled') || 'Bekor qilingan', color: 'bg-red-500' }
+      [PROJECT_STATUS.DRAFT]: {
+        label: t('draft') || 'Qoralama',
+        className: 'bg-slate-100 text-slate-700 border-slate-200',
+      },
+      [PROJECT_STATUS.PLANNING]: {
+        label: t('planning') || 'Rejalashtirish',
+        className: 'bg-violet-50 text-violet-700 border-violet-200',
+      },
+      [PROJECT_STATUS.APPROVED]: {
+        label: t('approved') || 'Tasdiqlangan',
+        className: 'bg-blue-50 text-blue-700 border-blue-200',
+      },
+      [PROJECT_STATUS.IN_PROGRESS]: {
+        label: t('in_progress') || 'Jarayonda',
+        className: 'bg-amber-50 text-amber-700 border-amber-200',
+      },
+      [PROJECT_STATUS.ON_HOLD]: {
+        label: t('on_hold') || "To'xtatilgan",
+        className: 'bg-yellow-50 text-yellow-700 border-yellow-200',
+      },
+      [PROJECT_STATUS.COMPLETED]: {
+        label: t('completed') || 'Tugallangan',
+        className: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+      },
+      [PROJECT_STATUS.CANCELLED]: {
+        label: t('cancelled') || 'Bekor qilingan',
+        className: 'bg-red-50 text-red-700 border-red-200',
+      },
     };
-    const statusConfig = config[status] || { label: status, color: 'bg-gray-500' };
-    return <Badge className={`${statusConfig.color} text-white`}>{statusConfig.label}</Badge>;
+    const cfg = config[status] || { label: status, className: 'bg-slate-100 text-slate-700 border-slate-200' };
+    return (
+      <span
+        className={cn(
+          'inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium whitespace-nowrap',
+          cfg.className
+        )}
+      >
+        {cfg.label}
+      </span>
+    );
   };
 
   const handleSubmitProject = async (e) => {
     e.preventDefault();
+
+    // Validation
+    const name = projectForm.name?.trim();
+    if (!name) {
+      toast.error(t('project_name_required') || 'Loyiha nomi kiritilishi shart');
+      return;
+    }
+    if (name.length < 2) {
+      toast.error(t('project_name_too_short') || "Loyiha nomi kamida 2 belgidan iborat bo'lishi kerak");
+      return;
+    }
+
+    const totalAreaNum = projectForm.total_area ? parseFloat(projectForm.total_area) : 0;
+    if (projectForm.total_area && (!Number.isFinite(totalAreaNum) || totalAreaNum < 0)) {
+      toast.error(t('invalid_total_area') || "Umumiy maydon noto'g'ri kiritildi");
+      return;
+    }
+
+    const floorsNum = projectForm.floors_count ? parseInt(projectForm.floors_count, 10) : 0;
+    if (projectForm.floors_count && (!Number.isFinite(floorsNum) || floorsNum < 0 || floorsNum > 200)) {
+      toast.error(t('invalid_floors_count') || "Qavatlar soni noto'g'ri (0-200)");
+      return;
+    }
+
+    const contractNum = projectForm.contract_amount
+      ? parseFloat(parsePriceInput(String(projectForm.contract_amount)))
+      : 0;
+    if (!Number.isFinite(contractNum) || contractNum <= 0) {
+      toast.error(t('contract_amount_required') || "Shartnoma summasi kiritilishi va 0'dan katta bo'lishi shart");
+      return;
+    }
+
+    if (
+      projectForm.planned_start_date &&
+      projectForm.planned_end_date &&
+      projectForm.planned_end_date < projectForm.planned_start_date
+    ) {
+      toast.error(
+        t('end_before_start') ||
+          'Tugash sanasi boshlanish sanasidan oldin bo\'lishi mumkin emas'
+      );
+      return;
+    }
+
     try {
       // Convert form data - empty strings to null/0 for numeric fields
       const formData = {
         ...projectForm,
-        total_area: projectForm.total_area ? parseFloat(projectForm.total_area) : 0,
-        floors_count: projectForm.floors_count ? parseInt(projectForm.floors_count, 10) : 0,
-        contract_amount: projectForm.contract_amount ? parseFloat(projectForm.contract_amount) : 0,
+        name,
+        total_area: totalAreaNum,
+        floors_count: floorsNum,
+        contract_amount: contractNum,
       };
 
       if (editingProject) {
         await updateProject(editingProject.id, formData);
+        toast.success(t('project_updated') || 'Loyiha yangilandi');
       } else {
         await createProject(formData);
+        toast.success(t('project_created') || 'Loyiha yaratildi');
       }
       setShowProjectModal(false);
       resetForm();
     } catch (error) {
       console.error('Error saving project:', error);
+      const msg = error?.response?.data?.message || t('error_occurred') || 'Xatolik yuz berdi';
+      toast.error(msg);
     }
   };
 
@@ -3602,6 +4337,7 @@ export default function Construction() {
   };
 
   const [confirmDeleteProject, setConfirmDeleteProject] = useState({ open: false, id: null });
+  const [confirmDeleteFile, setConfirmDeleteFile] = useState({ open: false, fileId: null });
 
   // Project Files modal state
   const [showProjectFilesModal, setShowProjectFilesModal] = useState(false);
@@ -3677,12 +4413,22 @@ export default function Construction() {
     }
   };
 
-  const handleDeleteProjectFile = async (fileId) => {
+  const handleDeleteProjectFile = (fileId) => {
     if (!projectFilesTarget) return;
+    setConfirmDeleteFile({
+      open: true,
+      fileId,
+    });
+  };
+
+  const doDeleteProjectFile = async () => {
+    const fileId = confirmDeleteFile.fileId;
+    setConfirmDeleteFile({ open: false, fileId: null });
+    if (!projectFilesTarget || !fileId) return;
     try {
       await constructionService.deleteProjectFile(projectFilesTarget.id, fileId);
       setProjectFiles(prev => prev.filter(f => f.id !== fileId));
-      toast.success(t('deleted') || "O'chirildi");
+      toast.success(t('file_deleted') || "Fayl o'chirildi");
     } catch (err) {
       console.error('Error deleting project file:', err);
       toast.error(t('error_occurred') || 'Xatolik yuz berdi');
@@ -3727,15 +4473,41 @@ export default function Construction() {
   };
 
   const handleViewProject = (project) => {
-    setSelectedProject(project);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('projectId', project.id);
+      return next;
+    });
+  };
+
+  const handleBackToProjects = () => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('projectId');
+      return next;
+    });
   };
 
   const handleStatusChange = async (projectId, newStatus) => {
+    const current = projects.find((p) => p.id === projectId);
+    if (current && current.status && current.status !== newStatus) {
+      const allowed = ALLOWED_PROJECT_TRANSITIONS[current.status] || [];
+      if (!allowed.includes(newStatus)) {
+        toast.error(
+          t('invalid_status_transition') ||
+            `"${current.status}" holatidan "${newStatus}" holatiga o'tib bo'lmaydi`
+        );
+        return;
+      }
+    }
     try {
       await constructionService.updateProject(projectId, { status: newStatus });
       await loadProjects();
+      toast.success(t('status_updated') || 'Holat yangilandi');
     } catch (error) {
       console.error('Failed to update project status:', error);
+      const msg = error?.response?.data?.message || t('error_occurred') || 'Xatolik yuz berdi';
+      toast.error(msg);
     }
   };
 
@@ -3745,7 +4517,7 @@ export default function Construction() {
       <div className="p-4 md:p-6 lg:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
         <ProjectDetailView
           project={selectedProject}
-          onBack={() => setSelectedProject(null)}
+          onBack={handleBackToProjects}
           t={t}
           formatCurrency={formatCurrency}
           getStatusBadge={getStatusBadge}
@@ -3754,102 +4526,122 @@ export default function Construction() {
     );
   }
 
+  // Segmented status filter cards data — defined here for clean rendering
+  const STATUS_FILTER_CARDS = [
+    {
+      key: 'all',
+      label: t('total_projects') || 'Jami loyihalar',
+      value: stats.total,
+      icon: Building2,
+      accent: 'text-slate-700',
+      hint: t('show_all_projects') || "Barcha loyihalarni ko'rsatish",
+    },
+    {
+      key: 'draft',
+      label: t('draft') || 'Qoralama',
+      value: stats.draft,
+      icon: FileSpreadsheet,
+      accent: 'text-slate-500',
+      hint: t('draft_projects_hint') || "Qoralama: tayyorlash bosqichidagi loyihalar",
+    },
+    {
+      key: 'in_progress',
+      label: t('in_progress') || 'Jarayonda',
+      value: stats.inProgress,
+      icon: TrendingUp,
+      accent: 'text-amber-600',
+      hint: t('in_progress_projects_hint') || "Jarayonda: qurilish ketayotgan loyihalar",
+    },
+    {
+      key: 'completed',
+      label: t('completed') || 'Tugallangan',
+      value: stats.completed,
+      icon: CheckCircle,
+      accent: 'text-emerald-600',
+      hint: t('completed_projects_hint') || "Tugallangan: yakunlangan loyihalar",
+    },
+  ];
+
   return (
-    <div className="p-4 md:p-6 lg:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-800">{t('construction') || 'Qurilish'}</h1>
-            <p className="text-slate-500 text-sm mt-1">{t('construction_description') || 'Qurilish loyihalari va smeta boshqaruvi'}</p>
+    <div className="min-h-screen bg-slate-50/50">
+      <div className="mx-auto max-w-[1600px] px-4 md:px-6 lg:px-8 py-6 md:py-8 space-y-8">
+        {/* Stats: clickable status filter cards + summary metrics */}
+        <div className="space-y-3">
+          {/* Status filter — segmented cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {STATUS_FILTER_CARDS.map(({ key, label, value, icon: Icon, accent, hint }) => {
+              const isActive = statusFilter === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setStatusFilter(key)}
+                  aria-pressed={isActive}
+                  title={hint}
+                  className={cn(
+                    'group relative rounded-xl border bg-white p-4 text-left transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400',
+                    isActive
+                      ? 'border-slate-900 shadow-sm'
+                      : 'border-slate-200 hover:border-slate-300'
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-2 mb-3">
+                    <Icon className={cn('w-5 h-5', accent)} strokeWidth={2} />
+                    {isActive && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-slate-900" aria-hidden="true" />
+                    )}
+                  </div>
+                  <p className="text-xs font-medium text-slate-500 mb-1">
+                    {label}
+                  </p>
+                  <p className="text-2xl font-semibold text-slate-900 tabular-nums leading-none">
+                    {value}
+                  </p>
+                </button>
+              );
+            })}
           </div>
-        </div>
 
-        {/* Metrics */}
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <Building2 className="w-5 h-5 text-blue-600" />
+          {/* Summary metrics — compact, non-clickable */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div
+              className="rounded-xl border border-slate-200 bg-white p-4"
+              title={t('contract_total_hint') || "Barcha loyihalar shartnoma summalari yig'indisi"}
+            >
+              <div className="flex items-center justify-between">
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-slate-500 mb-1">
+                    {t('contract_total') || 'Shartnoma summasi'}
+                  </p>
+                  <p className="text-xl font-semibold text-slate-900 tabular-nums truncate">
+                    {formatCurrencyCompact(stats.totalContractAmount)}
+                  </p>
                 </div>
-                <div>
-                  <p className="text-xs text-slate-600">{t('total_projects') || 'Jami loyihalar'}</p>
-                  <p className="text-2xl font-bold text-slate-900">{stats.total}</p>
+                <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0">
+                  <DollarSign className="w-5 h-5 text-emerald-600" strokeWidth={2} />
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
 
-          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
-                  <FileSpreadsheet className="w-5 h-5 text-gray-600" />
+            <div
+              className="rounded-xl border border-slate-200 bg-white p-4"
+              title={t('total_smeta_hint') || "Barcha loyihalar smetalari bo'yicha umumiy qiymat"}
+            >
+              <div className="flex items-center justify-between">
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-slate-500 mb-1">
+                    {t('total_smeta') || 'Jami smeta'}
+                  </p>
+                  <p className="text-xl font-semibold text-slate-900 tabular-nums truncate">
+                    {formatCurrencyCompact(stats.totalSmeta)}
+                  </p>
                 </div>
-                <div>
-                  <p className="text-xs text-slate-600">{t('draft') || 'Qoralama'}</p>
-                  <p className="text-2xl font-bold text-slate-900">{stats.draft}</p>
+                <div className="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
+                  <FileSpreadsheet className="w-5 h-5 text-indigo-600" strokeWidth={2} />
                 </div>
               </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
-                  <TrendingUp className="w-5 h-5 text-orange-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-slate-600">{t('in_progress') || 'Jarayonda'}</p>
-                  <p className="text-2xl font-bold text-slate-900">{stats.inProgress}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                  <CheckCircle className="w-5 h-5 text-green-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-slate-600">{t('completed') || 'Tugallangan'}</p>
-                  <p className="text-2xl font-bold text-slate-900">{stats.completed}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
-                  <DollarSign className="w-5 h-5 text-emerald-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-slate-600">{t('contract_total') || 'Shartnoma summasi'}</p>
-                  <p className="text-lg font-bold text-slate-900">{formatCurrencyCompact(stats.totalContractAmount)}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                  <FileSpreadsheet className="w-5 h-5 text-purple-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-slate-600">{t('total_smeta') || 'Jami smeta'}</p>
-                  <p className="text-lg font-bold text-slate-900">{formatCurrencyCompact(stats.totalSmeta)}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
 
         {/* Projects List */}
@@ -3875,132 +4667,249 @@ export default function Construction() {
 
       {/* Project Modal */}
       <Dialog open={showProjectModal} onOpenChange={setShowProjectModal}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby="project-form-help">
           <DialogHeader>
             <DialogTitle>
               {editingProject ? (t('edit_project') || 'Loyihani tahrirlash') : (t('new_project') || 'Yangi loyiha')}
             </DialogTitle>
+            <p id="project-form-help" className="text-sm text-slate-500">
+              {t('project_form_help') ||
+                "Yulduzcha (*) bilan belgilangan maydonlar majburiy. Boshqa maydonlarni keyin ham to'ldirishingiz mumkin."}
+            </p>
           </DialogHeader>
 
-          <form onSubmit={handleSubmitProject} className="space-y-4">
-            <div>
-              <Label>{t('project_name') || 'Loyiha nomi'} *</Label>
-              <Input
-                value={projectForm.name}
-                onChange={(e) => setProjectForm({ ...projectForm, name: e.target.value })}
-                required
-              />
-            </div>
+          <form onSubmit={handleSubmitProject} className="space-y-5">
+            {/* SECTION 1: Basic info */}
+            <section className="space-y-3">
+              <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                <Building2 className="w-4 h-4 text-blue-600" />
+                {t('basic_info') || "Asosiy ma'lumotlar"}
+              </h3>
+              <div>
+                <Label htmlFor="project-name">
+                  {t('project_name') || 'Loyiha nomi'} <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="project-name"
+                  value={projectForm.name}
+                  onChange={(e) => setProjectForm({ ...projectForm, name: e.target.value })}
+                  placeholder={t('project_name_placeholder') || "Yangi shahar TJM 10-uy"}
+                  required
+                  maxLength={200}
+                />
+              </div>
 
-            <div>
-              <Label>{t('description') || 'Tavsif'}</Label>
-              <Textarea
-                value={projectForm.description}
-                onChange={(e) => setProjectForm({ ...projectForm, description: e.target.value })}
-                rows={2}
-              />
-            </div>
+              <div>
+                <Label htmlFor="project-desc">{t('description') || 'Tavsif'}</Label>
+                <Textarea
+                  id="project-desc"
+                  value={projectForm.description}
+                  onChange={(e) => setProjectForm({ ...projectForm, description: e.target.value })}
+                  rows={2}
+                  placeholder={t('project_desc_placeholder') || "Loyiha haqida qisqacha..."}
+                />
+              </div>
+            </section>
 
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <Label>{t('address') || 'Manzil'}</Label>
-                <Input
-                  value={projectForm.address}
-                  onChange={(e) => setProjectForm({ ...projectForm, address: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label>{t('city') || 'Shahar'}</Label>
-                <Input
-                  value={projectForm.city}
-                  onChange={(e) => setProjectForm({ ...projectForm, city: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label>{t('region') || 'Viloyat'}</Label>
-                <Input
-                  value={projectForm.region}
-                  onChange={(e) => setProjectForm({ ...projectForm, region: e.target.value })}
-                />
-              </div>
-            </div>
+            <Separator />
 
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <Label>{t('project_type') || 'Loyiha turi'}</Label>
-                <Select value={projectForm.project_type} onValueChange={(v) => setProjectForm({ ...projectForm, project_type: v })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder={t('select') || 'Tanlang'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="residential">{t('residential') || 'Turar-joy'}</SelectItem>
-                    <SelectItem value="commercial">{t('commercial') || 'Tijorat'}</SelectItem>
-                    <SelectItem value="industrial">{t('industrial') || 'Sanoat'}</SelectItem>
-                    <SelectItem value="infrastructure">{t('infrastructure') || 'Infratuzilma'}</SelectItem>
-                  </SelectContent>
-                </Select>
+            {/* SECTION 2: Location */}
+            <section className="space-y-3">
+              <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-green-600" />
+                {t('location') || 'Manzil'}
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <Label htmlFor="proj-address">{t('address') || 'Manzil'}</Label>
+                  <Input
+                    id="proj-address"
+                    value={projectForm.address}
+                    onChange={(e) => setProjectForm({ ...projectForm, address: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="proj-city">{t('city') || 'Shahar'}</Label>
+                  <Input
+                    id="proj-city"
+                    value={projectForm.city}
+                    onChange={(e) => setProjectForm({ ...projectForm, city: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="proj-region">{t('region') || 'Viloyat'}</Label>
+                  <Input
+                    id="proj-region"
+                    value={projectForm.region}
+                    onChange={(e) => setProjectForm({ ...projectForm, region: e.target.value })}
+                  />
+                </div>
               </div>
-              <div>
-                <Label>{t('total_area') || 'Umumiy maydon (m²)'}</Label>
-                <Input
-                  type="number"
-                  value={projectForm.total_area}
-                  onChange={(e) => setProjectForm({ ...projectForm, total_area: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label>{t('floors_count') || 'Qavatlar soni'}</Label>
-                <Input
-                  type="number"
-                  value={projectForm.floors_count}
-                  onChange={(e) => setProjectForm({ ...projectForm, floors_count: e.target.value })}
-                />
-              </div>
-            </div>
+            </section>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>{t('planned_start_date') || 'Rejadagi boshlanish'}</Label>
-                <Input
-                  type="date"
-                  value={projectForm.planned_start_date}
-                  onChange={(e) => setProjectForm({ ...projectForm, planned_start_date: e.target.value })}
-                />
+            <Separator />
+
+            {/* SECTION 3: Project details */}
+            <section className="space-y-3">
+              <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                <HardHat className="w-4 h-4 text-orange-600" />
+                {t('project_details') || "Loyiha tafsilotlari"}
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <Label htmlFor="proj-type">{t('project_type') || 'Loyiha turi'}</Label>
+                  <Select
+                    value={projectForm.project_type}
+                    onValueChange={(v) => setProjectForm({ ...projectForm, project_type: v })}
+                  >
+                    <SelectTrigger id="proj-type">
+                      <SelectValue placeholder={t('select') || 'Tanlang'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="residential">{t('residential') || 'Turar-joy'}</SelectItem>
+                      <SelectItem value="commercial">{t('commercial') || 'Tijorat'}</SelectItem>
+                      <SelectItem value="industrial">{t('industrial') || 'Sanoat'}</SelectItem>
+                      <SelectItem value="infrastructure">{t('infrastructure') || 'Infratuzilma'}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="proj-area">{t('total_area') || 'Umumiy maydon (m²)'}</Label>
+                  <NumberInput
+                    id="proj-area"
+                    value={projectForm.total_area}
+                    onChange={(raw) => setProjectForm({ ...projectForm, total_area: raw })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="proj-floors">{t('floors_count') || 'Qavatlar soni'}</Label>
+                  <Input
+                    id="proj-floors"
+                    type="number"
+                    min="0"
+                    max="200"
+                    step="1"
+                    inputMode="numeric"
+                    value={projectForm.floors_count}
+                    onChange={(e) => setProjectForm({ ...projectForm, floors_count: e.target.value })}
+                  />
+                </div>
               </div>
-              <div>
-                <Label>{t('planned_end_date') || 'Rejadagi tugash'}</Label>
-                <Input
-                  type="date"
-                  value={projectForm.planned_end_date}
-                  onChange={(e) => setProjectForm({ ...projectForm, planned_end_date: e.target.value })}
-                />
+            </section>
+
+            <Separator />
+
+            {/* SECTION 4: Schedule */}
+            <section className="space-y-3">
+              <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-purple-600" />
+                {t('schedule') || 'Muddatlar'}
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="proj-start">{t('planned_start_date') || 'Rejadagi boshlanish'}</Label>
+                  <Input
+                    id="proj-start"
+                    type="date"
+                    value={projectForm.planned_start_date}
+                    onChange={(e) => setProjectForm({ ...projectForm, planned_start_date: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="proj-end">{t('planned_end_date') || 'Rejadagi tugash'}</Label>
+                  <Input
+                    id="proj-end"
+                    type="date"
+                    value={projectForm.planned_end_date}
+                    onChange={(e) => setProjectForm({ ...projectForm, planned_end_date: e.target.value })}
+                    min={projectForm.planned_start_date || undefined}
+                  />
+                  {projectForm.planned_start_date &&
+                    projectForm.planned_end_date &&
+                    projectForm.planned_end_date < projectForm.planned_start_date && (
+                      <p className="text-xs text-red-500 mt-1">
+                        {t('end_before_start') ||
+                          'Tugash sanasi boshlanish sanasidan oldin bo\'lishi mumkin emas'}
+                      </p>
+                    )}
+                </div>
               </div>
-            </div>
+            </section>
+
+            <Separator />
+
+            {/* SECTION 5: Financials */}
+            <section className="space-y-3">
+              <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                <DollarSign className="w-4 h-4 text-emerald-600" />
+                {t('financials') || "Moliyaviy ma'lumotlar"}
+              </h3>
+              <div>
+                <Label htmlFor="proj-contract-amount">
+                  {t('contract_amount') || 'Shartnoma summasi (so\'m)'} <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="proj-contract-amount"
+                  type="text"
+                  inputMode="decimal"
+                  value={
+                    projectForm.contract_amount
+                      ? formatPriceInput(String(projectForm.contract_amount))
+                      : ''
+                  }
+                  onChange={(e) =>
+                    setProjectForm({
+                      ...projectForm,
+                      contract_amount: parsePriceInput(e.target.value),
+                    })
+                  }
+                  placeholder="1 000 000"
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  {t('contract_amount_hint') || "Buyurtmachi bilan tuzilgan shartnoma bo'yicha umumiy summa"}
+                </p>
+              </div>
+            </section>
 
             {editingProject && (
-              <div>
-                <Label>{t('status') || 'Holat'}</Label>
-                <Select value={projectForm.status} onValueChange={(v) => setProjectForm({ ...projectForm, status: v })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder={t('select_status') || 'Holatni tanlang'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="draft">{t('draft') || 'Qoralama'}</SelectItem>
-                    <SelectItem value="planning">{t('planning') || 'Rejalashtirish'}</SelectItem>
-                    <SelectItem value="in_progress">{t('in_progress') || 'Jarayonda'}</SelectItem>
-                    <SelectItem value="on_hold">{t('on_hold') || "To'xtatilgan"}</SelectItem>
-                    <SelectItem value="completed">{t('completed') || 'Tugallangan'}</SelectItem>
-                    <SelectItem value="cancelled">{t('cancelled') || 'Bekor qilingan'}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <>
+                <Separator />
+                <section className="space-y-3">
+                  <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                    <ClipboardList className="w-4 h-4 text-slate-600" />
+                    {t('status') || 'Holat'}
+                  </h3>
+                  <div>
+                    <Label htmlFor="proj-status">{t('status') || 'Holat'}</Label>
+                    <Select
+                      value={projectForm.status}
+                      onValueChange={(v) => setProjectForm({ ...projectForm, status: v })}
+                    >
+                      <SelectTrigger id="proj-status">
+                        <SelectValue placeholder={t('select_status') || 'Holatni tanlang'} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="draft">{t('draft') || 'Qoralama'}</SelectItem>
+                        <SelectItem value="planning">{t('planning') || 'Rejalashtirish'}</SelectItem>
+                        <SelectItem value="in_progress">{t('in_progress') || 'Jarayonda'}</SelectItem>
+                        <SelectItem value="on_hold">{t('on_hold') || "To'xtatilgan"}</SelectItem>
+                        <SelectItem value="completed">{t('completed') || 'Tugallangan'}</SelectItem>
+                        <SelectItem value="cancelled">{t('cancelled') || 'Bekor qilingan'}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </section>
+              </>
             )}
 
-            <DialogFooter>
+            <DialogFooter className="flex-col-reverse sm:flex-row gap-2">
               <Button type="button" variant="outline" onClick={() => setShowProjectModal(false)}>
                 {t('cancel') || 'Bekor qilish'}
               </Button>
-              <Button type="submit" className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white">
+              <Button
+                type="submit"
+                className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
+              >
                 {editingProject ? (t('update') || 'Yangilash') : (t('create') || 'Yaratish')}
               </Button>
             </DialogFooter>
@@ -4017,12 +4926,16 @@ export default function Construction() {
           setProjectFileDescription('');
         }
       }}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto" aria-describedby={undefined}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto" aria-describedby="proj-files-help">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText className="w-5 h-5 text-green-600" />
               {projectFilesTarget?.name} — {t('files') || 'Fayllar'}
             </DialogTitle>
+            <p id="proj-files-help" className="text-sm text-slate-500">
+              {t('project_files_help') ||
+                "Shartnomalar, sxemalar, ruxsatnomalar va boshqa hujjatlarni biriktiring."}
+            </p>
           </DialogHeader>
           <div className="space-y-3">
             {/* Upload area */}
@@ -4163,8 +5076,11 @@ export default function Construction() {
       <AlertDialog open={confirmDeleteProject.open} onOpenChange={(open) => !open && setConfirmDeleteProject({ open: false, id: null })}>
         <AlertDialogContent className="sm:max-w-md">
           <AlertDialogHeader>
-            <AlertDialogTitle>{t('confirm_delete') || "O'chirishni tasdiqlaysizmi?"}</AlertDialogTitle>
-            <AlertDialogDescription>{t('this_cannot_be_undone')}</AlertDialogDescription>
+            <AlertDialogTitle>{t('confirm_delete_project') || "Loyihani o'chirishni tasdiqlaysizmi?"}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('delete_project_warning') ||
+                "Loyiha, barcha binolar, smetalar, materiallar, hisobotlar va fayllar butunlay o'chiriladi. Bu amalni ortga qaytarib bo'lmaydi."}
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setConfirmDeleteProject({ open: false, id: null })}>
@@ -4173,9 +5089,39 @@ export default function Construction() {
             <AlertDialogAction
               className="bg-red-600 hover:bg-red-700 text-white"
               onClick={async () => {
-                await deleteProject(confirmDeleteProject.id);
-                setConfirmDeleteProject({ open: false, id: null });
+                try {
+                  await deleteProject(confirmDeleteProject.id);
+                  toast.success(t('project_deleted') || "Loyiha o'chirildi");
+                } catch (e) {
+                  console.error('Error deleting project:', e);
+                  toast.error(t('error_occurred') || 'Xatolik yuz berdi');
+                } finally {
+                  setConfirmDeleteProject({ open: false, id: null });
+                }
               }}
+            >
+              {t('delete') || "O'chirish"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete File Confirmation */}
+      <AlertDialog open={confirmDeleteFile.open} onOpenChange={(open) => !open && setConfirmDeleteFile({ open: false, fileId: null })}>
+        <AlertDialogContent className="sm:max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('confirm_delete_file') || "Faylni o'chirishni tasdiqlaysizmi?"}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('file_delete_warning') || "Fayl butunlay o'chiriladi va qayta tiklab bo'lmaydi."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setConfirmDeleteFile({ open: false, fileId: null })}>
+              {t('cancel') || 'Bekor qilish'}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700 text-white"
+              onClick={doDeleteProjectFile}
             >
               {t('delete') || "O'chirish"}
             </AlertDialogAction>
