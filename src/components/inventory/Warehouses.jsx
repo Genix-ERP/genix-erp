@@ -1115,7 +1115,7 @@ export default function Warehouses() {
                 <div className="mt-4">
                   <LabelWithHelp
                     label={t('parent_location') || 'Parent Location'}
-                    helpText={t('help_parent_location') || "Iyerarxik tuzilma yaratish uchun ota joylashuvni tanlang. Masalan: Zona > Yo'lak > Stelling > Javon > Quti."}
+                    helpText={t('help_parent_location') || "Iyerarxik tuzilma yaratish uchun ota joylashuvni tanlang. Zona > Yo'lak > Stelling > Javon > Quti."}
                   />
                   <Select
                     value={locationForm.parent_id || '__none__'}

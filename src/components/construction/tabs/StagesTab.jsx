@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -1069,10 +1070,9 @@ const StagesTab = ({ project }) => {
                 </div>
                 <div>
                   <Label>{t('quantity')}</Label>
-                  <Input
-                    type="number" step="0.0001" min="0"
+                  <NumberInput
                     value={materialForm.quantity}
-                    onChange={e => setMaterialForm(f => ({ ...f, quantity: e.target.value }))}
+                    onChange={raw => setMaterialForm(f => ({ ...f, quantity: raw }))}
                   />
                 </div>
                 <div>
@@ -1154,8 +1154,8 @@ const StagesTab = ({ project }) => {
                 </div>
                 <div>
                   <Label>{t('quantity') || 'Miqdor'}</Label>
-                  <Input type="number" step="0.01" min="0" value={equipmentForm.quantity}
-                    onChange={e => setEquipmentForm(f => ({ ...f, quantity: e.target.value }))} />
+                  <NumberInput value={equipmentForm.quantity}
+                    onChange={raw => setEquipmentForm(f => ({ ...f, quantity: raw }))} />
                 </div>
                 <div>
                   <Label>{t('rf_unit_price') || 'Narxi'}</Label>
@@ -1230,8 +1230,8 @@ const StagesTab = ({ project }) => {
                 </div>
                 <div>
                   <Label>{t('quantity') || 'Miqdor'}</Label>
-                  <Input type="number" step="0.01" min="0" value={equipmentForm.quantity}
-                    onChange={e => setEquipmentForm(f => ({ ...f, quantity: e.target.value }))} />
+                  <NumberInput value={equipmentForm.quantity}
+                    onChange={raw => setEquipmentForm(f => ({ ...f, quantity: raw }))} />
                 </div>
                 <div>
                   <Label>{t('rf_unit_price') || 'Narxi'}</Label>

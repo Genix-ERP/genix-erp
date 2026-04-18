@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -1069,13 +1070,13 @@ const RejaFaktTab = ({ project }) => {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label>{t('rf_plan_qty')}</Label>
-                  <Input type="number" step="0.0001" min="0" value={materialForm.plan_quantity}
-                    onChange={e => setMaterialForm(f => ({ ...f, plan_quantity: e.target.value }))} />
+                  <NumberInput value={materialForm.plan_quantity}
+                    onChange={raw => setMaterialForm(f => ({ ...f, plan_quantity: raw }))} />
                 </div>
                 <div>
                   <Label>{t('rf_fact_qty')}</Label>
-                  <Input type="number" step="0.0001" min="0" value={materialForm.fact_quantity}
-                    onChange={e => setMaterialForm(f => ({ ...f, fact_quantity: e.target.value }))} />
+                  <NumberInput value={materialForm.fact_quantity}
+                    onChange={raw => setMaterialForm(f => ({ ...f, fact_quantity: raw }))} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -1156,8 +1157,8 @@ const RejaFaktTab = ({ project }) => {
                 </div>
                 <div>
                   <Label>{t('quantity') || 'Miqdor'}</Label>
-                  <Input type="number" step="0.01" min="0" value={equipmentForm.plan_quantity}
-                    onChange={e => setEquipmentForm(f => ({ ...f, plan_quantity: e.target.value }))} />
+                  <NumberInput value={equipmentForm.plan_quantity}
+                    onChange={raw => setEquipmentForm(f => ({ ...f, plan_quantity: raw }))} />
                 </div>
                 <div>
                   <Label>{t('rf_unit_price') || 'Narxi'}</Label>
@@ -1230,8 +1231,8 @@ const RejaFaktTab = ({ project }) => {
                 </div>
                 <div>
                   <Label>{t('quantity') || 'Miqdor'}</Label>
-                  <Input type="number" step="0.01" min="0" value={equipmentForm.plan_quantity}
-                    onChange={e => setEquipmentForm(f => ({ ...f, plan_quantity: e.target.value }))} />
+                  <NumberInput value={equipmentForm.plan_quantity}
+                    onChange={raw => setEquipmentForm(f => ({ ...f, plan_quantity: raw }))} />
                 </div>
                 <div>
                   <Label>{t('rf_unit_price') || 'Narxi'}</Label>
@@ -1266,13 +1267,13 @@ const RejaFaktTab = ({ project }) => {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label>{t('rf_plan_qty')}</Label>
-                  <Input type="number" step="0.01" min="0" value={equipmentForm.plan_quantity}
-                    onChange={e => setEquipmentForm(f => ({ ...f, plan_quantity: e.target.value }))} />
+                  <NumberInput value={equipmentForm.plan_quantity}
+                    onChange={raw => setEquipmentForm(f => ({ ...f, plan_quantity: raw }))} />
                 </div>
                 <div>
                   <Label>{t('rf_fact_qty')}</Label>
-                  <Input type="number" step="0.01" min="0" value={equipmentForm.fact_quantity}
-                    onChange={e => setEquipmentForm(f => ({ ...f, fact_quantity: e.target.value }))} />
+                  <NumberInput value={equipmentForm.fact_quantity}
+                    onChange={raw => setEquipmentForm(f => ({ ...f, fact_quantity: raw }))} />
                 </div>
               </div>
               <div>

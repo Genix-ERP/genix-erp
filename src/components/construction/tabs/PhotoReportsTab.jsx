@@ -215,6 +215,8 @@ const PhotoReportsTab = ({ project }) => {
                 <img
                   src={`${API_HOST}${(photo.photos && photo.photos[0]?.url) || photo.photo_url || ''}`}
                   alt={photo.description || 'Photo'}
+                  loading="lazy"
+                  decoding="async"
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
                   onError={(e) => { e.target.src = ''; e.target.alt = 'Rasm yuklanmadi'; }}
                 />
@@ -320,6 +322,8 @@ const PhotoReportsTab = ({ project }) => {
                     <img
                       src={URL.createObjectURL(file)}
                       alt={file.name}
+                      loading="lazy"
+                      decoding="async"
                       className="w-full h-full object-cover"
                     />
                     <Button

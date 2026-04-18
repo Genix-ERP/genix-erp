@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -359,7 +360,7 @@ const MaterialUsageTab = ({ project }) => {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>{t('quantity_used') || 'Sarflangan miqdor'} *</Label>
-                <Input type="number" value={form.quantity_used} onChange={e => setForm(f => ({...f, quantity_used: e.target.value}))} placeholder="0" />
+                <NumberInput value={form.quantity_used} onChange={raw => setForm(f => ({...f, quantity_used: raw}))} placeholder="0" />
               </div>
               <div>
                 <Label>{t('usage_date') || 'Sarf sanasi'} *</Label>
