@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { LabelWithHelp } from "@/components/ui/field-help";
 import { X } from "lucide-react";
 import { useTranslation } from "@/components/utils/translations";
+import { formatPhoneInput, parsePhoneInput, formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
+import { financeService } from '@/api/services/finance';
 
 export default function CustomerForm({ customer, onSave, onCancel, language = 'en' }) {
   const { t } = useTranslation(language);
@@ -21,6 +23,8 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
     expected_revenue: customer?.expected_revenue || "",
     annual_revenue: customer?.annual_revenue || 0,
     employee_count: customer?.employee_count || 0,
+    default_receivable_account_id: customer?.default_receivable_account_id || "",
+    default_payable_account_id: customer?.default_payable_account_id || "",
     address: customer?.address || {
       street: "",
       city: "",
@@ -30,6 +34,19 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
   });
 
   const [tagInput, setTagInput] = useState("");
+  const [accounts, setAccounts] = useState([]);
+
+  useEffect(() => {
+    const loadAccounts = async () => {
+      try {
+        const data = await financeService.listAccounts({ limit: 500 });
+        setAccounts(Array.isArray(data) ? data : data?.items || []);
+      } catch (err) {
+        console.error('Failed to load accounts:', err);
+      }
+    };
+    loadAccounts();
+  }, []);
 
   const handleTagKeyDown = (e) => {
     if ((e.key === 'Enter' || e.key === ',') && tagInput.trim()) {
@@ -69,7 +86,7 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 border-0">
       <Card className="w-full max-w-[95vw] sm:max-w-lg md:max-w-2xl lg:max-w-3xl max-h-[90vh] overflow-y-auto">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>{customer ? `${t('edit')} ${t('customer')}` : t('add_customer')}</CardTitle>
@@ -117,8 +134,9 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
                   <LabelWithHelp htmlFor="phone" label={t('phone')} helpText={t('help_customer_phone')} />
                   <Input
                     id="phone"
-                    value={formData.phone}
-                    onChange={(e) => handleChange("phone", e.target.value)}
+                    value={formatPhoneInput(formData.phone)}
+                    onChange={(e) => handleChange("phone", parsePhoneInput(e.target.value))}
+                    placeholder="+998 XX XXX XXXX"
                   />
                 </div>
               </div>
@@ -149,9 +167,10 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
                   <LabelWithHelp htmlFor="expected_revenue" label={t('expected_revenue') || 'Expected Revenue'} helpText={t('help_customer_expected_revenue') || 'Estimated annual revenue from this customer'} />
                   <Input
                     id="expected_revenue"
-                    type="number"
-                    value={formData.expected_revenue}
-                    onChange={(e) => handleChange("expected_revenue", e.target.value)}
+                    type="text"
+                    inputMode="decimal"
+                    value={formatPriceInput(formData.expected_revenue)}
+                    onChange={(e) => handleChange("expected_revenue", parsePriceInput(e.target.value))}
                   />
                 </div>
               </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,10 +32,13 @@ import {
   Settings,
   Barcode,
   QrCode,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
 import JsBarcode from "jsbarcode";
 import { useInventory } from "@/components/contexts/InventoryContext";
+import { inventoryService } from '@/api/services/inventory';
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 
@@ -145,9 +148,14 @@ const generateQRSVG = (data, size = 50) => {
 export default function PriceLabelPrinting() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { products, items, categories } = useInventory();
+  const { items, categories } = useInventory();
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalProducts, setTotalProducts] = useState(0);
+  const [paginatedProducts, setPaginatedProducts] = useState([]);
+  const [productsLoading, setProductsLoading] = useState(false);
+  const pageSize = 20;
   const [showSettings, setShowSettings] = useState(false);
   const [printDialog, setPrintDialog] = useState(null); // { product } or null
   const [printTemplate, setPrintTemplate] = useState("medium_58x40");
@@ -212,24 +220,45 @@ export default function PriceLabelPrinting() {
     }
   }, [customSettings]);
 
-  const allProducts = products.map(product => {
-    const inventory = items.find(item => item.product_id === product.id);
-    const categoryName = typeof product.category === 'string'
-      ? product.category
-      : (product.category?.name || categories.find(c => c.id === product.category_id)?.name || '');
-    return {
-      ...product,
-      category: categoryName,
-      current_stock: inventory?.current_stock || 0,
-      sale_price: product.list_price || product.sale_price || product.unit_price || product.cost_price || 0,
-    };
-  });
+  const fetchProducts = useCallback(async () => {
+    setProductsLoading(true);
+    try {
+      const params = { page: currentPage, limit: pageSize };
+      if (searchQuery) params.search = searchQuery;
+      const result = await inventoryService.listProductsPaginated(params);
+      const prods = (result?.data || []).map(product => {
+        const inventory = items.find(item => item.product_id === product.id);
+        const categoryName = typeof product.category === 'string'
+          ? product.category
+          : (product.category?.name || categories.find(c => c.id === product.category_id)?.name || '');
+        return {
+          ...product,
+          category: categoryName,
+          current_stock: inventory?.current_stock || 0,
+          sale_price: product.list_price || product.sale_price || product.unit_price || product.cost_price || 0,
+        };
+      });
+      setPaginatedProducts(prods);
+      setTotalProducts(result?.meta?.total || 0);
+    } catch (error) {
+      console.error('Error fetching products:', error);
+      setPaginatedProducts([]);
+      setTotalProducts(0);
+    } finally {
+      setProductsLoading(false);
+    }
+  }, [currentPage, searchQuery, items, categories]);
 
-  const filteredProducts = allProducts.filter(product =>
-    product.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    product.sku?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    product.barcode?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
+
+  const filteredProducts = paginatedProducts;
+  const totalPages = Math.ceil(totalProducts / pageSize);
 
   const formatPrice = (price) => {
     if (customSettings.priceFormat === "rounded") {
@@ -340,7 +369,7 @@ export default function PriceLabelPrinting() {
               <Input
                 placeholder={t('search')}
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
                 className="pl-10"
               />
             </div>
@@ -366,7 +395,7 @@ export default function PriceLabelPrinting() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredProducts.slice(0, 20).map((product) => (
+                  filteredProducts.map((product) => (
                     <TableRow key={product.id}>
                       <TableCell>
                         <Package className="w-8 h-8 text-slate-400" />
@@ -402,10 +431,19 @@ export default function PriceLabelPrinting() {
               </TableBody>
             </Table>
           </div>
-          {filteredProducts.length > 20 && (
-            <p className="text-center text-sm text-slate-500 mt-3">
-              {t('showing')}: 20 / {filteredProducts.length}
-            </p>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t">
+              <p className="text-sm text-slate-500">
+                {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, totalProducts)} / {totalProducts}
+              </p>
+              <div className="flex items-center gap-2">
+                <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}>1</button>
+                <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft className="w-4 h-4" /></button>
+                <span className="text-sm font-medium px-2">{currentPage} / {totalPages}</span>
+                <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}><ChevronRight className="w-4 h-4" /></button>
+                <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(totalPages)}>{totalPages}</button>
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>

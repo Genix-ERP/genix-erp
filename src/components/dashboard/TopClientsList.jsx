@@ -1,5 +1,4 @@
 import { useMemo } from "react";
-import { AreaChart, Area, ResponsiveContainer } from "recharts";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useCurrencyFormatter } from "@/hooks/useCurrencyFormatter";
@@ -13,49 +12,67 @@ const AVATAR_COLORS = [
   "bg-pink-100 text-pink-700",
 ];
 
-export default function TopClientsList({ customers, salesOrders }) {
+export default function TopClientsList({ customers, salesOrders, customerInvoices }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { formatCurrency } = useCurrencyFormatter();
 
   const topClients = useMemo(() => {
     const clientRevenue = {};
+
+    // From sales orders
     (salesOrders || []).forEach((order) => {
-      const cid = order.customer_id || order.customer;
+      const cid = order.customer_id || order.customer || order.partner_id;
       const total = order.total_amount || order.total || 0;
-      if (cid) {
-        clientRevenue[cid] = (clientRevenue[cid] || 0) + total;
+      if (cid && total > 0) {
+        if (!clientRevenue[cid]) clientRevenue[cid] = { total: 0, orders: [] };
+        clientRevenue[cid].total += total;
+        clientRevenue[cid].orders.push(total);
       }
     });
 
-    const totalRev = Object.values(clientRevenue).reduce((s, v) => s + v, 0);
+    // From customer invoices if no sales orders
+    if (Object.keys(clientRevenue).length === 0) {
+      (customerInvoices || []).forEach((inv) => {
+        const cid = inv.partner_id || inv.customer_id;
+        const total = inv.total_amount || inv.amount || 0;
+        if (cid && total > 0) {
+          if (!clientRevenue[cid]) clientRevenue[cid] = { total: 0, orders: [] };
+          clientRevenue[cid].total += total;
+          clientRevenue[cid].orders.push(total);
+        }
+      });
+    }
+
+    const totalRev = Object.values(clientRevenue).reduce((s, v) => s + v.total, 0);
 
     const ranked = Object.entries(clientRevenue)
-      .sort((a, b) => b[1] - a[1])
+      .sort((a, b) => b[1].total - a[1].total)
       .slice(0, 5)
-      .map(([cid, revenue]) => {
+      .map(([cid, data]) => {
         const cust = (customers || []).find(
-          (c) => c.id === cid || c._id === cid
+          (c) => c.id === cid || c._id === cid || String(c.id) === String(cid)
         );
+        // Skip entries where customer is not found
+        if (!cust) return null;
         return {
-          name: cust?.company_name || cust?.name || `Mijoz #${String(cid).slice(-4)}`,
-          revenue,
-          percentage: totalRev > 0 ? ((revenue / totalRev) * 100).toFixed(1) : 0,
-          initial: (cust?.company_name || cust?.name || "M").charAt(0).toUpperCase(),
-          sparkline: Array.from({ length: 6 }, () => ({
-            v: Math.random() * revenue * 0.3 + revenue * 0.1,
-          })),
+          id: cid,
+          name: cust.company_name || cust.name || cust.contact_name || `${t("customer") || "Customer"} #${String(cid).slice(-4)}`,
+          revenue: data.total,
+          orderCount: data.orders.length,
+          percentage: totalRev > 0 ? ((data.total / totalRev) * 100).toFixed(1) : 0,
+          initial: (cust.company_name || cust.name || "C").charAt(0).toUpperCase(),
         };
       });
 
-    return ranked;
-  }, [customers, salesOrders]);
+    return ranked.filter(Boolean);
+  }, [customers, salesOrders, customerInvoices]);
 
   return (
     <div className="glass-card rounded-2xl p-5 h-full transition-all duration-300">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold text-slate-900">
-          Top mijozlar
+          {t("top_clients") || "Top Clients"}
         </h3>
         <Crown className="w-4 h-4 text-amber-500" />
       </div>
@@ -64,7 +81,7 @@ export default function TopClientsList({ customers, salesOrders }) {
         <div className="space-y-2">
           {topClients.map((client, i) => (
             <div
-              key={i}
+              key={client.id}
               className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-slate-50/80 transition-colors"
             >
               <div
@@ -77,23 +94,8 @@ export default function TopClientsList({ customers, salesOrders }) {
                   {client.name}
                 </p>
                 <p className="text-[11px] text-slate-400">
-                  {formatCurrency(client.revenue)}
+                  {formatCurrency(client.revenue)} &middot; {client.orderCount} {t("orders_lc") || "orders"}
                 </p>
-              </div>
-              <div className="w-12 h-6 shrink-0">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={client.sparkline}>
-                    <Area
-                      type="monotone"
-                      dataKey="v"
-                      stroke="#6C5CE7"
-                      strokeWidth={1}
-                      fill="rgba(108,92,231,0.08)"
-                      dot={false}
-                      isAnimationActive={false}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
               </div>
               <span className="text-[10px] font-semibold text-slate-500 bg-slate-50 px-1.5 py-0.5 rounded w-10 text-center shrink-0">
                 {client.percentage}%
@@ -103,7 +105,7 @@ export default function TopClientsList({ customers, salesOrders }) {
         </div>
       ) : (
         <div className="h-[180px] flex flex-col items-center justify-center">
-          <p className="text-sm text-slate-500">{t("no_data") || "Ma'lumot yo'q"}</p>
+          <p className="text-sm text-slate-500">{t("no_data") || "No data"}</p>
         </div>
       )}
     </div>

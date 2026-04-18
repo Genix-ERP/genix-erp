@@ -119,12 +119,14 @@ export default function StockReport() {
     const labels = {
       receipt: { label: language === "uz" ? "Kirim" : "Receipt", color: "bg-green-100 text-green-700" },
       purchase: { label: language === "uz" ? "Xarid" : "Purchase", color: "bg-green-100 text-green-700" },
+      issue: { label: language === "uz" ? "Chiqim" : "Issue", color: "bg-red-100 text-red-700" },
       shipment: { label: language === "uz" ? "Chiqim" : "Shipment", color: "bg-red-100 text-red-700" },
       sale: { label: language === "uz" ? "Sotuv" : "Sale", color: "bg-red-100 text-red-700" },
       transfer: { label: language === "uz" ? "O'tkazma" : "Transfer", color: "bg-blue-100 text-blue-700" },
       adjustment: { label: language === "uz" ? "Tuzatish" : "Adjustment", color: "bg-orange-100 text-orange-700" },
       stock_in: { label: language === "uz" ? "Kirim" : "Stock In", color: "bg-green-100 text-green-700" },
       stock_out: { label: language === "uz" ? "Chiqim" : "Stock Out", color: "bg-red-100 text-red-700" },
+      return: { label: language === "uz" ? "Qaytarish" : "Return", color: "bg-yellow-100 text-yellow-700" },
       scrap: { label: language === "uz" ? "Yaroqsiz" : "Scrap", color: "bg-red-100 text-red-700" },
     };
     const info = labels[type] || { label: type || "-", color: "bg-slate-100 text-slate-700" };
@@ -295,7 +297,8 @@ export default function StockReport() {
                   <SelectContent>
                     <SelectItem value="all">{language === "uz" ? "Barchasi" : "All"}</SelectItem>
                     <SelectItem value="receipt">{language === "uz" ? "Kirim" : "Receipt"}</SelectItem>
-                    <SelectItem value="shipment">{language === "uz" ? "Chiqim" : "Shipment"}</SelectItem>
+                    <SelectItem value="issue">{language === "uz" ? "Chiqim" : "Issue"}</SelectItem>
+                    <SelectItem value="shipment">{language === "uz" ? "Jo'natma" : "Shipment"}</SelectItem>
                     <SelectItem value="transfer">{language === "uz" ? "O'tkazma" : "Transfer"}</SelectItem>
                     <SelectItem value="adjustment">{language === "uz" ? "Tuzatish" : "Adjustment"}</SelectItem>
                     <SelectItem value="scrap">{language === "uz" ? "Yaroqsiz" : "Scrap"}</SelectItem>

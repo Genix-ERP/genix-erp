@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Plus, Search, CreditCard, Calendar, CheckCircle, Clock,
   AlertCircle, ArrowUpRight, ArrowDownLeft, Building2, User, Wallet,
-  Filter, Download, MoreHorizontal, Eye
+  Filter, Download, MoreHorizontal, Eye, Printer
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -31,6 +31,7 @@ export default function Payments() {
     payments,
     accounts,
     journals,
+    paymentJournals,
     vendorBills,
     currencies,
     createPayment,
@@ -81,7 +82,7 @@ export default function Payments() {
     inv.status !== 'cancelled' && inv.status !== 'paid'
   ).filter(inv => ((inv.total_amount || 0) - (inv.amount_paid || 0)) > 0);
 
-  const bankCashJournals = (journals || []).filter(j => j.type === 'bank' || j.type === 'cash');
+  const bankCashJournals = (paymentJournals || []).length > 0 ? paymentJournals : (journals || []).filter(j => j.type === 'bank' || j.type === 'cash');
 
   // Auto-select matching journal when journals load and modal is open with no journal selected
   useEffect(() => {
@@ -265,6 +266,133 @@ export default function Payments() {
   const handleViewDetail = (payment) => {
     setSelectedPayment(payment);
     setShowDetailModal(true);
+  };
+
+  const handlePrintReceipt = (payment) => {
+    if (!payment) return;
+    const isInbound = payment.payment_type === 'inbound';
+    const paymentDate = payment.payment_date
+      ? format(new Date(payment.payment_date), 'dd.MM.yyyy')
+      : '-';
+    const methodLabels = {
+      bank_transfer: language === 'ru' ? 'Банковский перевод' : language === 'uz' ? 'Bank o\'tkazmasi' : 'Bank Transfer',
+      cash: language === 'ru' ? 'Наличные' : language === 'uz' ? 'Naqd' : 'Cash',
+      check: language === 'ru' ? 'Чек' : language === 'uz' ? 'Chek' : 'Check',
+      credit_card: language === 'ru' ? 'Кредитная карта' : language === 'uz' ? 'Kredit karta' : 'Credit Card',
+      wire: language === 'ru' ? 'Банковский перевод' : language === 'uz' ? 'Bank o\'tkazmasi' : 'Wire Transfer',
+    };
+    const statusLabels = {
+      confirmed: language === 'ru' ? 'Подтверждён' : language === 'uz' ? 'Tasdiqlangan' : 'Confirmed',
+      posted: language === 'ru' ? 'Проведён' : language === 'uz' ? 'O\'tkazilgan' : 'Posted',
+      draft: language === 'ru' ? 'Черновик' : language === 'uz' ? 'Qoralama' : 'Draft',
+      cancelled: language === 'ru' ? 'Отменён' : language === 'uz' ? 'Bekor qilingan' : 'Cancelled',
+    };
+
+    const html = `
+      <html>
+      <head>
+        <title>${t('payment_receipt')} - ${payment.payment_number || payment.reference || ''}</title>
+        <style>
+          body { font-family: 'Times New Roman', serif; padding: 40px; color: #000; font-size: 13px; max-width: 700px; margin: 0 auto; }
+          .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #000; padding-bottom: 15px; }
+          .header h1 { font-size: 20px; margin: 0 0 5px 0; text-transform: uppercase; letter-spacing: 1px; }
+          .header .receipt-number { font-size: 14px; color: #555; }
+          .receipt-body { margin: 20px 0; }
+          .row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dotted #ccc; }
+          .row .label { color: #555; font-weight: bold; width: 40%; }
+          .row .value { text-align: right; width: 58%; }
+          .amount-row { background: #f5f5f5; padding: 12px; margin: 15px 0; border: 1px solid #ddd; }
+          .amount-row .label { font-size: 15px; font-weight: bold; }
+          .amount-row .value { font-size: 20px; font-weight: bold; color: ${isInbound ? '#16a34a' : '#dc2626'}; }
+          .status-badge { display: inline-block; padding: 3px 10px; border-radius: 4px; font-size: 11px; font-weight: bold; background: ${payment.status === 'confirmed' || payment.status === 'posted' ? '#dcfce7' : '#fef9c3'}; color: ${payment.status === 'confirmed' || payment.status === 'posted' ? '#166534' : '#854d0e'}; }
+          .signatures { display: flex; justify-content: space-between; margin-top: 60px; }
+          .signatures div { width: 45%; }
+          .sig-line { border-bottom: 1px solid #000; margin-top: 35px; margin-bottom: 4px; }
+          .sig-label { font-size: 11px; color: #666; }
+          .footer { text-align: center; margin-top: 40px; padding-top: 15px; border-top: 1px solid #ddd; color: #888; font-size: 11px; }
+          @media print { body { padding: 20px; } }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>${t('payment_receipt')}</h1>
+          <div class="receipt-number">
+            ${t('receipt_number')}: <strong>${payment.payment_number || payment.reference || '-'}</strong>
+          </div>
+        </div>
+
+        <div class="receipt-body">
+          <div class="row">
+            <span class="label">${t('receipt_date')}:</span>
+            <span class="value">${paymentDate}</span>
+          </div>
+
+          <div class="row">
+            <span class="label">${isInbound ? t('receipt_received_from') : t('receipt_paid_to')}:</span>
+            <span class="value"><strong>${payment.party_name || '-'}</strong></span>
+          </div>
+
+          <div class="row amount-row">
+            <span class="label">${t('receipt_amount')}:</span>
+            <span class="value">${formatCurrency(payment.amount || 0)}</span>
+          </div>
+
+          <div class="row">
+            <span class="label">${t('receipt_payment_method')}:</span>
+            <span class="value">${methodLabels[payment.payment_method] || payment.payment_method || '-'}</span>
+          </div>
+
+          ${payment.journal_name ? `
+          <div class="row">
+            <span class="label">${t('receipt_journal')}:</span>
+            <span class="value">${payment.journal_name}</span>
+          </div>` : ''}
+
+          ${payment.reference ? `
+          <div class="row">
+            <span class="label">${t('receipt_reference')}:</span>
+            <span class="value">${payment.reference}</span>
+          </div>` : ''}
+
+          ${payment.description ? `
+          <div class="row">
+            <span class="label">${t('receipt_description')}:</span>
+            <span class="value">${payment.description}</span>
+          </div>` : ''}
+
+          <div class="row">
+            <span class="label">${t('receipt_status')}:</span>
+            <span class="value"><span class="status-badge">${statusLabels[payment.status] || payment.status}</span></span>
+          </div>
+        </div>
+
+        <div class="signatures">
+          <div>
+            <p><strong>${t('receipt_accountant')}:</strong></p>
+            <div class="sig-line"></div>
+            <p class="sig-label">${t('receipt_signature')}</p>
+          </div>
+          <div>
+            <p><strong>${t('receipt_director')}:</strong></p>
+            <div class="sig-line"></div>
+            <p class="sig-label">${t('receipt_signature')} / ${t('receipt_stamp_place')}</p>
+          </div>
+        </div>
+
+        <div class="footer">
+          ${t('receipt_thank_you')}
+        </div>
+      </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(html);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.print();
+    }
   };
 
   // Pay an invoice directly from the invoices table
@@ -808,6 +936,14 @@ export default function Payments() {
                 )}
                 <Button
                   variant="outline"
+                  onClick={() => handlePrintReceipt(selectedPayment)}
+                  className="flex-1"
+                >
+                  <Printer className="w-4 h-4 mr-2" />
+                  {t('print_receipt')}
+                </Button>
+                <Button
+                  variant="outline"
                   onClick={() => setShowDetailModal(false)}
                   className="flex-1"
                 >
@@ -1071,6 +1207,15 @@ export default function Payments() {
                               className="h-8 w-8 p-0"
                             >
                               <Eye className="w-4 h-4 text-slate-500" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handlePrintReceipt(payment)}
+                              className="h-8 w-8 p-0"
+                              title={t('print_receipt')}
+                            >
+                              <Printer className="w-4 h-4 text-slate-500" />
                             </Button>
                             {(payment.status === 'draft' || payment.status === 'pending') && canUpdate(MODULES.FINANCIALS) && (
                               <Button

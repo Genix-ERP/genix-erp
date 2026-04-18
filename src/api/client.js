@@ -190,8 +190,13 @@ apiClient.interceptors.response.use(
       }
     }
 
-    // If 401 and we haven't tried refreshing yet
-    if (error.response?.status === 401 && !originalRequest._retry && refreshToken) {
+    // Never try to refresh tokens for auth endpoints — a 401 on /auth/login means
+    // wrong credentials, NOT an expired token.  Refreshing here would silently
+    // restore an old session and cause 403s after the user "logs in" with autofill.
+    const isAuthEndpoint = originalRequest?.url && /\/auth\/(login|register|google|forgot|reset|send-otp|verify-otp|register-with-otp|accept-invite)/.test(originalRequest.url);
+
+    // If 401 and we haven't tried refreshing yet (skip auth endpoints)
+    if (error.response?.status === 401 && !originalRequest._retry && refreshToken && !isAuthEndpoint) {
       originalRequest._retry = true;
       originalRequest._isRetry = true;
 

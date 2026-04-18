@@ -33,7 +33,7 @@ export default function RecentCustomers({ customers }) {
               </div>
               {customer.industry && (
                 <span className="text-xs text-slate-400 bg-slate-50 px-2 py-0.5 rounded-md hidden sm:block">
-                  {customer.industry}
+                  {t(customer.industry) || customer.industry}
                 </span>
               )}
             </div>

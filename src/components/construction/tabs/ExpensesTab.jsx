@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Plus, Edit, Trash2, CheckCircle, XCircle, Receipt, Tag } from 'lucide-react';
+import { Plus, Edit, Trash2, CheckCircle, XCircle, Receipt, Tag, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -73,6 +73,8 @@ const ExpensesTab = ({ project, scope }) => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [filters, setFilters] = useState({ status: '', stage_id: '', category_id: '' });
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 20;
 
   const load = useCallback(async () => {
     if (!project?.id) return;
@@ -99,6 +101,8 @@ const ExpensesTab = ({ project, scope }) => {
   }, [project?.id, filters, scope]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => { setCurrentPage(1); }, [filters]);
 
   const openCreate = () => {
     setEditingLine(null);
@@ -424,7 +428,11 @@ const ExpensesTab = ({ project, scope }) => {
                   </tr>
                 </thead>
                 <tbody>
-                  {(data.items || []).map(line => (
+                  {(() => {
+                    const totalCount = (data.items || []).length;
+                    const totalPages = Math.ceil(totalCount / pageSize);
+                    const paginatedItems = (data.items || []).slice((currentPage - 1) * pageSize, currentPage * pageSize);
+                    return paginatedItems.map(line => (
                     <tr key={line.id} className="border-b hover:bg-slate-50">
                       <td className="py-2 px-3 whitespace-nowrap">{line.expense_date}</td>
                       <td className="py-2 px-3 max-w-[200px] truncate" title={line.description}>{line.description}</td>
@@ -458,9 +466,28 @@ const ExpensesTab = ({ project, scope }) => {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                  ));
+                  })()}
                 </tbody>
               </table>
+              {(() => {
+                const totalCount = (data.items || []).length;
+                const totalPages = Math.ceil(totalCount / pageSize);
+                return totalPages > 1 ? (
+                  <div className="flex items-center justify-between px-4 py-3 border-t">
+                    <p className="text-sm text-slate-500">
+                      {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, totalCount)} / {totalCount}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}>1</button>
+                      <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft className="w-4 h-4" /></button>
+                      <span className="text-sm font-medium px-2">{currentPage} / {totalPages}</span>
+                      <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}><ChevronRight className="w-4 h-4" /></button>
+                      <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(totalPages)}>{totalPages}</button>
+                    </div>
+                  </div>
+                ) : null;
+              })()}
             </div>
           )}
         </CardContent>

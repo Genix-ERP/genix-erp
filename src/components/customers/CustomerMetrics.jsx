@@ -62,7 +62,7 @@ export default function CustomerMetrics({ customers, leads, opportunities, langu
           key={index} 
           className="bg-white border-slate-200/60 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 overflow-hidden group"
         >
-          <CardContent className="p-6">
+          <CardContent className="p-6 relative">
             <div className="flex items-start justify-between mb-4">
               <div className="flex-1">
                 <p className="text-sm font-medium text-slate-600 mb-1">{metric.title}</p>
