@@ -53,6 +53,8 @@ export default function Payroll() {
   const [pendingDeductions, setPendingDeductions] = useState([]);
   const [totalPendingDeduction, setTotalPendingDeduction] = useState(0);
   const [deductionPercent, setDeductionPercent] = useState(0);
+  const [activeLoans, setActiveLoans] = useState([]);
+  const [loanDeductions, setLoanDeductions] = useState({}); // { [loanId]: amount }
 
   const [newPayroll, setNewPayroll] = useState({
     payroll_number: '',
@@ -113,14 +115,40 @@ export default function Payroll() {
     }
   };
 
+  // Fetch active employee loans
+  const fetchActiveLoans = async (employeeId) => {
+    if (!employeeId) {
+      setActiveLoans([]);
+      setLoanDeductions({});
+      return;
+    }
+    try {
+      const res = await apiClient.get('/employee-loans', { params: { employee_id: employeeId, status: 'active', limit: 100 } });
+      const raw = res.data?.data ?? res.data ?? [];
+      const loans = Array.isArray(raw) ? raw : (raw.items || []);
+      setActiveLoans(loans);
+      // Pre-fill deduction with suggested monthly_payment (capped by remaining_amount)
+      const prefill = {};
+      loans.forEach(l => {
+        const suggest = Math.min(Number(l.monthly_payment || 0), Number(l.remaining_amount || 0));
+        prefill[l.id] = suggest > 0 ? suggest : 0;
+      });
+      setLoanDeductions(prefill);
+    } catch {
+      setActiveLoans([]);
+      setLoanDeductions({});
+    }
+  };
+
   const shortageDeductionAmount = Math.round(totalPendingDeduction * deductionPercent / 100);
+  const totalLoanDeduction = Object.values(loanDeductions).reduce((s, v) => s + (Number(v) || 0), 0);
 
   // Payroll tax rates from settings (defaults: Uzbekistan 2024-2026 rates)
   const incomeTaxRate = parseFloat(getSetting('payroll.tax.income_tax_rate', '12')) / 100;
   const socialInsuranceRate = parseFloat(getSetting('payroll.tax.social_insurance_rate', '1')) / 100;
   const taxFreeMinimum = parseFloat(getSetting('payroll.tax.tax_free_minimum', '0'));
 
-  const calculatePayroll = (data, shortageAmount = 0) => {
+  const calculatePayroll = (data, shortageAmount = 0, loanAmount = 0) => {
     const basicSalary = parseFloat(data.basic_salary) || 0;
     const overtimeHours = parseFloat(data.overtime_hours) || 0;
     const monthlyHours = parseFloat(data.monthly_hours) || 208;
@@ -137,7 +165,7 @@ export default function Payroll() {
     // Social insurance (INPS): default 1% employee side
     const socialSecurity = Math.round(grossPay * socialInsuranceRate);
 
-    const otherDeductions = shortageAmount;
+    const otherDeductions = shortageAmount + loanAmount;
     const totalDeductions = taxDeduction + socialSecurity + otherDeductions;
     const netPay = grossPay - totalDeductions;
 
@@ -153,8 +181,8 @@ export default function Payroll() {
     };
   };
 
-  const handleCreatePayroll = () => {
-    const calculated = calculatePayroll(newPayroll, shortageDeductionAmount);
+  const handleCreatePayroll = async () => {
+    const calculated = calculatePayroll(newPayroll, shortageDeductionAmount, totalLoanDeduction);
 
     const payrollData = {
       ...newPayroll,
@@ -169,7 +197,36 @@ export default function Payroll() {
       payment_method: 'bank_transfer'
     };
 
-    createPayroll(payrollData);
+    await createPayroll(payrollData);
+
+    // Record loan payments for each loan with a deduction amount > 0
+    for (const loan of activeLoans) {
+      const amount = Number(loanDeductions[loan.id] || 0);
+      if (amount <= 0) continue;
+      try {
+        // Find the next pending payment on this loan and mark it paid with this amount.
+        // If the backend requires an explicit payment id, we POST a new payment of this amount.
+        await apiClient.post(`/employee-loans/${loan.id}/payments`, {
+          amount,
+          payment_date: newPayroll.payment_date || new Date().toISOString().slice(0, 10),
+          method: 'salary_deduction',
+          note: `Deducted from payroll`,
+        }).catch(async () => {
+          // Fallback: if there's no generic payments endpoint, try mark-paid on first pending payment
+          try {
+            const schedRes = await apiClient.get(`/employee-loans/${loan.id}`);
+            const payments = schedRes.data?.data?.payments || schedRes.data?.payments || [];
+            const pending = payments.find(p => p.status !== 'paid');
+            if (pending) {
+              await apiClient.post(`/employee-loans/${loan.id}/payments/${pending.id}/mark-paid`, { amount });
+            }
+          } catch { /* ignore */ }
+        });
+      } catch (err) {
+        console.warn('Failed to record loan payment', err);
+      }
+    }
+
     setShowCreateModal(false);
 
     setNewPayroll({
@@ -188,6 +245,8 @@ export default function Payroll() {
     setPendingDeductions([]);
     setTotalPendingDeduction(0);
     setDeductionPercent(0);
+    setActiveLoans([]);
+    setLoanDeductions({});
   };
 
   const updatePayrollStatus = (payrollId, newStatus, paymentMethod) => {
@@ -717,7 +776,10 @@ export default function Payroll() {
                       employee_name: value,
                       basic_salary: selectedEmployee?.salary || selectedEmployee?.base_salary || 0
                     });
-                    if (selectedEmployee?.id) fetchPendingDeductions(selectedEmployee.id);
+                    if (selectedEmployee?.id) {
+                      fetchPendingDeductions(selectedEmployee.id);
+                      fetchActiveLoans(selectedEmployee.id);
+                    }
                   }}>
                     <SelectTrigger>
                       <SelectValue placeholder={t('select_employee')} />
@@ -818,6 +880,72 @@ export default function Payroll() {
                 </div>
               </div>
 
+              {activeLoans.length > 0 && (
+                <div className="p-4 bg-blue-50 border border-blue-300 rounded-lg">
+                  <div className="flex items-center gap-2 mb-3">
+                    <CreditCard className="h-5 w-5 text-blue-600" />
+                    <h4 className="font-semibold text-blue-800">
+                      {language === 'uz' ? "Faol qarzlar (ixtiyoriy ushlash)" : language === 'ru' ? 'Активные займы (удержание опционально)' : 'Active loans (optional deduction)'}
+                    </h4>
+                  </div>
+                  <div className="space-y-2">
+                    {activeLoans.map((loan) => {
+                      const remaining = Number(loan.remaining_amount || 0);
+                      const suggested = Number(loan.monthly_payment || 0);
+                      const current = Number(loanDeductions[loan.id] || 0);
+                      return (
+                        <div key={loan.id} className="bg-white rounded p-2 border border-blue-200">
+                          <div className="flex justify-between items-start text-sm">
+                            <div className="min-w-0 flex-1">
+                              <div className="font-medium text-slate-800 truncate">
+                                {loan.loan_number || loan.id?.slice(0, 8)}
+                                {loan.reason && <span className="text-slate-500 font-normal"> — {loan.reason}</span>}
+                              </div>
+                              <div className="text-xs text-slate-500">
+                                {language === 'uz' ? 'Qoldiq' : language === 'ru' ? 'Остаток' : 'Remaining'}: <span className="font-semibold">{formatCurrency(remaining)}</span>
+                                {suggested > 0 && <>
+                                  {' · '}
+                                  {language === 'uz' ? 'Oylik' : language === 'ru' ? 'Ежемесячно' : 'Monthly'}: {formatCurrency(suggested)}
+                                </>}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 mt-2">
+                            <label className="text-xs text-slate-600 whitespace-nowrap">
+                              {language === 'uz' ? 'Ushlab qolish' : language === 'ru' ? 'Удержать' : 'Deduct'}:
+                            </label>
+                            <Input
+                              type="text"
+                              value={formatPriceInput(current)}
+                              onChange={(e) => {
+                                const v = Math.min(remaining, Math.max(0, parsePriceInput(e.target.value)));
+                                setLoanDeductions(prev => ({ ...prev, [loan.id]: v }));
+                              }}
+                              className="h-8 text-sm bg-white"
+                            />
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8 px-2 text-xs"
+                              onClick={() => setLoanDeductions(prev => ({ ...prev, [loan.id]: 0 }))}
+                              title={language === 'uz' ? "0 qilish" : 'Zero'}
+                            >
+                              {language === 'uz' ? 'Ushlamaslik' : language === 'ru' ? 'Не удерживать' : 'Skip'}
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {totalLoanDeduction > 0 && (
+                      <div className="flex justify-between pt-2 border-t border-blue-300 text-sm font-bold text-blue-900">
+                        <span>{language === 'uz' ? 'Jami qarz ushlamasi' : language === 'ru' ? 'Итого удержания' : 'Total loan deduction'}:</span>
+                        <span>-{formatCurrency(totalLoanDeduction)}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {totalPendingDeduction > 0 && (
                 <div className="p-4 bg-amber-50 border border-amber-300 rounded-lg">
                   <div className="flex items-center gap-2 mb-3">
@@ -858,7 +986,7 @@ export default function Payroll() {
               )}
 
               {newPayroll.basic_salary > 0 && (() => {
-                const calc = calculatePayroll(newPayroll, shortageDeductionAmount);
+                const calc = calculatePayroll(newPayroll, shortageDeductionAmount, totalLoanDeduction);
                 return (
                   <div className="p-4 bg-slate-50 rounded-lg">
                     <h4 className="font-semibold mb-3">{t('payroll_summary')}</h4>
@@ -875,6 +1003,12 @@ export default function Payroll() {
                         <div className="flex justify-between text-amber-700">
                           <span>{t('shortage_deduction')} ({deductionPercent}%):</span>
                           <span className="font-semibold">-{formatCurrency(shortageDeductionAmount)}</span>
+                        </div>
+                      )}
+                      {totalLoanDeduction > 0 && (
+                        <div className="flex justify-between text-blue-700">
+                          <span>{language === 'uz' ? 'Qarz ushlamasi' : language === 'ru' ? 'Удержание займа' : 'Loan deduction'}:</span>
+                          <span className="font-semibold">-{formatCurrency(totalLoanDeduction)}</span>
                         </div>
                       )}
                       <div className="flex justify-between pt-2 border-t text-lg">
