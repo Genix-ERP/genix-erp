@@ -339,7 +339,7 @@ export function FinancialsProvider({ children }) {
           const [entries, invoicesResponse, accountsData, paymentsData, taxRatesData, accountTypesData, vendorBillsData, bankAccountsData, cashTransactionsData, currenciesData, exchangeRatesData, fiscalYearsData, fiscalPeriodsData, budgetsData, budgetLinesData, fixedAssetsData, journalsData, cashRegistersData, cashOrdersData, reconciliationActsData, exchangeDiffsData, paymentJournalsData] = await Promise.all([
             financeService.listJournalEntries({ limit: 1000 }).catch(() => []),
             salesService.listInvoices().catch(() => []),
-            financeService.listAccounts({ organization_id: activeCompany.id }).catch(() => []),
+            financeService.listAccounts({ organization_id: activeCompany.id, limit: 500 }).catch(() => []),
             financeService.listPayments({ limit: 100 }).catch(() => []),
             financeService.listTaxRates().catch(() => []),
             financeService.listAccountTypes().catch(() => []),
