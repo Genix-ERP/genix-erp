@@ -358,8 +358,29 @@ export const financeService = {
     return response.data.data;
   },
 
+  // ASQ per TT Buxgalteriya §6.1 — opening / turnover / closing breakdown
+  async getTrialBalanceWithTurnover(params = {}) {
+    const response = await apiClient.get('/reports/trial-balance/turnover', { params });
+    return response.data.data;
+  },
+
+  // Streams an .xlsx file. Returns a Blob for the caller to trigger download.
+  async exportTrialBalanceExcel(params = {}) {
+    const response = await apiClient.get('/reports/trial-balance/excel', {
+      params,
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+
   async getGeneralLedger(params = {}) {
     const response = await apiClient.get('/reports/general-ledger', { params });
+    return response.data.data;
+  },
+
+  // Bosh kitob per TT Buxgalteriya §6.2 — monthly turnovers for a year
+  async getGeneralLedgerMonthly(params = {}) {
+    const response = await apiClient.get('/reports/general-ledger/monthly', { params });
     return response.data.data;
   },
 
@@ -370,6 +391,82 @@ export const financeService = {
 
   async getAgingPayables(params = {}) {
     const response = await apiClient.get('/reports/aging-payables', { params });
+    return response.data.data;
+  },
+
+  async getAccountCard(params = {}) {
+    const response = await apiClient.get('/reports/account-card', { params });
+    return response.data.data;
+  },
+
+  // BHMS №21 regulated reports (TT §6.4)
+  async getForma1(params = {}) {
+    const response = await apiClient.get('/reports/forma-1', { params });
+    return response.data.data;
+  },
+  async getForma2(params = {}) {
+    const response = await apiClient.get('/reports/forma-2', { params });
+    return response.data.data;
+  },
+  async getForma3(params = {}) {
+    const response = await apiClient.get('/reports/forma-3', { params });
+    return response.data.data;
+  },
+  async exportFormasExcel(params = {}) {
+    const response = await apiClient.get('/reports/formas/excel', {
+      params,
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+
+  // Period Close (TT §4.3)
+  async closePeriod(data) {
+    const response = await apiClient.post('/period-close/run', data);
+    return response.data.data;
+  },
+  async listPeriodClosings() {
+    const response = await apiClient.get('/period-close');
+    return response.data.data;
+  },
+  async getPeriodClosing(id) {
+    const response = await apiClient.get(`/period-close/${id}`);
+    return response.data.data;
+  },
+  async reopenPeriod(id, reason) {
+    const response = await apiClient.post(`/period-close/${id}/reopen`, { reason });
+    return response.data.data;
+  },
+
+  // Bank Statement Import (TT §8.1)
+  async importBankStatement(file) {
+    const form = new FormData();
+    form.append('file', file);
+    const response = await apiClient.post('/bank-statement-imports', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data.data;
+  },
+  async listBankStatementImports() {
+    const response = await apiClient.get('/bank-statement-imports');
+    return response.data.data;
+  },
+
+  // E-invoices (TT §8.2)
+  async ingestEInvoice(payload) {
+    const response = await apiClient.post('/einvoices/ingest', payload);
+    return response.data.data;
+  },
+  async listEInvoices(params = {}) {
+    const response = await apiClient.get('/einvoices', { params });
+    return response.data.data;
+  },
+  async approveEInvoice(id, links = {}) {
+    const response = await apiClient.post(`/einvoices/${id}/approve`, links);
+    return response.data.data;
+  },
+  async rejectEInvoice(id, reason) {
+    const response = await apiClient.post(`/einvoices/${id}/reject`, { reason });
     return response.data.data;
   },
 
