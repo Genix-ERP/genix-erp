@@ -547,6 +547,7 @@ function LayoutContent({ children, currentPageName }) {
                   <h1 className="text-xl md:text-2xl font-bold text-[var(--genix-navy)]">
                     {currentPageName === 'AdminPanel' ? t('admin_panel') :
                      currentPageName === 'AIAssistant' ? t('ai_assistant') :
+                     currentPageName === 'DirectorDashboard' ? t('director_dashboard') :
                      (t(currentPageName?.toLowerCase()) || t("dashboard"))}
                   </h1>
                 </div>
