@@ -37,7 +37,8 @@ export const MODULES = {
   EXPENSES: 'expenses',
   MANUFACTURING: 'manufacturing',
   CARGO: 'cargo',
-  CONSTRUCTION: 'construction'
+  CONSTRUCTION: 'construction',
+  DIRECTOR_DASHBOARD: 'director_dashboard'
 };
 
 // Permission matrix: defines what each permission level can do in each module

@@ -22,7 +22,8 @@ import {
   FileText,
   Ship,
   Lock,
-  Building2
+  Building2,
+  BarChart3
 } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useInstalledApps } from '@/components/contexts/InstalledAppsContext';
@@ -156,6 +157,15 @@ const appsList = [
     icon: Building2,
     color: '#f97316',
     permissionModule: MODULES.CONSTRUCTION
+  },
+  {
+    id: 'director_dashboard',
+    nameKey: 'app_director_dashboard_name',
+    descriptionKey: 'app_director_dashboard_description',
+    version: '1.0',
+    icon: BarChart3,
+    color: '#185FA5',
+    permissionModule: MODULES.DIRECTOR_DASHBOARD
   }
 ];
 

@@ -23,6 +23,7 @@ import {
   BarChart3,
   Hammer,
   RefreshCw,
+  Star,
 } from 'lucide-react';
 import { Trash2, Paperclip, Upload, FileText, Image, X } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -205,8 +206,36 @@ export default function ShopFloorControl({ isActive }) {
   const { workOrders, workCenters, productionOrders, manufacturingCategories, startWorkOrder, pauseWorkOrder, completeWorkOrder, refreshData } = useManufacturing();
   const { refreshData: refreshInventory, products, warehouses } = useInventory();
 
+  // Per-user default category filter (persists in localStorage)
+  const defaultCategoryStorageKey = useMemo(() => {
+    let userId = 'default';
+    try {
+      const userData = localStorage.getItem('genixerp_user') || localStorage.getItem('user');
+      if (userData) {
+        const u = JSON.parse(userData);
+        userId = u.id || u.email || 'default';
+      }
+    } catch { /* ignore */ }
+    return `genix_shopfloor_default_category_${userId}`;
+  }, []);
+
   const [selectedWorkCenter, setSelectedWorkCenter] = useState('all');
-  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedCategory, setSelectedCategory] = useState(() => {
+    try { return localStorage.getItem(defaultCategoryStorageKey) || 'all'; } catch { return 'all'; }
+  });
+  const [defaultCategory, setDefaultCategory] = useState(() => {
+    try { return localStorage.getItem(defaultCategoryStorageKey) || 'all'; } catch { return 'all'; }
+  });
+
+  const setAsDefaultCategory = (catId) => {
+    try {
+      localStorage.setItem(defaultCategoryStorageKey, catId);
+      setDefaultCategory(catId);
+      toast.success(language === 'uz' ? 'Standart filter saqlandi' : language === 'ru' ? 'Фильтр по умолчанию сохранён' : 'Default filter saved');
+    } catch {
+      toast.error('Failed to save default');
+    }
+  };
   const [activeWorkOrder, setActiveWorkOrder] = useState(null);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [showPauseModal, setShowPauseModal] = useState(false);
@@ -325,29 +354,36 @@ export default function ShopFloorControl({ isActive }) {
     return () => clearInterval(interval);
   }, [availableWorkOrders, completeWorkOrder, refreshData]);
 
-  // Kanban columns: group active work orders by work center (operation stage)
-  const kanbanColumns = useMemo(() => {
-    const active = filteredWorkOrders.filter(wo =>
-      wo.status === 'pending' || wo.status === 'ready' ||
-      wo.status === 'in_progress' || wo.status === 'paused'
-    );
-    // Collect unique work centers preserving first-seen order (sorted by sequence)
-    const seen = new Map(); // id -> { id, name }
-    active.forEach(wo => {
-      const id = wo.work_center_id || '__none__';
-      if (!seen.has(id)) {
-        seen.set(id, {
-          id,
-          name: wo.work_center_name || workCenters.find(wc => wc.id === id)?.name || (language === 'uz' ? 'Belgilanmagan' : language === 'ru' ? 'Не назначен' : 'Unassigned'),
-        });
+  // Rows: group all work orders (including completed) by production order, sorted by sequence
+  // Each row = one manufacturing order, steps shown horizontally in order
+  const orderRows = useMemo(() => {
+    const map = new Map(); // poId -> { po, workOrders[] }
+    filteredWorkOrders.forEach(wo => {
+      const poId = wo.production_order_id || '__none__';
+      if (!map.has(poId)) {
+        const po = (productionOrders || []).find(p => p.id === poId);
+        map.set(poId, { poId, po, workOrders: [] });
       }
+      map.get(poId).workOrders.push(wo);
     });
-    return Array.from(seen.values()).map(wc => ({
-      ...wc,
-      workOrders: active.filter(wo => (wo.work_center_id || '__none__') === wc.id)
-        .sort((a, b) => (a.sequence || 0) - (b.sequence || 0)),
+    // Sort each row's WOs by sequence; sort rows by latest activity (in-progress first, then pending, then completed)
+    const rows = Array.from(map.values()).map(row => ({
+      ...row,
+      workOrders: row.workOrders.sort((a, b) => (a.sequence || 0) - (b.sequence || 0)),
     }));
-  }, [filteredWorkOrders, workCenters, language]);
+    const rowPriority = (row) => {
+      if (row.workOrders.some(w => w.status === 'in_progress')) return 0;
+      if (row.workOrders.some(w => w.status === 'paused')) return 1;
+      if (row.workOrders.some(w => w.status === 'pending' || w.status === 'ready')) return 2;
+      return 3; // all completed/failed
+    };
+    rows.sort((a, b) => {
+      const p = rowPriority(a) - rowPriority(b);
+      if (p !== 0) return p;
+      return (a.po?.code || '').localeCompare(b.po?.code || '');
+    });
+    return rows;
+  }, [filteredWorkOrders, productionOrders]);
 
   // Calculate time spent using backend actual_start / actual_duration_minutes
   const calculateTimeSpent = (workOrder) => {
@@ -705,24 +741,37 @@ export default function ShopFloorControl({ isActive }) {
 
       {/* Category Tabs */}
       <div className="flex gap-2 flex-wrap items-center">
-        <Button
-          size="sm"
-          variant={selectedCategory === 'all' ? 'default' : 'outline'}
-          onClick={() => setSelectedCategory('all')}
-          className={selectedCategory === 'all' ? 'bg-slate-800 text-white' : ''}
-        >
-          {labels.all || 'All'}
-        </Button>
-        {(manufacturingCategories || []).filter(c => c.is_active).map(cat => (
-          <Button
-            key={cat.id}
-            size="sm"
-            variant={selectedCategory === cat.id ? 'default' : 'outline'}
-            onClick={() => setSelectedCategory(cat.id)}
-            className={selectedCategory === cat.id ? 'bg-slate-800 text-white' : ''}
+        <div className="inline-flex items-center rounded-md border overflow-hidden">
+          <button
+            onClick={() => setSelectedCategory('all')}
+            className={`px-3 py-1.5 text-sm ${selectedCategory === 'all' ? 'bg-slate-800 text-white' : 'bg-white hover:bg-slate-50'}`}
           >
-            {cat.name}
-          </Button>
+            {labels.all || 'All'}
+          </button>
+          <button
+            onClick={() => setAsDefaultCategory('all')}
+            title={language === 'uz' ? 'Standart filter sifatida belgilash' : language === 'ru' ? 'Установить как фильтр по умолчанию' : 'Set as default filter'}
+            className={`px-2 py-1.5 border-l ${defaultCategory === 'all' ? 'bg-amber-50 text-amber-500' : 'bg-white text-slate-300 hover:text-amber-400 hover:bg-amber-50'}`}
+          >
+            <Star className="w-3.5 h-3.5" fill={defaultCategory === 'all' ? 'currentColor' : 'none'} />
+          </button>
+        </div>
+        {(manufacturingCategories || []).filter(c => c.is_active).map(cat => (
+          <div key={cat.id} className="inline-flex items-center rounded-md border overflow-hidden">
+            <button
+              onClick={() => setSelectedCategory(cat.id)}
+              className={`px-3 py-1.5 text-sm ${selectedCategory === cat.id ? 'bg-slate-800 text-white' : 'bg-white hover:bg-slate-50'}`}
+            >
+              {cat.name}
+            </button>
+            <button
+              onClick={() => setAsDefaultCategory(cat.id)}
+              title={language === 'uz' ? 'Standart filter sifatida belgilash' : language === 'ru' ? 'Установить как фильтр по умолчанию' : 'Set as default filter'}
+              className={`px-2 py-1.5 border-l ${defaultCategory === cat.id ? 'bg-amber-50 text-amber-500' : 'bg-white text-slate-300 hover:text-amber-400 hover:bg-amber-50'}`}
+            >
+              <Star className="w-3.5 h-3.5" fill={defaultCategory === cat.id ? 'currentColor' : 'none'} />
+            </button>
+          </div>
         ))}
       </div>
 
@@ -793,38 +842,77 @@ export default function ShopFloorControl({ isActive }) {
           <span className="text-sm text-slate-400">({availableWorkOrders.length})</span>
         </div>
 
-        {kanbanColumns.length === 0 ? (
+        {orderRows.length === 0 ? (
           <Card className="bg-white/80 backdrop-blur-sm">
             <CardContent className="py-12 text-center text-slate-500">
               {labels.no_active_work_orders}
             </CardContent>
           </Card>
         ) : (
-          <div className="overflow-x-auto" style={{ height: 'calc(100vh - 420px)', minHeight: '400px' }}>
-            <div className="flex gap-4 min-w-max h-full">
-              {kanbanColumns.map(col => (
-                <KanbanColumn
-                  key={col.id}
-                  title={col.name}
-                  count={col.workOrders.length}
-                  headerColor="bg-slate-50 border-slate-200"
-                  titleColor="text-slate-700"
-                  countColor="bg-slate-200 text-slate-600"
-                  workOrders={col.workOrders}
-                  labels={labels}
-                  language={language}
-                  workCenters={workCenters}
-                  productionOrders={productionOrders}
-                  currentTimer={currentTimer}
-                  calculateTimeSpent={calculateTimeSpent}
-                  onStart={handleStartWorkOrder}
-                  onPause={handlePauseWorkOrder}
-                  onComplete={handleCompleteWorkOrder}
-                  onMaterials={handleOpenMaterials}
-                  onAttachments={handleOpenAttachments}
-                />
-              ))}
-            </div>
+          <div className="space-y-4">
+            {orderRows.map(row => {
+              const totalSteps = row.workOrders.length;
+              const completedSteps = row.workOrders.filter(w => w.status === 'completed').length;
+              const isFullyDone = completedSteps === totalSteps && totalSteps > 0;
+              return (
+                <div key={row.poId} className="bg-white rounded-xl border border-slate-200 shadow-sm">
+                  {/* Row header: production order info */}
+                  <div className={`flex items-center justify-between px-4 py-3 border-b ${isFullyDone ? 'bg-green-50 border-green-100' : 'bg-slate-50 border-slate-100'} rounded-t-xl`}>
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${isFullyDone ? 'bg-green-100' : 'bg-blue-100'}`}>
+                        <Package className={`w-5 h-5 ${isFullyDone ? 'text-green-600' : 'text-blue-600'}`} />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-semibold text-slate-800 text-sm truncate">
+                          {row.po?.code || row.po?.order_number || (language === 'uz' ? 'Buyurtma' : language === 'ru' ? 'Заказ' : 'Order')}
+                          {row.po?.product_name && <span className="text-slate-500 font-normal"> — {row.po.product_name}</span>}
+                        </p>
+                        <p className="text-xs text-slate-400">
+                          {language === 'uz' ? 'Bosqichlar' : language === 'ru' ? 'Шаги' : 'Steps'}: {completedSteps}/{totalSteps}
+                          {row.po?.quantity_to_produce ? ` · ${language === 'uz' ? 'Miqdor' : language === 'ru' ? 'Кол-во' : 'Qty'}: ${row.po.quantity_to_produce}` : ''}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="w-40 shrink-0">
+                      <Progress value={totalSteps ? (completedSteps / totalSteps) * 100 : 0} className="h-2" />
+                    </div>
+                  </div>
+
+                  {/* Horizontal sequence of step cards */}
+                  <div className="overflow-x-auto p-4">
+                    <div className="flex items-stretch gap-3 min-w-max">
+                      {row.workOrders.map((wo, idx) => (
+                        <React.Fragment key={wo.id}>
+                          <div className="w-72 shrink-0">
+                            <KanbanCard
+                              wo={wo}
+                              labels={labels}
+                              language={language}
+                              workCenters={workCenters}
+                              productionOrders={productionOrders}
+                              currentTimer={currentTimer}
+                              calculateTimeSpent={calculateTimeSpent}
+                              onStart={handleStartWorkOrder}
+                              onPause={handlePauseWorkOrder}
+                              onComplete={handleCompleteWorkOrder}
+                              onMaterials={handleOpenMaterials}
+                              onAttachments={handleOpenAttachments}
+                            />
+                          </div>
+                          {idx < row.workOrders.length - 1 && (
+                            <div className="flex items-center text-slate-300 select-none px-1">
+                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M5 12h14M13 6l6 6-6 6" />
+                              </svg>
+                            </div>
+                          )}
+                        </React.Fragment>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

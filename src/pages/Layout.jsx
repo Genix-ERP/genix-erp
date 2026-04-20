@@ -28,6 +28,7 @@ import {
   Cog,
   Ship,
   Building2,
+  BarChart3,
   Sparkles,
   Phone
 } from "lucide-react";
@@ -363,6 +364,13 @@ function LayoutContent({ children, currentPageName }) {
       icon: Building2,
       badge: null,
       moduleId: 'construction'
+    },
+    'director_dashboard': {
+      title: t("director_dashboard") || 'Direktor paneli',
+      url: createPageUrl("DirectorDashboard"),
+      icon: BarChart3,
+      badge: null,
+      moduleId: 'director_dashboard'
     }
   }), [t]);
 

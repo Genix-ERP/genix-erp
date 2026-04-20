@@ -52,6 +52,7 @@ const EmployeeContracts = lazyRetry(() => import('./EmployeeContracts'));
 const Cargo = lazyRetry(() => import('./Cargo'));
 const POS = lazyRetry(() => import('./POS'));
 const Construction = lazyRetry(() => import('./Construction'));
+const DirectorDashboard = lazyRetry(() => import('./DirectorDashboard'));
 const OperationTypeDetail = lazyRetry(() => import('./OperationTypeDetail'));
 const ForgotPassword = lazyRetry(() => import('./ForgotPassword'));
 const ResetPassword = lazyRetry(() => import('./ResetPassword'));
@@ -99,6 +100,7 @@ const PAGES = {
     EmployeeContracts: EmployeeContracts,
     Cargo: Cargo,
     Construction: Construction,
+    DirectorDashboard: DirectorDashboard,
 }
 
 function _getCurrentPage(url) {
@@ -223,6 +225,7 @@ function PagesContent() {
                 <Route path="employee-contracts" element={<ModuleRoute moduleId="hr"><EmployeeContracts /></ModuleRoute>} />
                 <Route path="cargo" element={<ModuleRoute moduleId="cargo"><Cargo /></ModuleRoute>} />
                 <Route path="construction" element={<ModuleRoute moduleId="construction"><Construction /></ModuleRoute>} />
+                <Route path="directordashboard" element={<ModuleRoute moduleId="director_dashboard"><DirectorDashboard /></ModuleRoute>} />
                 <Route path="apps" element={<AdminRoute><Apps /></AdminRoute>} />
                 <Route path="customers" element={<ModuleRoute moduleId="crm"><Customers /></ModuleRoute>} />
                 <Route path="settings" element={<AdminRoute><Settings /></AdminRoute>} />
