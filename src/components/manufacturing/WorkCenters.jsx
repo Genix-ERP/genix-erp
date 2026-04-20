@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { LabelWithHelp } from "@/components/ui/field-help";
-import { Plus, Cog, AlertTriangle, CheckCircle, Wrench, Eye, Pencil, Trash2, Settings, Check } from 'lucide-react';
+import { Plus, Cog, AlertTriangle, CheckCircle, Wrench, Eye, Pencil, Trash2, Settings, Check, Users } from 'lucide-react';
 import { Checkbox } from "@/components/ui/checkbox";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -15,6 +15,7 @@ import { useTranslation } from '@/components/utils/translations';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useManufacturing } from '@/components/contexts/ManufacturingContext';
 import { useCompany } from '@/components/contexts/CompanyContext';
+import { useHR } from '@/components/contexts/HRContext';
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { equipmentService } from '@/api/services/manufacturing';
@@ -28,6 +29,7 @@ export default function WorkCenters() {
   const { formatCurrency } = useCurrencyFormatter();
   const { workCenters, workOrders, loading, createWorkCenter, updateWorkCenter, deleteWorkCenter } = useManufacturing();
   const { activeCompany } = useCompany();
+  const { employees: allEmployees = [] } = useHR();
   const { canCreate, canUpdate, canDelete } = usePermissions();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -77,6 +79,8 @@ export default function WorkCenters() {
     operator_monthly_salary: '',
   });
   const [selectedEquipmentIds, setSelectedEquipmentIds] = useState([]);
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState([]);
+  const [employeeSearch, setEmployeeSearch] = useState('');
 
   // Auto-calculate cost breakdown from detailed inputs
   const calculatedCosts = useMemo(() => {
