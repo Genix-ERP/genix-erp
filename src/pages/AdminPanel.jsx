@@ -22,6 +22,7 @@ import {
   DollarSign, Package, Briefcase, Crown, Sparkles, Eye, Building2, Phone, Receipt
 } from 'lucide-react';
 import { format, differenceInDays, addDays, parseISO } from 'date-fns';
+import { formatPhoneDisplay } from '@/utils/formatCurrency';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import PermissionsManagement from '@/components/admin/PermissionsManagement';
@@ -756,7 +757,7 @@ export default function AdminPanel() {
                                   <p className="text-xs text-slate-500">{tenant.owner_email}</p>
                                 )}
                                 {tenant.owner_phone && (
-                                  <p className="text-xs text-slate-500">{tenant.owner_phone}</p>
+                                  <p className="text-xs text-slate-500">{formatPhoneDisplay(tenant.owner_phone)}</p>
                                 )}
                                 {!tenant.owner_email && !tenant.owner_phone && (
                                   <p className="text-xs text-slate-400">-</p>
@@ -1856,7 +1857,7 @@ export default function AdminPanel() {
                             <TableCell className="text-sm font-medium">{`${u.first_name} ${u.last_name}`.trim() || '-'}</TableCell>
                             <TableCell className="text-xs">
                               {u.email && <div className="text-slate-600">{u.email}</div>}
-                              {u.phone && <div className="text-slate-500 flex items-center gap-1"><Phone className="w-3 h-3" />{u.phone}</div>}
+                              {u.phone && <div className="text-slate-500 flex items-center gap-1"><Phone className="w-3 h-3" />{formatPhoneDisplay(u.phone)}</div>}
                             </TableCell>
                             <TableCell className="text-xs text-slate-500">{u.role_name || '-'}</TableCell>
                             <TableCell className="text-xs text-slate-500">{u.last_login ? format(new Date(u.last_login), 'dd.MM.yyyy HH:mm') : '-'}</TableCell>
