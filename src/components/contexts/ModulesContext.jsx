@@ -29,7 +29,8 @@ const APP_MODULES = [
   { id: 'assets', nameKey: 'assets', icon: 'Monitor', appId: 'assets' },
   { id: 'expenses', nameKey: 'expenses', icon: 'Receipt', appId: 'expenses' },
   { id: 'payroll', nameKey: 'payroll', icon: 'DollarSign', appId: 'payroll' },
-  { id: 'contracts', nameKey: 'contracts', icon: 'FileText', appId: 'contracts' }
+  { id: 'contracts', nameKey: 'contracts', icon: 'FileText', appId: 'contracts' },
+  { id: 'director_dashboard', nameKey: 'director_dashboard', icon: 'BarChart3', appId: 'director_dashboard' }
 ];
 
 const ALL_MODULES = [...CORE_MODULES, ...APP_MODULES];

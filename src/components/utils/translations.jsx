@@ -3758,6 +3758,9 @@ export const translations = {
     "app_cargo_description": "International freight forwarding and distribution system for B2B/B2C logistics.",
     "app_construction_name": "Construction",
     "app_construction_description": "Construction project management with smeta, progress tracking, and multi-vendor coordination.",
+    "director_dashboard": "Director Dashboard",
+    "app_director_dashboard_name": "Director Dashboard",
+    "app_director_dashboard_description": "Cross-company executive dashboard with revenue, profit, debtors, creditors and live charts aggregated across all companies.",
 
     // Construction Module
     "construction_projects": "Construction Projects",
@@ -11133,6 +11136,9 @@ export const translations = {
     "app_cargo_description": "B2B/B2C logistika uchun xalqaro yuk tashish va taqsimlash tizimi.",
     "app_construction_name": "Qurilish",
     "app_construction_description": "Xarajatlar hisobi, jarayon va ko'p pudratchi bilan qurilish loyihalarini boshqarish.",
+    "director_dashboard": "Direktor paneli",
+    "app_director_dashboard_name": "Direktor paneli",
+    "app_director_dashboard_description": "Barcha kompaniyalar bo'yicha umumiy hisobotlar: tushum, foyda, debitorlar, kreditorlar va jonli grafiklar.",
 
     // Construction Module
     "construction_projects": "Qurilish loyihalari",
@@ -18341,6 +18347,9 @@ export const translations = {
     "app_cargo_description": "Международная система перевозки и распределения грузов для B2B/B2C логистики.",
     "app_construction_name": "Строительство",
     "app_construction_description": "Управление строительными проектами со сметой, прогрессом и координацией подрядчиков.",
+    "director_dashboard": "Панель директора",
+    "app_director_dashboard_name": "Панель директора",
+    "app_director_dashboard_description": "Сводный дашборд по всем компаниям: выручка, прибыль, дебиторы, кредиторы и графики в реальном времени.",
 
     // Construction Module
     "construction_projects": "Строительные проекты",
