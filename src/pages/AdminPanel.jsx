@@ -94,6 +94,48 @@ export default function AdminPanel() {
   const [tenantDetails, setTenantDetails] = useState(null);
   const [tenantDetailsLoading, setTenantDetailsLoading] = useState(false);
 
+  const formatTenantStatus = (s) => {
+    const map = {
+      active: { uz: 'Faol', ru: 'Активный', en: 'Active' },
+      trialing: { uz: 'Sinov', ru: 'Триал', en: 'Trial' },
+      past_due: { uz: "To'lov kutilmoqda", ru: 'Просрочено', en: 'Past Due' },
+      expired: { uz: 'Muddati tugagan', ru: 'Истёк', en: 'Expired' },
+      cancelled: { uz: 'Bekor qilingan', ru: 'Отменено', en: 'Cancelled' },
+    };
+    const v = map[s];
+    return v ? (v[language] || v.en) : s;
+  };
+
+  const formatPaymentStatus = (s) => {
+    const map = {
+      success: { uz: 'Muvaffaqiyatli', ru: 'Успешно', en: 'Success' },
+      pending: { uz: 'Kutilmoqda', ru: 'В ожидании', en: 'Pending' },
+      error: { uz: 'Xatolik', ru: 'Ошибка', en: 'Error' },
+      revert: { uz: 'Bekor qilingan', ru: 'Возврат', en: 'Reverted' },
+    };
+    const v = map[s];
+    return v ? (v[language] || v.en) : (s || '—');
+  };
+
+  const formatPlan = (plan) => {
+    if (!plan) return '-';
+    // "1users_monthly" → "1 user · monthly"
+    const m = plan.match(/^(\d+)users?_(.+)$/);
+    if (m) {
+      const usersWord = language === 'uz' ? 'foyd.' : language === 'ru' ? 'польз.' : (m[1] === '1' ? 'user' : 'users');
+      const periodMap = {
+        monthly: { uz: 'oylik', ru: 'месячный', en: 'monthly' },
+        '3months': { uz: '3 oy', ru: '3 мес.', en: '3 months' },
+        '6months': { uz: '6 oy', ru: '6 мес.', en: '6 months' },
+        yearly: { uz: 'yillik', ru: 'годовой', en: 'yearly' },
+      };
+      const p = periodMap[m[2]];
+      const periodStr = p ? (p[language] || p.en) : m[2];
+      return `${m[1]} ${usersWord} · ${periodStr}`;
+    }
+    return plan;
+  };
+
   const openTenantDetails = async (tenant) => {
     setSelectedTenant(tenant);
     setShowTenantDetailsModal(true);
@@ -1696,11 +1738,11 @@ export default function AdminPanel() {
                   </div>
                   <div className="p-3 bg-purple-50 rounded-lg">
                     <p className="text-xs text-slate-500">{language === 'uz' ? 'Reja' : 'Plan'}</p>
-                    <p className="font-semibold text-sm capitalize">{tenantDetails.tenant?.subscription_plan}</p>
+                    <p className="font-semibold text-sm">{formatPlan(tenantDetails.tenant?.subscription_plan)}</p>
                   </div>
                   <div className="p-3 bg-emerald-50 rounded-lg">
                     <p className="text-xs text-slate-500">{language === 'uz' ? 'Holat' : 'Status'}</p>
-                    <p className="font-semibold text-sm capitalize">{tenantDetails.tenant?.subscription_status}</p>
+                    <p className="font-semibold text-sm">{formatTenantStatus(tenantDetails.tenant?.subscription_status)}</p>
                   </div>
                   <div className="p-3 bg-amber-50 rounded-lg">
                     <p className="text-xs text-slate-500">{language === 'uz' ? 'Pullik foydalanuvchilar' : 'Paid users'}</p>
@@ -1856,7 +1898,7 @@ export default function AdminPanel() {
                           {tenantDetails.payments.map(p => (
                             <TableRow key={p.id}>
                               <TableCell className="text-xs">{format(new Date(p.created_at), 'dd.MM.yyyy HH:mm')}</TableCell>
-                              <TableCell className="text-xs capitalize">{p.plan}</TableCell>
+                              <TableCell className="text-xs">{formatPlan(p.plan)}</TableCell>
                               <TableCell className="text-xs text-right font-medium">{Number(p.amount_uzs).toLocaleString()} {language === 'uz' ? "so'm" : 'UZS'}</TableCell>
                               <TableCell className="text-xs text-slate-500">
                                 {p.card_pan ? `${(p.ps || '').toUpperCase()} ${p.card_pan}` : '-'}
@@ -1866,8 +1908,9 @@ export default function AdminPanel() {
                                   p.status === 'success' ? 'bg-green-100 text-green-700'
                                   : p.status === 'pending' ? 'bg-amber-100 text-amber-700'
                                   : p.status === 'error' ? 'bg-red-100 text-red-700'
+                                  : p.status === 'revert' ? 'bg-orange-100 text-orange-700'
                                   : 'bg-slate-100 text-slate-500'
-                                }`}>{p.status}</Badge>
+                                }`}>{formatPaymentStatus(p.status)}</Badge>
                               </TableCell>
                               <TableCell className="text-xs">
                                 {p.receipt_url
