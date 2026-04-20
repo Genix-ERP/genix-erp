@@ -284,8 +284,8 @@ export default function Register() {
           <img
             src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68d244cb8a392237a5acfbd9/a049d6898_Logo.png"
             alt="Genix Logo"
-            className="w-56 object-contain mx-auto"
-            style={{ height: '100px', marginBottom: '12px' }}
+            className="object-contain mx-auto block"
+            style={{ height: '140px', width: 'auto', marginBottom: '12px' }}
           />
           <CardTitle className="text-2xl font-bold text-[var(--genix-navy)]">
             {googleStep ? 'Complete Registration' : step === 1 ? L.create_account : L.verify_phone}
