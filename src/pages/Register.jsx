@@ -15,8 +15,8 @@ import { authService } from '@/api/services/auth';
 
 const T = {
   uz: {
-    create_account: "Hisob yaratish",
-    sign_up_to_start: "GenixERP bilan ishlashni boshlash uchun ro'yxatdan o'ting",
+    create_account: "Ro'yxatdan o'tish",
+    sign_up_to_start: "",
     verify_phone: "Telefonni tasdiqlang",
     code_sent_to: "Tasdiqlash kodi yuborildi:",
     first_name: "Ism",
@@ -33,7 +33,7 @@ const T = {
     confirm_placeholder: "Parolni qayta kiriting",
     continue_btn: "Davom etish",
     sending: "Yuborilmoqda...",
-    create_btn: "Hisob yaratish",
+    create_btn: "Ro'yxatdan o'tish",
     creating: "Yaratilmoqda...",
     or: "Yoki davom eting",
     back_to_login: "Kirishga qaytish",
@@ -47,8 +47,8 @@ const T = {
     phone_required: "Telefon raqam majburiy",
   },
   ru: {
-    create_account: "Создать аккаунт",
-    sign_up_to_start: "Зарегистрируйтесь для начала работы с GenixERP",
+    create_account: "Регистрация",
+    sign_up_to_start: "",
     verify_phone: "Подтвердите телефон",
     code_sent_to: "Код подтверждения отправлен на:",
     first_name: "Имя",
@@ -65,7 +65,7 @@ const T = {
     confirm_placeholder: "Введите пароль ещё раз",
     continue_btn: "Продолжить",
     sending: "Отправка...",
-    create_btn: "Создать аккаунт",
+    create_btn: "Зарегистрироваться",
     creating: "Создание...",
     or: "Или продолжить с",
     back_to_login: "Назад к входу",
@@ -79,8 +79,8 @@ const T = {
     phone_required: "Номер телефона обязателен",
   },
   en: {
-    create_account: "Create Account",
-    sign_up_to_start: "Sign up to start using GenixERP",
+    create_account: "Sign Up",
+    sign_up_to_start: "",
     verify_phone: "Verify your phone",
     code_sent_to: "Verification code sent to:",
     first_name: "First Name",
@@ -97,7 +97,7 @@ const T = {
     confirm_placeholder: "Re-enter password",
     continue_btn: "Continue",
     sending: "Sending...",
-    create_btn: "Create Account",
+    create_btn: "Sign Up",
     creating: "Creating...",
     or: "Or continue with",
     back_to_login: "Back to login",
@@ -284,17 +284,19 @@ export default function Register() {
           <img
             src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68d244cb8a392237a5acfbd9/a049d6898_Logo.png"
             alt="Genix Logo"
-            className="w-32 object-contain mx-auto"
-            style={{ height: '56px', marginBottom: '12px' }}
+            className="w-56 object-contain mx-auto"
+            style={{ height: '100px', marginBottom: '12px' }}
           />
           <CardTitle className="text-2xl font-bold text-[var(--genix-navy)]">
             {googleStep ? 'Complete Registration' : step === 1 ? L.create_account : L.verify_phone}
           </CardTitle>
-          <CardDescription className="text-slate-500">
-            {googleStep ? 'Enter your company name to get started'
-              : step === 1 ? L.sign_up_to_start
-              : <>{L.code_sent_to} <span className="font-medium text-slate-700">{formData.phone}</span></>}
-          </CardDescription>
+          {(googleStep || step !== 1 || L.sign_up_to_start) && (
+            <CardDescription className="text-slate-500">
+              {googleStep ? 'Enter your company name to get started'
+                : step === 1 ? L.sign_up_to_start
+                : <>{L.code_sent_to} <span className="font-medium text-slate-700">{formData.phone}</span></>}
+            </CardDescription>
+          )}
         </CardHeader>
 
         <CardContent className="pt-4">
