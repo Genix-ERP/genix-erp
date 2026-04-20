@@ -110,15 +110,19 @@ export default function DirectorDashboard() {
     const months = monthRange(6);
 
     const results = await Promise.all(companies.map(async (co) => {
-      const [contacts, invoices, expenses] = await Promise.all([
+      const [contacts, invoices, expenses, products, employees] = await Promise.all([
         fetchForOrg(co.id, '/contacts', { page_size: 5000 }),
         fetchForOrg(co.id, '/finance/invoices', { page_size: 5000 }),
         fetchForOrg(co.id, '/finance/expenses', { page_size: 5000 }),
+        fetchForOrg(co.id, '/products', { page_size: 5000 }),
+        fetchForOrg(co.id, '/employees', { page_size: 5000 }),
       ]);
 
       const contactList = Array.isArray(contacts) ? contacts : (contacts?.items || []);
       const invList = Array.isArray(invoices) ? invoices : (invoices?.items || []);
       const expList = Array.isArray(expenses) ? expenses : (expenses?.items || []);
+      const productList = Array.isArray(products) ? products : (products?.items || []);
+      const employeeList = Array.isArray(employees) ? employees : (employees?.items || []);
 
       // AR = sum of positive balances (they owe us); AP = sum of negative (we owe them)
       let deb = 0, cred = 0;
@@ -156,6 +160,28 @@ export default function DirectorDashboard() {
         }
       });
 
+      // Stock: total units, total stock value, low-stock count
+      let stockUnits = 0, stockValue = 0, lowStockCount = 0;
+      const topProducts = []; // top 10 by stock value
+      productList.forEach(p => {
+        const qty = Number(p.stock_quantity ?? p.quantity_on_hand ?? p.qty ?? 0);
+        const cost = Number(p.cost_price ?? p.unit_cost ?? p.cost ?? 0);
+        stockUnits += qty;
+        stockValue += qty * cost;
+        const reorder = Number(p.reorder_level ?? p.min_stock ?? 0);
+        if (reorder > 0 && qty <= reorder) lowStockCount++;
+        if (qty > 0) topProducts.push({ name: p.name || p.product_name || p.code, qty, value: qty * cost });
+      });
+      topProducts.sort((a, b) => b.value - a.value);
+
+      // HR: counts, salary fund
+      let activeEmployees = 0, salaryFund = 0;
+      employeeList.forEach(e => {
+        const isActive = e.is_active !== false && (e.status || 'active') === 'active';
+        if (isActive) activeEmployees++;
+        salaryFund += Number(e.base_salary ?? e.salary ?? e.gross_salary ?? 0);
+      });
+
       return [co.id, {
         revenue: totalRev,
         expenses: totalExp,
@@ -164,6 +190,14 @@ export default function DirectorDashboard() {
         cred,
         monthlyRev,
         expenseBreakdown: expByCat,
+        stockUnits,
+        stockValue,
+        lowStockCount,
+        topProducts: topProducts.slice(0, 10),
+        productCount: productList.length,
+        activeEmployees,
+        totalEmployees: employeeList.length,
+        salaryFund,
       }];
     }));
 
@@ -372,14 +406,35 @@ export default function DirectorDashboard() {
       )}
 
       {/* Metric cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 mb-3">
-        <MetricCard label={t('Tushum', 'Выручка', 'Revenue')} value={agg.revenue} color="#185FA5" />
-        <MetricCard label={t('Foyda', 'Прибыль', 'Profit')} value={agg.profit} color="#1D9E75" />
-        <MetricCard label={t('Debitorlar', 'Дебиторы', 'Debtors')} value={agg.deb} color="#E24B4A" />
-        <MetricCard label={t('Kreditorlar', 'Кредиторы', 'Creditors')} value={agg.cred} color="#EF9F27" />
-      </div>
+      {(section === 'all' || section === 'finance') && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 mb-3">
+          <MetricCard label={t('Tushum', 'Выручка', 'Revenue')} value={agg.revenue} color="#185FA5" />
+          <MetricCard label={t('Foyda', 'Прибыль', 'Profit')} value={agg.profit} color="#1D9E75" />
+          <MetricCard label={t('Debitorlar', 'Дебиторы', 'Debtors')} value={agg.deb} color="#E24B4A" />
+          <MetricCard label={t('Kreditorlar', 'Кредиторы', 'Creditors')} value={agg.cred} color="#EF9F27" />
+        </div>
+      )}
 
-      {/* Charts row 1 */}
+      {section === 'inventory' && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 mb-3">
+          <MetricCard label={t('Mahsulotlar', 'Товары', 'Products')} value={sum(visibleCompanies.map(c => perCompany[c.id]?.productCount || 0))} color="#185FA5" />
+          <MetricCard label={t('Sklad qiymati', 'Стоимость склада', 'Stock value')} value={sum(visibleCompanies.map(c => perCompany[c.id]?.stockValue || 0))} color="#1D9E75" />
+          <MetricCard label={t('Birliklar', 'Единицы', 'Units')} value={sum(visibleCompanies.map(c => perCompany[c.id]?.stockUnits || 0))} color="#534AB7" />
+          <MetricCard label={t('Kam qoldiq', 'Низкий остаток', 'Low stock')} value={sum(visibleCompanies.map(c => perCompany[c.id]?.lowStockCount || 0))} color="#E24B4A" />
+        </div>
+      )}
+
+      {section === 'hr' && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 mb-3">
+          <MetricCard label={t('Xodimlar', 'Сотрудники', 'Employees')} value={sum(visibleCompanies.map(c => perCompany[c.id]?.totalEmployees || 0))} color="#185FA5" />
+          <MetricCard label={t('Faol', 'Активных', 'Active')} value={sum(visibleCompanies.map(c => perCompany[c.id]?.activeEmployees || 0))} color="#1D9E75" />
+          <MetricCard label={t('Maosh fondi', 'Зарплатный фонд', 'Salary fund')} value={sum(visibleCompanies.map(c => perCompany[c.id]?.salaryFund || 0))} color="#534AB7" />
+          <MetricCard label={t('Kompaniyalar', 'Компаний', 'Companies')} value={visibleCompanies.length} color="#EF9F27" />
+        </div>
+      )}
+
+      {/* Charts row 1 — finance only */}
+      {(section === 'all' || section === 'finance') && (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-2.5 mb-2.5">
         <div className="lg:col-span-2 bg-white border border-[#E8E8E8] rounded-xl p-3.5">
           <div className="flex justify-between items-center mb-2">
@@ -442,6 +497,85 @@ export default function DirectorDashboard() {
           </div>
         </div>
       </div>
+      )}
+
+      {/* Stock section: bar chart of stock value per company + low stock table */}
+      {section === 'inventory' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-2.5 mb-2.5">
+          <div className="lg:col-span-2 bg-white border border-[#E8E8E8] rounded-xl p-3.5">
+            <div className="text-xs font-semibold text-[#1a1a1a] mb-2">
+              {t('Kompaniyalar bo‘yicha sklad qiymati', 'Стоимость склада по компаниям', 'Stock value by company')}
+            </div>
+            <div className="h-[220px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={visibleCompanies.map(co => ({
+                    name: co.company_name,
+                    value: perCompany[co.id]?.stockValue || 0,
+                  }))}
+                  margin={{ top: 4, right: 4, left: -10, bottom: 0 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" />
+                  <XAxis dataKey="name" tick={{ fontSize: 9 }} interval={0} angle={-15} textAnchor="end" height={50} />
+                  <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtCompact} />
+                  <Tooltip formatter={(v) => fmtCompact(v)} />
+                  <Bar dataKey="value" fill="#185FA5" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+          <div className="bg-white border border-[#E8E8E8] rounded-xl p-3.5">
+            <div className="text-xs font-semibold text-[#1a1a1a] mb-2">
+              {t('Eng ko‘p qiymatdagi mahsulotlar', 'Топ товаров по стоимости', 'Top products by value')}
+            </div>
+            <div className="space-y-1 max-h-[220px] overflow-y-auto">
+              {(() => {
+                const all = [];
+                visibleCompanies.forEach(co => (perCompany[co.id]?.topProducts || []).forEach(p => all.push(p)));
+                all.sort((a, b) => b.value - a.value);
+                return all.slice(0, 10).map((p, i) => (
+                  <div key={i} className="flex justify-between items-center text-xs border-b border-[#F0F0F0] py-1.5 last:border-0">
+                    <span className="truncate text-slate-700">{p.name}</span>
+                    <span className="font-semibold text-slate-800 ml-2 shrink-0">{fmtCompact(p.value)}</span>
+                  </div>
+                ));
+              })()}
+              {visibleCompanies.every(co => !(perCompany[co.id]?.topProducts?.length)) && (
+                <div className="text-center py-4 text-xs text-slate-400">{t('Maʼlumot yo‘q', 'Нет данных', 'No data')}</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* HR section: bar chart of employees per company */}
+      {section === 'hr' && (
+        <div className="bg-white border border-[#E8E8E8] rounded-xl p-3.5 mb-2.5">
+          <div className="text-xs font-semibold text-[#1a1a1a] mb-2">
+            {t('Kompaniyalar bo‘yicha xodimlar', 'Сотрудники по компаниям', 'Employees by company')}
+          </div>
+          <div className="h-[220px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={visibleCompanies.map(co => ({
+                  name: co.company_name,
+                  active: perCompany[co.id]?.activeEmployees || 0,
+                  total: perCompany[co.id]?.totalEmployees || 0,
+                }))}
+                margin={{ top: 4, right: 4, left: -10, bottom: 0 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" />
+                <XAxis dataKey="name" tick={{ fontSize: 9 }} interval={0} angle={-15} textAnchor="end" height={50} />
+                <YAxis tick={{ fontSize: 10 }} />
+                <Tooltip />
+                <Legend wrapperStyle={{ fontSize: 10 }} />
+                <Bar dataKey="active" fill="#1D9E75" name={t('Faol', 'Активных', 'Active')} radius={[4, 4, 0, 0]} />
+                <Bar dataKey="total" fill="#185FA5" name={t('Jami', 'Всего', 'Total')} radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
 
       {/* Summary table */}
       <div className="bg-white border border-[#E8E8E8] rounded-xl p-3.5">
@@ -452,16 +586,29 @@ export default function DirectorDashboard() {
           <thead>
             <tr className="text-[#888] border-b border-[#F0F0F0]">
               <th className="text-left py-1.5">{t('Kompaniya', 'Компания', 'Company')}</th>
-              <th className="text-right py-1.5">{t('Tushum', 'Выручка', 'Revenue')}</th>
-              <th className="text-right py-1.5">{t('Xarajat', 'Расходы', 'Expenses')}</th>
-              <th className="text-right py-1.5">{t('Foyda', 'Прибыль', 'Profit')}</th>
-              <th className="text-right py-1.5">{t('Debitorlar', 'Дебиторы', 'Debtors')}</th>
-              <th className="text-right py-1.5">{t('Kreditorlar', 'Кредиторы', 'Creditors')}</th>
+              {(section === 'all' || section === 'finance') && (<>
+                <th className="text-right py-1.5">{t('Tushum', 'Выручка', 'Revenue')}</th>
+                <th className="text-right py-1.5">{t('Xarajat', 'Расходы', 'Expenses')}</th>
+                <th className="text-right py-1.5">{t('Foyda', 'Прибыль', 'Profit')}</th>
+                <th className="text-right py-1.5">{t('Debitorlar', 'Дебиторы', 'Debtors')}</th>
+                <th className="text-right py-1.5">{t('Kreditorlar', 'Кредиторы', 'Creditors')}</th>
+              </>)}
+              {section === 'inventory' && (<>
+                <th className="text-right py-1.5">{t('Mahsulotlar', 'Товары', 'Products')}</th>
+                <th className="text-right py-1.5">{t('Birliklar', 'Единицы', 'Units')}</th>
+                <th className="text-right py-1.5">{t('Sklad qiymati', 'Стоимость', 'Stock value')}</th>
+                <th className="text-right py-1.5">{t('Kam qoldiq', 'Низ. остаток', 'Low stock')}</th>
+              </>)}
+              {section === 'hr' && (<>
+                <th className="text-right py-1.5">{t('Jami xodimlar', 'Всего', 'Total')}</th>
+                <th className="text-right py-1.5">{t('Faol', 'Активных', 'Active')}</th>
+                <th className="text-right py-1.5">{t('Maosh fondi', 'ЗП фонд', 'Salary fund')}</th>
+              </>)}
             </tr>
           </thead>
           <tbody>
             {visibleCompanies.map((co, idx) => {
-              const d = perCompany[co.id] || { revenue: 0, expenses: 0, profit: 0, deb: 0, cred: 0 };
+              const d = perCompany[co.id] || {};
               const pa = PAL[(companies.findIndex(c => c.id === co.id)) % PAL.length];
               return (
                 <tr key={co.id} className="border-b border-[#F0F0F0] last:border-0">
@@ -473,13 +620,26 @@ export default function DirectorDashboard() {
                       <span className="font-medium">{co.company_name}</span>
                     </div>
                   </td>
-                  <td className="text-right">{fmtCompact(d.revenue)}</td>
-                  <td className="text-right">{fmtCompact(d.expenses)}</td>
-                  <td className="text-right" style={{ color: d.profit >= 0 ? '#0F6E56' : '#A32D2D', fontWeight: 600 }}>
-                    {fmtCompact(d.profit)}
-                  </td>
-                  <td className="text-right">{fmtCompact(d.deb)}</td>
-                  <td className="text-right">{fmtCompact(d.cred)}</td>
+                  {(section === 'all' || section === 'finance') && (<>
+                    <td className="text-right">{fmtCompact(d.revenue || 0)}</td>
+                    <td className="text-right">{fmtCompact(d.expenses || 0)}</td>
+                    <td className="text-right" style={{ color: (d.profit || 0) >= 0 ? '#0F6E56' : '#A32D2D', fontWeight: 600 }}>
+                      {fmtCompact(d.profit || 0)}
+                    </td>
+                    <td className="text-right">{fmtCompact(d.deb || 0)}</td>
+                    <td className="text-right">{fmtCompact(d.cred || 0)}</td>
+                  </>)}
+                  {section === 'inventory' && (<>
+                    <td className="text-right">{d.productCount || 0}</td>
+                    <td className="text-right">{fmtCompact(d.stockUnits || 0)}</td>
+                    <td className="text-right font-medium">{fmtCompact(d.stockValue || 0)}</td>
+                    <td className="text-right" style={{ color: (d.lowStockCount || 0) > 0 ? '#A32D2D' : '#888' }}>{d.lowStockCount || 0}</td>
+                  </>)}
+                  {section === 'hr' && (<>
+                    <td className="text-right">{d.totalEmployees || 0}</td>
+                    <td className="text-right text-[#0F6E56] font-medium">{d.activeEmployees || 0}</td>
+                    <td className="text-right">{fmtCompact(d.salaryFund || 0)}</td>
+                  </>)}
                 </tr>
               );
             })}
