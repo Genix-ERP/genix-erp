@@ -33,6 +33,7 @@ import TaxReports from "@/components/finance/TaxReports";
 import GeneralLedger from "@/components/finance/GeneralLedger";
 import AgedReceivables from "@/components/finance/AgedReceivables";
 import AgedPayables from "@/components/finance/AgedPayables";
+import AccountCard from "@/components/finance/AccountCard";
 import FinanceVendorBills from "@/components/finance/FinanceVendorBills";
 
 import { useLanguage } from "@/components/contexts/LanguageContext";
@@ -82,6 +83,12 @@ export default function Financials() {
             <TabsTrigger value="journal-entries" className={tabTriggerClass}>
               <BookOpen className="w-4 h-4" />
               <span className="hidden sm:inline">{t('journal_entries') || 'Jurnal yozuvlari'}</span>
+            </TabsTrigger>
+
+            {/* 3.5. Hisob kartochkasi */}
+            <TabsTrigger value="account-card" className={tabTriggerClass}>
+              <FileText className="w-4 h-4" />
+              <span className="hidden sm:inline">{language === 'ru' ? 'Карточка счёта' : language === 'uz' ? 'Kartochka' : 'Account Card'}</span>
             </TabsTrigger>
 
             {/* 4. To'lovlar */}
@@ -135,6 +142,9 @@ export default function Financials() {
           </TabsContent>
           <TabsContent value="journal-entries" className="mt-6">
             <GeneralLedger />
+          </TabsContent>
+          <TabsContent value="account-card" className="mt-6">
+            <AccountCard />
           </TabsContent>
           <TabsContent value="payments" className="mt-6">
             <Payments />

@@ -529,6 +529,7 @@ export function ModulesProvider({ children }) {
         ...periodResult,
         payroll_number: periodResult.period_code,
         period_name: periodResult.period_name,
+        employee_id: data.employee_id || periodResult.employee_id || '',
         employee_name: data.employee_name || periodResult.period_name, // Store employee name for display
         pay_period_start: periodResult.start_date,
         pay_period_end: periodResult.end_date,

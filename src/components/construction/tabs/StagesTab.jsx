@@ -11,11 +11,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Plus, Edit, Trash2, Layers, X, ChevronDown, ChevronRight, ChevronLeft, Package, Truck, Users, ShieldCheck } from 'lucide-react';
+import { Plus, Edit, Trash2, Layers, X, ChevronDown, ChevronRight, ChevronLeft, Package, Truck, Users, ShieldCheck, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { useAuth } from '@/components/contexts/AuthContext';
+import { useAdminSettings } from '@/components/contexts/AdminSettingsContext';
 import { toast } from 'sonner';
 
 const STATUS_COLORS = {
@@ -34,10 +36,19 @@ const EMPTY_FORM = {
   notes: '',
 };
 
+const RESERVATION_STATUS_COLORS = {
+  pending: 'bg-yellow-100 text-yellow-800 border-yellow-300',
+  approved: 'bg-green-100 text-green-800 border-green-300',
+  rejected: 'bg-red-100 text-red-800 border-red-300',
+  cancelled: 'bg-slate-100 text-slate-600 border-slate-300',
+};
+
 const StagesTab = ({ project }) => {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { formatCurrency } = useCurrencyFormatter();
+  const { user } = useAuth();
+  const { settings } = useAdminSettings();
 
   const STATUS_LABELS = {
     not_started: t('not_started'),
@@ -78,6 +89,18 @@ const StagesTab = ({ project }) => {
   // Estimate resources for equipment/employee tabs
   const [estimateEquipmentResources, setEstimateEquipmentResources] = useState([]);
   const [estimateLaborResources, setEstimateLaborResources] = useState([]);
+  // Reservations
+  const [reservations, setReservations] = useState([]);
+  const [reservationsLoading, setReservationsLoading] = useState(false);
+
+  // Determine if current user is the designated material approver
+  // System admin and tenant owner can always approve without being assigned
+  const constructionSettings = settings?.construction?.material_approval || {};
+  const approverUserId = constructionSettings.approver_user_id || '';
+  const userRole = user?.role || '';
+  const isSystemAdminOrOwner = userRole === 'site_admin' || userRole === 'owner' || user?.is_system_admin;
+  const isApprover = isSystemAdminOrOwner || (approverUserId && user?.id === approverUserId);
+
   // Unified modal tab: 'materials' | 'equipment' | 'employee'
   const [modalTab, setModalTab] = useState('materials');
   // Equipment/Employee form (shared)
@@ -85,6 +108,56 @@ const StagesTab = ({ project }) => {
   // Sub-stage equipment data (includes both equipment and employee/labor entries)
   const [subStageEquipment, setSubStageEquipment] = useState({});
   const [equipmentLoading, setEquipmentLoading] = useState(null);
+
+  // Load reservations for this project
+  const loadReservations = useCallback(async () => {
+    if (!project?.id) return;
+    setReservationsLoading(true);
+    try {
+      const data = await inventoryService.listReservations({ project_id: project.id, limit: 500 });
+      setReservations(data || []);
+    } catch (e) {
+      console.error('Failed to load reservations:', e);
+      setReservations([]);
+    } finally {
+      setReservationsLoading(false);
+    }
+  }, [project?.id]);
+
+  useEffect(() => { loadReservations(); }, [loadReservations]);
+
+  // Helper: find reservation for a material in a substage
+  const getReservationForMaterial = (mat, subStageId) => {
+    if (!mat.product_id) return null;
+    return reservations.find(r =>
+      r.product_id === mat.product_id &&
+      r.substage_id === subStageId &&
+      r.status !== 'cancelled'
+    ) || null;
+  };
+
+  // Approve / Reject handlers
+  const handleApproveReservation = async (reservationId) => {
+    try {
+      await inventoryService.approveReservation(reservationId);
+      toast.success(language === 'ru' ? 'Материал одобрен' : language === 'en' ? 'Material approved' : 'Material tasdiqlandi');
+      await loadReservations();
+    } catch (e) {
+      const msg = e?.response?.data?.error || e?.response?.data?.message || (language === 'ru' ? 'Ошибка при одобрении' : language === 'en' ? 'Approval error' : 'Tasdiqlashda xatolik');
+      toast.error(msg);
+    }
+  };
+
+  const handleRejectReservation = async (reservationId) => {
+    try {
+      await inventoryService.rejectReservation(reservationId);
+      toast.success(language === 'ru' ? 'Материал отклонён' : language === 'en' ? 'Material rejected' : 'Material rad etildi');
+      await loadReservations();
+    } catch (e) {
+      const msg = e?.response?.data?.error || e?.response?.data?.message || (language === 'ru' ? 'Ошибка при отклонении' : language === 'en' ? 'Rejection error' : 'Rad etishda xatolik');
+      toast.error(msg);
+    }
+  };
 
   // Load inventory products + estimate resources for dropdowns
   useEffect(() => {
@@ -244,6 +317,7 @@ const StagesTab = ({ project }) => {
       }
       setShowMaterialModal(false);
       await loadSubStageMaterials(materialSubStageId);
+      await loadReservations();
       const stageId = findStageForSubStage(materialSubStageId);
       if (stageId) await reloadSubStages(stageId);
       const data = await constructionService.listStages(project.id);
@@ -746,17 +820,63 @@ const StagesTab = ({ project }) => {
                                             <th className="text-right py-1.5 px-2">{t('quantity')}</th>
                                             <th className="text-right py-1.5 px-2">{t('unit_cost')}</th>
                                             <th className="text-right py-1.5 px-2">{t('total')}</th>
+                                            <th className="text-center py-1.5 px-2">{t('status')}</th>
                                             <th className="w-8"></th>
                                           </tr>
                                         </thead>
                                         <tbody>
-                                          {materials.map(mat => (
-                                            <tr key={mat.id} className="border-b border-slate-50 hover:bg-slate-50 group">
+                                          {materials.map(mat => {
+                                            const reservation = getReservationForMaterial(mat, sub.id);
+                                            const resStatus = reservation?.status || null;
+                                            const isPending = resStatus === 'pending';
+                                            const isRejected = resStatus === 'rejected';
+                                            const isApproved = resStatus === 'approved';
+                                            const rowBg = isRejected ? 'bg-red-50' : isPending ? 'bg-yellow-50' : '';
+
+                                            return (
+                                            <tr key={mat.id} className={`border-b border-slate-50 hover:bg-slate-50 group ${rowBg}`}>
                                               <td className="py-1.5 px-2">{mat.product_name}</td>
                                               <td className="py-1.5 px-2 text-right text-slate-500">{mat.uom}</td>
                                               <td className="py-1.5 px-2 text-right">{mat.quantity}</td>
                                               <td className="py-1.5 px-2 text-right">{formatCurrency(mat.unit_cost)}</td>
                                               <td className="py-1.5 px-2 text-right font-medium">{formatCurrency(mat.total_cost)}</td>
+                                              <td className="py-1.5 px-2 text-center">
+                                                {reservation ? (
+                                                  <div className="flex items-center justify-center gap-1">
+                                                    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium border ${RESERVATION_STATUS_COLORS[resStatus] || 'bg-slate-100 text-slate-600'}`}>
+                                                      {isPending && <Clock className="w-3 h-3" />}
+                                                      {isApproved && <CheckCircle className="w-3 h-3" />}
+                                                      {isRejected && <XCircle className="w-3 h-3" />}
+                                                      {isPending ? (language === 'ru' ? 'Ожидает' : language === 'en' ? 'Pending' : 'Kutilmoqda')
+                                                        : isApproved ? (language === 'ru' ? 'Одобрено' : language === 'en' ? 'Approved' : 'Tasdiqlangan')
+                                                        : isRejected ? (language === 'ru' ? 'Отклонено' : language === 'en' ? 'Rejected' : 'Rad etilgan')
+                                                        : resStatus}
+                                                    </span>
+                                                    {isPending && isApprover && (
+                                                      <div className="flex gap-0.5 ml-1">
+                                                        <Button
+                                                          variant="ghost" size="sm"
+                                                          className="h-5 w-5 p-0 text-green-600 hover:text-green-800 hover:bg-green-100"
+                                                          onClick={() => handleApproveReservation(reservation.id)}
+                                                          title={language === 'ru' ? 'Одобрить' : language === 'en' ? 'Approve' : 'Tasdiqlash'}
+                                                        >
+                                                          <CheckCircle className="w-3.5 h-3.5" />
+                                                        </Button>
+                                                        <Button
+                                                          variant="ghost" size="sm"
+                                                          className="h-5 w-5 p-0 text-red-600 hover:text-red-800 hover:bg-red-100"
+                                                          onClick={() => handleRejectReservation(reservation.id)}
+                                                          title={language === 'ru' ? 'Отклонить' : language === 'en' ? 'Reject' : 'Rad etish'}
+                                                        >
+                                                          <XCircle className="w-3.5 h-3.5" />
+                                                        </Button>
+                                                      </div>
+                                                    )}
+                                                  </div>
+                                                ) : (
+                                                  <span className="text-xs text-slate-400">—</span>
+                                                )}
+                                              </td>
                                               <td className="py-1.5 px-2 text-center">
                                                 <Button
                                                   variant="ghost" size="sm"
@@ -767,7 +887,8 @@ const StagesTab = ({ project }) => {
                                                 </Button>
                                               </td>
                                             </tr>
-                                          ))}
+                                            );
+                                          })}
                                         </tbody>
                                       </table>
                                     )}

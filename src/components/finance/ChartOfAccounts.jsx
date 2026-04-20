@@ -338,19 +338,54 @@ export default function ChartOfAccounts() {
     return accountTypes.find(t => t.value === type) || accountTypes[0];
   };
 
+  const getNatureLabel = (nature) => {
+    const labels = {
+      ACTIVE: language === 'ru' ? 'Активный' : language === 'en' ? 'Active' : 'Aktiv',
+      PASSIVE: language === 'ru' ? 'Пассивный' : language === 'en' ? 'Passive' : 'Passiv',
+      ACTIVE_PASSIVE: language === 'ru' ? 'Актив-пассив' : language === 'en' ? 'Active-Passive' : 'Aktiv-passiv',
+    };
+    return labels[nature] || nature;
+  };
+
+  const getNatureColor = (nature) => {
+    const colors = {
+      ACTIVE: 'bg-blue-50 text-blue-700',
+      PASSIVE: 'bg-rose-50 text-rose-700',
+      ACTIVE_PASSIVE: 'bg-violet-50 text-violet-700',
+    };
+    return colors[nature] || 'bg-slate-50 text-slate-700';
+  };
+
+  const getAnalyticsLabels = (analyticsJson) => {
+    try {
+      const arr = typeof analyticsJson === 'string' ? JSON.parse(analyticsJson) : analyticsJson;
+      if (!Array.isArray(arr) || arr.length === 0) return null;
+      const labels = {
+        kontragent: language === 'ru' ? 'Контрагент' : 'Kontragent',
+        shartnoma: language === 'ru' ? 'Договор' : 'Shartnoma',
+        ombor: language === 'ru' ? 'Склад' : 'Ombor',
+        xodim: language === 'ru' ? 'Сотрудник' : 'Xodim',
+        mjm: language === 'ru' ? 'ЕИ' : 'MJM',
+      };
+      return arr.map(a => labels[a] || a);
+    } catch { return null; }
+  };
+
   const renderAccountRow = (account, level = 0) => {
     const hasChildren = account.children && account.children.length > 0;
     const isExpanded = expandedAccounts.has(account.id);
     const contraAsset = isContraAsset(account);
     const typeInfo = getTypeInfo(account.category || account.type);
     const TypeIcon = typeInfo.icon;
+    const isGroup = account.is_leaf === false;
     const displayName = language === 'ru' && account.name_ru ? account.name_ru
       : language === 'en' && account.name_en ? account.name_en
       : account.name_uz || account.name;
+    const analyticsLabels = getAnalyticsLabels(account.analytics_types);
 
     return (
       <React.Fragment key={account.id}>
-        <TableRow className="hover:bg-slate-50 transition-colors">
+        <TableRow className={`hover:bg-slate-50 transition-colors ${isGroup ? 'bg-slate-50/50' : ''}`}>
           <TableCell className="font-mono text-sm">
             <div className="flex items-center gap-2" style={{ paddingLeft: `${level * 24}px` }}>
               {hasChildren ? (
@@ -367,29 +402,53 @@ export default function ChartOfAccounts() {
               ) : (
                 <span className="w-6" />
               )}
-              <span className="text-slate-600">{account.code}</span>
+              <span className={`${isGroup ? 'font-bold text-slate-800' : 'text-slate-600'}`}>{account.code}</span>
             </div>
           </TableCell>
           <TableCell>
             <div className="flex items-center gap-2">
-              <span className="font-medium text-slate-900">{displayName}</span>
+              <span className={`${isGroup ? 'font-bold text-slate-900' : 'font-medium text-slate-900'}`}>{displayName}</span>
+              {isGroup && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 uppercase tracking-wide">
+                  {language === 'ru' ? 'Группа' : 'Guruh'}
+                </span>
+              )}
+              {analyticsLabels && (
+                <div className="flex gap-1">
+                  {analyticsLabels.map((label, i) => (
+                    <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600">
+                      {label}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           </TableCell>
           <TableCell>
-            {contraAsset ? (
-              <Badge className="bg-amber-100 text-amber-800 flex items-center gap-1 w-fit">
-                <AlertTriangle className="w-3 h-3" />
-                {t('contra_asset') || 'Contra-Asset'}
-              </Badge>
-            ) : (
-              <Badge className={`${typeInfo.color} flex items-center gap-1 w-fit`}>
-                <TypeIcon className="w-3 h-3" />
-                {typeInfo.label}
-              </Badge>
-            )}
+            <div className="flex items-center gap-1.5">
+              {contraAsset ? (
+                <Badge className="bg-amber-100 text-amber-800 flex items-center gap-1 w-fit">
+                  <AlertTriangle className="w-3 h-3" />
+                  {t('contra_asset') || 'Contra-Asset'}
+                </Badge>
+              ) : (
+                <Badge className={`${typeInfo.color} flex items-center gap-1 w-fit`}>
+                  <TypeIcon className="w-3 h-3" />
+                  {typeInfo.label}
+                </Badge>
+              )}
+              {account.account_nature && (
+                <span className={`text-[10px] px-1.5 py-0.5 rounded ${getNatureColor(account.account_nature)}`}>
+                  {getNatureLabel(account.account_nature)}
+                </span>
+              )}
+            </div>
           </TableCell>
           <TableCell className="text-right font-semibold tabular-nums whitespace-nowrap">
-            {formatCurrency(hasChildren ? (account.aggregated_balance ?? account.current_balance ?? 0) : (account.current_balance || 0))}
+            {isGroup
+              ? formatCurrency(account.aggregated_balance ?? account.current_balance ?? 0)
+              : formatCurrency(account.current_balance || 0)
+            }
           </TableCell>
           <TableCell>
             <Badge variant={account.is_active ? "default" : "secondary"}>
@@ -398,12 +457,12 @@ export default function ChartOfAccounts() {
           </TableCell>
           <TableCell>
             <div className="flex items-center gap-1">
-              {canUpdate(MODULES.FINANCIALS) && (
+              {canUpdate(MODULES.FINANCIALS) && account.is_leaf !== false && (
                 <Button variant="ghost" size="sm" onClick={() => openEditModal(account)}>
                   <Edit2 className="w-4 h-4 text-slate-500" />
                 </Button>
               )}
-              {canDelete(MODULES.FINANCIALS) && (
+              {canDelete(MODULES.FINANCIALS) && account.is_leaf !== false && (
                 <Button variant="ghost" size="sm" onClick={() => handleDeleteClick(account)}>
                   <Trash2 className="w-4 h-4 text-red-500" />
                 </Button>
@@ -411,7 +470,9 @@ export default function ChartOfAccounts() {
             </div>
           </TableCell>
         </TableRow>
-        {hasChildren && isExpanded && account.children.map(child => renderAccountRow(child, level + 1))}
+        {hasChildren && isExpanded && account.children
+          .sort((a, b) => (a.code || '').localeCompare(b.code || ''))
+          .map(child => renderAccountRow(child, level + 1))}
       </React.Fragment>
     );
   };

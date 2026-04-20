@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Search, DollarSign, Users, Calculator, TrendingUp, Brain, Download, AlertTriangle, CheckCircle, Target, Lightbulb, Edit2, Trash2, CreditCard, UserCircle } from 'lucide-react';
+import { Plus, Search, DollarSign, Users, Calculator, TrendingUp, Brain, Download, AlertTriangle, CheckCircle, Target, Lightbulb, Edit2, Trash2, CreditCard, UserCircle, Printer } from 'lucide-react';
 import EmployeeLoans from '@/components/payroll/EmployeeLoans';
 import EmployeePortal from '@/components/payroll/EmployeePortal';
 import { format } from 'date-fns';
@@ -21,6 +21,7 @@ import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useAdminSettings } from '@/components/contexts/AdminSettingsContext';
+import { useCompany } from '@/components/contexts/CompanyContext';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 
 export default function Payroll() {
@@ -35,6 +36,7 @@ export default function Payroll() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
   const { getSetting } = useAdminSettings();
+  const { activeCompany } = useCompany();
 
   // AI Analysis
   const payrollAnalysis = useMemo(() => analyzePayroll(payrolls, employees, language), [payrolls, employees, language]);
@@ -402,6 +404,403 @@ export default function Payroll() {
     URL.revokeObjectURL(url);
   };
 
+  // Print Qaydnoma (salary payment record) for current filtered payrolls
+  const handlePrintQaydnoma = () => {
+    const payrollsToShow = filteredPayrolls.filter(p => p.status !== 'cancelled');
+    if (payrollsToShow.length === 0) return;
+
+    // Determine period from the payroll entries
+    const endDates = payrollsToShow.map(p => p.pay_period_end).filter(Boolean).sort();
+    const lastEnd = endDates[endDates.length - 1] ? new Date(endDates[endDates.length - 1]) : new Date();
+    const monthNum = lastEnd.getMonth() + 1;
+    const yearNum = lastEnd.getFullYear();
+
+    // Month names for each language
+    const monthNames = {
+      uz: ['yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun', 'iyul', 'avgust', 'sentabr', 'oktabr', 'noyabr', 'dekabr'],
+      ru: ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'],
+      en: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
+    };
+    const monthName = (monthNames[language] || monthNames.uz)[lastEnd.getMonth()];
+    const periodLabel = language === 'ru'
+      ? `за ${monthName} ${yearNum} года`
+      : language === 'en'
+        ? `for ${monthName} ${yearNum}`
+        : `${yearNum}-yil ${monthName} oyi uchun`;
+
+    const advancePercent = 40;
+    const today = format(new Date(), 'dd.MM.yyyy');
+    const currencyLabel = language === 'ru' ? 'сум (UZS)' : language === 'en' ? 'UZS' : "so\u2018m (UZS)";
+
+    // Build employee rows
+    let totalSalary = 0;
+    let totalAdvance = 0;
+    let totalRemainder = 0;
+
+    const rowsHtml = payrollsToShow.map((p, i) => {
+      const salary = p.gross_pay || p.basic_salary || 0;
+      const advance = Math.round(salary * advancePercent / 100);
+      const remainder = salary - advance;
+      totalSalary += salary;
+      totalAdvance += advance;
+      totalRemainder += remainder;
+
+      const emp = employees.find(e => e.id === p.employee_id)
+        || employees.find(e => e.full_name === p.employee_name)
+        || employees.find(e => `${e.first_name} ${e.last_name}` === p.employee_name);
+      const position = emp?.job_position_name || emp?.job_title || emp?.position || '-';
+
+      return `
+        <tr>
+          <td class="c">${i + 1}</td>
+          <td class="name">${p.employee_name || '-'}</td>
+          <td class="pos">${position}</td>
+          <td class="r">${formatCurrency(salary)}</td>
+          <td class="r">${formatCurrency(advance)}</td>
+          <td class="day-cell c"><b>15</b></td>
+          <td class="r">${formatCurrency(remainder)}</td>
+          <td class="day-cell c"><b>30</b></td>
+          <td class="sig"></td>
+        </tr>
+      `;
+    }).join('');
+
+    // Director name for signature
+    const directorName = activeCompany?.director_name || '';
+
+    const html = `
+      <html>
+      <head>
+        <title>${t('qaydnoma_title')} - ${monthNum}/${yearNum}</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { font-family: 'Times New Roman', Times, serif; padding: 30px 40px; color: #000; font-size: 10pt; }
+          .header { text-align: center; margin-bottom: 6px; }
+          .header .company { font-size: 13pt; font-weight: bold; margin-bottom: 3px; }
+          .header .address { color: #555; font-size: 9pt; margin: 2px 0; }
+          .header .stir { color: #555; font-size: 9pt; margin: 2px 0; }
+          .divider { border-bottom: 1.5px solid #000; margin: 8px 0 16px 0; }
+          .title { text-align: center; margin-bottom: 4px; }
+          .title h2 { font-size: 15pt; font-weight: bold; margin: 0 0 3px 0; letter-spacing: 0.5px; }
+          .title .period-num { font-size: 11pt; font-weight: bold; margin: 2px 0; }
+          .title .period-desc { font-size: 11pt; font-style: italic; margin: 2px 0 18px 0; }
+          .meta-row { font-size: 10pt; margin-bottom: 12px; }
+          .meta-row b { font-weight: bold; }
+          table.main { width: 100%; border-collapse: collapse; margin: 10px 0; }
+          table.main th, table.main td { border: 1.5px solid #000; padding: 5px 6px; font-size: 10pt; }
+          table.main th { background: #D9D9D9; text-align: center; font-weight: bold; vertical-align: middle; }
+          table.main th.day-hdr { background: #FFF2CC; font-size: 9pt; }
+          table.main td.c { text-align: center; }
+          table.main td.r { text-align: right; }
+          table.main td.name { font-size: 9pt; }
+          table.main td.pos { font-size: 9pt; }
+          table.main td.day-cell { background: #FFFBF0; }
+          table.main td.sig { min-width: 80px; }
+          .total-row td { background: #F0F0F0; font-weight: bold; }
+          .note { margin: 12px 0 6px 0; font-size: 9pt; }
+          .note b { font-weight: bold; }
+          .note .note-text { font-style: italic; color: #555; }
+          .summary { margin: 6px 0; font-size: 10pt; }
+          .summary p { margin: 3px 0; }
+          .summary b { font-weight: bold; }
+          .sig-title { font-size: 11pt; font-weight: bold; margin: 16px 0 8px 0; }
+          table.sig-table { width: 100%; border-collapse: collapse; }
+          table.sig-table td { border: none; padding: 3px 0; font-size: 10pt; vertical-align: bottom; }
+          table.sig-table td.label { width: 28%; font-weight: bold; }
+          table.sig-table td.line { width: 38%; }
+          table.sig-table td.fname { width: 34%; }
+          .footer-note { text-align: center; margin-top: 24px; font-size: 9pt; font-style: italic; color: #666; }
+          @media print {
+            body { padding: 15px 20px; }
+            @page { margin: 10mm; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="company">&laquo;${activeCompany?.company_name || activeCompany?.name || '_______________'}&raquo;</div>
+          <div class="address">${activeCompany?.legal_address || '_______________'}</div>
+          <div class="stir">STIR: ${activeCompany?.tax_id || '_______________'} &bull; Tel: ${activeCompany?.phone || activeCompany?.director_phone || '_______________'}</div>
+        </div>
+        <div class="divider"></div>
+
+        <div class="title">
+          <h2>${t('qaydnoma_title')}</h2>
+          <div class="period-num">${t('qaydnoma_number')} ${monthNum} / ${yearNum}</div>
+          <div class="period-desc">${periodLabel}</div>
+        </div>
+
+        <div class="meta-row">
+          <b>${t('qaydnoma_created_date')}: </b>${today}
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+          <b>${t('qaydnoma_advance_percent')}: </b>${advancePercent}%
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+          <b>${t('qaydnoma_currency')}: </b>${currencyLabel}
+        </div>
+
+        <table class="main">
+          <thead>
+            <tr>
+              <th style="width:30px">${t('qaydnoma_number')}</th>
+              <th style="width:150px">${t('qaydnoma_fio')}</th>
+              <th style="width:90px">${t('qaydnoma_position')}</th>
+              <th style="width:120px; font-size:9pt">${t('qaydnoma_salary')}</th>
+              <th style="width:120px">${t('qaydnoma_advance')}</th>
+              <th class="day-hdr" style="width:35px">${t('qaydnoma_day')}</th>
+              <th style="width:120px">${t('qaydnoma_remainder')}</th>
+              <th class="day-hdr" style="width:35px">${t('qaydnoma_day')}</th>
+              <th style="width:100px">${t('qaydnoma_signature')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+            <tr class="total-row">
+              <td colspan="3" class="c"><b>${t('qaydnoma_total')}</b></td>
+              <td class="r">${formatCurrency(totalSalary)}</td>
+              <td class="r">${formatCurrency(totalAdvance)}</td>
+              <td></td>
+              <td class="r">${formatCurrency(totalRemainder)}</td>
+              <td></td>
+              <td></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="note">
+          <b>${language === 'ru' ? 'Примечание' : language === 'en' ? 'Note' : 'Izoh'}: </b>
+          <span class="note-text">${language === 'ru'
+            ? '«День» — конкретная дата выплаты аванса и остатка. Если оплата не произведена, ячейка остаётся пустой.'
+            : language === 'en'
+              ? '"Day" columns — the exact day when advance and remainder are paid. If payment has not been made, the cell remains empty.'
+              : '«Kun» ustunlari — avans va qoldiq to\u2019langan aniq kun raqami. Agar to\u2019lov amalga oshirilmagan bo\u2019lsa, katak bo\u2019sh qoladi.'
+          }</span>
+        </div>
+
+        <div class="summary">
+          <p><b>${t('qaydnoma_total_payable')}: </b>${formatCurrency(totalSalary)} ${currencyLabel}</p>
+          <p>
+            <b>${t('qaydnoma_advance_amount')}: </b>${formatCurrency(totalAdvance)} ${currencyLabel}
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+            <b>${t('qaydnoma_remainder_amount')}: </b>${formatCurrency(totalRemainder)} ${currencyLabel}
+          </p>
+          <p><b>${t('qaydnoma_employees_count')}: </b>${payrollsToShow.length} ${language === 'ru' ? 'чел.' : language === 'en' ? 'employees' : 'kishi'}</p>
+        </div>
+
+        <div class="sig-title">${language === 'ru' ? 'ПОДПИСИ:' : language === 'en' ? 'SIGNATURES:' : 'IMZOLAR:'}</div>
+
+        <table class="sig-table">
+          <tr>
+            <td class="label">${t('qaydnoma_prepared_by')}:</td>
+            <td class="line">_____________________________</td>
+            <td class="fname">/ _______________ /</td>
+          </tr>
+          <tr><td colspan="3" style="height:12px"></td></tr>
+          <tr>
+            <td class="label">${t('qaydnoma_approved_by')}:</td>
+            <td class="line">_____________________________</td>
+            <td class="fname">/ ${directorName || '_______________'} /</td>
+          </tr>
+        </table>
+
+        <div class="footer-note">${t('qaydnoma_note')}</div>
+      </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(html);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.print();
+    }
+  };
+
+  // Download Qaydnoma as .doc file (Word-compatible HTML)
+  const handleDownloadQaydnomaDocx = () => {
+    const payrollsToShow = filteredPayrolls.filter(p => p.status !== 'cancelled');
+    if (payrollsToShow.length === 0) return;
+
+    const endDates = payrollsToShow.map(p => p.pay_period_end).filter(Boolean).sort();
+    const lastEnd = endDates[endDates.length - 1] ? new Date(endDates[endDates.length - 1]) : new Date();
+    const monthNum = lastEnd.getMonth() + 1;
+    const yearNum = lastEnd.getFullYear();
+
+    const monthNames = {
+      uz: ['yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun', 'iyul', 'avgust', 'sentabr', 'oktabr', 'noyabr', 'dekabr'],
+      ru: ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'],
+      en: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
+    };
+    const monthName = (monthNames[language] || monthNames.uz)[lastEnd.getMonth()];
+    const periodLabel = language === 'ru'
+      ? `за ${monthName} ${yearNum} года`
+      : language === 'en'
+        ? `for ${monthName} ${yearNum}`
+        : `${yearNum}-yil ${monthName} oyi uchun`;
+
+    const advancePercent = 40;
+    const today = format(new Date(), 'dd.MM.yyyy');
+    const currencyLabel = language === 'ru' ? 'сум (UZS)' : language === 'en' ? 'UZS' : "so\u2018m (UZS)";
+
+    let totalSalary = 0;
+    let totalAdvance = 0;
+    let totalRemainder = 0;
+
+    const rowsHtml = payrollsToShow.map((p, i) => {
+      const salary = p.gross_pay || p.basic_salary || 0;
+      const advance = Math.round(salary * advancePercent / 100);
+      const remainder = salary - advance;
+      totalSalary += salary;
+      totalAdvance += advance;
+      totalRemainder += remainder;
+
+      const emp = employees.find(e => e.id === p.employee_id)
+        || employees.find(e => e.full_name === p.employee_name)
+        || employees.find(e => `${e.first_name} ${e.last_name}` === p.employee_name);
+      const position = emp?.job_position_name || emp?.job_title || emp?.position || '-';
+
+      return `<tr>
+        <td align="center" style="width:30px">${i + 1}</td>
+        <td style="width:150px; font-size:9pt">${p.employee_name || '-'}</td>
+        <td style="width:90px; font-size:9pt">${position}</td>
+        <td align="right" style="width:120px">${formatCurrency(salary)}</td>
+        <td align="right" style="width:120px">${formatCurrency(advance)}</td>
+        <td align="center" style="width:35px; background:#FFFBF0"><b>15</b></td>
+        <td align="right" style="width:120px">${formatCurrency(remainder)}</td>
+        <td align="center" style="width:35px; background:#FFFBF0"><b>30</b></td>
+        <td style="width:100px"></td>
+      </tr>`;
+    }).join('');
+
+    const directorName = activeCompany?.director_name || '';
+
+    // Word-compatible HTML with mso namespace for page settings
+    const wordHtml = `<html xmlns:o="urn:schemas-microsoft-com:office:office"
+      xmlns:w="urn:schemas-microsoft-com:office:word"
+      xmlns="http://www.w3.org/TR/REC-html40">
+      <head>
+        <meta charset="utf-8">
+        <style>
+          @page { size: A4; margin: 1cm; }
+          body { font-family: 'Times New Roman', serif; font-size: 10pt; color: #000; }
+          table { border-collapse: collapse; }
+          .main-table td, .main-table th { border: 1.5px solid #000; padding: 5px 6px; font-size: 10pt; }
+          .main-table th { background: #D9D9D9; text-align: center; font-weight: bold; }
+          .day-hdr { background: #FFF2CC !important; font-size: 9pt !important; }
+          .total-row td { background: #F0F0F0; font-weight: bold; }
+          .sig-table td { border: none; padding: 3px 0; font-size: 10pt; }
+        </style>
+      </head>
+      <body>
+        <p align="center" style="margin-bottom:3px">
+          <b style="font-size:13pt">&laquo;${activeCompany?.company_name || activeCompany?.name || '_______________'}&raquo;</b>
+        </p>
+        <p align="center" style="margin:2px 0; color:#555; font-size:9pt">
+          ${activeCompany?.legal_address || '_______________'}
+        </p>
+        <p align="center" style="margin:2px 0 8px 0; color:#555; font-size:9pt">
+          STIR: ${activeCompany?.tax_id || '_______________'} &bull; Tel: ${activeCompany?.phone || activeCompany?.director_phone || '_______________'}
+        </p>
+        <hr style="border:none; border-top:1.5px solid #000; margin:8px 0 16px 0">
+
+        <p align="center" style="margin:0 0 3px 0">
+          <b style="font-size:15pt">${t('qaydnoma_title')}</b>
+        </p>
+        <p align="center" style="margin:2px 0; font-size:11pt">
+          <b>${t('qaydnoma_number')} ${monthNum} / ${yearNum}</b>
+        </p>
+        <p align="center" style="margin:2px 0 18px 0; font-size:11pt">
+          <i>${periodLabel}</i>
+        </p>
+
+        <p style="margin-bottom:12px; font-size:10pt">
+          <b>${t('qaydnoma_created_date')}: </b>${today}
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+          <b>${t('qaydnoma_advance_percent')}: </b>${advancePercent}%
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+          <b>${t('qaydnoma_currency')}: </b>${currencyLabel}
+        </p>
+
+        <table class="main-table" width="100%">
+          <thead>
+            <tr>
+              <th style="width:30px">${t('qaydnoma_number')}</th>
+              <th style="width:150px">${t('qaydnoma_fio')}</th>
+              <th style="width:90px">${t('qaydnoma_position')}</th>
+              <th style="width:120px; font-size:9pt">${t('qaydnoma_salary')}</th>
+              <th style="width:120px">${t('qaydnoma_advance')}</th>
+              <th class="day-hdr" style="width:35px">${t('qaydnoma_day')}</th>
+              <th style="width:120px">${t('qaydnoma_remainder')}</th>
+              <th class="day-hdr" style="width:35px">${t('qaydnoma_day')}</th>
+              <th style="width:100px">${t('qaydnoma_signature')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+            <tr class="total-row">
+              <td colspan="3" align="center"><b>${t('qaydnoma_total')}</b></td>
+              <td align="right">${formatCurrency(totalSalary)}</td>
+              <td align="right">${formatCurrency(totalAdvance)}</td>
+              <td></td>
+              <td align="right">${formatCurrency(totalRemainder)}</td>
+              <td></td>
+              <td></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p style="margin:12px 0 6px 0; font-size:9pt">
+          <b>${language === 'ru' ? 'Примечание' : language === 'en' ? 'Note' : 'Izoh'}: </b>
+          <i style="color:#555">${language === 'ru'
+            ? '«День» — конкретная дата выплаты аванса и остатка.'
+            : language === 'en'
+              ? '"Day" columns — the exact day when advance and remainder are paid.'
+              : '«Kun» ustunlari — avans va qoldiq to\u2019langan aniq kun raqami. Agar to\u2019lov amalga oshirilmagan bo\u2019lsa, katak bo\u2019sh qoladi.'
+          }</i>
+        </p>
+
+        <p style="margin:3px 0"><b>${t('qaydnoma_total_payable')}: </b>${formatCurrency(totalSalary)} ${currencyLabel}</p>
+        <p style="margin:3px 0">
+          <b>${t('qaydnoma_advance_amount')}: </b>${formatCurrency(totalAdvance)} ${currencyLabel}
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+          <b>${t('qaydnoma_remainder_amount')}: </b>${formatCurrency(totalRemainder)} ${currencyLabel}
+        </p>
+        <p style="margin:3px 0 18px 0"><b>${t('qaydnoma_employees_count')}: </b>${payrollsToShow.length} ${language === 'ru' ? 'чел.' : language === 'en' ? 'employees' : 'kishi'}</p>
+
+        <p style="font-size:11pt; font-weight:bold; margin:16px 0 8px 0">${language === 'ru' ? 'ПОДПИСИ:' : language === 'en' ? 'SIGNATURES:' : 'IMZOLAR:'}</p>
+
+        <table class="sig-table" width="100%">
+          <tr>
+            <td width="28%"><b>${t('qaydnoma_prepared_by')}:</b></td>
+            <td width="38%">_____________________________</td>
+            <td width="34%">/ _______________ /</td>
+          </tr>
+          <tr><td colspan="3" style="height:12px"></td></tr>
+          <tr>
+            <td><b>${t('qaydnoma_approved_by')}:</b></td>
+            <td>_____________________________</td>
+            <td>/ ${directorName || '_______________'} /</td>
+          </tr>
+        </table>
+
+        <p align="center" style="margin-top:24px; font-size:9pt; font-style:italic; color:#666">
+          ${t('qaydnoma_note')}
+        </p>
+      </body>
+    </html>`;
+
+    // Create blob and download as .doc (Word-compatible HTML)
+    const blob = new Blob(['\ufeff' + wordHtml], { type: 'application/msword' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Qaydnoma_${monthNum}_${yearNum}.doc`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const getStatusColor = (status) => {
     const colors = {
       draft: 'bg-gray-100 text-gray-800',
@@ -586,11 +985,23 @@ export default function Payroll() {
             <CardHeader className="border-b">
               <div className="flex items-center justify-between">
                 <CardTitle>{t('payroll_records')}</CardTitle>
-                {(canCreate(MODULES.PAYROLL) || canCreate(MODULES.HR)) && (
-                  <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]">
-                    <Plus className="w-4 h-4 mr-2" /> {t('process_payroll')}
-                  </Button>
-                )}
+                <div className="flex gap-2">
+                  {filteredPayrolls.length > 0 && (
+                    <>
+                      <Button variant="outline" onClick={handlePrintQaydnoma}>
+                        <Printer className="w-4 h-4 mr-2" /> {t('print_qaydnoma')}
+                      </Button>
+                      <Button variant="outline" onClick={handleDownloadQaydnomaDocx}>
+                        <Download className="w-4 h-4 mr-2" /> DOCX
+                      </Button>
+                    </>
+                  )}
+                  {(canCreate(MODULES.PAYROLL) || canCreate(MODULES.HR)) && (
+                    <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]">
+                      <Plus className="w-4 h-4 mr-2" /> {t('process_payroll')}
+                    </Button>
+                  )}
+                </div>
               </div>
               <div className="flex gap-3 mt-4">
                 <div className="relative flex-1">
