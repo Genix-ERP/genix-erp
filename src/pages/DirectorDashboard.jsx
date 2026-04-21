@@ -57,20 +57,6 @@ const monthRange = (count) => {
   return months;
 };
 
-// Fetch helper that overrides X-Organization-ID header
-const fetchForOrg = async (orgId, url, params = {}) => {
-  try {
-    const res = await apiClient.get(url, {
-      params,
-      headers: { 'X-Organization-ID': orgId },
-    });
-    return res.data?.data ?? res.data;
-  } catch (e) {
-    console.warn(`[DirectorDashboard] ${url} for ${orgId} failed`, e?.response?.status);
-    return null;
-  }
-};
-
 export default function DirectorDashboard() {
   const { language } = useLanguage();
   const { companies, isLoading: companiesLoading } = useCompany();
@@ -105,106 +91,43 @@ export default function DirectorDashboard() {
     return () => clearInterval(t);
   }, []);
 
-  // Fetch data per company in parallel
+  // Fetch all companies' metrics in a single backend call.
+  // The /reports/director-summary endpoint aggregates per-org revenue, expenses,
+  // debtors/creditors, inventory, and HR stats in one round-trip.
   const loadAll = useCallback(async () => {
     if (!companies || companies.length === 0) return;
     setLoading(true);
-    const months = monthRange(6);
-
-    const results = await Promise.all(companies.map(async (co) => {
-      const [contacts, invoices, expenses, products, employees] = await Promise.all([
-        fetchForOrg(co.id, '/contacts', { page_size: 5000 }),
-        fetchForOrg(co.id, '/finance/invoices', { page_size: 5000 }),
-        fetchForOrg(co.id, '/finance/expenses', { page_size: 5000 }),
-        fetchForOrg(co.id, '/products', { page_size: 5000 }),
-        fetchForOrg(co.id, '/employees', { page_size: 5000 }),
-      ]);
-
-      const contactList = Array.isArray(contacts) ? contacts : (contacts?.items || []);
-      const invList = Array.isArray(invoices) ? invoices : (invoices?.items || []);
-      const expList = Array.isArray(expenses) ? expenses : (expenses?.items || []);
-      const productList = Array.isArray(products) ? products : (products?.items || []);
-      const employeeList = Array.isArray(employees) ? employees : (employees?.items || []);
-
-      // AR = sum of positive balances (they owe us); AP = sum of negative (we owe them)
-      let deb = 0, cred = 0;
-      contactList.forEach(c => {
-        const b = Number(c.current_balance || 0);
-        if (b > 0) deb += b;
-        else if (b < 0) cred += Math.abs(b);
+    try {
+      const res = await apiClient.get('/reports/director-summary');
+      const payload = res.data?.data ?? res.data ?? {};
+      const rows = Array.isArray(payload.companies) ? payload.companies : [];
+      const next = {};
+      rows.forEach(row => {
+        next[row.id] = {
+          revenue: Number(row.revenue || 0),
+          expenses: Number(row.expenses || 0),
+          profit: Number(row.profit || 0),
+          deb: Number(row.debtors || 0),
+          cred: Number(row.creditors || 0),
+          monthlyRev: Array.isArray(row.monthly_revenue) ? row.monthly_revenue : [0, 0, 0, 0, 0, 0],
+          expenseBreakdown: row.expense_by_category || {},
+          stockUnits: Number(row.stock_units || 0),
+          stockValue: Number(row.stock_value || 0),
+          lowStockCount: Number(row.low_stock_count || 0),
+          topProducts: [],
+          productCount: 0,
+          activeEmployees: Number(row.active_employees || 0),
+          totalEmployees: Number(row.total_employees || 0),
+          salaryFund: Number(row.salary_fund || 0),
+        };
       });
-
-      // Revenue: sum of invoice totals over last 6 months by month
-      const monthlyRev = months.map(m => 0);
-      let totalRev = 0;
-      invList.forEach(inv => {
-        const dateStr = inv.invoice_date || inv.date || inv.created_at;
-        if (!dateStr) return;
-        const d = new Date(dateStr);
-        const total = Number(inv.total_amount || inv.total || inv.amount || 0);
-        totalRev += total;
-        const idx = months.findIndex(m => m.year === d.getFullYear() && m.month === d.getMonth());
-        if (idx >= 0) monthlyRev[idx] += total;
-      });
-
-      // Expenses: sum + breakdown by category (current month for donut)
-      let totalExp = 0;
-      const expByCat = {};
-      const now = new Date();
-      expList.forEach(e => {
-        const amt = Number(e.amount || 0);
-        totalExp += amt;
-        const dateStr = e.date || e.expense_date || e.claim_date;
-        const d = dateStr ? new Date(dateStr) : null;
-        if (d && d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()) {
-          const cat = e.category || e.category_name || 'other';
-          expByCat[cat] = (expByCat[cat] || 0) + amt;
-        }
-      });
-
-      // Stock: total units, total stock value, low-stock count
-      let stockUnits = 0, stockValue = 0, lowStockCount = 0;
-      const topProducts = []; // top 10 by stock value
-      productList.forEach(p => {
-        const qty = Number(p.stock_quantity ?? p.quantity_on_hand ?? p.qty ?? 0);
-        const cost = Number(p.cost_price ?? p.unit_cost ?? p.cost ?? 0);
-        stockUnits += qty;
-        stockValue += qty * cost;
-        const reorder = Number(p.reorder_level ?? p.min_stock ?? 0);
-        if (reorder > 0 && qty <= reorder) lowStockCount++;
-        if (qty > 0) topProducts.push({ name: p.name || p.product_name || p.code, qty, value: qty * cost });
-      });
-      topProducts.sort((a, b) => b.value - a.value);
-
-      // HR: counts, salary fund
-      let activeEmployees = 0, salaryFund = 0;
-      employeeList.forEach(e => {
-        const isActive = e.is_active !== false && (e.status || 'active') === 'active';
-        if (isActive) activeEmployees++;
-        salaryFund += Number(e.base_salary ?? e.salary ?? e.gross_salary ?? 0);
-      });
-
-      return [co.id, {
-        revenue: totalRev,
-        expenses: totalExp,
-        profit: totalRev - totalExp,
-        deb,
-        cred,
-        monthlyRev,
-        expenseBreakdown: expByCat,
-        stockUnits,
-        stockValue,
-        lowStockCount,
-        topProducts: topProducts.slice(0, 10),
-        productCount: productList.length,
-        activeEmployees,
-        totalEmployees: employeeList.length,
-        salaryFund,
-      }];
-    }));
-
-    setPerCompany(Object.fromEntries(results));
-    setLoading(false);
+      setPerCompany(next);
+    } catch (e) {
+      console.warn('[DirectorDashboard] /reports/director-summary failed', e?.response?.status, e?.response?.data);
+      setPerCompany({});
+    } finally {
+      setLoading(false);
+    }
   }, [companies]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
