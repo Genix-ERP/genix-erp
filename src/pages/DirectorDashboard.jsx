@@ -6,7 +6,7 @@ import {
 import apiClient from '@/api/client';
 import { useCompany } from '@/components/contexts/CompanyContext';
 import { useLanguage } from '@/components/contexts/LanguageContext';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ChevronDown, Check, Search, X } from 'lucide-react';
 
 const PAL = [
   { c: '#185FA5', l: '#E6F1FB', d: '#0C447C' },
@@ -80,6 +80,8 @@ export default function DirectorDashboard() {
   const [section, setSection] = useState('all');
   const [currency, setCurrency] = useState('UZS');
   const [clock, setClock] = useState(new Date());
+  const [companyPickerOpen, setCompanyPickerOpen] = useState(false);
+  const [companySearch, setCompanySearch] = useState('');
 
   const [perCompany, setPerCompany] = useState({}); // { [orgId]: { revenue, expenses, profit, deb, cred, monthlyRev[], expenseBreakdown{} } }
   const [loading, setLoading] = useState(false);
@@ -298,38 +300,106 @@ export default function DirectorDashboard() {
 
       {/* Filters */}
       <div className="bg-white border border-[#E8E8E8] rounded-xl mb-3 overflow-hidden">
-        <div className="flex items-center border-b border-[#F0F0F0] min-h-[46px]">
+        <div className="flex items-center border-b border-[#F0F0F0] min-h-[46px] relative">
           <div className="text-[10px] font-semibold text-[#999] uppercase tracking-wider px-4 min-w-[96px] border-r border-[#F0F0F0] self-stretch flex items-center">
             {t('Kompaniya', 'Компания', 'Company')}
           </div>
-          <div className="flex items-center gap-1 px-3.5 py-2 flex-1 overflow-x-auto">
+          <div className="flex items-center gap-2 px-3.5 py-2 flex-1">
+            {/* Selector button */}
             <button
-              onClick={selectAll}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border whitespace-nowrap transition-all ${allMode ? 'border-[#185FA5] border-[1.5px] bg-[#E6F1FB]' : 'border-[#E0E0E0] hover:bg-[#F8F8F8]'}`}
+              onClick={() => setCompanyPickerOpen(v => !v)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[#E0E0E0] bg-white hover:bg-[#F8F8F8] transition-colors min-w-[240px] max-w-[420px]"
             >
-              <div className="w-5 h-5 rounded text-[8px] font-bold flex items-center justify-center bg-[#E6F1FB] text-[#0C447C]">ALL</div>
-              <span className={`text-xs font-medium ${allMode ? 'text-[#0C447C]' : 'text-[#1a1a1a]'}`}>{t('Barchasi', 'Все компании', 'All companies')}</span>
+              <span className="text-xs font-medium text-[#1a1a1a] truncate flex-1 text-left">
+                {allMode
+                  ? t('Barcha kompaniyalar', 'Все компании', 'All companies') + ` (${(companies || []).length})`
+                  : visibleCompanies.length === 1
+                    ? visibleCompanies[0].company_name
+                    : t(`${visibleCompanies.length} ta kompaniya`, `${visibleCompanies.length} компаний`, `${visibleCompanies.length} companies`)
+                }
+              </span>
+              <ChevronDown className={`w-4 h-4 text-[#666] transition-transform ${companyPickerOpen ? 'rotate-180' : ''}`} />
             </button>
-            {(companies || []).map((co, idx) => {
-              const pa = PAL[idx % PAL.length];
-              const on = !allMode && selectedIds.has(co.id);
+
+            {/* Selected chips (first few, for quick deselect) */}
+            {!allMode && visibleCompanies.slice(0, 3).map((co, idx) => {
+              const origIdx = (companies || []).findIndex(c => c.id === co.id);
+              const pa = PAL[(origIdx >= 0 ? origIdx : idx) % PAL.length];
               return (
-                <button
+                <div
                   key={co.id}
-                  onClick={() => toggleCompany(co.id)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border whitespace-nowrap transition-all ${on ? 'border-[1.5px]' : 'border-[#E0E0E0] hover:bg-[#F8F8F8]'}`}
-                  style={on ? { borderColor: pa.c, backgroundColor: pa.l } : {}}
+                  className="flex items-center gap-1 px-2 py-1 rounded-full text-xs"
+                  style={{ backgroundColor: pa.l, color: pa.d }}
                 >
-                  <div className="w-5 h-5 rounded text-[8px] font-bold flex items-center justify-center" style={{ backgroundColor: pa.l, color: pa.d }}>
-                    {initials(co.company_name)}
-                  </div>
-                  <span className="text-xs font-medium" style={on ? { color: pa.d, fontWeight: 600 } : { color: '#1a1a1a' }}>
-                    {co.company_name}
-                  </span>
-                </button>
+                  <span className="font-medium">{co.company_name}</span>
+                  <button onClick={() => toggleCompany(co.id)} className="hover:bg-black/10 rounded-full p-0.5">
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
               );
             })}
+            {!allMode && visibleCompanies.length > 3 && (
+              <span className="text-xs text-[#666] font-medium">+{visibleCompanies.length - 3}</span>
+            )}
           </div>
+
+          {/* Dropdown panel */}
+          {companyPickerOpen && (
+            <>
+              <div className="fixed inset-0 z-30" onClick={() => setCompanyPickerOpen(false)} />
+              <div className="absolute top-full left-[96px] mt-1 bg-white border border-[#E0E0E0] rounded-xl shadow-lg z-40 w-[420px] max-h-[420px] flex flex-col overflow-hidden">
+                <div className="p-2 border-b border-[#F0F0F0] flex items-center gap-2">
+                  <Search className="w-4 h-4 text-[#999] ml-1" />
+                  <input
+                    type="text"
+                    value={companySearch}
+                    onChange={e => setCompanySearch(e.target.value)}
+                    placeholder={t('Qidirish...', 'Поиск...', 'Search...')}
+                    className="flex-1 text-sm outline-none bg-transparent"
+                  />
+                </div>
+                <div className="px-2 py-1.5 border-b border-[#F0F0F0] flex items-center justify-between">
+                  <button
+                    onClick={selectAll}
+                    className="text-xs font-medium text-[#185FA5] hover:underline px-2"
+                  >
+                    {allMode
+                      ? t('Tanlovni tozalash', 'Очистить выбор', 'Clear selection')
+                      : t('Barchasini tanlash', 'Выбрать все', 'Select all')
+                    }
+                  </button>
+                  <span className="text-[11px] text-[#999] px-2">
+                    {allMode ? (companies || []).length : selectedIds.size} / {(companies || []).length}
+                  </span>
+                </div>
+                <div className="flex-1 overflow-y-auto p-1">
+                  {(companies || [])
+                    .filter(co => !companySearch || (co.company_name || '').toLowerCase().includes(companySearch.toLowerCase()))
+                    .map((co, idx) => {
+                      const origIdx = (companies || []).findIndex(c => c.id === co.id);
+                      const pa = PAL[origIdx % PAL.length];
+                      const checked = allMode || selectedIds.has(co.id);
+                      return (
+                        <button
+                          key={co.id}
+                          onClick={() => toggleCompany(co.id)}
+                          className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-[#F5F5F5] transition-colors text-left"
+                        >
+                          <div className={`w-4 h-4 rounded border flex items-center justify-center ${checked ? 'bg-[#185FA5] border-[#185FA5]' : 'border-[#CCC]'}`}>
+                            {checked && <Check className="w-3 h-3 text-white" />}
+                          </div>
+                          <div className="w-6 h-6 rounded text-[9px] font-bold flex items-center justify-center flex-shrink-0" style={{ backgroundColor: pa.l, color: pa.d }}>
+                            {initials(co.company_name)}
+                          </div>
+                          <span className="text-xs font-medium text-[#1a1a1a] truncate">{co.company_name}</span>
+                        </button>
+                      );
+                    })
+                  }
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
         <div className="flex items-center min-h-[46px]">
