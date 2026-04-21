@@ -5,8 +5,9 @@ import { useTranslation } from '@/components/utils/translations';
 import { SettingsSection, SettingsField, SettingsRow, SettingsToggle } from './SettingsSection';
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar, FileText, Percent, Coins, Landmark, BookOpen, Lock } from 'lucide-react';
+import { Calendar, FileText, Percent, Coins, Landmark, BookOpen, Lock, Users } from 'lucide-react';
 import TaxRates from '@/components/finance/TaxRates';
+import EmployeeTaxes from '@/components/finance/EmployeeTaxes';
 
 // Arrays are defined inside component to use translations
 
@@ -202,6 +203,15 @@ export default function FinanceSettings() {
         <div className="mt-4 border-t pt-4">
           <TaxRates hideReports />
         </div>
+      </SettingsSection>
+
+      {/* Employee Taxes (migration 330) */}
+      <SettingsSection
+        title={t('employee_taxes') || "Xodim soliqlari"}
+        description={t('employee_taxes_desc') || "Ish haqi hisoblashda avtomatik qo'llaniladigan soliqlar"}
+        icon={Users}
+      >
+        <EmployeeTaxes />
       </SettingsSection>
 
       {/* Multi-Currency */}

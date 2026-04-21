@@ -496,13 +496,12 @@ function LayoutContent({ children, currentPageName }) {
         
         <Sidebar className="border-r border-slate-200/60 bg-white/80 backdrop-blur-xl" role="navigation" aria-label="Main navigation">
           <SidebarHeader className="border-b border-slate-100 px-4 py-5">
-            <div className="flex items-center gap-2 h-10 overflow-hidden">
+            <div className="flex items-center justify-center w-full overflow-hidden">
               <img
-                src="/logo.png"
+                src="/yuksalish-logo.png"
                 alt="Yuksalish"
-                className="h-10 w-auto object-contain brand-logo-transparent"
+                className="w-full max-w-[160px] h-auto object-contain brand-logo-transparent"
               />
-              <span className="text-xl font-bold tracking-tight text-slate-800">Yuksalish</span>
             </div>
           </SidebarHeader>
           

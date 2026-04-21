@@ -518,7 +518,11 @@ export function ModulesProvider({ children }) {
             total_deductions: data.total_deductions || 0,
             net_salary: data.net_pay || 0,
             payment_method: data.payment_method || 'bank_transfer',
-            status: 'calculated'
+            status: 'calculated',
+            // migration 330: pass through the list of tax IDs the user X-ed out in
+            // the payroll modal. If the caller didn't supply the field, we send
+            // undefined so the server uses its default (apply all active taxes).
+            excluded_tax_ids: Array.isArray(data.excluded_tax_ids) ? data.excluded_tax_ids : undefined,
           });
         } catch (entryError) {
           console.warn('Failed to create payroll entry:', entryError);
