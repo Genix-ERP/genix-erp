@@ -87,8 +87,8 @@ const FormsTab = ({ project }) => {
   };
 
   const TYPE_LABELS = {
-    ks2: t('forma_2') || 'Forma 2 (KS-2)',
-    ks3: t('forma_3') || 'Forma 3 (KS-3)',
+    ks2: t('forma_2') || 'Forma 2',
+    ks3: t('forma_3') || 'Forma 3',
     hidden_work: t('forma_19') || 'Forma 19',
   };
 
@@ -154,9 +154,9 @@ const FormsTab = ({ project }) => {
     client_chief_accountant_name: project?.client_chief_accountant_name || '',
   };
 
-  // Auto-generate modals
+  // Auto-generate modals — building_id '' = project-wide; otherwise scoped to that building
   const [showAutoGenModal, setShowAutoGenModal] = useState(false);
-  const [autoGenForm, setAutoGenForm] = useState({ subcontract_id: '', period_from: '', period_to: '', ...defaultClientFields });
+  const [autoGenForm, setAutoGenForm] = useState({ subcontract_id: '', building_id: '', period_from: '', period_to: '', ...defaultClientFields });
   const [autoGenSaving, setAutoGenSaving] = useState(false);
   const [autoGenPreview, setAutoGenPreview] = useState(null); // preview data, null = not yet fetched
   const [autoGenLoadingPreview, setAutoGenLoadingPreview] = useState(false);
@@ -164,9 +164,12 @@ const FormsTab = ({ project }) => {
   const [showAutoGenClientFields, setShowAutoGenClientFields] = useState(false);
 
   const [showGenF3Modal, setShowGenF3Modal] = useState(false);
-  const [genF3Form, setGenF3Form] = useState({ subcontract_id: '', period_from: '', period_to: '', ...defaultClientFields });
+  const [genF3Form, setGenF3Form] = useState({ subcontract_id: '', building_id: '', period_from: '', period_to: '', ...defaultClientFields });
   const [genF3Saving, setGenF3Saving] = useState(false);
   const [showGenF3ClientFields, setShowGenF3ClientFields] = useState(false);
+
+  // Forms list filter — reuses the same dropdown UI as the generate dialogs
+  const [filterBuildingId, setFilterBuildingId] = useState('');
 
   // Detail view state
   const [selectedAct, setSelectedAct] = useState(null);
@@ -199,6 +202,9 @@ const FormsTab = ({ project }) => {
     try {
       const params = {};
       if (filters.state) params.state = filters.state;
+      // Server-side building filter applies to Forma 2 + Forma 3. Forma 19
+      // already has its own building_id from migration so it respects it too.
+      if (filterBuildingId) params.building_id = filterBuildingId;
 
       const [f2s, f3s, f19s, subData, stagesData, buildingsData] = await Promise.all([
         (!filters.act_type || filters.act_type === 'ks2') ? constructionService.listF2(project.id, params).catch(() => []) : Promise.resolve([]),
@@ -217,7 +223,7 @@ const FormsTab = ({ project }) => {
     } finally {
       setLoading(false);
     }
-  }, [project?.id, filters]);
+  }, [project?.id, filters, filterBuildingId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -485,6 +491,7 @@ const FormsTab = ({ project }) => {
     try {
       const preview = await constructionService.previewAutoGenerateKS2(project.id, {
         subcontract_id: autoGenForm.subcontract_id ? Number(autoGenForm.subcontract_id) : 0,
+        building_id: autoGenForm.building_id ? Number(autoGenForm.building_id) : 0,
         period_from: autoGenForm.period_from,
         period_to: autoGenForm.period_to,
       });
@@ -507,6 +514,7 @@ const FormsTab = ({ project }) => {
     try {
       await constructionService.autoGenerateKS2(project.id, {
         subcontract_id: autoGenForm.subcontract_id ? Number(autoGenForm.subcontract_id) : 0,
+        building_id: autoGenForm.building_id ? Number(autoGenForm.building_id) : 0,
         period_from: autoGenForm.period_from,
         period_to: autoGenForm.period_to,
         client_name: autoGenForm.client_name,
@@ -524,7 +532,7 @@ const FormsTab = ({ project }) => {
       });
       setShowAutoGenConfirm(false);
       setAutoGenPreview(null);
-      toast.success('KS-2 avtomatik yaratildi');
+      toast.success('Forma 2 avtomatik yaratildi');
       load();
     } catch (e) {
       toast.error(e?.response?.data?.error?.message || e?.response?.data?.message || 'Xatolik yuz berdi');
@@ -550,6 +558,7 @@ const FormsTab = ({ project }) => {
     try {
       await constructionService.generateF3(project.id, {
         subcontract_id: genF3Form.subcontract_id ? Number(genF3Form.subcontract_id) : 0,
+        building_id: genF3Form.building_id ? Number(genF3Form.building_id) : 0,
         period_from: genF3Form.period_from,
         period_to: genF3Form.period_to,
         client_name: genF3Form.client_name,
@@ -566,7 +575,7 @@ const FormsTab = ({ project }) => {
         client_chief_accountant_name: genF3Form.client_chief_accountant_name,
       });
       setShowGenF3Modal(false);
-      toast.success('KS-3 (Forma 3) yaratildi');
+      toast.success('Forma 3 yaratildi');
       load();
     } catch (e) {
       toast.error(e?.response?.data?.error?.message || e?.response?.data?.message || 'Xatolik yuz berdi');
@@ -1412,9 +1421,23 @@ const FormsTab = ({ project }) => {
               <SelectTrigger className="w-40"><SelectValue placeholder={t('all_types') || 'Barcha turlar'} /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">{t('all_types') || 'Barcha turlar'}</SelectItem>
-                <SelectItem value="ks2">{t('forma_2') || 'Forma 2 (KS-2)'}</SelectItem>
-                <SelectItem value="ks3">{t('forma_3') || 'Forma 3 (KS-3)'}</SelectItem>
+                <SelectItem value="ks2">{t('forma_2') || 'Forma 2'}</SelectItem>
+                <SelectItem value="ks3">{t('forma_3') || 'Forma 3'}</SelectItem>
                 <SelectItem value="hidden_work">{t('forma_19') || 'Forma 19'}</SelectItem>
+              </SelectContent>
+            </Select>
+            {/* Building filter — restricts the list to one building. */}
+            <Select value={filterBuildingId || 'all'} onValueChange={v => setFilterBuildingId(v === 'all' ? '' : v)}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder={language === 'ru' ? 'Все здания' : language === 'uz' ? 'Barcha binolar' : 'All buildings'} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{language === 'ru' ? 'Все здания' : language === 'uz' ? 'Barcha binolar' : 'All buildings'}</SelectItem>
+                {(buildings || []).map(b => (
+                  <SelectItem key={b.id} value={String(b.id)}>
+                    {b.code ? `${b.code} — ${b.name}` : b.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <Select value={filters.state || 'all'} onValueChange={v => setFilters(f => ({ ...f, state: v === 'all' ? '' : v }))}>
@@ -1427,8 +1450,8 @@ const FormsTab = ({ project }) => {
                 <SelectItem value="cancelled">{t('cancelled') || 'Bekor qilingan'}</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline" onClick={() => { setAutoGenForm({ subcontract_id: '', period_from: '', period_to: '', ...defaultClientFields }); setShowAutoGenClientFields(false); setShowAutoGenModal(true); }}><Zap className="w-4 h-4 mr-2" /> {t('auto_ks2') || 'KS-2 avto'}</Button>
-            <Button variant="outline" onClick={() => { setGenF3Form({ subcontract_id: '', period_from: '', period_to: '', ...defaultClientFields }); setShowGenF3ClientFields(false); setShowGenF3Modal(true); }}><FileText className="w-4 h-4 mr-2" /> {t('gen_ks3') || 'KS-3 yaratish'}</Button>
+            <Button variant="outline" onClick={() => { setAutoGenForm({ subcontract_id: '', building_id: '', period_from: '', period_to: '', ...defaultClientFields }); setShowAutoGenClientFields(false); setShowAutoGenModal(true); }}><Zap className="w-4 h-4 mr-2" /> {t('auto_ks2') || 'Forma 2 avto'}</Button>
+            <Button variant="outline" onClick={() => { setGenF3Form({ subcontract_id: '', building_id: '', period_from: '', period_to: '', ...defaultClientFields }); setShowGenF3ClientFields(false); setShowGenF3Modal(true); }}><FileText className="w-4 h-4 mr-2" /> {t('gen_ks3') || 'Forma 3 yaratish'}</Button>
             <Button variant="outline" className="text-orange-600 border-orange-300" onClick={() => { setF19CreateForm({ building_id: '', period_from: '', period_to: '', notes: '' }); setShowF19CreateModal(true); }}>
               <Plus className="w-4 h-4 mr-2" /> {t('create_f19') || 'Forma 19'}
             </Button>
@@ -1454,6 +1477,9 @@ const FormsTab = ({ project }) => {
                     <th className="text-left py-2 px-3 cursor-pointer select-none" onClick={() => handleSort('act_type')}>
                       {t('type') || 'Turi'}<SortIndicator field="act_type" />
                     </th>
+                    <th className="text-left py-2 px-3 cursor-pointer select-none" onClick={() => handleSort('building_name')}>
+                      {language === 'ru' ? 'Здание' : language === 'uz' ? 'Bino' : 'Building'}<SortIndicator field="building_name" />
+                    </th>
                     <th className="text-left py-2 px-3 cursor-pointer select-none" onClick={() => handleSort('period_from')}>
                       {t('period') || 'Davr'}<SortIndicator field="period_from" />
                     </th>
@@ -1478,6 +1504,11 @@ const FormsTab = ({ project }) => {
                     <tr key={act.id} className="border-b hover:bg-slate-50">
                       <td className="py-2 px-3 font-medium">{act.name}{act.act_number ? ` #${act.act_number}` : ''}</td>
                       <td className="py-2 px-3"><Badge className={TYPE_COLORS[act.act_type]}>{TYPE_LABELS[act.act_type] || act.act_type}</Badge></td>
+                      <td className="py-2 px-3 text-slate-600 whitespace-nowrap">
+                        {act.building_name
+                          ? (act.building_code ? `${act.building_code} — ${act.building_name}` : act.building_name)
+                          : <span className="text-slate-400 italic">{language === 'ru' ? 'проект' : language === 'uz' ? 'loyiha' : 'project-wide'}</span>}
+                      </td>
                       <td className="py-2 px-3 whitespace-nowrap">{act.period_from ? `${act.period_from} — ${act.period_to}` : (act.works_start_date ? `${act.works_start_date} — ${act.works_end_date}` : '—')}</td>
                       <td className="py-2 px-3">{act.subcontract_name || '—'}</td>
                       <td className="py-2 px-3 text-right font-medium whitespace-nowrap">{formatCurrency(act.amount_total_with_vat || act.amount_total || 0)}</td>
@@ -1531,7 +1562,7 @@ const FormsTab = ({ project }) => {
               <Select value={form.act_type || ''} onValueChange={v => setForm(f => ({ ...f, act_type: v }))}>
                 <SelectTrigger><SelectValue placeholder="Tanlang" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="ks2">Forma 2 (KS-2)</SelectItem>
+                  <SelectItem value="ks2">Forma 2</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1835,7 +1866,7 @@ const FormsTab = ({ project }) => {
       {/* Auto-generate KS-2 Modal */}
       <Dialog open={showAutoGenModal} onOpenChange={setShowAutoGenModal}>
         <DialogContent className="max-w-lg" aria-describedby={undefined}>
-          <DialogHeader><DialogTitle>{t('auto_generate_ks2') || 'KS-2 avtomatik yaratish'}</DialogTitle><DialogDescription className="sr-only">Auto KS-2</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>{t('auto_generate_ks2') || 'Forma 2 avtomatik yaratish'}</DialogTitle><DialogDescription className="sr-only">Auto Forma 2</DialogDescription></DialogHeader>
           <div className="space-y-4">
             <div><Label>{t('subcontractor') || 'Subpudratchi'}</Label>
               <Select value={autoGenForm.subcontract_id || 'own'} onValueChange={v => setAutoGenForm(f => ({ ...f, subcontract_id: v === 'own' ? '' : v }))}>
@@ -1843,6 +1874,21 @@ const FormsTab = ({ project }) => {
                 <SelectContent>
                   <SelectItem value="own">{language === 'ru' ? 'Без субподрядчика' : 'Subpudratchisiz'}</SelectItem>
                   {(subcontracts || []).map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name || s.partner_name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            {/* Building/Block selector — restricts the Forma 2 to one building's
+                estimate lines. Leave on "All buildings" to keep project-wide scope. */}
+            <div><Label>{language === 'ru' ? 'Здание / Блок' : language === 'uz' ? 'Bino / Blok' : 'Building / Block'}</Label>
+              <Select value={autoGenForm.building_id || 'all'} onValueChange={v => setAutoGenForm(f => ({ ...f, building_id: v === 'all' ? '' : v }))}>
+                <SelectTrigger><SelectValue placeholder={language === 'ru' ? 'Выберите здание' : language === 'uz' ? 'Binoni tanlang' : 'Select building'} /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{language === 'ru' ? 'Все здания (проект)' : language === 'uz' ? 'Barcha binolar (loyiha)' : 'All buildings (project-wide)'}</SelectItem>
+                  {(buildings || []).map(b => (
+                    <SelectItem key={b.id} value={String(b.id)}>
+                      {b.code ? `${b.code} — ${b.name}` : b.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -1899,7 +1945,7 @@ const FormsTab = ({ project }) => {
         <DialogContent className="max-w-3xl" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>{t('confirm_ks2') || "Ko'rib chiqing va tasdiqlang"}</DialogTitle>
-            <DialogDescription className="sr-only">Confirm KS-2 generation</DialogDescription>
+            <DialogDescription className="sr-only">Confirm Forma 2 generation</DialogDescription>
           </DialogHeader>
           {autoGenPreview && (
             <div className="space-y-4">
@@ -1984,15 +2030,29 @@ const FormsTab = ({ project }) => {
       {/* Generate Forma 3 (KS-3) Modal */}
       <Dialog open={showGenF3Modal} onOpenChange={setShowGenF3Modal}>
         <DialogContent className="max-w-lg" aria-describedby={undefined}>
-          <DialogHeader><DialogTitle>{t('gen_ks3') || 'KS-3 (Forma 3) yaratish'}</DialogTitle><DialogDescription className="sr-only">Generate KS-3</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>{t('gen_ks3') || 'Forma 3 yaratish'}</DialogTitle><DialogDescription className="sr-only">Generate Forma 3</DialogDescription></DialogHeader>
           <div className="space-y-4">
-            <p className="text-sm text-slate-500">{t('gen_ks3_desc') || "Imzolangan KS-2 aktlar asosida KS-3 hisoboti yaratiladi"}</p>
+            <p className="text-sm text-slate-500">{t('gen_ks3_desc') || "Imzolangan Forma 2 aktlar asosida Forma 3 hisoboti yaratiladi"}</p>
             <div><Label>{t('subcontractor') || 'Subpudratchi'}</Label>
               <Select value={genF3Form.subcontract_id || 'own'} onValueChange={v => setGenF3Form(f => ({ ...f, subcontract_id: v === 'own' ? '' : v }))}>
                 <SelectTrigger><SelectValue placeholder="Tanlang" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="own">{language === 'ru' ? 'Без субподрядчика' : 'Subpudratchisiz'}</SelectItem>
                   {(subcontracts || []).map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name || s.partner_name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            {/* Building/Block selector — restricts Forma 3 to Forma 2 acts of this building. */}
+            <div><Label>{language === 'ru' ? 'Здание / Блок' : language === 'uz' ? 'Bino / Blok' : 'Building / Block'}</Label>
+              <Select value={genF3Form.building_id || 'all'} onValueChange={v => setGenF3Form(f => ({ ...f, building_id: v === 'all' ? '' : v }))}>
+                <SelectTrigger><SelectValue placeholder={language === 'ru' ? 'Выберите здание' : language === 'uz' ? 'Binoni tanlang' : 'Select building'} /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{language === 'ru' ? 'Все здания (проект)' : language === 'uz' ? 'Barcha binolar (loyiha)' : 'All buildings (project-wide)'}</SelectItem>
+                  {(buildings || []).map(b => (
+                    <SelectItem key={b.id} value={String(b.id)}>
+                      {b.code ? `${b.code} — ${b.name}` : b.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

@@ -137,8 +137,8 @@ export default function Login() {
         <div className="login-card">
           <div className="login-card__header">
             <img
-              src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68d244cb8a392237a5acfbd9/a049d6898_Logo.png"
-              alt="Genix Logo"
+              src="/yuksalish-logo.png"
+              alt="Yuksalish Logo"
               className="login-card__logo"
             />
             <h1 className="login-card__title">{t('select_company')}</h1>
@@ -195,8 +195,8 @@ export default function Login() {
       <div className="login-card">
         <div className="login-card__header">
           <img
-            src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68d244cb8a392237a5acfbd9/a049d6898_Logo.png"
-            alt="Genix Logo"
+            src="/yuksalish-logo.png"
+            alt="Yuksalish Logo"
             className="login-card__logo"
           />
           <h1 className="login-card__title">{t('welcome_back')}</h1>
@@ -312,12 +312,6 @@ export default function Login() {
             </button>
           </form>
 
-          {backendAvailable && (
-            <p className="login-register">
-              {t('dont_have_account')}{' '}
-              <Link to="/register">{t('sign_up')}</Link>
-            </p>
-          )}
         </div>
       </div>
     </div>

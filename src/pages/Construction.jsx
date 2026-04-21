@@ -67,7 +67,8 @@ import {
   X,
   Image,
   Layers,
-  Scale
+  Scale,
+  Paperclip
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -2222,6 +2223,10 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                                   <Edit className="w-4 h-4 mr-2" />
                                   {t('edit') || 'Tahrirlash'}
                                 </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => openBuildingFiles(building)}>
+                                  <Paperclip className="w-4 h-4 mr-2" />
+                                  {t('files') || 'Fayllar'}
+                                </DropdownMenuItem>
                                 <DropdownMenuItem
                                   className="text-red-600"
                                   onClick={() => {
@@ -2280,6 +2285,22 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                           <p className="text-xs text-slate-500 mb-1">{t('progress') || 'Progress'}</p>
                           <Progress value={building.progress_percent || 0} className="h-2" />
                           <p className="text-xs text-right mt-1">{building.progress_percent || 0}%</p>
+                        </div>
+                        {/* Files button — opens the existing modal where users can
+                            upload new files and download/delete attached ones. */}
+                        <div className="mt-3 pt-3 border-t border-slate-100">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full justify-center text-slate-700 hover:text-slate-900"
+                            onClick={() => openBuildingFiles(building)}
+                          >
+                            <Paperclip className="w-4 h-4 mr-2" />
+                            {t('files') || 'Fayllar'}
+                            {typeof building.files_count === 'number' && building.files_count > 0 && (
+                              <Badge variant="secondary" className="ml-2">{building.files_count}</Badge>
+                            )}
+                          </Button>
                         </div>
                       </CardContent>
                     </Card>
@@ -4038,6 +4059,18 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                       >
                         <Eye className="w-4 h-4 text-slate-500" />
                       </Button>
+                      {/* Real download — uses <a download> to force save-as rather than
+                          opening the file inline in the browser. */}
+                      <a
+                        href={file.file_url}
+                        download={file.filename}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={t('download') || 'Yuklab olish'}
+                        className="inline-flex items-center justify-center h-8 w-8 rounded-md hover:bg-slate-100 text-slate-500"
+                      >
+                        <Download className="w-4 h-4" />
+                      </a>
                       <Button
                         variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-400 hover:text-red-600"
                         onClick={() => handleDeleteBuildingFile(file.id)}
@@ -4286,18 +4319,23 @@ export default function Construction() {
       project_type: '', building_type: '',
       total_area: '', floors_count: '', contract_amount: '', planned_start_date: '', planned_end_date: '',
       status: 'draft',
-      // Auto-fill client details from active company
-      client_name: activeCompany?.company_name || '',
-      client_phone: activeCompany?.phone || activeCompany?.director_phone || '',
+      // Client (Buyurtmachi / Customer) fields are left BLANK by default.
+      // In construction ERP the "client" is the external customer ordering
+      // the work — NOT the user's own organization. Pre-filling these with
+      // activeCompany.* caused projects to be saved with the contractor's
+      // own name as the client (see Forma 2 DALOLATNOMA bug reported by user).
+      // User enters the real client info explicitly.
+      client_name: '',
+      client_phone: '',
       client_contact: '',
-      client_address: activeCompany?.legal_address || '',
-      client_bank_name: activeCompany?.bank_name || '',
-      client_bank_account: activeCompany?.bank_account || '',
-      client_mfo: activeCompany?.bank_mfo || '',
-      client_stir: activeCompany?.tax_id || '',
-      client_okonh: activeCompany?.oked || '',
+      client_address: '',
+      client_bank_name: '',
+      client_bank_account: '',
+      client_mfo: '',
+      client_stir: '',
+      client_okonh: '',
       contract_number: '', object_full_name: '',
-      client_director_name: activeCompany?.director_name || '',
+      client_director_name: '',
       client_chief_accountant_name: '',
     });
     setEditingProject(null);

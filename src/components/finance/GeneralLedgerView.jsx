@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, ChevronDown, ChevronRight, Download, Loader2, Calendar } from "lucide-react";
+import { Search, ChevronDown, ChevronRight, Download, Loader2, Calendar, TrendingUp, TrendingDown, CheckCircle2, AlertCircle } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { format } from "date-fns";
 import { useLanguage } from "@/components/contexts/LanguageContext";
@@ -79,10 +79,18 @@ export default function GeneralLedgerView() {
 
   // Filter accounts
   const filteredAccounts = (ledgerData?.accounts || []).filter(acc => {
-    // Search filter
+    // Search filter — match against code and any of the localized names so users
+    // can search by whatever label they see on screen.
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      if (!acc.account_code.toLowerCase().includes(q) && !acc.account_name.toLowerCase().includes(q)) {
+      const haystack = [
+        acc.account_code || '',
+        acc.account_name || '',
+        acc.account_name_uz || '',
+        acc.account_name_en || '',
+        acc.account_name_ru || '',
+      ].map((s) => s.toLowerCase());
+      if (!haystack.some((h) => h.includes(q))) {
         return false;
       }
     }
@@ -94,11 +102,32 @@ export default function GeneralLedgerView() {
     return true;
   });
 
-  // Summary totals
-  const totals = filteredAccounts.reduce((sum, acc) => ({
-    totalDebit: sum.totalDebit + acc.total_debit,
-    totalCredit: sum.totalCredit + acc.total_credit,
-  }), { totalDebit: 0, totalCredit: 0 });
+  // Summary totals — include debit/credit closing balances (BHMS-style ledger,
+  // needed for the balance-integrity check at the bottom of the page).
+  const totals = filteredAccounts.reduce(
+    (sum, acc) => ({
+      totalOpening: sum.totalOpening + (acc.opening_balance || 0),
+      totalDebit: sum.totalDebit + (acc.total_debit || 0),
+      totalCredit: sum.totalCredit + (acc.total_credit || 0),
+      closingDebit: sum.closingDebit + (acc.closing_debit || 0),
+      closingCredit: sum.closingCredit + (acc.closing_credit || 0),
+    }),
+    { totalOpening: 0, totalDebit: 0, totalCredit: 0, closingDebit: 0, closingCredit: 0 },
+  );
+
+  // Balance-integrity check: in a properly-posted double-entry ledger the total
+  // debit closing balance should equal the total credit closing balance.
+  // Allow a 1-so'm tolerance to absorb rounding noise.
+  const balanceDelta = Math.abs((totals.closingDebit || 0) - (totals.closingCredit || 0));
+  const isBalanced = balanceDelta < 1;
+
+  // Pick the localized account name. Mirrors ChartOfAccounts.jsx's pattern so
+  // both screens stay consistent: Russian → name_ru, English → name_en, else
+  // fall back to name_uz, and ultimately to the legacy `name` column.
+  const localizedAccountName = (acc) =>
+    (language === 'ru' && acc.account_name_ru) ? acc.account_name_ru
+    : (language === 'en' && acc.account_name_en) ? acc.account_name_en
+    : (acc.account_name_uz || acc.account_name);
 
   const accountTypeLabel = (type) => {
     const labels = {
@@ -207,7 +236,46 @@ export default function GeneralLedgerView() {
 
       {/* Ledger Content */}
       {!isLoading && !error && ledgerData && (
-        <div className="space-y-2">
+        <div className="space-y-3">
+          {/* KPI strip — 4 cards, with the two new debit/credit-closing cards
+               outlined in brand colours and flagged "new" per the mockup. */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60">
+              <CardContent className="p-3">
+                <div className="text-xs text-slate-500">{t('total_debit_turnover') || "Jami debet (oborot)"}</div>
+                <div className="text-xl font-bold text-slate-700 tabular-nums">{formatCurrency(totals.totalDebit)}</div>
+              </CardContent>
+            </Card>
+            <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60">
+              <CardContent className="p-3">
+                <div className="text-xs text-slate-500">{t('total_credit_turnover') || "Jami kredit (oborot)"}</div>
+                <div className="text-xl font-bold text-slate-700 tabular-nums">{formatCurrency(totals.totalCredit)}</div>
+              </CardContent>
+            </Card>
+            <Card className="bg-blue-50/60 border-blue-300">
+              <CardContent className="p-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs text-blue-700">{t('closing_debit_balance') || "Debet qoldig'i"}</div>
+                  <Badge variant="outline" className="text-[10px] bg-blue-100 text-blue-700 border-blue-300">
+                    {t('new') || "yangi"}
+                  </Badge>
+                </div>
+                <div className="text-xl font-bold text-blue-700 tabular-nums">{formatCurrency(totals.closingDebit)}</div>
+              </CardContent>
+            </Card>
+            <Card className="bg-emerald-50/60 border-emerald-300">
+              <CardContent className="p-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs text-emerald-700">{t('closing_credit_balance') || "Kredit qoldig'i"}</div>
+                  <Badge variant="outline" className="text-[10px] bg-emerald-100 text-emerald-700 border-emerald-300">
+                    {t('new') || "yangi"}
+                  </Badge>
+                </div>
+                <div className="text-xl font-bold text-emerald-700 tabular-nums">{formatCurrency(totals.closingCredit)}</div>
+              </CardContent>
+            </Card>
+          </div>
+
           {/* Period info */}
           <div className="flex items-center justify-between px-1">
             <div className="flex items-center gap-2 text-sm text-slate-500">
@@ -218,13 +286,26 @@ export default function GeneralLedgerView() {
               <span className="text-slate-400">|</span>
               <span>{filteredAccounts.length} {t('accounts') || 'accounts'}</span>
             </div>
-            <div className="flex items-center gap-4 text-sm">
-              <span className="text-slate-500">
-                {t('total_debit') || 'Total Debit'}: <span className="font-semibold text-slate-700">{formatCurrency(totals.totalDebit)}</span>
+            {/* Balance-integrity check */}
+            <div className={`flex items-center gap-2 text-sm px-3 py-1.5 rounded-md border ${
+              isBalanced
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                : 'bg-red-50 border-red-200 text-red-700'
+            }`}>
+              {isBalanced
+                ? <CheckCircle2 className="w-4 h-4" />
+                : <AlertCircle className="w-4 h-4" />}
+              <span className="font-medium">
+                {t('balance_check') || "Balans tekshiruvi"}:
               </span>
-              <span className="text-slate-500">
-                {t('total_credit') || 'Total Credit'}: <span className="font-semibold text-slate-700">{formatCurrency(totals.totalCredit)}</span>
-              </span>
+              <span className="tabular-nums">{formatCurrency(totals.closingDebit)}</span>
+              <span className="font-semibold">{isBalanced ? '=' : '≠'}</span>
+              <span className="tabular-nums">{formatCurrency(totals.closingCredit)}</span>
+              {!isBalanced && (
+                <span className="text-xs">
+                  (Δ {formatCurrency(balanceDelta)})
+                </span>
+              )}
             </div>
           </div>
 
@@ -239,9 +320,15 @@ export default function GeneralLedgerView() {
                   <TableRow className="bg-slate-50/80">
                     <TableHead className="w-8"></TableHead>
                     <TableHead className="text-xs font-semibold">{t('account') || 'Account'}</TableHead>
-                    <TableHead className="w-[130px] text-right text-xs font-semibold">{t('opening') || 'Opening'}</TableHead>
-                    <TableHead className="w-[130px] text-right text-xs font-semibold">{t('debit') || 'Debit'}</TableHead>
-                    <TableHead className="w-[130px] text-right text-xs font-semibold">{t('credit') || 'Credit'}</TableHead>
+                    <TableHead className="w-[120px] text-right text-xs font-semibold">{t('opening') || 'Opening'}</TableHead>
+                    <TableHead className="w-[120px] text-right text-xs font-semibold">{t('debit_turnover') || 'Debit (turnover)'}</TableHead>
+                    <TableHead className="w-[120px] text-right text-xs font-semibold">{t('credit_turnover') || 'Credit (turnover)'}</TableHead>
+                    <TableHead className="w-[120px] text-right text-xs font-semibold bg-blue-50/60 text-blue-700">
+                      {t('closing_debit_balance') || "Debet qoldig'i"}
+                    </TableHead>
+                    <TableHead className="w-[120px] text-right text-xs font-semibold bg-emerald-50/60 text-emerald-700">
+                      {t('closing_credit_balance') || "Kredit qoldig'i"}
+                    </TableHead>
                     <TableHead className="w-[130px] text-right text-xs font-semibold">{t('closing') || 'Closing'}</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -270,7 +357,7 @@ export default function GeneralLedgerView() {
                           <TableCell className="py-3">
                             <div className="flex items-center gap-2">
                               <span className="font-mono text-sm text-slate-500">{acc.account_code}</span>
-                              <span className="font-medium text-slate-800">{acc.account_name}</span>
+                              <span className="font-medium text-slate-800">{localizedAccountName(acc)}</span>
                               {accType && (
                                 <Badge variant="outline" className={`text-xs ${accountTypeColor(accType)}`}>
                                   {accountTypeLabel(accType)}
@@ -292,6 +379,12 @@ export default function GeneralLedgerView() {
                           <TableCell className="text-right py-3 text-sm font-medium text-red-600">
                             {formatCurrency(acc.total_credit)}
                           </TableCell>
+                          <TableCell className="text-right py-3 text-sm font-semibold tabular-nums bg-blue-50/30 text-blue-700">
+                            {(acc.closing_debit || 0) > 0 ? formatCurrency(acc.closing_debit) : '—'}
+                          </TableCell>
+                          <TableCell className="text-right py-3 text-sm font-semibold tabular-nums bg-emerald-50/30 text-emerald-700">
+                            {(acc.closing_credit || 0) > 0 ? formatCurrency(acc.closing_credit) : '—'}
+                          </TableCell>
                           <TableCell className="text-right py-3 text-sm font-semibold">
                             {formatCurrency(acc.closing_balance)}
                           </TableCell>
@@ -303,7 +396,7 @@ export default function GeneralLedgerView() {
                             {/* Sub-header */}
                             <TableRow className="bg-slate-100/60">
                               <TableCell></TableCell>
-                              <TableCell colSpan={5} className="p-0">
+                              <TableCell colSpan={7} className="p-0">
                                 <Table>
                                   <TableHeader>
                                     <TableRow className="bg-slate-100/60 border-0">
@@ -371,6 +464,27 @@ export default function GeneralLedgerView() {
                       </React.Fragment>
                     );
                   })}
+                  {/* Grand totals row (Jami) — anchors the balance-integrity check */}
+                  <TableRow className="bg-slate-100 border-t-2 border-slate-300 font-semibold">
+                    <TableCell></TableCell>
+                    <TableCell className="py-3 text-sm">{t('total') || 'Jami'}</TableCell>
+                    <TableCell className="text-right py-3 text-sm tabular-nums">
+                      {formatCurrency(totals.totalOpening)}
+                    </TableCell>
+                    <TableCell className="text-right py-3 text-sm tabular-nums text-blue-700">
+                      {formatCurrency(totals.totalDebit)}
+                    </TableCell>
+                    <TableCell className="text-right py-3 text-sm tabular-nums text-red-700">
+                      {formatCurrency(totals.totalCredit)}
+                    </TableCell>
+                    <TableCell className="text-right py-3 text-sm tabular-nums bg-blue-100 text-blue-800">
+                      {formatCurrency(totals.closingDebit)}
+                    </TableCell>
+                    <TableCell className="text-right py-3 text-sm tabular-nums bg-emerald-100 text-emerald-800">
+                      {formatCurrency(totals.closingCredit)}
+                    </TableCell>
+                    <TableCell></TableCell>
+                  </TableRow>
                 </TableBody>
               </Table>
             </Card>

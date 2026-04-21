@@ -75,6 +75,9 @@ export default function TaxReports() {
   const [activeTab, setActiveTab] = useState('overview');
   const [isLoading, setIsLoading] = useState(false);
   const [summary, setSummary] = useState(null);
+  // Employee-taxes aggregation (migration 330) — loaded lazily when the tab is active
+  const [employeeTaxReport, setEmployeeTaxReport] = useState({ rows: [], total_employee: 0, total_employer: 0, total: 0 });
+  const [employeeTaxLoading, setEmployeeTaxLoading] = useState(false);
   const [periods, setPeriods] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [selectedPeriod, setSelectedPeriod] = useState(null);
@@ -124,7 +127,22 @@ export default function TaxReports() {
     if (activeTab === 'transactions') {
       loadTransactions();
     }
-  }, [activeTab]);
+    if (activeTab === 'employee-taxes') {
+      loadEmployeeTaxReport();
+    }
+  }, [activeTab, startDate, endDate]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const loadEmployeeTaxReport = async () => {
+    setEmployeeTaxLoading(true);
+    try {
+      const data = await taxReportsService.getEmployeeTaxReport(startDate, endDate);
+      setEmployeeTaxReport(data || { rows: [], total_employee: 0, total_employer: 0, total: 0 });
+    } catch (e) {
+      console.warn('Failed to load employee tax report', e);
+    } finally {
+      setEmployeeTaxLoading(false);
+    }
+  };
 
   const loadSummary = async () => {
     try {
@@ -432,6 +450,7 @@ export default function TaxReports() {
             <TabsTrigger value="overview">{t('overview') || 'Overview'}</TabsTrigger>
             <TabsTrigger value="periods">{t('report_periods') || 'Report Periods'}</TabsTrigger>
             <TabsTrigger value="transactions">{t('transactions') || 'Transactions'}</TabsTrigger>
+            <TabsTrigger value="employee-taxes">{t('employee_taxes') || 'Xodim soliqlari'}</TabsTrigger>
           </TabsList>
 
           <div className="flex gap-2">
@@ -734,6 +753,72 @@ export default function TaxReports() {
                   )}
                 </TableBody>
               </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Employee Taxes (migration 330) — per-tax breakdown across payroll entries */}
+        <TabsContent value="employee-taxes">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                {t('employee_taxes') || 'Xodim soliqlari'}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-3 gap-4 mb-4">
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">{t('employee_tax_total') || 'Xodimdan ushlab qolingan'}</div>
+                  <div className="text-lg font-semibold text-red-600">{formatCurrency(employeeTaxReport.total_employee || 0)}</div>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">{t('employer_tax_total') || 'Ish beruvchi xarajati'}</div>
+                  <div className="text-lg font-semibold text-amber-700">{formatCurrency(employeeTaxReport.total_employer || 0)}</div>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">{t('total') || 'Jami'}</div>
+                  <div className="text-lg font-semibold">{formatCurrency(employeeTaxReport.total || 0)}</div>
+                </div>
+              </div>
+
+              {employeeTaxLoading ? (
+                <div className="py-8 text-center text-muted-foreground">{t('loading') || 'Yuklanmoqda…'}</div>
+              ) : (employeeTaxReport.rows?.length || 0) === 0 ? (
+                <div className="py-8 text-center text-muted-foreground">
+                  {t('no_employee_tax_data') || "Tanlangan davr uchun ma'lumot topilmadi"}
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{t('code') || 'Kod'}</TableHead>
+                      <TableHead>{t('name') || 'Nomi'}</TableHead>
+                      <TableHead>{t('payer') || "To'lovchi"}</TableHead>
+                      <TableHead className="text-right">{t('entries') || 'Yozuvlar'}</TableHead>
+                      <TableHead className="text-right">{t('total_base') || "Baza summasi"}</TableHead>
+                      <TableHead className="text-right">{t('tax_amount') || 'Soliq summasi'}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(employeeTaxReport.rows || []).map((row) => (
+                      <TableRow key={`${row.tax_code}-${row.payer}`}>
+                        <TableCell className="font-mono text-xs">{row.tax_code}</TableCell>
+                        <TableCell>{row.tax_name}</TableCell>
+                        <TableCell>
+                          {row.payer === 'employer'
+                            ? <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">{t('payer_employer') || 'Employer'}</Badge>
+                            : <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">{t('payer_employee') || 'Employee'}</Badge>}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">{row.entry_count}</TableCell>
+                        <TableCell className="text-right tabular-nums">{formatCurrency(row.total_base)}</TableCell>
+                        <TableCell className={`text-right font-semibold tabular-nums ${row.payer === 'employer' ? 'text-amber-700' : 'text-red-600'}`}>
+                          {formatCurrency(row.total_amount)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

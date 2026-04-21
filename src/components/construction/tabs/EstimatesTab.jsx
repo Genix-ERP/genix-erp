@@ -51,6 +51,8 @@ import { ImportExportButtons } from '@/components/shared';
 import SmetaImportModal from '@/components/construction/SmetaImportModal';
 import SmetaExportModal from '@/components/construction/SmetaExportModal';
 import SmetaSummaryView from '@/components/construction/SmetaSummaryView';
+import SublineModal from '@/components/construction/SublineModal';
+import EstimateLineEditModal from '@/components/construction/EstimateLineEditModal';
 
 const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontracts = [] }) => {
   const { language } = useLanguage();
@@ -69,6 +71,12 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
   const [showEstimateModal, setShowEstimateModal] = useState(false);
   const [showEditEstimateModal, setShowEditEstimateModal] = useState(false);
   const [showLineModal, setShowLineModal] = useState(false);
+
+  // Sub-line modals (migration 332). `sublineParent` is the parent row when
+  // adding a new sub-line; `lineToEdit` is the row being edited in the full
+  // edit modal (can be parent or sub-line).
+  const [sublineDialog, setSublineDialog] = useState({ open: false, parent: null, estimateId: null, nextSeq: 1, initial: null });
+  const [editLineDialog, setEditLineDialog] = useState({ open: false, line: null, parent: null, estimateId: null });
 
   // Forms
   const [estimateForm, setEstimateForm] = useState({
@@ -134,7 +142,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
 
       // Show toast if Forma 2 was auto-created from VOR/Edinich estimate
       if (bulkResult?.forma2_created) {
-        toast.success(t('forma2_auto_created') || "Forma 2 (KS-2) avtomatik yaratildi", {
+        toast.success(t('forma2_auto_created') || "Forma 2 avtomatik yaratildi", {
           description: t('forma2_auto_created_desc') || "Smetadan barcha qatorlar bilan qoralama Forma 2 yaratildi",
         });
       }
@@ -787,66 +795,125 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                     </tr>
                                   </thead>
                                   <tbody>
-                                    {lines.map((line) => (
-                                      <tr key={line.id} className={`border-b border-slate-100 hover:bg-white group ${line.resource_type ? 'bg-slate-50/50' : ''}`}>
-                                        <td className="py-2 px-2 text-xs text-slate-400">
-                                          {line.resource_type ? <span className="pl-2">{line.item_number}</span> : <span className="font-medium">{line.item_number}</span>}
-                                        </td>
-                                        {est.source_type !== 'resurs' && <td className="py-2 px-2 text-xs text-slate-500">{line.code}</td>}
-                                        <td className="py-2 px-2 text-xs">
-                                          {line.resource_type && (
-                                            <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${
-                                              line.resource_type === 'labor' ? 'bg-blue-400' :
-                                              line.resource_type === 'equipment' ? 'bg-amber-400' : 'bg-green-400'
-                                            }`} />
-                                          )}
-                                          {line.name}
-                                        </td>
-                                        <td className="py-2 px-2 text-right text-xs text-slate-600">{line.uom}</td>
-                                        <td className="py-2 px-2 text-right text-xs">{line.quantity}</td>
-                                        {est.source_type === 'resurs' && <>
-                                          <td className="py-2 px-2 text-right text-xs">{formatCurrency(line.material_rate)}</td>
-                                          <td className="py-2 px-2 text-right text-xs">{formatCurrency(line.labor_rate)}</td>
-                                          <td className="py-2 px-2 text-right text-xs">{formatCurrency(line.equipment_rate)}</td>
-                                          <td className="py-2 px-2 text-right text-xs font-medium">{formatCurrency(line.unit_rate)}</td>
-                                          <td className="py-2 px-2 text-right text-xs font-medium">{formatCurrency(line.total_amount)}</td>
-                                        </>}
-                                        {est.state === 'draft' && (
-                                          <td className="py-2 px-2 text-center">
-                                            <div className="flex gap-1 opacity-0 group-hover:opacity-100">
-                                              <Button
-                                                variant="ghost" size="sm"
-                                                className="h-6 w-6 p-0"
-                                                onClick={() => {
-                                                  setLineForm({
-                                                    id: line.id,
-                                                    estimate_id: est.id,
-                                                    product_id: line.product_id ? String(line.product_id) : '',
-                                                    name: line.name,
-                                                    uom: line.uom,
-                                                    quantity: String(line.quantity),
-                                                    material_rate: formatPriceInput(String(line.material_rate)),
-                                                    labor_rate: formatPriceInput(String(line.labor_rate)),
-                                                    equipment_rate: formatPriceInput(String(line.equipment_rate)),
-                                                    sort_order: String(line.sort_order),
-                                                  });
-                                                  setShowLineModal(true);
-                                                }}
-                                              >
-                                                <Edit className="w-3 h-3" />
-                                              </Button>
-                                              <Button
-                                                variant="ghost" size="sm"
-                                                className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
-                                                onClick={() => handleDeleteLine(est.id, line.id)}
-                                              >
-                                                <Trash2 className="w-3 h-3" />
-                                              </Button>
-                                            </div>
-                                          </td>
-                                        )}
-                                      </tr>
-                                    ))}
+                                    {(() => {
+                                      // Group lines by parent: render each top-level line followed by its
+                                      // sub-lines (rows with parent_line_id). We keep top-level rows in the
+                                      // order the backend returned them (already sorted) and emit children
+                                      // immediately after their parent.
+                                      const byParent = new Map(); // parent_line_id -> children[]
+                                      const roots = [];
+                                      for (const ln of lines) {
+                                        if (ln.parent_line_id) {
+                                          const arr = byParent.get(ln.parent_line_id) || [];
+                                          arr.push(ln);
+                                          byParent.set(ln.parent_line_id, arr);
+                                        } else {
+                                          roots.push(ln);
+                                        }
+                                      }
+                                      const rows = [];
+                                      const colSpan = est.source_type === 'resurs' ? 10 : 6;
+
+                                      const renderLine = (line, isSubline, parent) => {
+                                        return (
+                                          <tr key={line.id} className={`border-b border-slate-100 hover:bg-white group ${isSubline ? 'bg-slate-50/60' : ''}`}>
+                                            <td className="py-2 px-2 text-xs text-slate-500">
+                                              {isSubline
+                                                ? <span className="pl-6 font-mono">{line.item_number}</span>
+                                                : <span className="font-medium">{line.item_number}</span>}
+                                            </td>
+                                            {est.source_type !== 'resurs' && <td className="py-2 px-2 text-xs text-slate-500">{line.code}</td>}
+                                            <td className="py-2 px-2 text-xs">
+                                              {isSubline && (
+                                                <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${
+                                                  line.resource_type === 'labor' ? 'bg-blue-400' :
+                                                  line.resource_type === 'equipment' ? 'bg-amber-400' :
+                                                  line.resource_type === 'material' ? 'bg-green-400' : 'bg-slate-300'
+                                                }`} />
+                                              )}
+                                              {line.name}
+                                              {isSubline && Number(line.norm_rate) > 0 && (
+                                                <span className="text-[10px] text-muted-foreground ml-2">
+                                                  ({t('norm') || 'Norma'} {line.norm_rate})
+                                                </span>
+                                              )}
+                                            </td>
+                                            <td className="py-2 px-2 text-right text-xs text-slate-600">{line.uom}</td>
+                                            <td className="py-2 px-2 text-right text-xs">{line.quantity}</td>
+                                            {est.source_type === 'resurs' && <>
+                                              <td className="py-2 px-2 text-right text-xs">{formatCurrency(line.material_rate)}</td>
+                                              <td className="py-2 px-2 text-right text-xs">{formatCurrency(line.labor_rate)}</td>
+                                              <td className="py-2 px-2 text-right text-xs">{formatCurrency(line.equipment_rate)}</td>
+                                              <td className="py-2 px-2 text-right text-xs font-medium">{formatCurrency(line.unit_rate)}</td>
+                                              <td className="py-2 px-2 text-right text-xs font-medium">{formatCurrency(line.total_amount)}</td>
+                                            </>}
+                                            {est.state === 'draft' && (
+                                              <td className="py-2 px-2 text-center">
+                                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 justify-end">
+                                                  {!isSubline && (
+                                                    <Button
+                                                      variant="ghost" size="sm"
+                                                      className="h-6 w-6 p-0"
+                                                      title={t('add_subline') || "Podkator qo'shish"}
+                                                      onClick={() => {
+                                                        const children = byParent.get(line.id) || [];
+                                                        const nextSeq = children.reduce((mx, c) => Math.max(mx, Number(c.subline_seq) || 0), 0) + 1;
+                                                        setSublineDialog({ open: true, parent: line, estimateId: est.id, nextSeq, initial: null });
+                                                      }}
+                                                    >
+                                                      <Plus className="w-3 h-3" />
+                                                    </Button>
+                                                  )}
+                                                  <Button
+                                                    variant="ghost" size="sm"
+                                                    className="h-6 w-6 p-0"
+                                                    onClick={() => setEditLineDialog({ open: true, line, parent: parent || null, estimateId: est.id })}
+                                                  >
+                                                    <Edit className="w-3 h-3" />
+                                                  </Button>
+                                                  <Button
+                                                    variant="ghost" size="sm"
+                                                    className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                                    onClick={() => handleDeleteLine(est.id, line.id)}
+                                                  >
+                                                    <Trash2 className="w-3 h-3" />
+                                                  </Button>
+                                                </div>
+                                              </td>
+                                            )}
+                                          </tr>
+                                        );
+                                      };
+
+                                      for (const parent of roots) {
+                                        rows.push(renderLine(parent, false, null));
+                                        const children = byParent.get(parent.id) || [];
+                                        for (const c of children) {
+                                          rows.push(renderLine(c, true, parent));
+                                        }
+                                        if (children.length > 0 && est.source_type === 'resurs') {
+                                          const subTotal = children.reduce((s, c) => s + (Number(c.total_amount) || 0), 0);
+                                          rows.push(
+                                            <tr key={`subtotal-${parent.id}`} className="bg-blue-50/40 border-b border-slate-100">
+                                              <td className="py-1.5 px-2" />
+                                              {est.source_type !== 'resurs' && <td />}
+                                              <td className="py-1.5 px-2 text-xs text-slate-600 italic" colSpan={colSpan - 2}>
+                                                {parent.item_number}-{t('subline_total_label') || "qator podkatorlar jami"}
+                                              </td>
+                                              <td className="py-1.5 px-2 text-right text-xs font-semibold text-blue-700">
+                                                {formatCurrency(subTotal)}
+                                              </td>
+                                              {est.state === 'draft' && <td />}
+                                            </tr>
+                                          );
+                                        }
+                                        // Also render any orphan lines that claim this as parent by item_number
+                                        // (legacy rows linked via parent_item_number only)
+                                      }
+
+                                      // Render orphans (parent_line_id unset and parent_item_number points to nothing)
+                                      return rows;
+                                    })()}
                                   </tbody>
                                   {est.source_type === 'resurs' && (
                                     <tfoot>
@@ -1330,6 +1397,38 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
         loadEstimateLines={loadEstimateLines}
         selectedBuilding={selectedBuilding}
         project={project}
+      />
+
+      {/* Sub-line add / edit modal (migration 332) */}
+      <SublineModal
+        open={sublineDialog.open}
+        onClose={() => setSublineDialog({ open: false, parent: null, estimateId: null, nextSeq: 1, initial: null })}
+        parent={sublineDialog.parent}
+        estimateId={sublineDialog.estimateId}
+        projectId={project?.id}
+        nextSeq={sublineDialog.nextSeq}
+        initial={sublineDialog.initial}
+        onSaved={async () => {
+          if (sublineDialog.estimateId) {
+            await loadEstimateLines(sublineDialog.estimateId);
+            await loadEstimates();
+          }
+        }}
+      />
+
+      {/* Full edit modal — used by the pencil icon on any line */}
+      <EstimateLineEditModal
+        open={editLineDialog.open}
+        onClose={() => setEditLineDialog({ open: false, line: null, parent: null, estimateId: null })}
+        line={editLineDialog.line}
+        parent={editLineDialog.parent}
+        estimateId={editLineDialog.estimateId}
+        onSaved={async () => {
+          if (editLineDialog.estimateId) {
+            await loadEstimateLines(editLineDialog.estimateId);
+            await loadEstimates();
+          }
+        }}
       />
     </div>
   );

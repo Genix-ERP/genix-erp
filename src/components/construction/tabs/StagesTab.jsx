@@ -9,9 +9,12 @@ import { NumberInput } from '@/components/ui/number-input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from '@/components/ui/command';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Plus, Edit, Trash2, Layers, X, ChevronDown, ChevronRight, ChevronLeft, Package, Truck, Users, ShieldCheck, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { Plus, Edit, Trash2, Layers, X, ChevronDown, ChevronsUpDown, Check, ChevronRight, ChevronLeft, Package, Truck, Users, ShieldCheck, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -85,6 +88,9 @@ const StagesTab = ({ project }) => {
   const [showMaterialModal, setShowMaterialModal] = useState(false);
   const [materialSubStageId, setMaterialSubStageId] = useState(null);
   const [materialForm, setMaterialForm] = useState({ product_id: '', product_name: '', uom: 'шт', quantity: '', unit_cost: '' });
+  // Searchable product picker state
+  const [productPickerOpen, setProductPickerOpen] = useState(false);
+  const [productSearch, setProductSearch] = useState('');
   const [inventoryProducts, setInventoryProducts] = useState([]);
   // Estimate resources for equipment/employee tabs
   const [estimateEquipmentResources, setEstimateEquipmentResources] = useState([]);
@@ -159,25 +165,55 @@ const StagesTab = ({ project }) => {
     }
   };
 
-  // Load inventory products + estimate resources for dropdowns
+  // Load inventory products + estimate resources for dropdowns.
+  // We fetch ALL products (so products that have never been received into a
+  // warehouse still appear with Qoldiq = 0), then overlay stock balances from
+  // the inventory table where available. The inventory-only query used to
+  // miss ~1300 of the catalog's 1340 items.
   useEffect(() => {
     if (!project?.id) return;
-    // Load inventory products (deduplicate by product_id, aggregate stock)
-    inventoryService.listInventory({ limit: 500 })
-      .then(d => {
-        const map = {};
-        (d || []).forEach(item => {
-          if (map[item.product_id]) {
-            map[item.product_id].quantity_on_hand += item.quantity_on_hand || 0;
-            map[item.product_id].quantity_available += item.quantity_available || 0;
-            map[item.product_id].quantity_reserved += item.quantity_reserved || 0;
-          } else {
-            map[item.product_id] = { ...item };
-          }
-        });
-        setInventoryProducts(Object.values(map));
-      })
-      .catch(() => setInventoryProducts([]));
+
+    Promise.all([
+      inventoryService.listProducts({ limit: 5000 }).catch(() => []),
+      inventoryService.listInventory({ limit: 5000 }).catch(() => []),
+    ]).then(([products, inv]) => {
+      // Aggregate inventory rows by product_id across warehouses
+      const stockByProduct = {};
+      (inv || []).forEach(item => {
+        const pid = item.product_id;
+        if (!pid) return;
+        if (stockByProduct[pid]) {
+          stockByProduct[pid].quantity_on_hand += item.quantity_on_hand || 0;
+          stockByProduct[pid].quantity_available += item.quantity_available || 0;
+          stockByProduct[pid].quantity_reserved += item.quantity_reserved || 0;
+        } else {
+          stockByProduct[pid] = {
+            quantity_on_hand: item.quantity_on_hand || 0,
+            quantity_available: item.quantity_available || 0,
+            quantity_reserved: item.quantity_reserved || 0,
+            unit_cost: item.unit_cost,
+            uom: item.uom,
+          };
+        }
+      });
+
+      // Build rows from the product catalog, overlaying stock where known
+      const rows = (products || []).map(p => {
+        const stk = stockByProduct[p.id] || {};
+        return {
+          product_id: p.id,
+          product_name: p.name,
+          uom: stk.uom || p.unit_code || p.unit?.code || 'шт',
+          unit_cost: stk.unit_cost ?? p.cost_price ?? 0,
+          quantity_on_hand: stk.quantity_on_hand ?? 0,
+          quantity_available: stk.quantity_available ?? 0,
+          quantity_reserved: stk.quantity_reserved ?? 0,
+        };
+      });
+
+      rows.sort((a, b) => (a.product_name || '').localeCompare(b.product_name || ''));
+      setInventoryProducts(rows);
+    }).catch(() => setInventoryProducts([]));
     // Load estimate resources by type for equipment/employee dropdowns
     constructionService.listEstimateResources(project.id, 'equipment')
       .then(d => setEstimateEquipmentResources(d || []))
@@ -1149,31 +1185,117 @@ const StagesTab = ({ project }) => {
             <div className="space-y-4">
               <div>
                 <Label>{t('select_product') || 'Mahsulot tanlang'}</Label>
-                <Select
-                  value={materialForm.product_id || undefined}
-                  onValueChange={(val) => {
-                    const p = inventoryProducts.find(ip => ip.product_id === val);
-                    if (p) {
-                      setMaterialForm(f => ({
-                        ...f,
-                        product_id: p.product_id,
-                        product_name: p.product_name,
-                        uom: 'шт',
-                        unit_cost: p.unit_cost ? String(p.unit_cost) : '',
-                      }));
-                    }
-                  }}
-                >
-                  <SelectTrigger><SelectValue placeholder={t('select_product') || 'Mahsulot tanlang'} /></SelectTrigger>
-                  <SelectContent className="max-h-[300px]">
-                    {inventoryProducts.map(p => (
-                      <SelectItem key={p.product_id} value={p.product_id}>
-                        {p.product_name} — {t('stock') || 'Zaxira'}: {p.quantity_available ?? p.quantity_on_hand ?? 0}
-                        {p.unit_cost ? ` (${formatCurrency(p.unit_cost)})` : ''}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {/* Searchable product picker: client-side filter across all loaded
+                    products (the catalog is fully in inventoryProducts). Popover is
+                    width-matched to the trigger so it never overflows the modal. */}
+                <Popover open={productPickerOpen} onOpenChange={setProductPickerOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={productPickerOpen}
+                      className="w-full justify-between font-normal h-9 px-3 text-sm"
+                    >
+                      <span className="truncate">
+                        {materialForm.product_name
+                          ? materialForm.product_name
+                          : (t('select_product') || 'Mahsulot tanlang')}
+                      </span>
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  {/* onWheel.stopPropagation stops the parent Dialog from
+                      eating wheel events — without it the inner CommandList
+                      scrollbar is visible but won't scroll. */}
+                  <PopoverContent
+                    className="p-0"
+                    align="start"
+                    sideOffset={4}
+                    style={{ width: 'var(--radix-popover-trigger-width)' }}
+                    onWheel={(e) => e.stopPropagation()}
+                    onTouchMove={(e) => e.stopPropagation()}
+                  >
+                    {(() => {
+                      const q = productSearch.trim().toLowerCase();
+                      const filtered = q
+                        ? inventoryProducts.filter(p =>
+                            (p.product_name || '').toLowerCase().includes(q))
+                        : inventoryProducts;
+                      const shown = filtered.slice(0, 200);
+                      const hiddenCount = filtered.length - shown.length;
+
+                      return (
+                        <Command shouldFilter={false}>
+                          <CommandInput
+                            placeholder={t('search_product') || 'Qidirish...'}
+                            value={productSearch}
+                            onValueChange={setProductSearch}
+                          />
+                          <CommandList className="max-h-[280px] overflow-y-auto">
+                            <CommandEmpty>{t('not_found') || 'Topilmadi'}</CommandEmpty>
+                            {filtered.length > 0 && (
+                              <CommandGroup>
+                                {shown.map(p => {
+                                  const stock = p.quantity_available ?? p.quantity_on_hand ?? 0;
+                                  const isSelected = materialForm.product_id === p.product_id;
+                                  return (
+                                    <CommandItem
+                                      key={p.product_id}
+                                      value={`${p.product_name} ${p.product_id}`}
+                                      onSelect={() => {
+                                        setMaterialForm(f => ({
+                                          ...f,
+                                          product_id: p.product_id,
+                                          product_name: p.product_name,
+                                          uom: p.uom || 'шт',
+                                          unit_cost: p.unit_cost ? String(p.unit_cost) : '',
+                                        }));
+                                        setProductPickerOpen(false);
+                                        setProductSearch('');
+                                      }}
+                                    >
+                                      <Check
+                                        className={cn(
+                                          'mr-2 h-4 w-4 shrink-0',
+                                          isSelected ? 'opacity-100' : 'opacity-0'
+                                        )}
+                                      />
+                                      <div className="flex-1 min-w-0">
+                                        <div className="truncate text-sm">{p.product_name}</div>
+                                        <div className="text-xs text-slate-500 flex gap-2">
+                                          <span
+                                            className={cn(
+                                              stock < 0 && 'text-red-600',
+                                              stock === 0 && 'text-amber-600',
+                                              stock > 0 && 'text-emerald-600'
+                                            )}
+                                          >
+                                            {t('stock') || 'Qoldiq'}: {stock}
+                                          </span>
+                                          {p.unit_cost ? (
+                                            <span>· {formatCurrency(p.unit_cost)}</span>
+                                          ) : null}
+                                        </div>
+                                      </div>
+                                    </CommandItem>
+                                  );
+                                })}
+                              </CommandGroup>
+                            )}
+                          </CommandList>
+                          {hiddenCount > 0 && (
+                            <div className="px-3 py-2 text-xs text-slate-500 border-t">
+                              {(t('showing_first') || 'Ko\'rsatildi')}: {shown.length} / {filtered.length}.
+                              {' '}
+                              {(t('refine_search') || 'Aniqroq qidiring')}
+                            </div>
+                          )}
+                        </Command>
+                      );
+                    })()}
+                  </PopoverContent>
+                </Popover>
                 {materialForm.product_id && (
                   <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
                     <ShieldCheck className="w-3 h-3" />

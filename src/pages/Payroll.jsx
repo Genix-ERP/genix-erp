@@ -10,7 +10,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Search, DollarSign, Users, Calculator, TrendingUp, Brain, Download, AlertTriangle, CheckCircle, Target, Lightbulb, Edit2, Trash2, CreditCard, UserCircle, Printer } from 'lucide-react';
+import { Plus, Search, DollarSign, Users, Calculator, TrendingUp, Brain, Download, AlertTriangle, CheckCircle, Target, Lightbulb, Edit2, Trash2, CreditCard, UserCircle, Printer, Settings as SettingsIcon, History, FileDown, Loader2, X, RotateCcw, Percent } from 'lucide-react';
+import { hrService } from '@/api/services/hr';
+import { employeeTaxesService } from '@/api/services/employeeTaxes';
+import { toast } from 'sonner';
 import EmployeeLoans from '@/components/payroll/EmployeeLoans';
 import EmployeePortal from '@/components/payroll/EmployeePortal';
 import { format } from 'date-fns';
@@ -58,6 +61,18 @@ export default function Payroll() {
   const [activeLoans, setActiveLoans] = useState([]);
   const [loanDeductions, setLoanDeductions] = useState({}); // { [loanId]: amount }
 
+  // Employee-tax catalog (migration 330). Loaded when the payroll-create modal
+  // opens. `excludedTaxIds` is the set the user has X-ed out for this entry.
+  const [taxCatalog, setTaxCatalog] = useState([]);
+  const [excludedTaxIds, setExcludedTaxIds] = useState([]);
+  const [taxPreview, setTaxPreview] = useState({
+    applied: [],
+    total_employee: 0,
+    total_employer: 0,
+    gross: 0,
+    net: 0,
+  });
+
   const [newPayroll, setNewPayroll] = useState({
     payroll_number: '',
     employee_id: '',
@@ -71,6 +86,46 @@ export default function Payroll() {
     bonuses: 0,
     allowances: 0
   });
+
+  // Load the employee-tax catalog once — used by the create-payroll modal and
+  // the edit modal's tax picker. Only active taxes are shown (settings page
+  // controls which ones are enabled). Placed after the state declarations it
+  // depends on to avoid a temporal dead zone error.
+  useEffect(() => {
+    let alive = true;
+    employeeTaxesService
+      .list({ onlyActive: true })
+      .then((rows) => { if (alive) setTaxCatalog(rows || []); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  // Recompute the tax preview whenever the salary inputs or exclusion set changes.
+  useEffect(() => {
+    if (!showCreateModal) return;
+    if (!taxCatalog.length) {
+      setTaxPreview({ applied: [], total_employee: 0, total_employer: 0, gross: 0, net: 0 });
+      return;
+    }
+    const base = Number(newPayroll.basic_salary) || 0;
+    const overtimeAmount = (Number(newPayroll.overtime_hours) || 0) * (base / (Number(newPayroll.monthly_hours) || 208) * 1.5);
+    const bonus = Number(newPayroll.bonuses) || 0;
+    const allowances = Number(newPayroll.allowances) || 0;
+    let cancelled = false;
+    employeeTaxesService
+      .preview({
+        baseSalary: base,
+        overtimeAmount,
+        bonus,
+        allowances,
+        excludedTaxIds,
+      })
+      .then((res) => { if (!cancelled && res) setTaxPreview(res); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [showCreateModal, taxCatalog, excludedTaxIds,
+      newPayroll.basic_salary, newPayroll.overtime_hours,
+      newPayroll.monthly_hours, newPayroll.bonuses, newPayroll.allowances]);
 
   useEffect(() => {
     let filtered = payrolls;
@@ -195,6 +250,7 @@ export default function Payroll() {
       allowances: parseFloat(newPayroll.allowances),
       ...calculated,
       deduction_percent: deductionPercent,
+      excluded_tax_ids: excludedTaxIds, // migration 330: opt-out list per entry
       status: 'calculated',
       payment_method: 'bank_transfer'
     };
@@ -269,35 +325,164 @@ export default function Payroll() {
     setPayingPayrollId(null);
   };
 
-  const handleEditPayroll = (payroll) => {
+  // TT §2.3: auto-create payroll for current month. Creates one period with an
+  // entry per active employee, using the tenant's advance_percent setting.
+  const [autoCreating, setAutoCreating] = useState(false);
+  const handleAutoCreateCurrentMonth = async () => {
+    setAutoCreating(true);
+    try {
+      const r = await hrService.getOrCreateCurrentMonthPayroll();
+      if (r?.newly_created) {
+        toast.success(t('payroll_auto_created') || "Joriy oy qaydnomasi yaratildi");
+      } else {
+        toast.info(t('payroll_already_exists') || "Joriy oy qaydnomasi allaqachon mavjud");
+      }
+      // Refresh list — the existing load function name varies; try a couple.
+      if (typeof loadPayrolls === 'function') { await loadPayrolls(); }
+      else if (typeof loadData === 'function') { await loadData(); }
+      else { window.location.reload(); }
+    } catch (e) {
+      toast.error(e?.response?.data?.message || e?.response?.data?.error?.message
+        || t('error_occurred') || 'Xatolik');
+    } finally {
+      setAutoCreating(false);
+    }
+  };
+
+  // TT §2.4: toggle advance/remainder paid flag with day-of-month.
+  // When marking as paid, open an in-app Dialog so the user can pick the day
+  // (leave blank = today, clamped server-side). Unchecking clears flag + day
+  // immediately without prompting.
+  const [paidDialog, setPaidDialog] = useState({
+    open: false,
+    kind: null,       // 'advance' | 'remainder'
+    entry: null,
+    dayInput: '',
+    saving: false,
+  });
+
+  const toggleTTPaid = async (entry, kind) => {
+    const isPaid = kind === 'advance' ? !!entry.advance_paid : !!entry.remainder_paid;
+    if (isPaid) {
+      // Uncheck — no prompt, just clear.
+      try {
+        const fn = kind === 'advance' ? hrService.markAdvancePaid : hrService.markRemainderPaid;
+        const result = await fn(entry.id, { paid: false, day: null });
+        setFilteredPayrolls((prev) => prev.map((p) => (p.id === entry.id ? { ...p, ...result } : p)));
+        toast.success(t('saved') || 'Saqlandi');
+      } catch (e) {
+        toast.error(e?.response?.data?.message || t('error_occurred') || 'Xatolik');
+      }
+      return;
+    }
+    // Marking as paid — open the day-picker dialog.
+    const suggested = String(new Date().getDate()); // today
+    setPaidDialog({ open: true, kind, entry, dayInput: suggested, saving: false });
+  };
+
+  const submitPaidDialog = async () => {
+    const { kind, entry, dayInput } = paidDialog;
+    if (!entry || !kind) return;
+    let day = null;
+    const trimmed = (dayInput || '').trim();
+    if (trimmed !== '') {
+      const n = parseInt(trimmed, 10);
+      if (Number.isNaN(n) || n < 1 || n > 31) {
+        toast.error(t('invalid_day_1_31') || '1 dan 31 gacha son kiriting');
+        return;
+      }
+      day = n;
+    }
+    setPaidDialog((d) => ({ ...d, saving: true }));
+    try {
+      const fn = kind === 'advance' ? hrService.markAdvancePaid : hrService.markRemainderPaid;
+      const result = await fn(entry.id, { paid: true, day });
+      setFilteredPayrolls((prev) => prev.map((p) => (p.id === entry.id ? { ...p, ...result } : p)));
+      toast.success(t('saved') || 'Saqlandi');
+      setPaidDialog({ open: false, kind: null, entry: null, dayInput: '', saving: false });
+    } catch (e) {
+      toast.error(e?.response?.data?.message || t('error_occurred') || 'Xatolik');
+      setPaidDialog((d) => ({ ...d, saving: false }));
+    }
+  };
+
+  const handleEditPayroll = async (payroll) => {
+    // `payroll` here is a PayrollPeriod. The real numeric fields live on the
+    // PayrollEntry rows under it. Fetch them before opening the modal so the
+    // form shows the actual values instead of zeros.
+    let firstEntry = null;
+    try {
+      const entries = await hrService.listPayrollEntries(payroll.id);
+      if (Array.isArray(entries) && entries.length > 0) {
+        firstEntry = entries[0];
+      }
+    } catch (e) {
+      // Non-fatal — we'll fall back to zeros below. Show a soft warning only.
+      console.warn('Failed to load payroll entries for editing', e);
+    }
+
     setEditPayroll({
       ...payroll,
-      basic_salary: payroll.basic_salary || 0,
-      overtime_hours: payroll.overtime_hours || 0,
+      entry_id: firstEntry?.id || null,
+      employee_name: firstEntry?.employee_name || payroll.employee_name || '',
+      basic_salary: firstEntry?.base_salary ?? payroll.basic_salary ?? 0,
+      overtime_hours: firstEntry?.overtime_hours ?? payroll.overtime_hours ?? 0,
+      overtime_amount: firstEntry?.overtime_amount ?? 0,
       monthly_hours: payroll.monthly_hours || 208,
-      bonuses: payroll.bonuses || 0,
-      allowances: payroll.allowances || 0
+      bonuses: firstEntry?.bonus ?? payroll.bonuses ?? 0,
+      allowances: firstEntry?.allowances ?? payroll.allowances ?? 0,
+      income_tax: firstEntry?.income_tax ?? 0,
+      social_security: firstEntry?.social_security ?? 0,
+      pension: firstEntry?.pension ?? 0,
+      other_deductions: firstEntry?.other_deductions ?? 0,
     });
     setShowEditModal(true);
   };
 
-  const handleUpdatePayroll = () => {
+  const handleUpdatePayroll = async () => {
     if (!editPayroll) return;
 
     const calculated = calculatePayroll(editPayroll);
 
-    updatePayroll(editPayroll.id, {
-      employee_name: editPayroll.employee_name,
-      pay_period_start: editPayroll.pay_period_start,
-      pay_period_end: editPayroll.pay_period_end,
-      payment_date: editPayroll.payment_date,
-      basic_salary: parseFloat(editPayroll.basic_salary),
-      overtime_hours: parseFloat(editPayroll.overtime_hours),
-      bonuses: parseFloat(editPayroll.bonuses),
-      allowances: parseFloat(editPayroll.allowances),
-      ...calculated,
-      status: editPayroll.status
-    });
+    try {
+      // 1) Save period-level fields (dates, status, notes) through the context
+      await updatePayroll(editPayroll.id, {
+        employee_name: editPayroll.employee_name,
+        pay_period_start: editPayroll.pay_period_start,
+        pay_period_end: editPayroll.pay_period_end,
+        payment_date: editPayroll.payment_date,
+        basic_salary: parseFloat(editPayroll.basic_salary),
+        overtime_hours: parseFloat(editPayroll.overtime_hours),
+        bonuses: parseFloat(editPayroll.bonuses),
+        allowances: parseFloat(editPayroll.allowances),
+        ...calculated,
+        status: editPayroll.status,
+      });
+
+      // 2) Save entry-level numeric fields (base_salary, bonus, etc.)
+      if (editPayroll.entry_id) {
+        await hrService.updatePayrollEntry(editPayroll.id, editPayroll.entry_id, {
+          base_salary: parseFloat(editPayroll.basic_salary) || 0,
+          overtime_hours: parseFloat(editPayroll.overtime_hours) || 0,
+          overtime_amount: parseFloat(editPayroll.overtime_amount) || 0,
+          bonus: parseFloat(editPayroll.bonuses) || 0,
+          allowances: parseFloat(editPayroll.allowances) || 0,
+          income_tax: parseFloat(editPayroll.income_tax) || 0,
+          social_security: parseFloat(editPayroll.social_security) || 0,
+          pension: parseFloat(editPayroll.pension) || 0,
+          other_deductions: parseFloat(editPayroll.other_deductions) || 0,
+          status: editPayroll.status,
+        });
+      }
+
+      // 3) Refresh list so the updated totals (recomputed server-side) are shown
+      if (typeof refreshData === 'function') {
+        refreshData();
+      }
+    } catch (e) {
+      toast.error(e?.response?.data?.message || t('error_occurred') || 'Xatolik');
+      return;
+    }
 
     setShowEditModal(false);
     setEditPayroll(null);
@@ -428,7 +613,11 @@ export default function Payroll() {
         ? `for ${monthName} ${yearNum}`
         : `${yearNum}-yil ${monthName} oyi uchun`;
 
-    const advancePercent = 40;
+    // Prefer the per-row snapshot from the backend (TT §2.3.2). Fallback to 40
+    // only if the legacy row has no recorded percent — keeps pre-migration
+    // payrolls printable.
+    const firstRow = payrollsToShow[0] || {};
+    const advancePercent = firstRow.advance_percent_used || 40;
     const today = format(new Date(), 'dd.MM.yyyy');
     const currencyLabel = language === 'ru' ? 'сум (UZS)' : language === 'en' ? 'UZS' : "so\u2018m (UZS)";
 
@@ -438,17 +627,29 @@ export default function Payroll() {
     let totalRemainder = 0;
 
     const rowsHtml = payrollsToShow.map((p, i) => {
-      const salary = p.gross_pay || p.basic_salary || 0;
-      const advance = Math.round(salary * advancePercent / 100);
-      const remainder = salary - advance;
+      const salary = p.gross_pay || p.basic_salary || p.base_salary || 0;
+      // Prefer the server snapshot. Fallback to on-the-fly compute for legacy rows.
+      const advance = (p.advance_amount != null && p.advance_amount > 0)
+        ? p.advance_amount
+        : Math.round(salary * advancePercent / 100);
+      const remainder = (p.remainder_amount != null && p.remainder_amount > 0)
+        ? p.remainder_amount
+        : (salary - advance);
       totalSalary += salary;
       totalAdvance += advance;
       totalRemainder += remainder;
 
+      // TT §2.4: day of month actually paid. Empty cell when not yet paid.
+      const advanceDay = p.advance_paid_day ? String(p.advance_paid_day) : '';
+      const remainderDay = p.remainder_paid_day ? String(p.remainder_paid_day) : '';
+
+      // Prefer the position snapshot so the print matches what the period was
+      // generated with, even if the employee record has since been edited (TT §2.1).
       const emp = employees.find(e => e.id === p.employee_id)
         || employees.find(e => e.full_name === p.employee_name)
         || employees.find(e => `${e.first_name} ${e.last_name}` === p.employee_name);
-      const position = emp?.job_position_name || emp?.job_title || emp?.position || '-';
+      const position = p.position_snapshot
+        || emp?.job_position_name || emp?.job_title || emp?.position || '-';
 
       return `
         <tr>
@@ -457,9 +658,9 @@ export default function Payroll() {
           <td class="pos">${position}</td>
           <td class="r">${formatCurrency(salary)}</td>
           <td class="r">${formatCurrency(advance)}</td>
-          <td class="day-cell c"><b>15</b></td>
+          <td class="day-cell c"><b>${advanceDay}</b></td>
           <td class="r">${formatCurrency(remainder)}</td>
-          <td class="day-cell c"><b>30</b></td>
+          <td class="day-cell c"><b>${remainderDay}</b></td>
           <td class="sig"></td>
         </tr>
       `;
@@ -638,7 +839,9 @@ export default function Payroll() {
         ? `for ${monthName} ${yearNum}`
         : `${yearNum}-yil ${monthName} oyi uchun`;
 
-    const advancePercent = 40;
+    // TT §2.3.2 / §2.4: prefer server-snapshot advance percent + actual paid days
+    const firstRow = payrollsToShow[0] || {};
+    const advancePercent = firstRow.advance_percent_used || 40;
     const today = format(new Date(), 'dd.MM.yyyy');
     const currencyLabel = language === 'ru' ? 'сум (UZS)' : language === 'en' ? 'UZS' : "so\u2018m (UZS)";
 
@@ -647,17 +850,25 @@ export default function Payroll() {
     let totalRemainder = 0;
 
     const rowsHtml = payrollsToShow.map((p, i) => {
-      const salary = p.gross_pay || p.basic_salary || 0;
-      const advance = Math.round(salary * advancePercent / 100);
-      const remainder = salary - advance;
+      const salary = p.gross_pay || p.basic_salary || p.base_salary || 0;
+      const advance = (p.advance_amount != null && p.advance_amount > 0)
+        ? p.advance_amount
+        : Math.round(salary * advancePercent / 100);
+      const remainder = (p.remainder_amount != null && p.remainder_amount > 0)
+        ? p.remainder_amount
+        : (salary - advance);
       totalSalary += salary;
       totalAdvance += advance;
       totalRemainder += remainder;
 
+      const advanceDay = p.advance_paid_day ? String(p.advance_paid_day) : '';
+      const remainderDay = p.remainder_paid_day ? String(p.remainder_paid_day) : '';
+
       const emp = employees.find(e => e.id === p.employee_id)
         || employees.find(e => e.full_name === p.employee_name)
         || employees.find(e => `${e.first_name} ${e.last_name}` === p.employee_name);
-      const position = emp?.job_position_name || emp?.job_title || emp?.position || '-';
+      const position = p.position_snapshot
+        || emp?.job_position_name || emp?.job_title || emp?.position || '-';
 
       return `<tr>
         <td align="center" style="width:30px">${i + 1}</td>
@@ -665,9 +876,9 @@ export default function Payroll() {
         <td style="width:90px; font-size:9pt">${position}</td>
         <td align="right" style="width:120px">${formatCurrency(salary)}</td>
         <td align="right" style="width:120px">${formatCurrency(advance)}</td>
-        <td align="center" style="width:35px; background:#FFFBF0"><b>15</b></td>
+        <td align="center" style="width:35px; background:#FFFBF0"><b>${advanceDay}</b></td>
         <td align="right" style="width:120px">${formatCurrency(remainder)}</td>
-        <td align="center" style="width:35px; background:#FFFBF0"><b>30</b></td>
+        <td align="center" style="width:35px; background:#FFFBF0"><b>${remainderDay}</b></td>
         <td style="width:100px"></td>
       </tr>`;
     }).join('');
@@ -845,6 +1056,21 @@ export default function Payroll() {
               <UserCircle className="w-4 h-4" />
               {t('employee_portal')}
             </TabsTrigger>
+            {/* TT §3.2 / §5.1: Xodimlar — inline employee list scoped to the Ish haqi module */}
+            <TabsTrigger value="employees" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
+              <Users className="w-4 h-4" />
+              {t('employees') || 'Xodimlar'}
+            </TabsTrigger>
+            {/* TT §2.6: Tarix (history) */}
+            <TabsTrigger value="history" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
+              <History className="w-4 h-4" />
+              {t('history') || 'Tarix'}
+            </TabsTrigger>
+            {/* TT §2.2: Sozlamalar (settings) */}
+            <TabsTrigger value="settings" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
+              <SettingsIcon className="w-4 h-4" />
+              {t('settings') || 'Sozlamalar'}
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="payroll" className="mt-4 space-y-6">
@@ -997,9 +1223,21 @@ export default function Payroll() {
                     </>
                   )}
                   {(canCreate(MODULES.PAYROLL) || canCreate(MODULES.HR)) && (
-                    <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]">
-                      <Plus className="w-4 h-4 mr-2" /> {t('process_payroll')}
-                    </Button>
+                    <>
+                      {/* TT §2.3: one-click auto-create of current month payroll */}
+                      <Button
+                        variant="outline"
+                        onClick={handleAutoCreateCurrentMonth}
+                        disabled={autoCreating}
+                        title={t('auto_create_payroll_hint') || "Joriy oy uchun barcha xodimlarga qaydnoma avtomatik yaratiladi"}
+                      >
+                        {autoCreating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Calculator className="w-4 h-4 mr-2" />}
+                        {t('auto_create_current_month') || "Joriy oyga yaratish"}
+                      </Button>
+                      <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]">
+                        <Plus className="w-4 h-4 mr-2" /> {t('process_payroll')}
+                      </Button>
+                    </>
                   )}
                 </div>
               </div>
@@ -1072,7 +1310,31 @@ export default function Payroll() {
                             <Badge className={getStatusColor(payroll.status)}>{t(payroll.status)}</Badge>
                           </TableCell>
                           <TableCell>
-                            <div className="flex gap-1">
+                            <div className="flex gap-1 flex-wrap">
+                              {/* TT §2.4 per-row advance/remainder flags. Title tooltip
+                                  shows the actual day paid. */}
+                              <Button
+                                size="sm" variant="ghost"
+                                className={payroll.advance_paid ? 'text-green-600' : 'text-slate-500'}
+                                title={payroll.advance_paid
+                                  ? `${t('advance_paid') || 'Avans to\'langan'}${payroll.advance_paid_day ? ' — ' + payroll.advance_paid_day : ''}`
+                                  : (t('mark_advance_paid') || 'Avansni to\'langan deb belgilash')}
+                                onClick={() => toggleTTPaid(payroll, 'advance')}
+                              >
+                                {payroll.advance_paid ? '🟢' : '⚪'} {t('advance_short') || 'Avans'}
+                                {payroll.advance_paid_day ? ` (${payroll.advance_paid_day})` : ''}
+                              </Button>
+                              <Button
+                                size="sm" variant="ghost"
+                                className={payroll.remainder_paid ? 'text-green-600' : 'text-slate-500'}
+                                title={payroll.remainder_paid
+                                  ? `${t('remainder_paid') || 'Qoldiq to\'langan'}${payroll.remainder_paid_day ? ' — ' + payroll.remainder_paid_day : ''}`
+                                  : (t('mark_remainder_paid') || 'Qoldiqni to\'langan deb belgilash')}
+                                onClick={() => toggleTTPaid(payroll, 'remainder')}
+                              >
+                                {payroll.remainder_paid ? '🟢' : '⚪'} {t('remainder_short') || 'Qoldiq'}
+                                {payroll.remainder_paid_day ? ` (${payroll.remainder_paid_day})` : ''}
+                              </Button>
                               {payroll.status === 'draft' && canUpdate(MODULES.PAYROLL) || canUpdate(MODULES.HR) && (
                                 <Button size="sm" variant="ghost" className="text-blue-600" onClick={() => updatePayrollStatus(payroll.id, 'approved')}>
                                   {t('approve')}
@@ -1168,8 +1430,102 @@ export default function Payroll() {
           </DialogContent>
         </Dialog>
 
+        {/* TT §2.4 — Mark advance/remainder paid: day-of-month picker.
+            Replaces the native window.prompt that previously asked for the day. */}
+        <Dialog
+          open={paidDialog.open}
+          onOpenChange={(open) => {
+            if (!paidDialog.saving) {
+              setPaidDialog((d) => ({ ...d, open }));
+            }
+          }}
+        >
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>
+                {paidDialog.kind === 'advance'
+                  ? (t('ask_advance_day') || "Avans qaysi kunda to'landi?")
+                  : (t('ask_remainder_day') || "Qoldiq qaysi kunda to'landi?")}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              <p className="text-sm text-slate-500">
+                {t('leave_blank_for_today') || "(bo'sh qoldiring — bugungi kun)"}
+              </p>
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  {t('day_of_month') || 'Kun'} (1–31)
+                </label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={31}
+                  placeholder={String(new Date().getDate())}
+                  value={paidDialog.dayInput}
+                  onChange={(e) =>
+                    setPaidDialog((d) => ({ ...d, dayInput: e.target.value }))
+                  }
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') submitPaidDialog();
+                    if (e.key === 'Escape' && !paidDialog.saving) {
+                      setPaidDialog({ open: false, kind: null, entry: null, dayInput: '', saving: false });
+                    }
+                  }}
+                  autoFocus
+                />
+              </div>
+              {/* Quick-pick buttons for common payroll days */}
+              <div className="flex gap-1 flex-wrap">
+                {[1, 5, 10, 15, 20, 25, 28].map((d) => (
+                  <Button
+                    key={d}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPaidDialog((s) => ({ ...s, dayInput: String(d) }))}
+                  >
+                    {d}
+                  </Button>
+                ))}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setPaidDialog((s) => ({ ...s, dayInput: String(new Date().getDate()) }))
+                  }
+                  title={t('today') || 'Bugun'}
+                >
+                  {t('today') || 'Bugun'}
+                </Button>
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button
+                variant="outline"
+                disabled={paidDialog.saving}
+                onClick={() =>
+                  setPaidDialog({ open: false, kind: null, entry: null, dayInput: '', saving: false })
+                }
+              >
+                {t('cancel') || 'Bekor qilish'}
+              </Button>
+              <Button onClick={submitPaidDialog} disabled={paidDialog.saving}>
+                {paidDialog.saving ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : null}
+                {t('save') || 'Saqlash'}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
         {/* Create Payroll Modal */}
-        <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
+        <Dialog
+          open={showCreateModal}
+          onOpenChange={(open) => {
+            setShowCreateModal(open);
+            if (!open) setExcludedTaxIds([]);
+          }}
+        >
           <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{t('process_payroll')}</DialogTitle>
@@ -1396,8 +1752,100 @@ export default function Payroll() {
                 </div>
               )}
 
+              {/* Employee taxes (migration 330) — X to exclude any tax for this entry */}
+              {taxCatalog.length > 0 && (
+                <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Percent className="h-4 w-4 text-slate-600" />
+                    <h4 className="font-semibold text-slate-800">
+                      {t('employee_taxes') || 'Xodim soliqlari'}
+                    </h4>
+                    {excludedTaxIds.length > 0 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="ml-auto h-7 px-2 text-xs"
+                        onClick={() => setExcludedTaxIds([])}
+                      >
+                        <RotateCcw className="w-3 h-3 mr-1" />
+                        {t('reset') || 'Qayta tiklash'}
+                      </Button>
+                    )}
+                  </div>
+                  <div className="space-y-1.5 text-sm">
+                    {taxCatalog.map((tax) => {
+                      const excluded = excludedTaxIds.includes(tax.id);
+                      const applied = taxPreview.applied?.find((a) => a.tax_id === tax.id);
+                      const amount = applied ? applied.amount : 0;
+                      return (
+                        <div
+                          key={tax.id}
+                          className={`flex items-center justify-between rounded px-2 py-1.5 ${
+                            excluded ? 'bg-slate-100 text-slate-400 line-through' : 'bg-white border border-slate-200'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] ${
+                                tax.payer === 'employer'
+                                  ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                  : 'bg-blue-50 text-blue-700 border-blue-200'
+                              }`}
+                            >
+                              {tax.payer === 'employer' ? (t('payer_employer') || 'Ish beruvchi') : (t('payer_employee') || 'Xodim')}
+                            </Badge>
+                            <span className="font-medium truncate">{tax.name}</span>
+                            <span className="text-xs text-slate-500">{Number(tax.rate).toFixed(2)}%</span>
+                          </div>
+                          <div className="flex items-center gap-2 whitespace-nowrap">
+                            <span className={`font-semibold ${tax.payer === 'employee' && !excluded ? 'text-red-600' : ''}`}>
+                              {excluded ? '—' : (tax.payer === 'employee' ? '-' : '') + formatCurrency(amount)}
+                            </span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0"
+                              title={excluded ? (t('include_tax') || "Qo'shish") : (t('exclude_tax') || "Chiqarib tashlash")}
+                              onClick={() => {
+                                setExcludedTaxIds((prev) =>
+                                  prev.includes(tax.id)
+                                    ? prev.filter((x) => x !== tax.id)
+                                    : [...prev, tax.id]
+                                );
+                              }}
+                            >
+                              {excluded ? <Plus className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5 text-slate-500" />}
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    <div className="flex justify-between pt-2 border-t border-slate-300 text-sm">
+                      <span className="text-slate-600">{t('employee_tax_total') || "Xodimdan ushlanadi"}:</span>
+                      <span className="font-semibold text-red-600">-{formatCurrency(taxPreview.total_employee || 0)}</span>
+                    </div>
+                    {taxPreview.total_employer > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-600">{t('employer_tax_total') || "Ish beruvchi xarajati"}:</span>
+                        <span className="font-semibold text-amber-700">{formatCurrency(taxPreview.total_employer || 0)}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {newPayroll.basic_salary > 0 && (() => {
                 const calc = calculatePayroll(newPayroll, shortageDeductionAmount, totalLoanDeduction);
+                // When employee taxes are configured, prefer the server preview so the
+                // UI and the actual saved record match exactly.
+                const effectiveDeductions = taxCatalog.length > 0
+                  ? (taxPreview.total_employee || 0) + shortageDeductionAmount + totalLoanDeduction
+                  : calc.total_deductions + shortageDeductionAmount + totalLoanDeduction;
+                const effectiveNet = calc.gross_pay - effectiveDeductions;
                 return (
                   <div className="p-4 bg-slate-50 rounded-lg">
                     <h4 className="font-semibold mb-3">{t('payroll_summary')}</h4>
@@ -1408,7 +1856,7 @@ export default function Payroll() {
                       </div>
                       <div className="flex justify-between text-red-600">
                         <span>{t('total_deductions')}:</span>
-                        <span className="font-semibold">-{formatCurrency(calc.total_deductions)}</span>
+                        <span className="font-semibold">-{formatCurrency(effectiveDeductions)}</span>
                       </div>
                       {shortageDeductionAmount > 0 && (
                         <div className="flex justify-between text-amber-700">
@@ -1424,7 +1872,7 @@ export default function Payroll() {
                       )}
                       <div className="flex justify-between pt-2 border-t text-lg">
                         <span className="font-bold">{t('net_pay')}:</span>
-                        <span className="font-bold text-green-600">{formatCurrency(calc.net_pay)}</span>
+                        <span className="font-bold text-green-600">{formatCurrency(taxCatalog.length > 0 ? effectiveNet : calc.net_pay)}</span>
                       </div>
                     </div>
                   </div>
@@ -1432,7 +1880,7 @@ export default function Payroll() {
               })()}
 
               <div className="flex gap-3 pt-4">
-                <Button variant="outline" onClick={() => setShowCreateModal(false)} className="flex-1">
+                <Button variant="outline" onClick={() => { setShowCreateModal(false); setExcludedTaxIds([]); }} className="flex-1">
                   {t('cancel')}
                 </Button>
                 <Button
@@ -1617,8 +2065,353 @@ export default function Payroll() {
             <EmployeePortal />
           </TabsContent>
 
+          {/* TT §3.2 Xodimlar — employees scoped to the payroll module */}
+          <TabsContent value="employees" className="mt-4">
+            <PayrollEmployeesTab t={t} formatCurrency={formatCurrency} />
+          </TabsContent>
+
+          {/* TT §2.6 Tarix — lists all past payrolls with fund/headcount/status */}
+          <TabsContent value="history" className="mt-4">
+            <PayrollHistoryTab t={t} formatCurrency={formatCurrency} />
+          </TabsContent>
+
+          {/* TT §2.2 Sozlamalar — advance percent, currency, company name */}
+          <TabsContent value="settings" className="mt-4">
+            <PayrollSettingsTab t={t} />
+          </TabsContent>
+
         </Tabs>
       </div>
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// TT §2.2 — Sozlamalar (payroll settings) tab
+// ─────────────────────────────────────────────────────────────────────
+function PayrollSettingsTab({ t }) {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [form, setForm] = useState({ advance_percent: 40, currency: "so'm", company_name: '' });
+
+  useEffect(() => {
+    let alive = true;
+    hrService.getPayrollSettings()
+      .then((s) => { if (alive && s) setForm({
+        advance_percent: Number(s.advance_percent ?? 40),
+        currency: s.currency || "so'm",
+        company_name: s.company_name || '',
+      }); })
+      .catch(() => {})
+      .finally(() => alive && setLoading(false));
+    return () => { alive = false; };
+  }, []);
+
+  const save = async () => {
+    if (form.advance_percent < 0 || form.advance_percent > 100) {
+      toast.error(t('advance_percent_range_error') || 'Avans foizi 0 dan 100 gacha bo\'lishi kerak');
+      return;
+    }
+    setSaving(true);
+    try {
+      await hrService.updatePayrollSettings({
+        advance_percent: Number(form.advance_percent),
+        currency: form.currency,
+        company_name: form.company_name,
+      });
+      toast.success(t('saved') || 'Saqlandi');
+    } catch (e) {
+      toast.error(e?.response?.data?.message || t('error_occurred') || 'Xatolik');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const downloadBackup = async () => {
+    setExporting(true);
+    try {
+      const blob = await hrService.exportPayrollBackup();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `payroll_backup_${new Date().toISOString().slice(0,10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success(t('backup_exported') || 'Zaxira nusxa yuklandi');
+    } catch (e) {
+      toast.error(t('error_occurred') || 'Xatolik');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <SettingsIcon className="w-5 h-5" />
+          {t('payroll_settings') || 'Ish haqi sozlamalari'}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <div className="flex items-center gap-2 text-slate-500"><Loader2 className="w-4 h-4 animate-spin" /> {t('loading')}</div>
+        ) : (
+          <div className="max-w-xl space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                {t('advance_percent') || 'Avans foizi'} (%)
+              </label>
+              <Input
+                type="number" min={0} max={100}
+                value={form.advance_percent}
+                onChange={(e) => setForm((f) => ({ ...f, advance_percent: Number(e.target.value) }))}
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                {t('advance_percent_hint') || "Bu foiz faqat yangi qaydnomalarga qo'llaniladi."}
+              </p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">{t('currency') || 'Valyuta'}</label>
+              <Input
+                value={form.currency}
+                onChange={(e) => setForm((f) => ({ ...f, currency: e.target.value }))}
+                placeholder="so'm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">{t('company_name') || 'Tashkilot nomi'}</label>
+              <Input
+                value={form.company_name}
+                onChange={(e) => setForm((f) => ({ ...f, company_name: e.target.value }))}
+                placeholder='MChJ "..."'
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                {t('company_name_hint') || "Chop etish shakli sarlavhasida ko'rinadi."}
+              </p>
+            </div>
+            <div className="flex gap-2 pt-2">
+              <Button onClick={save} disabled={saving}>
+                {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                {t('save') || 'Saqlash'}
+              </Button>
+              <Button variant="outline" onClick={downloadBackup} disabled={exporting}>
+                {exporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FileDown className="w-4 h-4 mr-2" />}
+                {t('export_backup') || 'Zaxira nusxa (JSON)'}
+              </Button>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// TT §2.6 — Tarix (history) tab
+// ─────────────────────────────────────────────────────────────────────
+function PayrollHistoryTab({ t, formatCurrency }) {
+  const [loading, setLoading] = useState(true);
+  const [periods, setPeriods] = useState([]);
+
+  useEffect(() => {
+    let alive = true;
+    hrService.listPayrollPeriods({ page: 1, limit: 100 })
+      .then((res) => {
+        if (!alive) return;
+        const list = Array.isArray(res) ? res : (res?.data || []);
+        setPeriods(list);
+      })
+      .catch(() => alive && setPeriods([]))
+      .finally(() => alive && setLoading(false));
+    return () => { alive = false; };
+  }, []);
+
+  const statusBadge = (s) => {
+    const map = {
+      draft: 'bg-slate-100 text-slate-700',
+      processing: 'bg-blue-100 text-blue-700',
+      approved: 'bg-amber-100 text-amber-700',
+      paid: 'bg-green-100 text-green-700',
+      cancelled: 'bg-red-100 text-red-700',
+    };
+    return <Badge className={map[s] || 'bg-slate-100 text-slate-700'}>{t(s) || s}</Badge>;
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <History className="w-5 h-5" />
+          {t('history') || 'Tarix'}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-0">
+        {loading ? (
+          <div className="flex items-center gap-2 text-slate-500 p-6">
+            <Loader2 className="w-4 h-4 animate-spin" /> {t('loading')}
+          </div>
+        ) : periods.length === 0 ? (
+          <div className="text-center py-10 text-slate-400">{t('no_data') || "Ma'lumot yo'q"}</div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t('period') || 'Davr'}</TableHead>
+                <TableHead className="text-right">{t('employee_count') || 'Xodimlar'}</TableHead>
+                <TableHead className="text-right">{t('fund') || 'Fond'}</TableHead>
+                <TableHead className="text-right">{t('total_net') || 'Sof summa'}</TableHead>
+                <TableHead>{t('status') || 'Holat'}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {periods.map((p) => (
+                <TableRow key={p.id}>
+                  <TableCell className="font-medium">
+                    {p.period_name || p.period_code}
+                    <div className="text-xs text-slate-500">{p.start_date} — {p.end_date}</div>
+                  </TableCell>
+                  <TableCell className="text-right">{p.employee_count || 0}</TableCell>
+                  <TableCell className="text-right">{formatCurrency(p.total_gross || 0)}</TableCell>
+                  <TableCell className="text-right">{formatCurrency(p.total_net || 0)}</TableCell>
+                  <TableCell>{statusBadge(p.status)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// TT §3.2 / §5.1 — Xodimlar (employees) tab scoped to payroll context.
+// Shows FIO, position (job_title), monthly salary. Salary can be edited
+// inline. Creating or deleting employees is still the HR module's job.
+// ─────────────────────────────────────────────────────────────────────
+function PayrollEmployeesTab({ t, formatCurrency }) {
+  const [loading, setLoading] = useState(true);
+  const [employees, setEmployees] = useState([]);
+  const [editingId, setEditingId] = useState(null);
+  const [editValue, setEditValue] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const data = await hrService.listEmployees({ page: 1, limit: 500 });
+      const list = Array.isArray(data) ? data : (data?.data || []);
+      setEmployees(list);
+    } catch {
+      setEmployees([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => { load(); }, []);
+
+  const startEdit = (emp) => {
+    setEditingId(emp.id);
+    setEditValue(String(emp.salary || 0));
+  };
+  const cancelEdit = () => { setEditingId(null); setEditValue(''); };
+  const saveEdit = async (emp) => {
+    const parsed = parseFloat(editValue);
+    if (Number.isNaN(parsed) || parsed < 0) {
+      toast.error(t('invalid_salary') || "Noto'g'ri summa");
+      return;
+    }
+    setSaving(true);
+    try {
+      await hrService.updateEmployee(emp.id, { salary: parsed });
+      toast.success(t('saved') || 'Saqlandi');
+      setEditingId(null);
+      await load();
+    } catch (e) {
+      toast.error(e?.response?.data?.message || t('error_occurred') || 'Xatolik');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Users className="w-5 h-5" />
+          {t('employees') || 'Xodimlar'}
+          <span className="ml-2 text-sm font-normal text-slate-500">
+            ({employees.length})
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-0">
+        {loading ? (
+          <div className="flex items-center gap-2 text-slate-500 p-6">
+            <Loader2 className="w-4 h-4 animate-spin" /> {t('loading')}
+          </div>
+        ) : employees.length === 0 ? (
+          <div className="text-center py-10 text-slate-400">
+            {t('no_employees') || "Xodimlar yo'q — HR modulidan xodim qo'shing"}
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-10">#</TableHead>
+                <TableHead>{t('full_name') || "F.I.O."}</TableHead>
+                <TableHead>{t('position') || 'Lavozim'}</TableHead>
+                <TableHead className="text-right">{t('monthly_salary') || 'Oylik maosh'}</TableHead>
+                <TableHead className="w-40">{t('actions')}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {employees.map((e, i) => {
+                const fullName = `${e.first_name || ''} ${e.last_name || ''}`.trim() || e.full_name || '—';
+                const position = e.job_title || e.position || e.job_position_name || '—';
+                return (
+                  <TableRow key={e.id}>
+                    <TableCell>{i + 1}</TableCell>
+                    <TableCell className="font-medium">{fullName}</TableCell>
+                    <TableCell className="text-slate-600">{position}</TableCell>
+                    <TableCell className="text-right">
+                      {editingId === e.id ? (
+                        <Input
+                          type="number" min={0}
+                          value={editValue}
+                          onChange={(ev) => setEditValue(ev.target.value)}
+                          className="w-40 text-right"
+                        />
+                      ) : (
+                        <span className="font-medium">{formatCurrency(e.salary || 0)}</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {editingId === e.id ? (
+                        <div className="flex gap-1">
+                          <Button size="sm" onClick={() => saveEdit(e)} disabled={saving}>
+                            {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : (t('save') || 'Saqlash')}
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={cancelEdit}>{t('cancel')}</Button>
+                        </div>
+                      ) : (
+                        <Button size="sm" variant="ghost" onClick={() => startEdit(e)}>
+                          <Edit2 className="w-4 h-4 mr-1" />
+                          {t('edit_salary') || 'Oylikni tahrirlash'}
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
   );
 }

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { useCompany } from '@/components/contexts/CompanyContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -28,9 +29,16 @@ import {
   Calendar,
   Building2,
   ClipboardList,
+  Eye,
+  Loader2,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import {
+  exportForma2Excel,
+  exportSmetaSummaryExcel,
+  exportProgressReportExcel,
+} from '@/utils/exportConstructionReports';
 
 // Report types
 const REPORT_TYPES = {
@@ -93,7 +101,7 @@ const generateKS2HTML = (project, sections, items, reportData) => {
     <html>
     <head>
       <meta charset="utf-8">
-      <title>KS-2 - ${project.name}</title>
+      <title>Forma 2 - ${project.name}</title>
       <style>
         body {
           font-family: 'Times New Roman', serif;
@@ -167,12 +175,12 @@ const generateKS2HTML = (project, sections, items, reportData) => {
       <div class="header">
         <h1>DALOLATNOMA</h1>
         <h2>Bajarilgan qurilish-montaj ishlari qabul qilish to'g'risida</h2>
-        <p>(KS-2 shakli)</p>
+        <p>(Forma 2 shakli)</p>
       </div>
 
       <div class="info-block">
         <div class="info-left">
-          <div class="info-row"><span class="info-label">Buyurtmachi:</span> ${project.client_name || '-'}</div>
+          <div class="info-row"><span class="info-label">Buyurtmachi:</span> ${reportData.clientName || project.client_name || '-'}</div>
           <div class="info-row"><span class="info-label">Pudratchi:</span> ${reportData.contractorName || '-'}</div>
           <div class="info-row"><span class="info-label">Qurilish:</span> ${project.name}</div>
           <div class="info-row"><span class="info-label">Manzil:</span> ${[project.address, project.city, project.region].filter(Boolean).join(', ') || '-'}</div>
@@ -492,16 +500,20 @@ const generateProgressReportHTML = (project, buildings, sections) => {
   `;
 };
 
-// Print or download report
-const printReport = (htmlContent, title) => {
-  const printWindow = window.open('', '_blank');
-  if (printWindow) {
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => {
-      printWindow.print();
-    }, 500);
+// Open the report in a new window.
+// autoPrint=true  → trigger the print dialog after load (Print button)
+// autoPrint=false → just show the rendered report (Preview button)
+const openReportWindow = (htmlContent, { autoPrint = true } = {}) => {
+  const win = window.open('', '_blank');
+  if (!win) {
+    toast.error('Popup blocked — please allow popups for this site');
+    return;
+  }
+  win.document.write(htmlContent);
+  win.document.close();
+  win.focus();
+  if (autoPrint) {
+    setTimeout(() => win.print(), 500);
   }
 };
 
@@ -509,6 +521,9 @@ const printReport = (htmlContent, title) => {
 export function ReportGenerator({ project, sections = [], items = [], buildings = [] }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  // Active organization — used to pre-fill "Pudratchi" (Contractor) in the form,
+  // since in construction ERP the logged-in org is typically the contractor.
+  const { activeCompany } = useCompany();
   const [showModal, setShowModal] = useState(false);
   const [selectedReport, setSelectedReport] = useState(null);
   const [reportData, setReportData] = useState({
@@ -517,34 +532,106 @@ export function ReportGenerator({ project, sections = [], items = [], buildings 
     contractNumber: '',
     contractDate: '',
     actNumber: '',
-    contractorName: '',
+    clientName: '',        // Buyurtmachi (Customer)
+    contractorName: '',    // Pudratchi (Contractor)
   });
+  const [isExporting, setIsExporting] = useState(false);
 
-  const handleGenerateReport = () => {
-    if (!selectedReport) {
-      toast.error('Hisobot turini tanlang');
-      return;
-    }
+  // Pre-fill Buyurtmachi and Pudratchi when the dialog opens. The user can
+  // still edit both before generating the report.
+  //   Buyurtmachi ← project.client_name
+  //   Pudratchi   ← project.contractor_name OR activeCompany.company_name
+  useEffect(() => {
+    if (!showModal) return;
+    setReportData((prev) => {
+      const next = { ...prev };
+      if (!next.clientName) {
+        next.clientName = project?.client_name || '';
+      }
+      if (!next.contractorName) {
+        next.contractorName =
+          project?.contractor_name || activeCompany?.company_name || '';
+      }
+      return next;
+    });
+  }, [
+    showModal,
+    project?.client_name,
+    project?.contractor_name,
+    activeCompany?.company_name,
+  ]);
 
-    let htmlContent = '';
-
+  // Build the HTML once for a given report — shared by Preview and Print.
+  const buildReportHTML = () => {
+    if (!selectedReport) return null;
     switch (selectedReport) {
       case 'ks2':
-        htmlContent = generateKS2HTML(project, sections, items, reportData);
-        break;
+        return generateKS2HTML(project, sections, items, reportData);
       case 'smeta_summary':
-        htmlContent = generateSmetaSummaryHTML(project, sections);
-        break;
+        return generateSmetaSummaryHTML(project, sections);
       case 'progress_report':
-        htmlContent = generateProgressReportHTML(project, buildings, sections);
-        break;
+        return generateProgressReportHTML(project, buildings, sections);
       default:
-        toast.error(t('report_not_ready') || 'This report type is not ready yet');
-        return;
+        return null;
     }
+  };
 
-    printReport(htmlContent, t(REPORT_TYPES[selectedReport].nameKey));
+  const handlePreview = () => {
+    if (!selectedReport) {
+      toast.error(t('select_report_type') || 'Hisobot turini tanlang');
+      return;
+    }
+    const html = buildReportHTML();
+    if (!html) {
+      toast.error(t('report_not_ready') || 'This report type is not ready yet');
+      return;
+    }
+    openReportWindow(html, { autoPrint: false });
+    // Keep the dialog open so the user can also print/download if they want.
+  };
+
+  const handlePrint = () => {
+    if (!selectedReport) {
+      toast.error(t('select_report_type') || 'Hisobot turini tanlang');
+      return;
+    }
+    const html = buildReportHTML();
+    if (!html) {
+      toast.error(t('report_not_ready') || 'This report type is not ready yet');
+      return;
+    }
+    openReportWindow(html, { autoPrint: true });
     setShowModal(false);
+  };
+
+  const handleDownloadExcel = async () => {
+    if (!selectedReport) {
+      toast.error(t('select_report_type') || 'Hisobot turini tanlang');
+      return;
+    }
+    setIsExporting(true);
+    try {
+      switch (selectedReport) {
+        case 'ks2':
+          await exportForma2Excel({ project, items, reportData });
+          break;
+        case 'smeta_summary':
+          await exportSmetaSummaryExcel({ project, sections });
+          break;
+        case 'progress_report':
+          await exportProgressReportExcel({ project, buildings, sections });
+          break;
+        default:
+          toast.error(t('report_not_ready') || 'This report type is not ready yet');
+          return;
+      }
+      toast.success(t('excel_downloaded') || 'Excel yuklab olindi');
+    } catch (err) {
+      console.error('Excel export failed:', err);
+      toast.error(t('excel_export_failed') || 'Excel eksport xatoligi');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   return (
@@ -595,8 +682,24 @@ export function ReportGenerator({ project, sections = [], items = [], buildings 
             {/* Additional fields for KS-2 */}
             {selectedReport === 'ks2' && (
               <div className="space-y-4 p-4 bg-slate-50 rounded-lg">
-                <h4 className="font-medium">{t('ks2_details') || 'KS-2 Details'}</h4>
+                <h4 className="font-medium">{t('ks2_details') || 'Forma 2 Details'}</h4>
                 <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>{t('buyurtmachi_label') || 'Buyurtmachi (Customer)'}</Label>
+                    <Input
+                      value={reportData.clientName}
+                      onChange={(e) => setReportData({ ...reportData, clientName: e.target.value })}
+                      placeholder={t('buyurtmachi_placeholder') || 'OOO Kamalak Invest'}
+                    />
+                  </div>
+                  <div>
+                    <Label>{t('pudratchi_label') || 'Pudratchi (Contractor)'}</Label>
+                    <Input
+                      value={reportData.contractorName}
+                      onChange={(e) => setReportData({ ...reportData, contractorName: e.target.value })}
+                      placeholder={activeCompany?.company_name || 'OOO Building Corp'}
+                    />
+                  </div>
                   <div>
                     <Label>{t('report_period_start') || 'Report Period (Start)'}</Label>
                     <Input
@@ -637,24 +740,39 @@ export function ReportGenerator({ project, sections = [], items = [], buildings 
                       placeholder="№1"
                     />
                   </div>
-                  <div>
-                    <Label>{t('contractor_name') || 'Contractor Name'}</Label>
-                    <Input
-                      value={reportData.contractorName}
-                      onChange={(e) => setReportData({ ...reportData, contractorName: e.target.value })}
-                      placeholder="OOO Building Corp"
-                    />
-                  </div>
                 </div>
               </div>
             )}
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="gap-2 sm:gap-2">
             <Button variant="outline" onClick={() => setShowModal(false)}>
               {t('cancel') || 'Cancel'}
             </Button>
-            <Button onClick={handleGenerateReport} disabled={!selectedReport}>
+            <Button
+              variant="outline"
+              onClick={handlePreview}
+              disabled={!selectedReport}
+              title={t('preview') || 'Preview'}
+            >
+              <Eye className="w-4 h-4 mr-2" />
+              {t('preview') || 'Preview'}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleDownloadExcel}
+              disabled={!selectedReport || isExporting}
+              title={t('download_excel') || 'Download Excel'}
+              className="border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+            >
+              {isExporting ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <FileSpreadsheet className="w-4 h-4 mr-2" />
+              )}
+              {t('download_excel') || 'Excel'}
+            </Button>
+            <Button onClick={handlePrint} disabled={!selectedReport}>
               <Printer className="w-4 h-4 mr-2" />
               {t('print') || 'Print'}
             </Button>

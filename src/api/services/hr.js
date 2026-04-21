@@ -87,6 +87,40 @@ export const hrService = {
     return response.data.data;
   },
 
+  async updatePayrollEntry(periodId, entryId, data) {
+    const response = await apiClient.put(`/payroll-periods/${periodId}/entries/${entryId}`, data);
+    return response.data.data;
+  },
+
+  // ────────── TT "Ish haqi" module (simple advance/remainder flow) ──────────
+  async getPayrollSettings() {
+    const response = await apiClient.get('/payroll/settings');
+    return response.data.data;
+  },
+  async updatePayrollSettings(data) {
+    const response = await apiClient.put('/payroll/settings', data);
+    return response.data.data;
+  },
+  // Auto-create or fetch the payroll period for a given YYYY-MM (default = this month)
+  async getOrCreateCurrentMonthPayroll(month) {
+    const params = month ? { month } : {};
+    const response = await apiClient.post('/payroll/periods/current-or-create', null, { params });
+    return response.data.data;
+  },
+  async markAdvancePaid(entryId, { paid, day } = { paid: true }) {
+    const response = await apiClient.post(`/payroll/entries/${entryId}/advance-paid`, { paid, day });
+    return response.data.data;
+  },
+  async markRemainderPaid(entryId, { paid, day } = { paid: true }) {
+    const response = await apiClient.post(`/payroll/entries/${entryId}/remainder-paid`, { paid, day });
+    return response.data.data;
+  },
+  // Backup dump — returns a Blob (application/json attachment)
+  async exportPayrollBackup() {
+    const response = await apiClient.get('/payroll/export', { responseType: 'blob' });
+    return response.data;
+  },
+
   // Employee Deductions
   async listEmployeeDeductions(employeeId, params = {}) {
     const response = await apiClient.get(`/employees/${employeeId}/deductions`, { params });

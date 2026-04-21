@@ -10,6 +10,15 @@ export const taxReportsService = {
     return response.data.data;
   },
 
+  // Employee taxes aggregation (migration 330) — per-tax breakdown of payroll taxes
+  getEmployeeTaxReport: async (startDate, endDate) => {
+    const params = {};
+    if (startDate) params.start_date = startDate;
+    if (endDate) params.end_date = endDate;
+    const response = await apiClient.get('/tax-reports/employee-taxes', { params });
+    return response.data.data;
+  },
+
   // Transactions
   getTransactions: async (startDate, endDate, type = null) => {
     const params = {};

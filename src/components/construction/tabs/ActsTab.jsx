@@ -64,8 +64,8 @@ const ActsTab = ({ project }) => {
       setActTypes([
         { value: 'acceptance', label: 'Qabul qilish', color: 'bg-green-100 text-green-700' },
         { value: 'defect', label: 'Nuqson', color: 'bg-red-100 text-red-700' },
-        { value: 'ks2', label: 'KS-2', color: 'bg-blue-100 text-blue-700' },
-        { value: 'ks3', label: 'KS-3', color: 'bg-purple-100 text-purple-700' },
+        { value: 'ks2', label: 'Forma 2', color: 'bg-blue-100 text-blue-700' },
+        { value: 'ks3', label: 'Forma 3', color: 'bg-purple-100 text-purple-700' },
         { value: 'hidden_work', label: 'Yashirin ish', color: 'bg-amber-100 text-amber-700' },
       ]);
     } finally {
