@@ -222,8 +222,8 @@ export default function DirectorDashboard() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white border border-[#E8E8E8] rounded-xl mb-3 overflow-hidden">
-        <div className="flex items-center border-b border-[#F0F0F0] min-h-[46px] relative">
+      <div className="bg-white border border-[#E8E8E8] rounded-xl mb-3">
+        <div className="flex items-center border-b border-[#F0F0F0] min-h-[46px] relative rounded-t-xl">
           <div className="text-[10px] font-semibold text-[#999] uppercase tracking-wider px-4 min-w-[96px] border-r border-[#F0F0F0] self-stretch flex items-center">
             {t('Kompaniya', 'Компания', 'Company')}
           </div>
