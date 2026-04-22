@@ -502,8 +502,16 @@ export const constructionService = {
     return response.data.data;
   },
 
-  async bulkCreateEstimateLines(estimateId, lines, { replace = false, sourceType = '' } = {}) {
-    const response = await apiClient.post(`/construction/estimates/${estimateId}/lines/bulk`, { lines, replace, source_type: sourceType });
+  async bulkCreateEstimateLines(estimateId, lines, { replace = false, sourceType = '', sourceFileName = '' } = {}) {
+    // `source_file_name` lets the backend dedupe auto-created Forma 2
+    // drafts across estimates extracted from the same uploaded Excel
+    // file — see migration 339 and autoCreateForma2FromEstimate.
+    const response = await apiClient.post(`/construction/estimates/${estimateId}/lines/bulk`, {
+      lines,
+      replace,
+      source_type: sourceType,
+      source_file_name: sourceFileName,
+    });
     return response.data.data;
   },
 
