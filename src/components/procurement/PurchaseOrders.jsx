@@ -50,6 +50,7 @@ import { useSearchParams } from 'react-router-dom';
 
 import { useProcurement } from '@/components/contexts/ProcurementContext';
 import { useInventory } from '@/components/contexts/InventoryContext';
+import { useCompany } from '@/components/contexts/CompanyContext';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { usePermissions } from "@/hooks/usePermissions";
@@ -96,6 +97,7 @@ export default function PurchaseOrders() {
     isLoading,
   } = useProcurement();
   const { refreshData: refreshInventory } = useInventory();
+  const { activeCompany } = useCompany();
 
   const [activeTab, setActiveTab] = useState('orders');
   const [filteredOrders, setFilteredOrders] = useState([]);
@@ -603,6 +605,44 @@ export default function PurchaseOrders() {
     }
   };
 
+  // Enrich PO lines with `alt_name` = counterparty (seller) product's
+  // name, matched via search_key. Mirrors the same-named helper on
+  // the Sales Orders page so both sides of an intercompany flow see
+  // both the buyer's and the seller's name when printing.
+  const enrichLinesWithAltNames = async (lines) => {
+    if (!Array.isArray(lines) || lines.length === 0) return lines;
+    const keyByLine = new Map();
+    for (const line of lines) {
+      const prod = products.find(p => p.id === line.product_id);
+      const key = prod?.search_key;
+      if (key) keyByLine.set(line, key);
+    }
+    const uniqueKeys = [...new Set(keyByLine.values())];
+    if (uniqueKeys.length === 0) return lines;
+
+    const keyToMatches = new Map();
+    await Promise.all(uniqueKeys.map(async (k) => {
+      try {
+        const res = await apiClient.get('/products/by-search-key', {
+          params: {
+            key: k,
+            ...(activeCompany?.id ? { exclude_organization_id: activeCompany.id } : {}),
+          },
+        });
+        const list = res.data?.data?.products ?? res.data?.products ?? [];
+        keyToMatches.set(k, list);
+      } catch { /* ignore */ }
+    }));
+
+    return lines.map(line => {
+      const key = keyByLine.get(line);
+      if (!key) return line;
+      const matches = keyToMatches.get(key) || [];
+      const alt = matches.find(m => m.id !== line.product_id && m.name);
+      return alt ? { ...line, alt_name: alt.name } : line;
+    });
+  };
+
   const handleViewPO = async (po, e) => {
     e.stopPropagation();
     setIsLoadingDetails(true);
@@ -612,7 +652,8 @@ export default function PurchaseOrders() {
     try {
       const fullOrder = await procurementService.getOrder(po.id);
       setDetailPO(fullOrder);
-      setDetailPOLines(fullOrder.lines || []);
+      const enrichedLines = await enrichLinesWithAltNames(fullOrder.lines || []);
+      setDetailPOLines(enrichedLines);
 
       const basicReturns = getOrderReturns(po.id);
       if (basicReturns.length > 0) {
@@ -1550,6 +1591,9 @@ export default function PurchaseOrders() {
                       <div key={line.id || idx} className="flex justify-between items-center border-b border-slate-200 pb-2 last:border-0 last:pb-0">
                         <div>
                           <span className="font-medium">{line.product_name || line.description}</span>
+                          {line.alt_name && line.alt_name !== (line.product_name || line.description) && (
+                            <p className="text-xs text-indigo-600 italic">({line.alt_name})</p>
+                          )}
                           <p className="text-xs text-slate-500">{t('quantity')}: {line.quantity}{line.unit_name ? ` ${line.unit_name}` : ''}</p>
                         </div>
                         <div className="text-right">
