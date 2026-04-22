@@ -916,8 +916,12 @@ const OverviewTabContent = React.memo(function OverviewTabContent({
     },
   ];
 
+  // NOTE: `client_name` is intentionally NOT in this list. The construction
+  // project create/edit forms don't collect a client name — rendering the
+  // row here always left a blank "Mijoz nomi" field with an em-dash in the
+  // overview card, which looked like missing data rather than an
+  // inapplicable field.
   const infoItems = [
-    { label: t('client_name') || 'Mijoz', value: project.client_name || EMPTY },
     { label: t('client_phone') || 'Telefon', value: project.client_phone || EMPTY },
     { label: t('location') || 'Manzil', value: locationStr || EMPTY },
     {
@@ -1399,6 +1403,15 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
       }
       const data = await constructionService.listBuildingFiles(project.id, buildingFilesTarget.id);
       setBuildingFiles(data || []);
+      // Keep the Fayllar-button badge in sync with the real count from the
+      // refreshed file list, without refetching the whole buildings query.
+      setBuildings((prev) =>
+        prev.map((b) =>
+          b.id === buildingFilesTarget.id
+            ? { ...b, files_count: (data || []).length }
+            : b,
+        ),
+      );
       toast.success(t('file_uploaded') || 'Fayl yuklandi');
     } catch (err) {
       console.error('Error uploading building file:', err);
@@ -1421,6 +1434,14 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
         try {
           await constructionService.deleteBuildingFile(project.id, buildingFilesTarget.id, fileId);
           setBuildingFiles(prev => prev.filter(f => f.id !== fileId));
+          // Decrement the Fayllar-button badge for this building.
+          setBuildings((prev) =>
+            prev.map((b) =>
+              b.id === buildingFilesTarget.id
+                ? { ...b, files_count: Math.max(0, (Number(b.files_count) || 0) - 1) }
+                : b,
+            ),
+          );
           toast.success(t('file_deleted') || "Fayl o'chirildi");
         } catch (err) {
           console.error('Error deleting building file:', err);
@@ -3989,7 +4010,10 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
 
       {/* Building Files Modal */}
       <Dialog open={showBuildingFilesModal} onOpenChange={setShowBuildingFilesModal}>
-        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto" aria-describedby="bld-files-help">
+        {/* Wider (max-w-3xl) + taller (max-h-[90vh]) so a typical building's
+            file list fits without having to scroll inside the modal. The
+            overflow-y-auto is kept as a safety net for very long lists. */}
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" aria-describedby="bld-files-help">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText className="w-5 h-5" />
@@ -4052,15 +4076,10 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                       </div>
                     </div>
                     <div className="flex items-center gap-1 shrink-0 ml-2">
-                      <Button
-                        variant="ghost" size="sm" className="h-8 w-8 p-0"
-                        onClick={() => window.open(file.file_url, '_blank')}
-                        title={t('open') || 'Ochish'}
-                      >
-                        <Eye className="w-4 h-4 text-slate-500" />
-                      </Button>
                       {/* Real download — uses <a download> to force save-as rather than
-                          opening the file inline in the browser. */}
+                          opening the file inline in the browser. The old "open"
+                          (eye) button was redundant with Download, so it was
+                          removed to keep this row tidy. */}
                       <a
                         href={file.file_url}
                         download={file.filename}

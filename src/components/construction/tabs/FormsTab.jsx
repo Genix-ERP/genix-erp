@@ -29,6 +29,19 @@ const STATE_COLORS = {
   cancelled: 'bg-red-100 text-red-700',
 };
 
+// Acts created before the KS → Forma rename carry "KS2-001" / "KS3-001" style
+// names in the DB. Backend migration 327 + the updated prefix in
+// construction_acts.go cover new rows and the Type label, but existing names
+// stay as-is. This helper rewrites them for display so the Name column reads
+// "Forma 2-001" / "Forma 3-001" consistently. Only the leading KS[-]?[23]
+// token is replaced — any suffix (e.g. "-001", " #5") is preserved.
+const displayActName = (name) => {
+  if (!name || typeof name !== 'string') return name;
+  return name
+    .replace(/^KS[-_ ]?2\b/, 'Forma 2')
+    .replace(/^KS[-_ ]?3\b/, 'Forma 3');
+};
+
 const EMPTY_FORM = {
   act_type: 'ks2',
   subcontract_id: '',
@@ -673,7 +686,7 @@ const FormsTab = ({ project }) => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${act.name || 'act'}.pdf`;
+      a.download = `${displayActName(act.name) || 'act'}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
@@ -1119,7 +1132,7 @@ const FormsTab = ({ project }) => {
             <Button variant="outline" size="sm" onClick={() => setSelectedAct(null)}>
               <ArrowLeft className="w-4 h-4 mr-1" /> {t('back') || 'Ortga'}
             </Button>
-            <h3 className="text-lg font-semibold">{selectedAct.name}</h3>
+            <h3 className="text-lg font-semibold">{displayActName(selectedAct.name)}</h3>
             {selectedAct.act_number && <span className="text-sm text-slate-500">#{selectedAct.act_number}</span>}
             <Badge className={TYPE_COLORS[selectedAct.act_type]}>{TYPE_LABELS[selectedAct.act_type] || selectedAct.act_type}</Badge>
             <Badge className={STATE_COLORS[selectedAct.state]}>{STATE_LABELS[selectedAct.state] || selectedAct.state}</Badge>
@@ -1502,7 +1515,7 @@ const FormsTab = ({ project }) => {
                     const paginatedItems = sortedActs.slice((currentPage - 1) * pageSize, currentPage * pageSize);
                     return paginatedItems.map(act => (
                     <tr key={act.id} className="border-b hover:bg-slate-50">
-                      <td className="py-2 px-3 font-medium">{act.name}{act.act_number ? ` #${act.act_number}` : ''}</td>
+                      <td className="py-2 px-3 font-medium">{displayActName(act.name)}{act.act_number ? ` #${act.act_number}` : ''}</td>
                       <td className="py-2 px-3"><Badge className={TYPE_COLORS[act.act_type]}>{TYPE_LABELS[act.act_type] || act.act_type}</Badge></td>
                       <td className="py-2 px-3 text-slate-600 whitespace-nowrap">
                         {act.building_name

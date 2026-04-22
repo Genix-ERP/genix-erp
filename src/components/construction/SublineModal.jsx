@@ -30,6 +30,30 @@ const RESOURCE_TYPE_OPTIONS = [
 
 const UOM_PRESETS = ['MASH-CH', 'ISH-KUN', 'ISH-SOAT', 'dona', 'm3', 'kg', 'tn', 'm2', 'pog.m', 'l', 'kompl'];
 
+// Display-time formatter for the ShRNK normasi input: keeps the Uzbek
+// convention of comma-for-decimal while adding a non-breaking-looking space
+// as the thousands separator. Accepts either comma or dot as the user types.
+// Example: "10000"  → "10 000"
+//          "1000,5" → "1 000,5"
+//          "1.5"    → "1,5"
+function formatNormInput(value) {
+  if (value === '' || value === null || value === undefined) return '';
+  // Normalize: strip whitespace and fold any dots into commas so the decimal
+  // separator is consistent regardless of what the user typed.
+  const normalized = String(value).replace(/\s/g, '').replace(/\./g, ',');
+  // Keep the first comma and drop any subsequent ones (avoids "1,2,3" typos).
+  const commaIdx = normalized.indexOf(',');
+  const intRaw = (commaIdx >= 0 ? normalized.slice(0, commaIdx) : normalized).replace(/[^\d]/g, '');
+  const fracRaw = commaIdx >= 0 ? normalized.slice(commaIdx + 1).replace(/[^\d]/g, '') : '';
+  const intWithSpaces = intRaw.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return commaIdx >= 0 ? `${intWithSpaces},${fracRaw}` : intWithSpaces;
+}
+
+// Parse back to a numeric string (dot as decimal separator) for submission.
+function parseNormInput(value) {
+  return String(value ?? '').replace(/\s/g, '').replace(',', '.');
+}
+
 export default function SublineModal({ open, onClose, parent, estimateId, projectId, nextSeq, initial, onSaved }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
@@ -67,7 +91,7 @@ export default function SublineModal({ open, onClose, parent, estimateId, projec
         item_number: initial.item_number || '',
         resource_type: initial.resource_type || 'equipment',
         name: initial.name || '',
-        norm_rate: String(initial.norm_rate ?? '').replace('.', ','),
+        norm_rate: formatNormInput(String(initial.norm_rate ?? '').replace('.', ',')),
         unit_price: formatPriceInput(String(rateFromType ?? 0)),
         uom: initial.uom || '',
       });
@@ -107,7 +131,7 @@ export default function SublineModal({ open, onClose, parent, estimateId, projec
 
   // Derived preview values
   const preview = useMemo(() => {
-    const norm = parseFloat(String(form.norm_rate).replace(',', '.')) || 0;
+    const norm = parseFloat(parseNormInput(form.norm_rate)) || 0;
     const unitPrice = parseFloat(parsePriceInput(form.unit_price)) || 0;
     const parentQty = Number(parent?.quantity) || 0;
     const effectiveQty = parentQty * norm;
@@ -154,7 +178,7 @@ export default function SublineModal({ open, onClose, parent, estimateId, projec
       toast.error(t('resource_name_required') || "Resurs nomi kiritilishi kerak");
       return;
     }
-    const norm = parseFloat(String(form.norm_rate).replace(',', '.')) || 0;
+    const norm = parseFloat(parseNormInput(form.norm_rate)) || 0;
     const unitPrice = parseFloat(parsePriceInput(form.unit_price)) || 0;
 
     setSaving(true);
@@ -188,24 +212,64 @@ export default function SublineModal({ open, onClose, parent, estimateId, projec
 
   const parentLabel = parent?.item_number || String(parent?.id || '');
 
+  // Full parent label (name + code) surfaced as a native tooltip on the
+  // clamped DialogDescription so users can still read the whole string.
+  const parentFullLabel = `${parent.name || ''}${parent.code ? ` — ${parent.code}` : ''}`;
+
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose?.()}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>
+      {/*
+        Three-layer defense against any child widening the modal past
+        `max-w-2xl`:
+          1. `overflow-hidden` on DialogContent — any overflow is visually
+             clipped, never spills onto other UI. Popovers/Selects render
+             through Radix portals so they're not affected.
+          2. `min-w-0` on every direct grid/flex child (DialogHeader,
+             content wrapper, each grid cell) — lets `truncate`/`line-clamp`
+             inside actually take effect inside CSS grid cells, which
+             otherwise default to `minmax(auto, 1fr)` and grow with content.
+          3. Per-child truncation/line-clamp on every text node that can
+             carry user- or data-driven length (title, description, name
+             trigger, preview labels, save hint + button label).
+        Together these make the modal's height and width fully deterministic
+        regardless of name length — no scrollbar needed.
+      */}
+      <DialogContent className="max-w-2xl overflow-hidden">
+        <DialogHeader className="min-w-0">
+          {/* pr-8 reserves room for the absolutely-positioned X close
+              button (top-right of DialogContent) so a truncated title
+              never runs into the close icon. */}
+          <DialogTitle
+            className="truncate pr-8"
+            title={
+              isEdit
+                ? (t('edit_subline') || "Podkatorni tahrirlash")
+                : `${parentLabel}-${t('row_to_add_subline') || "qatorga podkator qo'shish"}`
+            }
+          >
             {isEdit
               ? (t('edit_subline') || "Podkatorni tahrirlash")
               : `${parentLabel}-${t('row_to_add_subline') || "qatorga podkator qo'shish"}`}
           </DialogTitle>
-          <DialogDescription className="text-xs">
+          {/*
+            Parent lines in resurs estimates routinely carry multi-line
+            names (SNiP item + dopolnenie clause + resolution number).
+            Clamping to two lines + `break-words` keeps the header a
+            deterministic height while still showing enough context; the
+            full string remains reachable via the tooltip.
+          */}
+          <DialogDescription
+            className="text-xs line-clamp-2 break-words pr-8"
+            title={parentFullLabel}
+          >
             {parent.name}
             {parent.code ? <> — <span className="font-mono">{parent.code}</span></> : null}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3">
+        <div className="space-y-3 min-w-0">
           <div className="grid grid-cols-2 gap-3">
-            <div>
+            <div className="min-w-0">
               <label className="text-xs text-muted-foreground">{t('subline_number') || "Podkator raqami"}</label>
               <Input
                 value={form.item_number}
@@ -214,7 +278,7 @@ export default function SublineModal({ open, onClose, parent, estimateId, projec
                 className="font-mono"
               />
             </div>
-            <div>
+            <div className="min-w-0">
               <label className="text-xs text-muted-foreground">{t('resource_type') || "Resurs turi"}</label>
               <Select
                 value={form.resource_type}
@@ -233,20 +297,28 @@ export default function SublineModal({ open, onClose, parent, estimateId, projec
           </div>
 
           {/* Resource name — searchable dropdown backed by project's estimate-resources */}
-          <div>
+          <div className="min-w-0">
             <label className="text-xs text-muted-foreground">{t('resource_name') || "Resurs nomi"} *</label>
             <Popover open={pickerOpen} onOpenChange={setPickerOpen} modal>
               <PopoverTrigger asChild>
+                {/* `min-w-0` + flex-child layout is required so very long
+                    Russian/Uzbek resource names truncate with an ellipsis
+                    instead of pushing the trigger (and the modal behind it)
+                    past its container. `text-left` keeps the label flush
+                    left, matching a standard combobox. */}
                 <Button
                   type="button"
                   variant="outline"
                   role="combobox"
-                  className="w-full justify-between font-normal"
+                  className="w-full min-w-0 justify-between font-normal text-left"
                 >
-                  <span className={form.name ? '' : 'text-muted-foreground'}>
+                  <span
+                    className={`truncate min-w-0 flex-1 ${form.name ? '' : 'text-muted-foreground'}`}
+                    title={form.name || undefined}
+                  >
                     {form.name || (t('pick_resource') || "Resursni tanlang")}
                   </span>
-                  <ChevronsUpDown className="h-4 w-4 opacity-50 shrink-0" />
+                  <ChevronsUpDown className="h-4 w-4 opacity-50 shrink-0 ml-2" />
                 </Button>
               </PopoverTrigger>
               <PopoverContent
@@ -320,17 +392,17 @@ export default function SublineModal({ open, onClose, parent, estimateId, projec
           </div>
 
           <div className="grid grid-cols-3 gap-3">
-            <div>
+            <div className="min-w-0">
               <label className="text-xs text-muted-foreground">{t('shrnk_norm') || "ShRNK normasi"}</label>
               <Input
                 type="text"
                 inputMode="decimal"
                 value={form.norm_rate}
-                onChange={(e) => setForm({ ...form, norm_rate: e.target.value })}
+                onChange={(e) => setForm({ ...form, norm_rate: formatNormInput(e.target.value) })}
                 placeholder="0,204"
               />
             </div>
-            <div>
+            <div className="min-w-0">
               <label className="text-xs text-muted-foreground">{t('unit_price_som') || "Birlik narxi (so'm)"}</label>
               <Input
                 type="text"
@@ -340,7 +412,7 @@ export default function SublineModal({ open, onClose, parent, estimateId, projec
                 placeholder="16 430"
               />
             </div>
-            <div>
+            <div className="min-w-0">
               <label className="text-xs text-muted-foreground">{t('uom') || "O'lchov birligi"}</label>
               <Select value={form.uom || '__empty__'} onValueChange={(v) => setForm({ ...form, uom: v === '__empty__' ? '' : v })}>
                 <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
@@ -357,52 +429,66 @@ export default function SublineModal({ open, onClose, parent, estimateId, projec
             </div>
           </div>
 
-          {/* Live preview card */}
+          {/* Live preview card — every text block inside the left column
+              truncates so user-supplied values (item_number, name) can never
+              widen the card past the right-hand Summa block. */}
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
-                <div className="text-xs font-mono text-blue-600">
+                <div className="text-xs font-mono text-blue-600 truncate">
                   {form.item_number || `${parentLabel}-${nextSeq || 1}`}
                 </div>
-                <div className="text-sm font-medium truncate">
+                <div
+                  className="text-sm font-medium truncate"
+                  title={form.name || undefined}
+                >
                   {form.name || (t('enter_resource_name') || "Resurs nomini kiriting")}
                 </div>
-                <div className="text-xs text-muted-foreground mt-1 flex gap-3 flex-wrap">
-                  <span>
+                <div className="text-xs text-muted-foreground mt-1 flex gap-3 flex-wrap min-w-0">
+                  <span className="truncate">
                     {t('norm') || "Norma"}: <b>{preview.norm || 0}</b> {form.uom || ''}
                   </span>
-                  <span>
+                  <span className="truncate">
                     {t('price') || "Narx"}: <b>{formatCurrency(preview.unitPrice)}</b>
                   </span>
-                  <span>
+                  <span className="truncate">
                     {t('quantity_short') || "Hajm"}: {preview.parentQty} × {preview.norm || 0} = <b>{preview.effectiveQty.toFixed(2)}</b>
                   </span>
                 </div>
               </div>
-              <div className="text-right">
+              <div className="text-right shrink-0">
                 <div className="text-xs text-muted-foreground">{t('amount') || "Summa"}</div>
-                <div className="text-lg font-semibold text-blue-600">{formatCurrency(preview.amount)}</div>
+                <div className="text-lg font-semibold text-blue-600 whitespace-nowrap">{formatCurrency(preview.amount)}</div>
               </div>
             </div>
           </div>
 
-          <div className="flex items-center justify-between pt-2 border-t">
-            <div className="text-xs text-muted-foreground">
+          <div className="flex items-center justify-between gap-3 pt-2 border-t">
+            {/*
+              min-w-0 lets the hint div shrink below its content's intrinsic
+              width, so `truncate` actually takes effect and the buttons on
+              the right keep their natural width.
+            */}
+            <div className="text-xs text-muted-foreground min-w-0 flex-1 truncate">
               {t('subline_save_hint') || "Saqlangandan so'ng"}{' '}
               <span className="font-mono text-slate-600">
                 {form.item_number || `${parentLabel}-${nextSeq || 1}`}
               </span>{' '}
               {t('subline_save_hint_suffix') || "sifatida jadvalga qo'shiladi"}
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 shrink-0">
               <Button type="button" variant="outline" onClick={() => onClose?.()} disabled={saving}>
                 {t('cancel') || "Bekor qilish"}
               </Button>
-              <Button type="button" onClick={handleSave} disabled={saving}>
-                {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                {isEdit
-                  ? (t('save') || "Saqlash")
-                  : `${t('add_arrow') || "Qo'shish →"} ${form.item_number || `${parentLabel}-${nextSeq || 1}`}`}
+              <Button type="button" onClick={handleSave} disabled={saving} className="max-w-[280px]">
+                {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin shrink-0" />}
+                {isEdit ? (
+                  t('save') || "Saqlash"
+                ) : (
+                  <span className="truncate">
+                    {`${t('add_arrow') || "Qo'shish →"} ${form.item_number || `${parentLabel}-${nextSeq || 1}`}`}
+                  </span>
+                )}
               </Button>
             </div>
           </div>

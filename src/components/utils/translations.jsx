@@ -7280,6 +7280,14 @@ export const translations = {
     "project_wide": "Project-wide",
     "building_block": "Building / Block",
 
+    // Jarayon (in-progress feed) columns
+    "sub_stage": "Sub-stage",
+    "average_progress": "Average progress",
+    "on_track_count": "On track",
+    "planned_window": "Planned",
+    "actual_start": "Actual start",
+    "no_in_progress_items": "No items currently in progress",
+
     // General Ledger debit/credit closing balances (BHMS-style view)
     "total_debit_turnover": "Total debit (turnover)",
     "total_credit_turnover": "Total credit (turnover)",
@@ -14872,6 +14880,14 @@ export const translations = {
     // Stages ↔ Buildings (migration 333)
     "project_wide": "Umumiy",
     "building_block": "Bino / Blok",
+
+    // Jarayon (in-progress feed) columns
+    "sub_stage": "Kichik bosqich",
+    "average_progress": "O'rtacha jarayon",
+    "on_track_count": "O'z vaqtida",
+    "planned_window": "Reja",
+    "actual_start": "Haqiqiy boshlanish",
+    "no_in_progress_items": "Hozirda jarayonda element yo'q",
 
     // General Ledger debit/credit closing balances (BHMS-style view)
     "total_debit_turnover": "Jami debet (oborot)",
@@ -22544,6 +22560,14 @@ export const translations = {
     // Stages ↔ Buildings (migration 333)
     "project_wide": "Общий",
     "building_block": "Здание / Блок",
+
+    // Jarayon (in-progress feed) columns
+    "sub_stage": "Подэтап",
+    "average_progress": "Средний прогресс",
+    "on_track_count": "В графике",
+    "planned_window": "План",
+    "actual_start": "Фактическое начало",
+    "no_in_progress_items": "Сейчас нет активных элементов",
 
     // General Ledger debit/credit closing balances (BHMS-style view)
     "total_debit_turnover": "Итого дебет (оборот)",

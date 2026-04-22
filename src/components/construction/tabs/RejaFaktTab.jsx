@@ -37,6 +37,12 @@ const RejaFaktTab = ({ project }) => {
   const pageSize = 20;
 
   // Filters
+  // `buildingFilter` is the id (as string) of the active building tab.
+  // `null` means no tab has been picked yet — the buildings-loaded effect
+  // below auto-selects the first one. There's no "all" option; the view is
+  // always scoped to a single block, matching the Bosqichlar / Jarayon tabs.
+  const [buildingFilter, setBuildingFilter] = useState(null);
+  const [buildings, setBuildings] = useState([]);
   const [stageFilter, setStageFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [onlyOverBudget, setOnlyOverBudget] = useState(false);
@@ -92,10 +98,8 @@ const RejaFaktTab = ({ project }) => {
         setInventoryProducts(Object.values(map));
       })
       .catch(() => setInventoryProducts([]));
-    // Load stages
-    constructionService.listStages(project.id)
-      .then(d => setAllStages(d || []))
-      .catch(() => setAllStages([]));
+    // Stages are loaded below by a dedicated effect that scopes them to the
+    // active building tab (so the stage dropdown only shows relevant stages).
     // Load reservations for this project
     inventoryService.listReservations({ project_id: project.id })
       .then(d => setReservations(d || []))
@@ -111,9 +115,11 @@ const RejaFaktTab = ({ project }) => {
 
   const load = useCallback(async () => {
     if (!project?.id) return;
+    // Wait for the buildings list (and the auto-select) before fetching.
+    if (buildingFilter == null) return;
     setLoading(true);
     try {
-      const params = {};
+      const params = { building_id: buildingFilter };
       if (stageFilter !== 'all') params.stage_id = stageFilter;
       if (statusFilter !== 'all') params.status = statusFilter;
       const result = await constructionService.getRejaFakt(project.id, params);
@@ -123,9 +129,53 @@ const RejaFaktTab = ({ project }) => {
     } finally {
       setLoading(false);
     }
-  }, [project?.id, stageFilter, statusFilter]);
+  }, [project?.id, buildingFilter, stageFilter, statusFilter]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Load buildings once per project — drives the tab row above the filters.
+  useEffect(() => {
+    if (!project?.id) return;
+    let cancelled = false;
+    constructionService.listBuildings(project.id)
+      .then((rows) => { if (!cancelled) setBuildings(Array.isArray(rows) ? rows : []); })
+      .catch(() => { if (!cancelled) setBuildings([]); });
+    return () => { cancelled = true; };
+  }, [project?.id]);
+
+  // Auto-select the first building when buildings arrive. Also re-pick if
+  // the current selection disappeared after a reload.
+  useEffect(() => {
+    if (!buildings || buildings.length === 0) {
+      if (buildingFilter !== null) setBuildingFilter(null);
+      return;
+    }
+    const exists =
+      buildingFilter != null &&
+      buildings.some((b) => String(b.id) === String(buildingFilter));
+    if (!exists) setBuildingFilter(String(buildings[0].id));
+  }, [buildings, buildingFilter]);
+
+  // Scope the stage dropdown to the active building.
+  useEffect(() => {
+    if (!project?.id || buildingFilter == null) {
+      setAllStages([]);
+      return;
+    }
+    let cancelled = false;
+    constructionService.listStages(project.id, { buildingId: buildingFilter })
+      .then((d) => { if (!cancelled) setAllStages(d || []); })
+      .catch(() => { if (!cancelled) setAllStages([]); });
+    return () => { cancelled = true; };
+  }, [project?.id, buildingFilter]);
+
+  // Reset the stage filter when the active block changes, so we never keep
+  // a stage that doesn't belong to the newly selected block.
+  useEffect(() => {
+    setStageFilter('all');
+    setSubStageFilter('all');
+    setCurrentPage(1);
+  }, [buildingFilter]);
 
   // Budget warning toasts — show once when data first loads
   useEffect(() => {
@@ -461,6 +511,32 @@ const RejaFaktTab = ({ project }) => {
           @page { margin: 1cm; size: landscape; }
         }
       `}</style>
+      {/* Building/block tabs — one pill per block, no "Hammasi" option.
+          Matches the behavior of Bosqichlar and Jarayon: the view is always
+          scoped to a single block. */}
+      {buildings.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {buildings.map((b) => {
+            const active = String(buildingFilter) === String(b.id);
+            return (
+              <button
+                key={b.id}
+                type="button"
+                onClick={() => setBuildingFilter(String(b.id))}
+                title={b.code || b.name}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                  active
+                    ? 'bg-slate-900 text-white border-slate-900'
+                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                {b.name || b.code || `#${b.id}`}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* Filters */}
       <div className="flex flex-wrap gap-3 items-end">
         <div className="w-48">

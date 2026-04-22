@@ -575,6 +575,14 @@ export const constructionService = {
   // CONSTRUCTION STAGES (Bosqichlar)
   // =====================================================
 
+  // Flat aggregated feed of items that are currently status='in_progress'
+  // across the construction module for one project (stages + sub-stages today,
+  // pluggable for more sources later). Drives the Jarayon tab.
+  async getProjectInProgressItems(projectId) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/in-progress`);
+    return response.data.data;
+  },
+
   async listStages(projectId, { buildingId } = {}) {
     // Migration 333 — optional building filter. Pass a numeric id to scope
     // stages to one building, 0 for unassigned (project-wide), or nothing for
