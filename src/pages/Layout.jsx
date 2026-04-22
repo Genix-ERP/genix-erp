@@ -337,6 +337,11 @@ function LayoutContent({ children, currentPageName }) {
       badge: null,
       moduleId: 'expenses'
     },
+    // NOTE: ТЗ_Ish_Haqi_Soliq_Tolik.docx §8.1 lists "Фойда солиғи" as a
+    // TAB ("Солиқ ҳисоби") inside an existing screen, not a standalone
+    // sidebar module. The route /profit-tax still exists so the page can
+    // be linked from inside another page (Financials/Expenses), but we
+    // don't surface it as a top-level sidebar entry.
     'payroll': {
       title: t("payroll"),
       url: createPageUrl("Payroll"),

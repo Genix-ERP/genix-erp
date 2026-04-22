@@ -249,7 +249,16 @@ const ProgressTab = ({ project }) => {
         ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
         : 'bg-indigo-50 text-indigo-700 border-indigo-200';
 
-    const fmt = (d) => (d ? String(d).slice(0, 10) : '—');
+    // Render dates as dd.mm.yyyy to match the rest of the Uzbek UI. Backend
+    // returns ISO-like "yyyy-mm-dd" strings; we reorder locally so we don't
+    // need to add a timezone-sensitive Date parse on the frontend.
+    const fmt = (d) => {
+      if (!d) return '—';
+      const s = String(d).slice(0, 10); // yyyy-mm-dd
+      const parts = s.split('-');
+      if (parts.length !== 3) return s;
+      return `${parts[2]}.${parts[1]}.${parts[0]}`;
+    };
 
     return (
       <div>
@@ -453,14 +462,6 @@ const ProgressTab = ({ project }) => {
           >
             <Table2 className="w-4 h-4 mr-2" />
             {t('table') || 'Jadval'}
-          </Button>
-          <Button
-            variant={view === 'gantt' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setView('gantt')}
-          >
-            <BarChart3 className="w-4 h-4 mr-2" />
-            Gantt
           </Button>
         </div>
       </div>

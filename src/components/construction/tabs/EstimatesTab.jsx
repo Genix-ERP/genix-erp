@@ -797,12 +797,27 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                               */}
                               <div className="overflow-x-auto">
                                 <table
-                                  className={`w-full text-sm ${est.source_type === 'resurs' ? 'min-w-[1200px]' : ''}`}
+                                  className={`w-full text-sm table-fixed ${est.source_type === 'resurs' ? 'min-w-[1400px]' : 'min-w-[900px]'}`}
                                 >
+                                  <colgroup>
+                                    <col style={{ width: '56px' }} />
+                                    {est.source_type !== 'resurs' && <col style={{ width: '120px' }} />}
+                                    <col />{/* Nomi — absorbs remaining width */}
+                                    <col style={{ width: '110px' }} />
+                                    <col style={{ width: '100px' }} />
+                                    {est.source_type === 'resurs' && <>
+                                      <col style={{ width: '110px' }} />
+                                      <col style={{ width: '110px' }} />
+                                      <col style={{ width: '110px' }} />
+                                      <col style={{ width: '120px' }} />
+                                      <col style={{ width: '130px' }} />
+                                    </>}
+                                    {est.state === 'draft' && <col style={{ width: '96px' }} />}
+                                  </colgroup>
                                   <thead>
                                     <tr className="border-b">
-                                      <th className="text-left py-2 px-2 text-xs font-medium text-slate-500 w-10">№</th>
-                                      {est.source_type !== 'resurs' && <th className="text-left py-2 px-2 text-xs font-medium text-slate-500">{t('code') || 'Shifr'}</th>}
+                                      <th className="text-left py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">№</th>
+                                      {est.source_type !== 'resurs' && <th className="text-left py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">{t('code') || 'Shifr'}</th>}
                                       <th className="text-left py-2 px-2 text-xs font-medium text-slate-500">{t('name') || 'Nomi'}</th>
                                       <th className="text-right py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">{t('unit') || "O'lchov"}</th>
                                       <th className="text-right py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">{t('quantity') || 'Miqdor'}</th>
@@ -813,7 +828,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                         <th className="text-right py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">{t('unit_rate') || 'Birlik narxi'}</th>
                                         <th className="text-right py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">{t('total') || 'Jami'}</th>
                                       </>}
-                                      {est.state === 'draft' && <th className="w-16"></th>}
+                                      {est.state === 'draft' && <th className="whitespace-nowrap"></th>}
                                     </tr>
                                   </thead>
                                   <tbody>

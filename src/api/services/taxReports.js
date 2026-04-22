@@ -19,6 +19,29 @@ export const taxReportsService = {
     return response.data.data;
   },
 
+  // Per-tax XML export for regulator filings — NDFL quarterly, ESP
+  // monthly, INPS monthly. Backend streams application/xml with a
+  // Content-Disposition attachment header; we trigger the download on
+  // the client by creating a blob URL so the filename from the server
+  // is preserved.
+  exportEmployeeTaxXML: async ({ taxCode, startDate, endDate }) => {
+    const response = await apiClient.get('/tax-reports/employee-taxes/xml', {
+      params: { tax_code: taxCode, start_date: startDate, end_date: endDate },
+      responseType: 'blob',
+    });
+    const disposition = response.headers?.['content-disposition'] || '';
+    const match = /filename="?([^"]+)"?/.exec(disposition);
+    const filename = (match && match[1]) ||
+      `tax-report-${String(taxCode).toLowerCase()}-${startDate}-${endDate}.xml`;
+    const url = window.URL.createObjectURL(response.data);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    window.URL.revokeObjectURL(url);
+    return { filename };
+  },
+
   // Transactions
   getTransactions: async (startDate, endDate, type = null) => {
     const params = {};

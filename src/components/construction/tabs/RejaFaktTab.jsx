@@ -37,10 +37,11 @@ const RejaFaktTab = ({ project }) => {
   const pageSize = 20;
 
   // Filters
-  // `buildingFilter` is the id (as string) of the active building tab.
-  // `null` means no tab has been picked yet — the buildings-loaded effect
-  // below auto-selects the first one. There's no "all" option; the view is
-  // always scoped to a single block, matching the Bosqichlar / Jarayon tabs.
+  // `buildingFilter` is the id (as string) of the active building tab, the
+  // literal `'all'` sentinel for the Hammasi pill (show everything across
+  // blocks), or `null` before the buildings list has settled. The effect
+  // below auto-selects the first real building when one arrives — users can
+  // switch back to `'all'` via the Hammasi pill.
   const [buildingFilter, setBuildingFilter] = useState(null);
   const [buildings, setBuildings] = useState([]);
   const [stageFilter, setStageFilter] = useState('all');
@@ -119,7 +120,9 @@ const RejaFaktTab = ({ project }) => {
     if (buildingFilter == null) return;
     setLoading(true);
     try {
-      const params = { building_id: buildingFilter };
+      // 'all' → no building_id filter; backend returns data for every block.
+      const params =
+        buildingFilter === 'all' ? {} : { building_id: buildingFilter };
       if (stageFilter !== 'all') params.stage_id = stageFilter;
       if (statusFilter !== 'all') params.status = statusFilter;
       const result = await constructionService.getRejaFakt(project.id, params);
@@ -144,26 +147,33 @@ const RejaFaktTab = ({ project }) => {
   }, [project?.id]);
 
   // Auto-select the first building when buildings arrive. Also re-pick if
-  // the current selection disappeared after a reload.
+  // the current selection disappeared after a reload. `'all'` is a valid
+  // user-chosen value (Hammasi pill) and is preserved.
   useEffect(() => {
     if (!buildings || buildings.length === 0) {
       if (buildingFilter !== null) setBuildingFilter(null);
       return;
     }
+    if (buildingFilter === 'all') return;
     const exists =
       buildingFilter != null &&
       buildings.some((b) => String(b.id) === String(buildingFilter));
     if (!exists) setBuildingFilter(String(buildings[0].id));
   }, [buildings, buildingFilter]);
 
-  // Scope the stage dropdown to the active building.
+  // Scope the stage dropdown to the active building. For 'all', pull
+  // project-wide stages so the Bosqich dropdown isn't empty.
   useEffect(() => {
     if (!project?.id || buildingFilter == null) {
       setAllStages([]);
       return;
     }
     let cancelled = false;
-    constructionService.listStages(project.id, { buildingId: buildingFilter })
+    const req =
+      buildingFilter === 'all'
+        ? constructionService.listStages(project.id)
+        : constructionService.listStages(project.id, { buildingId: buildingFilter });
+    req
       .then((d) => { if (!cancelled) setAllStages(d || []); })
       .catch(() => { if (!cancelled) setAllStages([]); });
     return () => { cancelled = true; };
@@ -511,11 +521,23 @@ const RejaFaktTab = ({ project }) => {
           @page { margin: 1cm; size: landscape; }
         }
       `}</style>
-      {/* Building/block tabs — one pill per block, no "Hammasi" option.
-          Matches the behavior of Bosqichlar and Jarayon: the view is always
-          scoped to a single block. */}
+      {/* Building/block tabs: Hammasi (all blocks) + one pill per block.
+          Hammasi clears the building_id filter so the summary cards and
+          stage list aggregate across every block; individual pills still
+          scope the view to a single block. */}
       {buildings.length > 0 && (
         <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setBuildingFilter('all')}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+              buildingFilter === 'all'
+                ? 'bg-slate-900 text-white border-slate-900'
+                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            {t('all') || 'Hammasi'}
+          </button>
           {buildings.map((b) => {
             const active = String(buildingFilter) === String(b.id);
             return (

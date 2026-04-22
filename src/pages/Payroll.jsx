@@ -26,6 +26,7 @@ import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useAdminSettings } from '@/components/contexts/AdminSettingsContext';
 import { useCompany } from '@/components/contexts/CompanyContext';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
+import * as XLSX from 'xlsx';
 
 export default function Payroll() {
   const { language } = useLanguage();
@@ -817,6 +818,103 @@ export default function Payroll() {
     }
   };
 
+  // Download the monthly payroll vedomost as an Excel workbook.
+  // One sheet per payroll_period_id found in the currently-filtered rows,
+  // using the backend's aggregated /payroll-periods/:id/vedomost endpoint
+  // so every configured tax (NDFL/Profsoyuz/INPS/ESP…) becomes its own
+  // column with the right rate header — matches §7.4 + §10 report #1 of
+  // ТЗ_Ish_Haqi_Soliq_Tolik.docx.
+  const [exportingVedomost, setExportingVedomost] = useState(false);
+  const handleExportVedomostXlsx = async () => {
+    const payrollsToShow = filteredPayrolls.filter(p => p.status !== 'cancelled');
+    if (payrollsToShow.length === 0) return;
+
+    // Collect distinct period ids from the visible rows. If the payroll
+    // record doesn't carry a payroll_period_id we just skip it — the
+    // vedomost is inherently period-scoped.
+    const periodIds = Array.from(
+      new Set(payrollsToShow.map(p => p.payroll_period_id).filter(Boolean))
+    );
+    if (periodIds.length === 0) {
+      toast.error(t('vedomost_no_periods') || "Ko'rsatilgan ro'yxatda davr topilmadi");
+      return;
+    }
+
+    setExportingVedomost(true);
+    try {
+      const wb = XLSX.utils.book_new();
+      for (const periodId of periodIds) {
+        const ved = await hrService.getPayrollVedomost(periodId);
+        if (!ved) continue;
+        const columns = ved.tax_columns || [];
+
+        // Header row — FOT block + one column per tax + summary columns.
+        const header = [
+          '№',
+          t('employee') || 'Xodim',
+          t('position') || 'Lavozim',
+          'FOT',
+          ...columns.map(c => `${c.name} (${Number(c.rate).toFixed(2)}%)`),
+          t('total_employee_tax') || 'Ushlanmalar',
+          t('total_employer_tax') || 'Ish beruvchi soliqlari',
+          t('netto') || 'Netto',
+          t('employer_cost') || 'Umumiy xarajat',
+        ];
+
+        const aoa = [header];
+        (ved.rows || []).forEach((r, idx) => {
+          aoa.push([
+            idx + 1,
+            r.employee_name,
+            r.position || '',
+            r.fot,
+            ...columns.map(c => r.taxes?.[c.code] ?? 0),
+            r.total_employee_tax,
+            r.total_employer_tax,
+            r.netto,
+            r.employer_cost,
+          ]);
+        });
+
+        // Jami (totals) row.
+        const totals = ved.totals || {};
+        aoa.push([
+          '',
+          t('total') || 'JAMI',
+          '',
+          totals.fot || 0,
+          ...columns.map(c => totals.taxes?.[c.code] ?? 0),
+          totals.total_employee_tax || 0,
+          totals.total_employer_tax || 0,
+          totals.netto || 0,
+          totals.employer_cost || 0,
+        ]);
+
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+        // Column widths: name/position wider, numbers narrower.
+        ws['!cols'] = [
+          { wch: 4 }, { wch: 30 }, { wch: 24 }, { wch: 14 },
+          ...columns.map(() => ({ wch: 14 })),
+          { wch: 14 }, { wch: 18 }, { wch: 14 }, { wch: 16 },
+        ];
+
+        const name = (ved.period?.name || ved.period?.code || periodId.slice(0, 8))
+          .replace(/[:\\/?*[\]]/g, '-')
+          .slice(0, 31); // Excel sheet-name limit
+        XLSX.utils.book_append_sheet(wb, ws, name);
+      }
+
+      const today = format(new Date(), 'yyyy-MM-dd');
+      XLSX.writeFile(wb, `vedomost-${today}.xlsx`);
+      toast.success(t('vedomost_export_success') || "Vedomost Excel yuklandi");
+    } catch (e) {
+      console.error('Failed to export vedomost:', e);
+      toast.error(e?.response?.data?.message || t('error_occurred') || "Xatolik");
+    } finally {
+      setExportingVedomost(false);
+    }
+  };
+
   // Download Qaydnoma as .doc file (Word-compatible HTML)
   const handleDownloadQaydnomaDocx = () => {
     const payrollsToShow = filteredPayrolls.filter(p => p.status !== 'cancelled');
@@ -1219,6 +1317,20 @@ export default function Payroll() {
                       </Button>
                       <Button variant="outline" onClick={handleDownloadQaydnomaDocx}>
                         <Download className="w-4 h-4 mr-2" /> DOCX
+                      </Button>
+                      {/* Vedomost Excel — one sheet per payroll period with
+                          every tax pivoted into its own column. */}
+                      <Button
+                        variant="outline"
+                        onClick={handleExportVedomostXlsx}
+                        disabled={exportingVedomost}
+                      >
+                        {exportingVedomost ? (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <FileDown className="w-4 h-4 mr-2" />
+                        )}
+                        {t('vedomost_excel') || 'Vedomost (Excel)'}
                       </Button>
                     </>
                   )}

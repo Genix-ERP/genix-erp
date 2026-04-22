@@ -797,6 +797,7 @@ export default function TaxReports() {
                       <TableHead className="text-right">{t('entries') || 'Yozuvlar'}</TableHead>
                       <TableHead className="text-right">{t('total_base') || "Baza summasi"}</TableHead>
                       <TableHead className="text-right">{t('tax_amount') || 'Soliq summasi'}</TableHead>
+                      <TableHead className="text-right">XML</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -813,6 +814,32 @@ export default function TaxReports() {
                         <TableCell className="text-right tabular-nums">{formatCurrency(row.total_base)}</TableCell>
                         <TableCell className={`text-right font-semibold tabular-nums ${row.payer === 'employer' ? 'text-amber-700' : 'text-red-600'}`}>
                           {formatCurrency(row.total_amount)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {/* Per-tax XML export for regulator filings
+                              (NDFL→DSK quarterly, ESP→DSDMB monthly,
+                              INPS→PFO'Z monthly — §10 of the TZ).
+                              Downloads the XML via the browser using the
+                              filename returned by the backend. */}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={async () => {
+                              try {
+                                await taxReportsService.exportEmployeeTaxXML({
+                                  taxCode: row.tax_code,
+                                  startDate,
+                                  endDate,
+                                });
+                              } catch (e) {
+                                console.error('XML export failed', e);
+                              }
+                            }}
+                            disabled={!startDate || !endDate}
+                            title={t('download_xml') || 'XML yuklab olish'}
+                          >
+                            <Download className="w-4 h-4" />
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}

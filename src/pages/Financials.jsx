@@ -16,7 +16,8 @@ import {
   BookOpen,
   Clock,
   Receipt,
-  TrendingUp
+  TrendingUp,
+  Calculator
 } from "lucide-react";
 
 import FinanceDashboard from "@/components/finance/FinanceDashboard";
@@ -30,6 +31,10 @@ import RecurringJournalEntries from "@/components/finance/RecurringJournalEntrie
 import FinancialReports from "@/components/finance/FinancialReports";
 import ActSverka from "@/components/finance/ActSverka";
 import TaxReports from "@/components/finance/TaxReports";
+// Profit-tax calculator — §8.1 "Фойда солиғи / Солиқ ҳисоби" tab of
+// ТЗ_Ish_Haqi_Soliq_Tolik.docx. Mounted here as a tab inside Financials
+// (not a standalone sidebar page); see Layout.jsx for the rationale.
+import ProfitTax from "@/pages/ProfitTax";
 import GeneralLedger from "@/components/finance/GeneralLedger";
 import AgedReceivables from "@/components/finance/AgedReceivables";
 import AgedPayables from "@/components/finance/AgedPayables";
@@ -127,7 +132,13 @@ export default function Financials() {
               <span className="hidden sm:inline">{t('tax_reports') || 'Soliq hisobotlari'}</span>
             </TabsTrigger>
 
-            {/* 14. Hisobotlar */}
+            {/* 14. Foyda solig'i (§8.1 of ТЗ_Ish_Haqi_Soliq_Tolik.docx) */}
+            <TabsTrigger value="profit-tax" className={tabTriggerClass}>
+              <Calculator className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('profit_tax') || "Foyda solig'i"}</span>
+            </TabsTrigger>
+
+            {/* 15. Hisobotlar */}
             <TabsTrigger value="reports" className={tabTriggerClass}>
               <FileText className="w-4 h-4" />
               <span className="hidden sm:inline">{t('reports') || 'Hisobotlar'}</span>
@@ -163,6 +174,9 @@ export default function Financials() {
           </TabsContent>
           <TabsContent value="tax-reports" className="mt-6">
             <TaxReports />
+          </TabsContent>
+          <TabsContent value="profit-tax" className="mt-6">
+            <ProfitTax />
           </TabsContent>
           <TabsContent value="reports" className="mt-6">
             <Tabs defaultValue="financial-reports" className="w-full">
