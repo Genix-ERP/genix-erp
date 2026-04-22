@@ -82,6 +82,15 @@ export const hrService = {
     return response.data.data;
   },
 
+  // Monthly vedomost — aggregated per-period payroll view with every tax
+  // pivoted into its own column. Returns { period, tax_columns, rows,
+  // totals, employee_count }. Used to populate the Excel export button
+  // on the Payroll page (§7.4 / §10 of ТЗ_Ish_Haqi_Soliq_Tolik.docx).
+  async getPayrollVedomost(periodId) {
+    const response = await apiClient.get(`/payroll-periods/${periodId}/vedomost`);
+    return response.data.data;
+  },
+
   async createPayrollEntry(periodId, data) {
     const response = await apiClient.post(`/payroll-periods/${periodId}/entries`, data);
     return response.data.data;

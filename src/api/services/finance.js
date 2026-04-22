@@ -477,6 +477,9 @@ export const financeService = {
   },
 
   // Expenses
+  // Accepts any of: status, category_id, employee_id, is_recognized (bool),
+  // date_from / date_to (YYYY-MM-DD), page, limit. Passed through axios
+  // params so snake_case keys survive on the wire.
   async listExpenses(params = {}) {
     const response = await apiClient.get('/expenses', { params });
     return response.data.data;
@@ -503,6 +506,59 @@ export const financeService = {
 
   async approveExpense(id) {
     const response = await apiClient.post(`/expenses/${id}/approve`);
+    return response.data.data;
+  },
+
+  // Toggle an expense's profit-tax recognition flag (PATCH
+  // /expenses/:id/recognize). See §7.2 of ТЗ_Ish_Haqi_Soliq_Tolik.docx —
+  // dedicated endpoint so UI can fire a small request on each row click
+  // without sending the full update payload.
+  async recognizeExpense(id, isRecognized) {
+    const response = await apiClient.patch(`/expenses/${id}/recognize`, {
+      is_recognized: Boolean(isRecognized),
+    });
+    return response.data.data;
+  },
+
+  // ────────────── Profit-tax calculation ──────────────
+  // Live re-compute for a period. `income` is passed as a manual override
+  // until the revenue ledger is wired up; omit it to get a tax-base that
+  // reflects only expenses.
+  async getProfitTax({ periodType = 'month', periodKey, income, rate } = {}) {
+    const params = { period_type: periodType };
+    if (periodKey) params.period_key = periodKey;
+    if (income !== undefined && income !== null && income !== '') params.income = income;
+    if (rate !== undefined && rate !== null && rate !== '') params.rate = rate;
+    const response = await apiClient.get('/profit-tax', { params });
+    return response.data.data;
+  },
+
+  // Pull a period's revenue straight from the general ledger — sum of
+  // credits net of debits on revenue-category accounts for posted
+  // journal entries. Used by the "Pull from ledger" button on the Profit
+  // Tax page so accountants don't have to type the number by hand.
+  async getProfitTaxRevenue({ periodType = 'month', periodKey } = {}) {
+    const params = { period_type: periodType };
+    if (periodKey) params.period_key = periodKey;
+    const response = await apiClient.get('/profit-tax/revenue', { params });
+    return response.data.data;
+  },
+
+  // Freeze the current computed numbers into profit_tax_calc.
+  async snapshotProfitTax({ periodType, periodKey, income, rate, notes } = {}) {
+    const body = { period_type: periodType, period_key: periodKey };
+    if (income !== undefined) body.income = income;
+    if (rate !== undefined && rate !== null && rate !== '') body.rate = rate;
+    if (notes) body.notes = notes;
+    const response = await apiClient.post('/profit-tax/snapshot', body);
+    return response.data.data;
+  },
+
+  // Listing for the snapshots tab / audit view.
+  async listProfitTaxSnapshots({ year } = {}) {
+    const params = {};
+    if (year) params.year = year;
+    const response = await apiClient.get('/profit-tax/snapshots', { params });
     return response.data.data;
   },
 

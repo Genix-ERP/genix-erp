@@ -922,7 +922,6 @@ const OverviewTabContent = React.memo(function OverviewTabContent({
   // overview card, which looked like missing data rather than an
   // inapplicable field.
   const infoItems = [
-    { label: t('client_phone') || 'Telefon', value: project.client_phone || EMPTY },
     { label: t('location') || 'Manzil', value: locationStr || EMPTY },
     {
       label: t('project_type') || 'Loyiha turi',

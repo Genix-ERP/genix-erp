@@ -242,6 +242,10 @@ function PagesContent() {
                 <Route path="pos" element={<ModuleRoute moduleId="sales"><POS /></ModuleRoute>} />
                 <Route path="assets" element={<ModuleRoute moduleId="assets"><Assets /></ModuleRoute>} />
                 <Route path="expenses" element={<ModuleRoute moduleId="expenses"><Expenses /></ModuleRoute>} />
+                {/* Profit tax is now mounted as a tab inside Financials
+                    per §8.1 of ТЗ_Ish_Haqi_Soliq_Tolik.docx, so no
+                    dedicated route here. Link to it with
+                    /financials?tab=profit-tax. */}
                 <Route path="payroll" element={<ModuleRoute moduleId="payroll"><Payroll /></ModuleRoute>} />
                 <Route path="contracts" element={<ModuleRoute moduleId="contracts"><Contracts /></ModuleRoute>} />
                 <Route path="companies" element={<AdminRoute><Companies /></AdminRoute>} />
