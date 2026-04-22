@@ -796,17 +796,50 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                   </thead>
                                   <tbody>
                                     {(() => {
-                                      // Group lines by parent: render each top-level line followed by its
-                                      // sub-lines (rows with parent_line_id). We keep top-level rows in the
-                                      // order the backend returned them (already sorted) and emit children
-                                      // immediately after their parent.
+                                      // Group lines by parent. Two mechanisms, in order of precedence:
+                                      //   1. Explicit FK (`parent_line_id`) set by the SublineModal flow.
+                                      //   2. Implicit hierarchy detected from the item_number pattern
+                                      //      `{base}-{seq}` (e.g. "3-1" is a child of "3"). This covers
+                                      //      data imported from Excel/SNiP files where the numbering
+                                      //      expresses the relationship but no FK was written.
                                       const byParent = new Map(); // parent_line_id -> children[]
                                       const roots = [];
+
+                                      // Build an item_number -> line.id lookup for the implicit pass.
+                                      // We only use top-level rows (no parent already set) as potential
+                                      // parents so we don't stack 3-1-1 as child of 3-1.
+                                      const itemNumToId = new Map();
                                       for (const ln of lines) {
+                                        if (!ln.parent_line_id && ln.item_number) {
+                                          itemNumToId.set(String(ln.item_number), ln.id);
+                                        }
+                                      }
+
+                                      // Classify: a row is a sub-line if (a) it has parent_line_id,
+                                      // or (b) its item_number looks like "N-M" (N, M both numeric)
+                                      // AND an item_number "N" exists in this estimate.
+                                      for (const ln of lines) {
+                                        let effectiveParentId = null;
                                         if (ln.parent_line_id) {
-                                          const arr = byParent.get(ln.parent_line_id) || [];
+                                          effectiveParentId = ln.parent_line_id;
+                                        } else if (typeof ln.item_number === 'string') {
+                                          // Only split on the LAST hyphen, and only when both sides are
+                                          // plain integers. This avoids misinterpreting codes like
+                                          // "E0102-057-02" (not all-numeric segments).
+                                          const m = ln.item_number.match(/^(\d+)-(\d+)$/);
+                                          if (m) {
+                                            const base = m[1];
+                                            const resolved = itemNumToId.get(base);
+                                            if (resolved && resolved !== ln.id) {
+                                              effectiveParentId = resolved;
+                                            }
+                                          }
+                                        }
+
+                                        if (effectiveParentId) {
+                                          const arr = byParent.get(effectiveParentId) || [];
                                           arr.push(ln);
-                                          byParent.set(ln.parent_line_id, arr);
+                                          byParent.set(effectiveParentId, arr);
                                         } else {
                                           roots.push(ln);
                                         }
@@ -815,25 +848,30 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                       const colSpan = est.source_type === 'resurs' ? 10 : 6;
 
                                       const renderLine = (line, isSubline, parent) => {
+                                        // Sub-lines (podkator) get a green tint + left accent border so they're
+                                        // visually distinct from regular estimate rows.
+                                        const rowClass = isSubline
+                                          ? 'border-b border-slate-100 hover:bg-emerald-50/70 group bg-emerald-50/40 border-l-[3px] border-l-emerald-400'
+                                          : 'border-b border-slate-100 hover:bg-white group';
                                         return (
-                                          <tr key={line.id} className={`border-b border-slate-100 hover:bg-white group ${isSubline ? 'bg-slate-50/60' : ''}`}>
-                                            <td className="py-2 px-2 text-xs text-slate-500">
+                                          <tr key={line.id} className={rowClass}>
+                                            <td className="py-2 px-2 text-xs whitespace-nowrap">
                                               {isSubline
-                                                ? <span className="pl-6 font-mono">{line.item_number}</span>
-                                                : <span className="font-medium">{line.item_number}</span>}
+                                                ? <span className="pl-6 font-mono text-emerald-700 whitespace-nowrap">{line.item_number}</span>
+                                                : <span className="font-medium text-slate-500 whitespace-nowrap">{line.item_number}</span>}
                                             </td>
-                                            {est.source_type !== 'resurs' && <td className="py-2 px-2 text-xs text-slate-500">{line.code}</td>}
-                                            <td className="py-2 px-2 text-xs">
+                                            {est.source_type !== 'resurs' && <td className={`py-2 px-2 text-xs ${isSubline ? 'text-emerald-700/80' : 'text-slate-500'}`}>{line.code}</td>}
+                                            <td className={`py-2 px-2 text-xs ${isSubline ? 'text-emerald-900' : ''}`}>
                                               {isSubline && (
                                                 <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${
-                                                  line.resource_type === 'labor' ? 'bg-blue-400' :
-                                                  line.resource_type === 'equipment' ? 'bg-amber-400' :
-                                                  line.resource_type === 'material' ? 'bg-green-400' : 'bg-slate-300'
+                                                  line.resource_type === 'labor' ? 'bg-blue-500' :
+                                                  line.resource_type === 'equipment' ? 'bg-amber-500' :
+                                                  line.resource_type === 'material' ? 'bg-emerald-600' : 'bg-emerald-400'
                                                 }`} />
                                               )}
                                               {line.name}
                                               {isSubline && Number(line.norm_rate) > 0 && (
-                                                <span className="text-[10px] text-muted-foreground ml-2">
+                                                <span className="text-[10px] text-emerald-700/70 ml-2">
                                                   ({t('norm') || 'Norma'} {line.norm_rate})
                                                 </span>
                                               )}
@@ -894,13 +932,13 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                         if (children.length > 0 && est.source_type === 'resurs') {
                                           const subTotal = children.reduce((s, c) => s + (Number(c.total_amount) || 0), 0);
                                           rows.push(
-                                            <tr key={`subtotal-${parent.id}`} className="bg-blue-50/40 border-b border-slate-100">
+                                            <tr key={`subtotal-${parent.id}`} className="bg-emerald-50/60 border-b border-slate-100 border-l-[3px] border-l-emerald-400">
                                               <td className="py-1.5 px-2" />
                                               {est.source_type !== 'resurs' && <td />}
-                                              <td className="py-1.5 px-2 text-xs text-slate-600 italic" colSpan={colSpan - 2}>
+                                              <td className="py-1.5 px-2 text-xs text-emerald-800 italic" colSpan={colSpan - 2}>
                                                 {parent.item_number}-{t('subline_total_label') || "qator podkatorlar jami"}
                                               </td>
-                                              <td className="py-1.5 px-2 text-right text-xs font-semibold text-blue-700">
+                                              <td className="py-1.5 px-2 text-right text-xs font-semibold text-emerald-700">
                                                 {formatCurrency(subTotal)}
                                               </td>
                                               {est.state === 'draft' && <td />}
