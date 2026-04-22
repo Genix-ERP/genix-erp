@@ -104,13 +104,18 @@ export default function DirectorDashboard() {
   // Fetch all companies' metrics in a single backend call.
   // The /reports/director-summary endpoint aggregates per-org revenue, expenses,
   // debtors/creditors, inventory, and HR stats in one round-trip.
+  const [monthLabels, setMonthLabels] = useState([]);
+
   const loadAll = useCallback(async () => {
     if (!companies || companies.length === 0) return;
     setLoading(true);
     try {
-      const res = await apiClient.get('/reports/director-summary');
+      const res = await apiClient.get('/reports/director-summary', {
+        params: { period },
+      });
       const payload = res.data?.data ?? res.data ?? {};
       const rows = Array.isArray(payload.companies) ? payload.companies : [];
+      if (Array.isArray(payload.month_labels)) setMonthLabels(payload.month_labels);
       const next = {};
       rows.forEach(row => {
         next[row.id] = {
@@ -119,7 +124,7 @@ export default function DirectorDashboard() {
           profit: Number(row.profit || 0),
           deb: Number(row.debtors || 0),
           cred: Number(row.creditors || 0),
-          monthlyRev: Array.isArray(row.monthly_revenue) ? row.monthly_revenue : [0, 0, 0, 0, 0, 0],
+          monthlyRev: Array.isArray(row.monthly_revenue) ? row.monthly_revenue : [],
           expenseBreakdown: row.expense_by_category || {},
           stockUnits: Number(row.stock_units || 0),
           stockValue: Number(row.stock_value || 0),
@@ -139,11 +144,18 @@ export default function DirectorDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [companies]);
+  }, [companies, period]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
-  const months = useMemo(() => monthRange(6), []);
+  // Chart x-axis labels come from the backend — they follow whatever
+  // period is currently active (days, months, quarters or years).
+  // Fall back to the client-side month range only if the server
+  // hasn't responded yet.
+  const months = useMemo(() => {
+    if (monthLabels.length > 0) return monthLabels.map(l => ({ label: l }));
+    return monthRange(6);
+  }, [monthLabels]);
 
   // Aggregates
   const agg = useMemo(() => {
