@@ -117,7 +117,7 @@ export default function Register() {
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
-    phone: '',
+    phone: '+998 ',
     email: '',
     password: '',
     confirmPassword: '',
@@ -150,6 +150,23 @@ export default function Register() {
   }, [countdown]);
 
   const handleChange = (e) => setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+
+  // Format Uzbek phone as "+998 XX XXX XX XX" while the user types.
+  // Matches the subscription / forgot-password pages so the UX is the
+  // same everywhere a phone number is entered.
+  const formatPhone = (value) => {
+    let raw = value.replace(/[^\d+]/g, '');
+    if (!raw.startsWith('+')) raw = '+' + raw.replace(/\+/g, '');
+    const digits = raw.slice(1);
+    let formatted = '+';
+    if (digits.length > 0) formatted += digits.slice(0, 3);
+    if (digits.length > 3) formatted += ' ' + digits.slice(3, 5);
+    if (digits.length > 5) formatted += ' ' + digits.slice(5, 8);
+    if (digits.length > 8) formatted += ' ' + digits.slice(8, 10);
+    if (digits.length > 10) formatted += ' ' + digits.slice(10, 12);
+    return formatted;
+  };
+  const handlePhoneChange = (e) => setFormData(prev => ({ ...prev, phone: formatPhone(e.target.value) }));
 
   const handleOtpChange = (index, value) => {
     if (value && !/^\d$/.test(value)) return;
@@ -344,7 +361,7 @@ export default function Register() {
                 <Label className="text-slate-700">{L.phone} *</Label>
                 <div className="relative">
                   <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <Input name="phone" placeholder={L.phone_placeholder} value={formData.phone} onChange={handleChange} className={inputCls} required />
+                  <Input name="phone" type="tel" placeholder={L.phone_placeholder} value={formData.phone} onChange={handlePhoneChange} className={inputCls} required />
                 </div>
               </div>
 
