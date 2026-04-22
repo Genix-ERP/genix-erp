@@ -652,7 +652,14 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
               </Button>
             </div>
           ) : (
-            <ScrollArea className="h-[600px]">
+            // Use a plain scrollable div instead of Radix <ScrollArea>: the
+            // Radix viewport is `display: table`, which lets any descendant
+            // with an intrinsic min-width (like the resurs table's
+            // min-w-[1200px]) widen the viewport itself. That swallowed the
+            // inner overflow-x-auto and made horizontal scrolling impossible.
+            // A native block-level scroll container keeps the viewport
+            // constrained so the table can overflow and scroll horizontally.
+            <div className="h-[600px] overflow-y-auto">
               <div className="p-4 space-y-3">
                 {(() => {
                   const totalCount = filteredEstimates.length;
@@ -775,21 +782,36 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                             </div>
                           ) : (
                             <div className="px-2 pb-2">
+                              {/*
+                                For resurs estimates the table has up to 10
+                                columns (Nomi + 5 numeric rates + actions),
+                                which don't fit on a typical desktop viewport
+                                once sidebar + panel widths are taken out.
+                                Give the table a minimum width so the
+                                wrapping div's overflow-x-auto actually kicks
+                                in and the user can scroll to the rightmost
+                                columns (Material / Ish haqi / Jihozlar /
+                                Birlik narxi / Jami) instead of having them
+                                squeezed to 30-40px with the values wrapped
+                                across two lines.
+                              */}
                               <div className="overflow-x-auto">
-                                <table className="w-full text-sm">
+                                <table
+                                  className={`w-full text-sm ${est.source_type === 'resurs' ? 'min-w-[1200px]' : ''}`}
+                                >
                                   <thead>
                                     <tr className="border-b">
                                       <th className="text-left py-2 px-2 text-xs font-medium text-slate-500 w-10">№</th>
                                       {est.source_type !== 'resurs' && <th className="text-left py-2 px-2 text-xs font-medium text-slate-500">{t('code') || 'Shifr'}</th>}
                                       <th className="text-left py-2 px-2 text-xs font-medium text-slate-500">{t('name') || 'Nomi'}</th>
-                                      <th className="text-right py-2 px-2 text-xs font-medium text-slate-500">{t('unit') || "O'lchov"}</th>
-                                      <th className="text-right py-2 px-2 text-xs font-medium text-slate-500">{t('quantity') || 'Miqdor'}</th>
+                                      <th className="text-right py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">{t('unit') || "O'lchov"}</th>
+                                      <th className="text-right py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">{t('quantity') || 'Miqdor'}</th>
                                       {est.source_type === 'resurs' && <>
-                                        <th className="text-right py-2 px-2 text-xs font-medium text-slate-500">{t('material') || 'Material'}</th>
-                                        <th className="text-right py-2 px-2 text-xs font-medium text-slate-500">{t('labor') || 'Ish haqi'}</th>
-                                        <th className="text-right py-2 px-2 text-xs font-medium text-slate-500">{t('equipment') || 'Jihozlar'}</th>
-                                        <th className="text-right py-2 px-2 text-xs font-medium text-slate-500">{t('unit_rate') || 'Birlik narxi'}</th>
-                                        <th className="text-right py-2 px-2 text-xs font-medium text-slate-500">{t('total') || 'Jami'}</th>
+                                        <th className="text-right py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">{t('material') || 'Material'}</th>
+                                        <th className="text-right py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">{t('labor') || 'Ish haqi'}</th>
+                                        <th className="text-right py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">{t('equipment') || 'Jihozlar'}</th>
+                                        <th className="text-right py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">{t('unit_rate') || 'Birlik narxi'}</th>
+                                        <th className="text-right py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">{t('total') || 'Jami'}</th>
                                       </>}
                                       {est.state === 'draft' && <th className="w-16"></th>}
                                     </tr>
@@ -876,14 +898,14 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                                 </span>
                                               )}
                                             </td>
-                                            <td className="py-2 px-2 text-right text-xs text-slate-600">{line.uom}</td>
-                                            <td className="py-2 px-2 text-right text-xs">{line.quantity}</td>
+                                            <td className="py-2 px-2 text-right text-xs text-slate-600 whitespace-nowrap">{line.uom}</td>
+                                            <td className="py-2 px-2 text-right text-xs whitespace-nowrap">{line.quantity}</td>
                                             {est.source_type === 'resurs' && <>
-                                              <td className="py-2 px-2 text-right text-xs">{formatCurrency(line.material_rate)}</td>
-                                              <td className="py-2 px-2 text-right text-xs">{formatCurrency(line.labor_rate)}</td>
-                                              <td className="py-2 px-2 text-right text-xs">{formatCurrency(line.equipment_rate)}</td>
-                                              <td className="py-2 px-2 text-right text-xs font-medium">{formatCurrency(line.unit_rate)}</td>
-                                              <td className="py-2 px-2 text-right text-xs font-medium">{formatCurrency(line.total_amount)}</td>
+                                              <td className="py-2 px-2 text-right text-xs whitespace-nowrap">{formatCurrency(line.material_rate)}</td>
+                                              <td className="py-2 px-2 text-right text-xs whitespace-nowrap">{formatCurrency(line.labor_rate)}</td>
+                                              <td className="py-2 px-2 text-right text-xs whitespace-nowrap">{formatCurrency(line.equipment_rate)}</td>
+                                              <td className="py-2 px-2 text-right text-xs font-medium whitespace-nowrap">{formatCurrency(line.unit_rate)}</td>
+                                              <td className="py-2 px-2 text-right text-xs font-medium whitespace-nowrap">{formatCurrency(line.total_amount)}</td>
                                             </>}
                                             {est.state === 'draft' && (
                                               <td className="py-2 px-2 text-center">
@@ -1025,7 +1047,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                   );
                 })()}
               </div>
-            </ScrollArea>
+            </div>
           )}
         </CardContent>
       </Card>

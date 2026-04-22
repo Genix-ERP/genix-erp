@@ -69,7 +69,10 @@ const StagesTab = ({ project }) => {
   // Buildings tab (migration 333) — filter stages by building. 'all' shows
   // every stage; any number is a specific building id.
   const [buildings, setBuildings] = useState([]);
-  const [buildingFilter, setBuildingFilter] = useState('all');
+  // `buildingFilter` is the id of the active building tab. `null` means no
+  // building is selected yet (initial render before buildings have loaded);
+  // the effect below picks the first building as soon as they arrive.
+  const [buildingFilter, setBuildingFilter] = useState(null);
 
   // Stage modal
   const [showModal, setShowModal] = useState(false);
@@ -243,13 +246,15 @@ const StagesTab = ({ project }) => {
 
   const load = useCallback(async () => {
     if (!project?.id) return;
+    // No building picked yet — wait for the buildings effect to set one.
+    if (buildingFilter == null) return;
     setLoading(true);
     try {
-      // Translate the tab filter to the backend query:
-      //   'all'        → no filter (all stages returned)
-      //   <numeric id> → that specific building
-      const buildingId = buildingFilter === 'all' ? undefined : buildingFilter;
-      const data = await constructionService.listStages(project.id, { buildingId });
+      // Stages are always scoped to the active building tab now (the old
+      // "Hammasi" / all-stages option has been removed).
+      const data = await constructionService.listStages(project.id, {
+        buildingId: buildingFilter,
+      });
       const list = data || [];
       setStages(list);
       await loadAllSubStages(list);
@@ -273,6 +278,22 @@ const StagesTab = ({ project }) => {
       .catch(() => { if (!cancelled) setBuildings([]); });
     return () => { cancelled = true; };
   }, [project?.id]);
+
+  // With the "Hammasi" tab removed, the filter must always point at a real
+  // building. Auto-select the first one when buildings arrive, and re-select
+  // if the currently active building disappears after a reload.
+  useEffect(() => {
+    if (!buildings || buildings.length === 0) {
+      if (buildingFilter !== null) setBuildingFilter(null);
+      return;
+    }
+    const stillExists =
+      buildingFilter != null &&
+      buildings.some((b) => String(b.id) === String(buildingFilter));
+    if (!stillExists) {
+      setBuildingFilter(String(buildings[0].id));
+    }
+  }, [buildings, buildingFilter]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -448,10 +469,9 @@ const StagesTab = ({ project }) => {
 
   const openCreate = () => {
     setEditingStage(null);
-    // If the user is viewing a specific building's tab, pre-fill the building
-    // selector so the new stage lands where they're looking.
-    const preselectedBuilding =
-      buildingFilter === 'all' ? '' : String(buildingFilter);
+    // Pre-fill the building selector with whichever tab the user is viewing
+    // so the new stage lands in the same block.
+    const preselectedBuilding = buildingFilter != null ? String(buildingFilter) : '';
     setForm({ ...EMPTY_FORM, stage_order: stages.length, building_id: preselectedBuilding });
     setModalSubStages([]);
     setError(null);
@@ -656,26 +676,12 @@ const StagesTab = ({ project }) => {
             {t('add_stage')}
           </Button>
         </CardHeader>
-        {/* Building tab row (migration 333). `Hammasi` shows every stage,
-             and each following pill scopes the list to one building. */}
+        {/* Building tab row (migration 333). One pill per building; the
+             previous "Hammasi" (all-stages) tab has been removed so the view
+             is always scoped to a single block. */}
         {buildings.length > 0 && (
           <div className="px-6 pb-3 -mt-2">
             <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setBuildingFilter('all')}
-                className={cn(
-                  'px-3 py-1.5 rounded-full text-xs font-medium border transition-colors',
-                  buildingFilter === 'all'
-                    ? 'bg-slate-900 text-white border-slate-900'
-                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50',
-                )}
-              >
-                {t('all') || 'Hammasi'}
-                <span className="ml-1.5 text-[10px] opacity-70">
-                  {stages.length}
-                </span>
-              </button>
               {buildings.map((b) => (
                 <button
                   key={b.id}
@@ -1163,19 +1169,22 @@ const StagesTab = ({ project }) => {
                 </SelectContent>
               </Select>
             </div>
-            {/* Migration 333: assign stage to a building/block (optional) */}
+            {/* Migration 333: assign stage to a building/block. The previous
+                "Umumiy (bino tanlanmagan)" fallback has been removed so new
+                stages always belong to a concrete block. */}
             {buildings.length > 0 && (
               <div>
                 <Label>{t('building_block') || 'Bino / Blok'}</Label>
                 <Select
-                  value={form.building_id || '__none__'}
-                  onValueChange={(v) => setForm((f) => ({ ...f, building_id: v === '__none__' ? '' : v }))}
+                  value={form.building_id ? String(form.building_id) : ''}
+                  onValueChange={(v) =>
+                    setForm((f) => ({ ...f, building_id: v }))
+                  }
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder={t('project_wide') || 'Umumiy'} />
+                    <SelectValue placeholder={t('select_building') || 'Bino / Blok tanlang'} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__none__">{t('project_wide') || 'Umumiy (bino tanlanmagan)'}</SelectItem>
                     {buildings.map((b) => (
                       <SelectItem key={b.id} value={String(b.id)}>
                         {b.name || b.code || `#${b.id}`}

@@ -37,12 +37,42 @@ const ProgressTab = ({ project }) => {
   const { t } = useTranslation(language);
 
   const [view, setView] = useState('table');
-  const [progressData, setProgressData] = useState(null);
+  const [progressData, setProgressData] = useState(null); // { items: [...], kpis: {...} }
   const [ganttData, setGanttData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedBlock, setSelectedBlock] = useState(null);
   const pageSize = 20;
+
+  // Reset pagination whenever the block filter changes so we always start on
+  // page 1 of the filtered list.
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedBlock]);
+
+  // Pick the first available block as the active tab once items arrive (or
+  // when the currently selected block disappears after a reload). Items
+  // without a building_name (project-wide) are intentionally ignored — they
+  // don't get their own tab.
+  useEffect(() => {
+    const items = progressData?.items || [];
+    if (items.length === 0) return;
+    const keys = Array.from(
+      new Set(
+        items
+          .map((it) => it.building_name)
+          .filter((name) => Boolean(name)),
+      ),
+    );
+    if (keys.length === 0) {
+      if (selectedBlock !== null) setSelectedBlock(null);
+      return;
+    }
+    if (!selectedBlock || !keys.includes(selectedBlock)) {
+      setSelectedBlock(keys[0]);
+    }
+  }, [progressData, selectedBlock]);
 
   const STATUS_LABELS = {
     on_track: t('on_track') || 'On track',
@@ -50,12 +80,15 @@ const ProgressTab = ({ project }) => {
     completed: t('completed') || 'Bajarildi',
   };
 
+  // Pulls the in-progress feed (stages + sub-stages with status='in_progress'
+  // for this project). Replaces the previous WBS-only summary so the Jarayon
+  // table reflects every construction item that's currently under way.
   const loadTable = useCallback(async () => {
     if (!project?.id) return;
     setLoading(true);
     setError(null);
     try {
-      const data = await constructionService.getProgressSummary(project.id);
+      const data = await constructionService.getProjectInProgressItems(project.id);
       setProgressData(data);
     } catch (e) {
       setError(t('progress_load_error') || 'Error loading progress data');
@@ -127,14 +160,14 @@ const ProgressTab = ({ project }) => {
 
   const renderSummary = () => {
     if (!progressData) return null;
+    // Server-computed KPIs (see GetProjectInProgressItems). Fall back to
+    // client-side derivation when an older server build is running.
     const items = progressData.items || [];
-    const totalItems = items.length;
-    const completedCount = items.filter((i) => i.status === 'completed').length;
-    const behindCount = items.filter((i) => i.status === 'behind').length;
-    const avgGap =
-      totalItems > 0
-        ? (items.reduce((sum, i) => sum + ((i.fact_pct || 0) - (i.plan_pct || 0)), 0) / totalItems).toFixed(1)
-        : 0;
+    const k = progressData.kpis || {};
+    const totalItems = k.total ?? items.length;
+    const onTrackCount = k.on_track ?? items.filter((i) => i.bucket === 'on_track').length;
+    const behindCount = k.behind ?? items.filter((i) => i.bucket === 'behind').length;
+    const avgPct = Number(k.avg_pct ?? 0).toFixed(1);
 
     return (
       <div className="grid grid-cols-4 gap-4">
@@ -146,8 +179,8 @@ const ProgressTab = ({ project }) => {
         </Card>
         <Card>
           <CardContent className="p-4">
-            <p className="text-sm text-slate-500">{t('completed_count') || 'Bajarilgan'}</p>
-            <p className="text-2xl font-bold text-blue-600">{completedCount}</p>
+            <p className="text-sm text-slate-500">{t('on_track_count') || "O'z vaqtida"}</p>
+            <p className="text-2xl font-bold text-green-600">{onTrackCount}</p>
           </CardContent>
         </Card>
         <Card>
@@ -158,11 +191,8 @@ const ProgressTab = ({ project }) => {
         </Card>
         <Card>
           <CardContent className="p-4">
-            <p className="text-sm text-slate-500">{t('average_gap') || "O'rtacha farq"}</p>
-            <p className={`text-2xl font-bold ${Number(avgGap) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {Number(avgGap) >= 0 ? '+' : ''}
-              {avgGap}%
-            </p>
+            <p className="text-sm text-slate-500">{t('average_progress') || "O'rtacha jarayon"}</p>
+            <p className="text-2xl font-bold text-blue-600">{avgPct}%</p>
           </CardContent>
         </Card>
       </div>
@@ -171,69 +201,138 @@ const ProgressTab = ({ project }) => {
 
   const renderTable = () => {
     if (!progressData) return null;
-    const items = progressData.items || [];
+    const allItems = progressData.items || [];
+    // Only items attached to a block/building are shown. Project-wide
+    // ("Umumiy") items are hidden so the tab row and table stay aligned with
+    // the Stages (Bosqichlar) view, which also has no Umumiy pill.
+    const items = allItems.filter((it) => Boolean(it.building_name));
 
     if (items.length === 0) {
       return (
         <div className="text-center py-12 text-slate-500">
-          {t('no_progress_data') || "Jarayon ma'lumotlari topilmadi"}
+          {t('no_in_progress_items') || "Hozirda jarayonda element yo'q"}
         </div>
       );
     }
 
-    const paginatedItems = items.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+    // Build an ordered, de-duplicated list of blocks found in the items.
+    const blockTabs = (() => {
+      const seen = new Map();
+      for (const it of items) {
+        const key = it.building_name;
+        if (!seen.has(key)) seen.set(key, key);
+      }
+      return Array.from(seen.entries()).map(([key, label]) => ({ key, label }));
+    })();
+
+    const filteredItems = items.filter(
+      (it) => it.building_name === selectedBlock,
+    );
+
+    // If the previously-selected tab no longer exists (data reloaded), show
+    // an empty-state message rather than a stale pagination UI.
+    const hasSelectedBlock = blockTabs.some((b) => b.key === selectedBlock);
+
+    const paginatedItems = filteredItems.slice(
+      (currentPage - 1) * pageSize,
+      currentPage * pageSize,
+    );
+    const totalPages = Math.max(1, Math.ceil(filteredItems.length / pageSize));
+
+    const sourceLabel = (src) =>
+      src === 'sub_stage' ? (t('sub_stage') || 'Kichik bosqich')
+      : src === 'stage'   ? (t('stage') || 'Bosqich')
+      : src;
+
+    const sourceBadgeClass = (src) =>
+      src === 'sub_stage'
+        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+        : 'bg-indigo-50 text-indigo-700 border-indigo-200';
+
+    const fmt = (d) => (d ? String(d).slice(0, 10) : '—');
 
     return (
       <div>
+        {/* Block filter tabs — one tab per building/block. The active block's
+            name doubles as the column identity, so the table below no longer
+            repeats it per row. */}
+        {blockTabs.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-3">
+            {blockTabs.map(({ key, label }) => {
+              const count = items.filter((it) => it.building_name === key).length;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setSelectedBlock(key)}
+                  className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${
+                    selectedBlock === key
+                      ? 'bg-slate-900 text-white border-slate-900'
+                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  {label}
+                  <span className="ml-1 opacity-70">({count})</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {!hasSelectedBlock || filteredItems.length === 0 ? (
+          <div className="text-center py-8 text-slate-500 text-sm">
+            {t('no_in_progress_items') || "Hozirda jarayonda element yo'q"}
+          </div>
+        ) : (
+        <>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b text-slate-500">
-                <th className="text-left py-2 px-3">{t('wbs_code') || 'WBS kodi'}</th>
-                <th className="text-left py-2 px-3">{t('wbs_name') || 'Nomi'}</th>
-                <th className="text-center py-2 px-3">{t('plan_pct') || 'Reja %'}</th>
-                <th className="text-center py-2 px-3">{t('fact_pct') || 'Fakt %'}</th>
-                <th className="text-center py-2 px-3">{t('gap') || 'Farq'}</th>
+                <th className="text-left py-2 px-3">{t('source') || 'Manba'}</th>
+                <th className="text-left py-2 px-3">{t('name') || 'Nomi'}</th>
+                <th className="text-center py-2 px-3">{t('planned_window') || 'Reja'}</th>
+                <th className="text-center py-2 px-3">{t('actual_start') || 'Haqiqiy boshlanish'}</th>
+                <th className="text-left py-2 px-3 w-[200px]">{t('progress') || 'Jarayon'}</th>
                 <th className="text-center py-2 px-3">{t('status') || 'Holat'}</th>
               </tr>
             </thead>
             <tbody>
-              {paginatedItems.map((item, idx) => {
-                const gap = (item.fact_pct || 0) - (item.plan_pct || 0);
+              {paginatedItems.map((item) => {
+                const bucket = item.bucket || 'on_track';
+                const pct = Number(item.progress_pct) || 0;
                 return (
-                  <tr key={idx} className="border-b hover:bg-slate-50">
-                    <td className="py-2 px-3 font-mono text-xs">{item.wbs_code}</td>
-                    <td className="py-2 px-3">{item.wbs_name}</td>
+                  <tr key={`${item.source}-${item.id}`} className="border-b hover:bg-slate-50">
                     <td className="py-2 px-3">
-                      <div className="flex items-center gap-2">
-                        <Progress value={item.plan_pct || 0} className="h-2 flex-1 bg-slate-200" />
-                        <span className="text-xs text-slate-500 min-w-[36px] text-right">
-                          {(item.plan_pct || 0).toFixed(1)}%
-                        </span>
-                      </div>
+                      <Badge variant="outline" className={`text-[10px] ${sourceBadgeClass(item.source)}`}>
+                        {sourceLabel(item.source)}
+                      </Badge>
+                    </td>
+                    <td className="py-2 px-3">
+                      <div className="font-medium text-slate-800">{item.name}</div>
+                      {item.parent_name && (
+                        <div className="text-[11px] text-slate-500">
+                          ↳ {item.parent_name}
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-2 px-3 text-center text-xs text-slate-600 whitespace-nowrap">
+                      {fmt(item.planned_start)} — {fmt(item.planned_end)}
+                    </td>
+                    <td className="py-2 px-3 text-center text-xs text-slate-600">
+                      {fmt(item.actual_start)}
                     </td>
                     <td className="py-2 px-3">
                       <div className="flex items-center gap-2">
-                        <Progress
-                          value={item.fact_pct || 0}
-                          className="h-2 flex-1 bg-slate-200"
-                        />
-                        <span className="text-xs text-slate-500 min-w-[36px] text-right">
-                          {(item.fact_pct || 0).toFixed(1)}%
+                        <Progress value={pct} className="h-2 flex-1 bg-slate-200" />
+                        <span className="text-xs text-slate-500 min-w-[40px] text-right">
+                          {pct.toFixed(0)}%
                         </span>
                       </div>
                     </td>
                     <td className="py-2 px-3 text-center">
-                      <span
-                        className={`font-medium ${gap >= 0 ? 'text-green-600' : 'text-red-600'}`}
-                      >
-                        {gap >= 0 ? '+' : ''}
-                        {gap.toFixed(1)}%
-                      </span>
-                    </td>
-                    <td className="py-2 px-3 text-center">
-                      <Badge className={STATUS_BADGE[item.status] || 'bg-slate-100 text-slate-700'}>
-                        {STATUS_LABELS[item.status] || item.status}
+                      <Badge className={STATUS_BADGE[bucket] || 'bg-slate-100 text-slate-700'}>
+                        {STATUS_LABELS[bucket] || bucket}
                       </Badge>
                     </td>
                   </tr>
@@ -242,19 +341,21 @@ const ProgressTab = ({ project }) => {
             </tbody>
           </table>
         </div>
-        {Math.ceil(items.length / pageSize) > 1 && (
+        {totalPages > 1 && (
           <div className="flex items-center justify-between px-4 py-3 border-t">
             <p className="text-sm text-slate-500">
-              {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, items.length)} / {items.length}
+              {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, filteredItems.length)} / {filteredItems.length}
             </p>
             <div className="flex items-center gap-2">
               <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}>1</button>
               <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft className="w-4 h-4" /></button>
-              <span className="text-sm font-medium px-2">{currentPage} / {Math.ceil(items.length / pageSize)}</span>
-              <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= Math.ceil(items.length / pageSize)} onClick={() => setCurrentPage(p => p + 1)}><ChevronRight className="w-4 h-4" /></button>
-              <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= Math.ceil(items.length / pageSize)} onClick={() => setCurrentPage(Math.ceil(items.length / pageSize))}>{Math.ceil(items.length / pageSize)}</button>
+              <span className="text-sm font-medium px-2">{currentPage} / {totalPages}</span>
+              <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}><ChevronRight className="w-4 h-4" /></button>
+              <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(totalPages)}>{totalPages}</button>
             </div>
           </div>
+        )}
+        </>
         )}
       </div>
     );
