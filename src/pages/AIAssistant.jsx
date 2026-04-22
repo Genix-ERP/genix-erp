@@ -13,8 +13,38 @@ import {
 } from "lucide-react";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
-import { AIUsageIndicator } from "@/components/subscription/SubscriptionStatus";
 import ReactMarkdown from 'react-markdown';
+
+const TOOL_LABELS = {
+  analyze_sales_data: { en: 'Sales analysis', uz: 'Savdo tahlili', ru: 'Анализ продаж' },
+  analyze_inventory: { en: 'Inventory analysis', uz: 'Ombor tahlili', ru: 'Анализ инвентаря' },
+  analyze_financials: { en: 'Financial analysis', uz: 'Moliyaviy tahlil', ru: 'Финансовый анализ' },
+  analyze_customers: { en: 'Customer analysis', uz: 'Mijozlar tahlili', ru: 'Анализ клиентов' },
+  analyze_hr: { en: 'HR analysis', uz: 'HR tahlili', ru: 'HR-анализ' },
+  analyze_assets: { en: 'Asset analysis', uz: 'Aktivlar tahlili', ru: 'Анализ активов' },
+  analyze_projects: { en: 'Project analysis', uz: 'Loyihalar tahlili', ru: 'Анализ проектов' },
+  analyze_contracts: { en: 'Contract analysis', uz: 'Shartnomalar tahlili', ru: 'Анализ контрактов' },
+  create_company: { en: 'Create company', uz: 'Kompaniya yaratish', ru: 'Создание компании' },
+  create_inventory_item: { en: 'Create item', uz: 'Mahsulot yaratish', ru: 'Создание товара' },
+  adjust_stock: { en: 'Adjust stock', uz: 'Zaxirani o\'zgartirish', ru: 'Корректировка запаса' },
+  create_customer: { en: 'Create customer', uz: 'Mijoz yaratish', ru: 'Создание клиента' },
+  create_sales_order: { en: 'Create sales order', uz: 'Savdo buyurtmasi yaratish', ru: 'Создание заказа' },
+  create_purchase_order: { en: 'Create purchase order', uz: 'Xarid buyurtmasi yaratish', ru: 'Создание закупки' },
+  create_employee: { en: 'Create employee', uz: 'Xodim yaratish', ru: 'Создание сотрудника' },
+  create_expense: { en: 'Create expense', uz: 'Xarajat yaratish', ru: 'Создание расхода' },
+  create_invoice: { en: 'Create invoice', uz: 'Hisob-faktura yaratish', ru: 'Создание счёта' },
+  create_project: { en: 'Create project', uz: 'Loyiha yaratish', ru: 'Создание проекта' },
+  create_contract: { en: 'Create contract', uz: 'Shartnoma yaratish', ru: 'Создание контракта' },
+  create_vendor: { en: 'Create vendor', uz: 'Yetkazib beruvchi yaratish', ru: 'Создание поставщика' },
+};
+
+const getToolLabel = (name, lang) => {
+  if (!name) return lang === 'uz' ? 'Amal' : lang === 'ru' ? 'Действие' : 'Action';
+  const key = name.split('.').pop();
+  const entry = TOOL_LABELS[key];
+  if (entry) return entry[lang] || entry.en;
+  return key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+};
 
 export default function AIAssistant() {
   const { language } = useLanguage();
@@ -114,40 +144,39 @@ export default function AIAssistant() {
   };
 
   return (
-    <div className="h-full flex flex-col bg-gradient-to-br from-slate-50 via-white to-blue-50/30 relative overflow-hidden">
-      {/* Decorative Elements */}
-      <div className="absolute top-0 left-0 w-full h-full pointer-events-none overflow-hidden">
-        <div className="absolute top-20 left-10 w-72 h-72 bg-blue-100/30 rounded-full blur-3xl"></div>
-        <div className="absolute bottom-20 right-10 w-96 h-96 bg-purple-100/30 rounded-full blur-3xl"></div>
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-br from-blue-50/20 to-purple-50/20 rounded-full blur-3xl"></div>
+    <div className="h-full flex flex-col bg-slate-50/50 relative overflow-hidden">
+      {/* Subtle ambient glow */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[720px] h-[720px] bg-gradient-to-b from-blue-100/40 via-purple-50/20 to-transparent rounded-full blur-3xl"></div>
       </div>
 
       <div className="relative z-10 flex-1 flex flex-col min-h-0">
         {!showChat ? (
           /* Landing View */
-          <div className="flex flex-col items-center justify-center flex-1 p-6 animate-[fadeInUp_0.5s_ease-out]">
-            <div className="w-full max-w-4xl mx-auto space-y-10">
+          <div className="flex flex-col items-center justify-center flex-1 px-6 py-10 animate-[fadeInUp_0.5s_ease-out]">
+            <div className="w-full max-w-3xl mx-auto space-y-8">
 
-              {/* Hero Title */}
+              {/* Hero */}
               <div className="text-center space-y-4 animate-[fadeInUp_0.6s_ease-out]">
-                <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-3xl shadow-xl shadow-blue-500/25 animate-[scaleIn_0.5s_ease-out_0.2s_both]">
-                  <Bot className="w-10 h-10 text-white" />
+                <div className="inline-flex items-center justify-center w-14 h-14 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl shadow-md shadow-blue-500/20 animate-[scaleIn_0.5s_ease-out_0.2s_both]">
+                  <Bot className="w-7 h-7 text-white" />
                 </div>
-                <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                  {t('ai_assistant') || 'AI Yordamchi'}
-                </h1>
-                <p className="text-lg text-slate-500 max-w-xl mx-auto">
-                  {t('ai_assistant_description') || "Biznesingiz haqida biror narsa so'rang..."}
-                </p>
+                <div className="space-y-2">
+                  <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-slate-900">
+                    {t('ai_assistant') || 'AI Yordamchi'}
+                  </h1>
+                  <p className="text-base text-slate-500 max-w-lg mx-auto">
+                    {t('ai_assistant_description') || "Biznesingiz haqida istalgan savolni bering"}
+                  </p>
+                </div>
               </div>
 
               {/* Search Box */}
-              <div className="relative group animate-[fadeInUp_0.5s_ease-out_0.3s_both]">
-                <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-purple-500 rounded-2xl blur-xl opacity-0 group-hover:opacity-20 transition-all duration-500"></div>
-                <div className="relative bg-white rounded-2xl shadow-2xl border border-slate-200/50 p-2 transition-all duration-300 hover:shadow-3xl">
-                  <div className="flex items-center gap-3">
-                    <div className="pl-4 text-slate-400">
-                      <Search className="w-6 h-6" />
+              <div className="animate-[fadeInUp_0.5s_ease-out_0.3s_both]">
+                <div className="relative bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md focus-within:shadow-md focus-within:border-blue-300 transition-all duration-200 p-1.5">
+                  <div className="flex items-center gap-2">
+                    <div className="pl-3.5 text-slate-400">
+                      <Search className="w-5 h-5" />
                     </div>
                     <Input
                       ref={inputRef}
@@ -155,21 +184,21 @@ export default function AIAssistant() {
                       onChange={(e) => setInput(e.target.value)}
                       onKeyDown={handleKeyDown}
                       placeholder={t('ask_anything') || "Biznesingiz haqida biror narsa so'rang..."}
-                      className="border-0 text-lg h-16 focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-slate-400"
+                      className="border-0 text-base h-12 focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-slate-400 px-2"
                       disabled={isLoading}
                     />
                     <Button
                       onClick={() => handleSendMessage()}
                       disabled={!input.trim() || isLoading}
-                      size="lg"
-                      className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl px-8 h-14 text-base font-semibold mr-2"
+                      size="sm"
+                      className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-sm rounded-xl px-5 h-11 text-sm font-medium"
                     >
                       {isLoading ? (
-                        <Loader2 className="w-5 h-5 animate-spin" />
+                        <Loader2 className="w-4 h-4 animate-spin" />
                       ) : (
                         <>
-                          <span className="mr-2">{t('ask_ai') || "AI'dan so'rang"}</span>
-                          <ArrowRight className="w-5 h-5" />
+                          <span>{t('ask_ai') || "AI'dan so'rang"}</span>
+                          <ArrowRight className="w-4 h-4 ml-1.5" />
                         </>
                       )}
                     </Button>
@@ -178,69 +207,39 @@ export default function AIAssistant() {
               </div>
 
               {/* Suggested Queries */}
-              <div className="space-y-4">
-                <p className="text-center text-sm font-medium text-slate-500 uppercase tracking-wider">
-                  {t('ai_insights') || 'AI TAHLILLARI'} - Try asking:
+              <div className="space-y-3">
+                <p className="text-xs font-medium text-slate-400 uppercase tracking-wider text-center">
+                  {language === 'uz' ? 'Namuna savollar' : language === 'ru' ? 'Попробуйте спросить' : 'Try asking'}
                 </p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl mx-auto">
-                  {suggestedQueries.map((query, index) => (
-                    <button
-                      key={index}
-                      onClick={() => handleSendMessage(query.text)}
-                      disabled={isLoading}
-                      className="group relative bg-white/80 backdrop-blur-sm border border-slate-200/50 rounded-xl p-5 hover:shadow-xl hover:border-blue-300/50 hover:scale-[1.02] hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-300 text-left disabled:opacity-50 disabled:cursor-not-allowed animate-[fadeInUp_0.4s_ease-out_both]"
-                      style={{ animationDelay: `${0.4 + index * 0.1}s` }}
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${
-                          index === 0 ? 'from-green-100 to-green-200' :
-                          index === 1 ? 'from-orange-100 to-orange-200' :
-                          index === 2 ? 'from-blue-100 to-blue-200' :
-                          'from-purple-100 to-purple-200'
-                        } flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300`}>
-                          <query.icon className={`w-6 h-6 ${query.color}`} />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                  {suggestedQueries.map((query, index) => {
+                    const iconBg = [
+                      'bg-green-50 text-green-600',
+                      'bg-orange-50 text-orange-600',
+                      'bg-blue-50 text-blue-600',
+                      'bg-purple-50 text-purple-600',
+                    ][index];
+                    return (
+                      <button
+                        key={index}
+                        onClick={() => handleSendMessage(query.text)}
+                        disabled={isLoading}
+                        className="group flex items-center gap-3 bg-white border border-slate-200 rounded-xl p-3.5 hover:border-slate-300 hover:shadow-sm transition-all duration-200 text-left disabled:opacity-50 disabled:cursor-not-allowed animate-[fadeInUp_0.4s_ease-out_both]"
+                        style={{ animationDelay: `${0.4 + index * 0.08}s` }}
+                      >
+                        <div className={`w-9 h-9 rounded-lg ${iconBg} flex items-center justify-center flex-shrink-0`}>
+                          <query.icon className="w-[18px] h-[18px]" />
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-slate-700 group-hover:text-slate-900 transition-colors">
-                            {query.text}
-                          </p>
-                        </div>
-                        <ArrowRight className="w-5 h-5 text-slate-400 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all duration-300" />
-                      </div>
-                    </button>
-                  ))}
+                        <p className="flex-1 text-sm text-slate-700 leading-snug">
+                          {query.text}
+                        </p>
+                        <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-slate-500 group-hover:translate-x-0.5 transition-all duration-200 flex-shrink-0" />
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* Features Grid */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-6 pt-8 max-w-4xl mx-auto">
-                {[
-                  { icon: TrendingUp, label: t('revenue_analysis') || 'Daromad tahlili', color: 'from-green-500 to-emerald-500' },
-                  { icon: Users, label: t('customer_insights') || 'Mijozlar tushunchalari', color: 'from-blue-500 to-cyan-500' },
-                  { icon: Package, label: t('inventory_optimization') || 'Ombor optimallashtirish', color: 'from-orange-500 to-amber-500' },
-                  { icon: DollarSign, label: t('financial_planning') || 'Moliyaviy rejalashtirish', color: 'from-purple-500 to-pink-500' }
-                ].map((feature, index) => (
-                  <div
-                    key={index}
-                    className="group text-center space-y-3 animate-[fadeInUp_0.4s_ease-out_both]"
-                    style={{ animationDelay: `${0.5 + index * 0.1}s` }}
-                  >
-                    <div className={`w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br ${feature.color} p-4 shadow-lg group-hover:shadow-xl group-hover:scale-110 transition-all duration-300`}>
-                      <feature.icon className="w-full h-full text-white" />
-                    </div>
-                    <p className="text-sm font-medium text-slate-600 group-hover:text-slate-900 transition-colors">
-                      {feature.label}
-                    </p>
-                  </div>
-                ))}
-              </div>
-
-              {/* AI Usage Indicator */}
-              <div className="flex justify-center">
-                <div className="bg-white/80 backdrop-blur-sm rounded-xl px-4 py-2 border border-slate-200/50 shadow-sm">
-                  <AIUsageIndicator />
-                </div>
-              </div>
             </div>
           </div>
         ) : (
@@ -270,9 +269,6 @@ export default function AIAssistant() {
                       </div>
                     </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <AIUsageIndicator />
                 </div>
               </div>
 
@@ -323,7 +319,15 @@ export default function AIAssistant() {
                           >
                             {message.role === 'assistant' ? (
                               <div>
-                                <div className="text-sm prose prose-sm max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 prose-table:border-collapse prose-th:border prose-th:border-slate-300 prose-th:p-2 prose-th:bg-slate-50 prose-td:border prose-td:border-slate-300 prose-td:p-2">
+                                <div className="text-sm prose prose-sm max-w-none
+                                  [&>*:first-child]:mt-0 [&>*:last-child]:mb-0
+                                  prose-p:my-2 prose-p:leading-relaxed
+                                  prose-headings:mt-4 prose-headings:mb-2 prose-headings:font-semibold
+                                  prose-strong:text-slate-900 prose-strong:font-semibold
+                                  prose-ul:my-2 prose-ul:pl-5 prose-ul:list-disc prose-ul:marker:text-slate-400
+                                  prose-ol:my-2 prose-ol:pl-5 prose-ol:list-decimal prose-ol:marker:text-slate-500 prose-ol:marker:font-medium
+                                  prose-li:my-0.5 prose-li:leading-relaxed
+                                  prose-table:border-collapse prose-th:border prose-th:border-slate-300 prose-th:p-2 prose-th:bg-slate-50 prose-td:border prose-td:border-slate-300 prose-td:p-2">
                                   <ReactMarkdown>{message.content}</ReactMarkdown>
                                 </div>
 
@@ -333,11 +337,11 @@ export default function AIAssistant() {
                                       <div key={idx} className="flex items-center gap-2 text-xs">
                                         <Zap className="w-3 h-3 text-purple-600" />
                                         <span className="font-medium text-slate-700">
-                                          {toolCall.name?.split('.').pop() || 'Action'}
+                                          {getToolLabel(toolCall.name, language)}
                                         </span>
                                         {toolCall.status === 'completed' && (
                                           <Badge className="bg-green-100 text-green-700 text-xs">
-                                            ✓ Completed
+                                            ✓ {language === 'uz' ? 'Bajarildi' : language === 'ru' ? 'Готово' : 'Completed'}
                                           </Badge>
                                         )}
                                       </div>
