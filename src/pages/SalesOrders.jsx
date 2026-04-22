@@ -200,13 +200,22 @@ export default function SalesOrders() {
     // Build table data from order lines if available
     const lines = order.lines || [];
     const tableData = lines.length > 0
-      ? lines.map((line, idx) => ({
-          no: idx + 1,
-          description: line.description || line.product_name || '-',
-          quantity: line.quantity || 0,
-          unit_price: formatCurrency(line.unit_price || 0),
-          total: formatCurrency((line.quantity || 0) * (line.unit_price || 0)),
-        }))
+      ? lines.map((line, idx) => {
+          const primary = line.description || line.product_name || '-';
+          // Append counterparty's name (via search_key match) on a
+          // second line so both the seller and the buyer see a
+          // product name they recognise on the printed document.
+          const description = line.alt_name && line.alt_name !== primary
+            ? `${primary}\n(${line.alt_name})`
+            : primary;
+          return {
+            no: idx + 1,
+            description,
+            quantity: line.quantity || 0,
+            unit_price: formatCurrency(line.unit_price || 0),
+            total: formatCurrency((line.quantity || 0) * (line.unit_price || 0)),
+          };
+        })
       : [{ no: 1, description: t('no_items'), quantity: '-', unit_price: '-', total: '-' }];
 
     return {
@@ -1180,9 +1189,57 @@ export default function SalesOrders() {
     });
   };
 
+  // Enrich each order line with `alt_names` = other products in the
+  // tenant that share the same search_key. This powers the
+  // dual-name print (seller's "Eshik Hi tech" + buyer's internal
+  // "ПБ-5.9*100а" below it) so both parties see a name they
+  // recognize on the printed document.
+  const enrichLinesWithAltNames = async (lines) => {
+    if (!Array.isArray(lines) || lines.length === 0) return lines;
+    // Collect unique search_keys from the seller's products
+    const keyByLine = new Map();
+    for (const line of lines) {
+      const prod = products.find(p => p.id === line.product_id);
+      const key = prod?.search_key;
+      if (key) keyByLine.set(line, key);
+    }
+    const uniqueKeys = [...new Set(keyByLine.values())];
+    if (uniqueKeys.length === 0) return lines;
+
+    // Fetch counterparty matches per unique key in parallel.
+    // `exclude_organization_id` keeps the seller's own products out
+    // of the result — we only want the OTHER org's name for the
+    // same material, which is what the buyer recognises on the PDF.
+    const keyToMatches = new Map();
+    await Promise.all(uniqueKeys.map(async (k) => {
+      try {
+        const res = await apiClient.get('/products/by-search-key', {
+          params: {
+            key: k,
+            ...(activeCompany?.id ? { exclude_organization_id: activeCompany.id } : {}),
+          },
+        });
+        const list = res.data?.data?.products ?? res.data?.products ?? [];
+        keyToMatches.set(k, list);
+      } catch { /* ignore failed key */ }
+    }));
+
+    // Attach the first counterparty match's name as alt_name
+    return lines.map(line => {
+      const key = keyByLine.get(line);
+      if (!key) return line;
+      const matches = keyToMatches.get(key) || [];
+      const alt = matches.find(m => m.id !== line.product_id && m.name);
+      return alt ? { ...line, alt_name: alt.name } : line;
+    });
+  };
+
   const handlePrintOrder = async (order) => {
     try {
       const fullOrder = await salesService.getOrder(order.id);
+      if (fullOrder.lines) {
+        fullOrder.lines = await enrichLinesWithAltNames(fullOrder.lines);
+      }
       setSelectedOrder(fullOrder);
       setShowPrintPreview(true);
     } catch (error) {

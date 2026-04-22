@@ -450,6 +450,7 @@ export default function Products() {
   const [formData, setFormData] = useState({
     name: '',
     barcode: '',
+    search_key: '',
     type: 'product',
     category_id: '',
     description: '',
@@ -704,6 +705,7 @@ export default function Products() {
     setFormData({
       name: '',
       barcode: '',
+      search_key: '',
       type: 'product',
       category_id: '',
       description: '',
@@ -876,6 +878,7 @@ export default function Products() {
     setFormData({
       name: product.name || '',
       barcode: product.barcode || '',
+      search_key: product.search_key || '',
       type: product.type || 'product',
       category_id: product.category_id || '',
       description: product.description || '',
@@ -1952,6 +1955,42 @@ export default function Products() {
                     <p className="text-xs text-amber-500 mt-1">EAN-13 formatida emas (13 ta raqam kerak)</p>
                   )}
                 </div>
+                <div>
+                  <LabelWithHelp
+                    label={t('search_key') || 'Qidiruv kaliti'}
+                    helpText={t('help_search_key') || "Kompaniyalararo bir xil materialni bog'laydi. Qurilish kompaniyasi smetadagi nomi bilan kiritsa, ishlab chiqaruvchi o'z nomi bilan sotadi — lekin kalit bir xil bo'lgani uchun tizim bog'laydi."}
+                  />
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Masalan: PK59106SHVC8"
+                      value={formData.search_key}
+                      onChange={(e) => setFormData({...formData, search_key: e.target.value.toUpperCase()})}
+                      className="flex-1 font-mono text-xs"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      title={t('generate_search_key') || "Nomdan avtomatik yaratish"}
+                      onClick={() => {
+                        const name = formData.name || '';
+                        let key = '';
+                        for (const ch of name) {
+                          if (/[\p{L}\p{N}]/u.test(ch)) key += ch.toUpperCase();
+                          if (key.length >= 32) break;
+                        }
+                        setFormData({...formData, search_key: key});
+                      }}
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  {formData.search_key && (
+                    <p className="text-[10px] text-slate-400 mt-1 font-mono">{formData.search_key}</p>
+                  )}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4 mt-4">
                 <div>
                   <LabelWithHelp
                     label={t('category')}
