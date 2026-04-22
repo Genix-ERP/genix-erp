@@ -29,8 +29,18 @@ const SECTION_OPTIONS = [
   { id: 'all', uz: 'Hammasi', ru: 'Все', en: 'All' },
   { id: 'finance', uz: 'Moliya', ru: 'Финансы', en: 'Finance' },
   { id: 'inventory', uz: 'Sklad', ru: 'Склад', en: 'Stock' },
+  { id: 'construction', uz: 'Qurilish', ru: 'Строительство', en: 'Construction' },
   { id: 'hr', uz: 'Kadrlar', ru: 'Кадры', en: 'HR' },
 ];
+
+const PROJECT_STATUS_COLOR = {
+  in_progress: { bg: '#E1F5EE', fg: '#0F6E56' },
+  active: { bg: '#E1F5EE', fg: '#0F6E56' },
+  delayed: { bg: '#FAEEDA', fg: '#8A5A12' },
+  draft: { bg: '#E6F1FB', fg: '#0C447C' },
+  planning: { bg: '#E6F1FB', fg: '#0C447C' },
+  completed: { bg: '#EEE', fg: '#555' },
+};
 
 const initials = (name) => (name || '').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
 const fmtMln = (n) => `${(n / 1_000_000).toFixed(1)} mln`;
@@ -114,11 +124,12 @@ export default function DirectorDashboard() {
           stockUnits: Number(row.stock_units || 0),
           stockValue: Number(row.stock_value || 0),
           lowStockCount: Number(row.low_stock_count || 0),
-          topProducts: [],
-          productCount: 0,
+          topProducts: Array.isArray(row.top_stock_products) ? row.top_stock_products : [],
+          productCount: Array.isArray(row.top_stock_products) ? row.top_stock_products.length : 0,
           activeEmployees: Number(row.active_employees || 0),
           totalEmployees: Number(row.total_employees || 0),
           salaryFund: Number(row.salary_fund || 0),
+          constructionProjects: Array.isArray(row.construction_projects) ? row.construction_projects : [],
         };
       });
       setPerCompany(next);
@@ -408,7 +419,7 @@ export default function DirectorDashboard() {
         </div>
       )}
 
-      {section === 'inventory' && (
+      {(section === 'all' || section === 'inventory') && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 mb-3">
           <MetricCard label={t('Mahsulotlar', 'Товары', 'Products')} value={sum(visibleCompanies.map(c => perCompany[c.id]?.productCount || 0))} color="#185FA5" />
           <MetricCard label={t('Sklad qiymati', 'Стоимость склада', 'Stock value')} value={sum(visibleCompanies.map(c => perCompany[c.id]?.stockValue || 0))} color="#1D9E75" />
@@ -417,7 +428,16 @@ export default function DirectorDashboard() {
         </div>
       )}
 
-      {section === 'hr' && (
+      {(section === 'all' || section === 'construction') && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 mb-3">
+          <MetricCard label={t('Obyektlar', 'Объекты', 'Projects')} value={sum(visibleCompanies.map(c => (perCompany[c.id]?.constructionProjects || []).length))} color="#185FA5" />
+          <MetricCard label={t('Shartnoma summasi', 'Сумма контрактов', 'Contracts')} value={sum(visibleCompanies.flatMap(c => (perCompany[c.id]?.constructionProjects || []).map(p => Number(p.contract_amount || 0))))} color="#1D9E75" />
+          <MetricCard label={t('Faol obyektlar', 'Активные', 'Active')} value={sum(visibleCompanies.flatMap(c => (perCompany[c.id]?.constructionProjects || []).filter(p => ['in_progress', 'active'].includes(p.status)).map(() => 1)))} color="#534AB7" />
+          <MetricCard label={t('Kechikkan', 'С задержкой', 'Delayed')} value={sum(visibleCompanies.flatMap(c => (perCompany[c.id]?.constructionProjects || []).filter(p => p.status === 'delayed').map(() => 1)))} color="#E24B4A" />
+        </div>
+      )}
+
+      {(section === 'all' || section === 'hr') && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 mb-3">
           <MetricCard label={t('Xodimlar', 'Сотрудники', 'Employees')} value={sum(visibleCompanies.map(c => perCompany[c.id]?.totalEmployees || 0))} color="#185FA5" />
           <MetricCard label={t('Faol', 'Активных', 'Active')} value={sum(visibleCompanies.map(c => perCompany[c.id]?.activeEmployees || 0))} color="#1D9E75" />
@@ -492,12 +512,45 @@ export default function DirectorDashboard() {
       </div>
       )}
 
-      {/* Stock section: bar chart of stock value per company + low stock table */}
-      {section === 'inventory' && (
+      {/* Warehouse diagram: top products/materials by stock value (aggregated across visible companies) */}
+      {(section === 'all' || section === 'inventory') && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-2.5 mb-2.5">
           <div className="lg:col-span-2 bg-white border border-[#E8E8E8] rounded-xl p-3.5">
+            <div className="flex justify-between items-center mb-2">
+              <div className="text-xs font-semibold text-[#1a1a1a]">{t('Sklad qoldiqlari', 'Остатки склада', 'Warehouse stock')}</div>
+              <span className="text-[9px] px-2 py-0.5 rounded-full bg-[#E1F5EE] text-[#0F6E56] font-medium">Live</span>
+            </div>
+            <div className="h-[220px]">
+              {(() => {
+                const merged = {};
+                visibleCompanies.forEach(co => (perCompany[co.id]?.topProducts || []).forEach(p => {
+                  const name = p.name || 'N/A';
+                  merged[name] = (merged[name] || 0) + Number(p.value || 0);
+                }));
+                const data = Object.entries(merged)
+                  .map(([name, value]) => ({ name, value }))
+                  .sort((a, b) => b.value - a.value)
+                  .slice(0, 8);
+                if (data.length === 0) {
+                  return <div className="flex items-center justify-center h-full text-xs text-slate-400">{t('Maʼlumot yo‘q', 'Нет данных', 'No data')}</div>;
+                }
+                return (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={data} margin={{ top: 4, right: 4, left: -10, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" />
+                      <XAxis dataKey="name" tick={{ fontSize: 9 }} interval={0} angle={-15} textAnchor="end" height={50} />
+                      <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtCompact} />
+                      <Tooltip formatter={(v) => fmtCompact(v)} />
+                      <Bar dataKey="value" fill="#1D9E75" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                );
+              })()}
+            </div>
+          </div>
+          <div className="bg-white border border-[#E8E8E8] rounded-xl p-3.5">
             <div className="text-xs font-semibold text-[#1a1a1a] mb-2">
-              {t('Kompaniyalar bo‘yicha sklad qiymati', 'Стоимость склада по компаниям', 'Stock value by company')}
+              {t('Kompaniyalar bo‘yicha sklad', 'Склад по компаниям', 'Stock by company')}
             </div>
             <div className="h-[220px]">
               <ResponsiveContainer width="100%" height="100%">
@@ -517,32 +570,74 @@ export default function DirectorDashboard() {
               </ResponsiveContainer>
             </div>
           </div>
-          <div className="bg-white border border-[#E8E8E8] rounded-xl p-3.5">
-            <div className="text-xs font-semibold text-[#1a1a1a] mb-2">
-              {t('Eng ko‘p qiymatdagi mahsulotlar', 'Топ товаров по стоимости', 'Top products by value')}
-            </div>
-            <div className="space-y-1 max-h-[220px] overflow-y-auto">
-              {(() => {
-                const all = [];
-                visibleCompanies.forEach(co => (perCompany[co.id]?.topProducts || []).forEach(p => all.push(p)));
-                all.sort((a, b) => b.value - a.value);
-                return all.slice(0, 10).map((p, i) => (
-                  <div key={i} className="flex justify-between items-center text-xs border-b border-[#F0F0F0] py-1.5 last:border-0">
-                    <span className="truncate text-slate-700">{p.name}</span>
-                    <span className="font-semibold text-slate-800 ml-2 shrink-0">{fmtCompact(p.value)}</span>
-                  </div>
-                ));
-              })()}
-              {visibleCompanies.every(co => !(perCompany[co.id]?.topProducts?.length)) && (
-                <div className="text-center py-4 text-xs text-slate-400">{t('Maʼlumot yo‘q', 'Нет данных', 'No data')}</div>
-              )}
-            </div>
+        </div>
+      )}
+
+      {/* Construction projects: Активные объекты table */}
+      {(section === 'all' || section === 'construction') && (
+        <div className="bg-white border border-[#E8E8E8] rounded-xl p-3.5 mb-2.5">
+          <div className="flex justify-between items-center mb-2">
+            <div className="text-xs font-semibold text-[#1a1a1a]">{t('Faol obyektlar', 'Активные объекты', 'Active projects')}</div>
+            <span className="text-[9px] px-2 py-0.5 rounded-full bg-[#E6F1FB] text-[#0C447C] font-medium">Live</span>
           </div>
+          {(() => {
+            const all = [];
+            visibleCompanies.forEach(co => {
+              (perCompany[co.id]?.constructionProjects || []).forEach(p => all.push({ ...p, _coName: co.company_name }));
+            });
+            if (all.length === 0) {
+              return <div className="text-center py-8 text-xs text-slate-400">{t('Hozircha obyektlar yo‘q', 'Пока нет объектов', 'No active projects')}</div>;
+            }
+            all.sort((a, b) => (b.progress || 0) - (a.progress || 0));
+            return (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-[#888] border-b border-[#F0F0F0]">
+                      <th className="text-left py-1.5 pl-1">{t('Obyekt', 'Объект', 'Project')}</th>
+                      <th className="text-left py-1.5 w-[220px]">{t('Progress', 'Прогресс', 'Progress')}</th>
+                      <th className="text-right py-1.5">{t('Summa', 'Сумма', 'Budget')}</th>
+                      <th className="text-right py-1.5 pr-2">{t('Holati', 'Статус', 'Status')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {all.slice(0, 10).map(p => {
+                      const pct = Math.max(0, Math.min(100, Number(p.progress || 0)));
+                      const sc = PROJECT_STATUS_COLOR[p.status] || PROJECT_STATUS_COLOR.draft;
+                      const barColor = p.status === 'delayed' ? '#EF9F27' : pct >= 90 ? '#1D9E75' : '#185FA5';
+                      return (
+                        <tr key={p.id} className="border-b border-[#F0F0F0] last:border-0">
+                          <td className="py-2 pl-1">
+                            <div className="font-medium text-slate-800">{p.name || p.code}</div>
+                            <div className="text-[10px] text-slate-500">{p._coName}</div>
+                          </td>
+                          <td className="py-2">
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1 h-1.5 bg-[#F0F0F0] rounded-full overflow-hidden">
+                                <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: barColor }} />
+                              </div>
+                              <span className="text-[10px] font-semibold text-slate-600 w-[32px] text-right">{pct.toFixed(0)}%</span>
+                            </div>
+                          </td>
+                          <td className="text-right py-2 font-medium">{fmtCompact(p.contract_amount || 0)}</td>
+                          <td className="text-right py-2 pr-2">
+                            <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-medium" style={{ background: sc.bg, color: sc.fg }}>
+                              {p.status || '—'}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
         </div>
       )}
 
       {/* HR section: bar chart of employees per company */}
-      {section === 'hr' && (
+      {(section === 'all' || section === 'hr') && (
         <div className="bg-white border border-[#E8E8E8] rounded-xl p-3.5 mb-2.5">
           <div className="text-xs font-semibold text-[#1a1a1a] mb-2">
             {t('Kompaniyalar bo‘yicha xodimlar', 'Сотрудники по компаниям', 'Employees by company')}
@@ -586,15 +681,16 @@ export default function DirectorDashboard() {
                 <th className="text-right py-1.5">{t('Debitorlar', 'Дебиторы', 'Debtors')}</th>
                 <th className="text-right py-1.5">{t('Kreditorlar', 'Кредиторы', 'Creditors')}</th>
               </>)}
-              {section === 'inventory' && (<>
-                <th className="text-right py-1.5">{t('Mahsulotlar', 'Товары', 'Products')}</th>
+              {(section === 'all' || section === 'inventory') && (<>
                 <th className="text-right py-1.5">{t('Birliklar', 'Единицы', 'Units')}</th>
                 <th className="text-right py-1.5">{t('Sklad qiymati', 'Стоимость', 'Stock value')}</th>
                 <th className="text-right py-1.5">{t('Kam qoldiq', 'Низ. остаток', 'Low stock')}</th>
               </>)}
-              {section === 'hr' && (<>
-                <th className="text-right py-1.5">{t('Jami xodimlar', 'Всего', 'Total')}</th>
-                <th className="text-right py-1.5">{t('Faol', 'Активных', 'Active')}</th>
+              {(section === 'all' || section === 'construction') && (<>
+                <th className="text-right py-1.5">{t('Obyektlar', 'Объекты', 'Projects')}</th>
+              </>)}
+              {(section === 'all' || section === 'hr') && (<>
+                <th className="text-right py-1.5">{t('Xodimlar', 'Сотрудники', 'Employees')}</th>
                 <th className="text-right py-1.5">{t('Maosh fondi', 'ЗП фонд', 'Salary fund')}</th>
               </>)}
             </tr>
@@ -622,15 +718,16 @@ export default function DirectorDashboard() {
                     <td className="text-right">{fmtCompact(d.deb || 0)}</td>
                     <td className="text-right">{fmtCompact(d.cred || 0)}</td>
                   </>)}
-                  {section === 'inventory' && (<>
-                    <td className="text-right">{d.productCount || 0}</td>
+                  {(section === 'all' || section === 'inventory') && (<>
                     <td className="text-right">{fmtCompact(d.stockUnits || 0)}</td>
                     <td className="text-right font-medium">{fmtCompact(d.stockValue || 0)}</td>
                     <td className="text-right" style={{ color: (d.lowStockCount || 0) > 0 ? '#A32D2D' : '#888' }}>{d.lowStockCount || 0}</td>
                   </>)}
-                  {section === 'hr' && (<>
+                  {(section === 'all' || section === 'construction') && (<>
+                    <td className="text-right">{(d.constructionProjects || []).length}</td>
+                  </>)}
+                  {(section === 'all' || section === 'hr') && (<>
                     <td className="text-right">{d.totalEmployees || 0}</td>
-                    <td className="text-right text-[#0F6E56] font-medium">{d.activeEmployees || 0}</td>
                     <td className="text-right">{fmtCompact(d.salaryFund || 0)}</td>
                   </>)}
                 </tr>
