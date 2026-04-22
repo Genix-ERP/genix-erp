@@ -7276,6 +7276,10 @@ export const translations = {
     "view_mode": "View",
     "wbs": "WBS",
 
+    // Stages ↔ Buildings (migration 333)
+    "project_wide": "Project-wide",
+    "building_block": "Building / Block",
+
     // General Ledger debit/credit closing balances (BHMS-style view)
     "total_debit_turnover": "Total debit (turnover)",
     "total_credit_turnover": "Total credit (turnover)",
@@ -14864,6 +14868,10 @@ export const translations = {
     "validation_photo_required": "Kamida bitta rasm tanlang",
     "validation_role_required": "Vazifani tanlang",
     "wbs": "WBS",
+
+    // Stages ↔ Buildings (migration 333)
+    "project_wide": "Umumiy",
+    "building_block": "Bino / Blok",
 
     // General Ledger debit/credit closing balances (BHMS-style view)
     "total_debit_turnover": "Jami debet (oborot)",
@@ -22532,6 +22540,10 @@ export const translations = {
     "wbs_items": "Элементы WBS",
     "wbs_name": "Название",
     "work_description": "Описание работы",
+
+    // Stages ↔ Buildings (migration 333)
+    "project_wide": "Общий",
+    "building_block": "Здание / Блок",
 
     // General Ledger debit/credit closing balances (BHMS-style view)
     "total_debit_turnover": "Итого дебет (оборот)",

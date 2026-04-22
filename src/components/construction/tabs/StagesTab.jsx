@@ -37,6 +37,7 @@ const EMPTY_FORM = {
   planned_start: '',
   planned_end: '',
   notes: '',
+  building_id: '', // '' = project-wide (unassigned), otherwise building id
 };
 
 const RESERVATION_STATUS_COLORS = {
@@ -64,6 +65,11 @@ const StagesTab = ({ project }) => {
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 20;
+
+  // Buildings tab (migration 333) — filter stages by building. 'all' shows
+  // every stage; any number is a specific building id.
+  const [buildings, setBuildings] = useState([]);
+  const [buildingFilter, setBuildingFilter] = useState('all');
 
   // Stage modal
   const [showModal, setShowModal] = useState(false);
@@ -239,7 +245,11 @@ const StagesTab = ({ project }) => {
     if (!project?.id) return;
     setLoading(true);
     try {
-      const data = await constructionService.listStages(project.id);
+      // Translate the tab filter to the backend query:
+      //   'all'        → no filter (all stages returned)
+      //   <numeric id> → that specific building
+      const buildingId = buildingFilter === 'all' ? undefined : buildingFilter;
+      const data = await constructionService.listStages(project.id, { buildingId });
       const list = data || [];
       setStages(list);
       await loadAllSubStages(list);
@@ -248,9 +258,21 @@ const StagesTab = ({ project }) => {
     } finally {
       setLoading(false);
     }
-  }, [project?.id, loadAllSubStages]);
+  }, [project?.id, loadAllSubStages, buildingFilter]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Load buildings once per project — used by the tab row above the stages
+  // list and by the building-picker in the create/edit modal.
+  useEffect(() => {
+    if (!project?.id) return;
+    let cancelled = false;
+    constructionService
+      .listBuildings(project.id)
+      .then((rows) => { if (!cancelled) setBuildings(Array.isArray(rows) ? rows : []); })
+      .catch(() => { if (!cancelled) setBuildings([]); });
+    return () => { cancelled = true; };
+  }, [project?.id]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -426,7 +448,11 @@ const StagesTab = ({ project }) => {
 
   const openCreate = () => {
     setEditingStage(null);
-    setForm({ ...EMPTY_FORM, stage_order: stages.length });
+    // If the user is viewing a specific building's tab, pre-fill the building
+    // selector so the new stage lands where they're looking.
+    const preselectedBuilding =
+      buildingFilter === 'all' ? '' : String(buildingFilter);
+    setForm({ ...EMPTY_FORM, stage_order: stages.length, building_id: preselectedBuilding });
     setModalSubStages([]);
     setError(null);
     setShowModal(true);
@@ -442,6 +468,7 @@ const StagesTab = ({ project }) => {
       planned_start: stage.planned_start ? stage.planned_start.slice(0, 10) : '',
       planned_end: stage.planned_end ? stage.planned_end.slice(0, 10) : '',
       notes: stage.notes || '',
+      building_id: stage.building_id ? String(stage.building_id) : '',
     });
     const existing = (subStagesMap[stage.id] || []).map(s => ({
       _key: s.id, id: s.id, name: s.name, status: s.status,
@@ -476,6 +503,9 @@ const StagesTab = ({ project }) => {
         planned_start: form.planned_start || '',
         planned_end: form.planned_end || '',
         notes: form.notes || '',
+        // Migration 333: when editing, `0` clears the building; on create it's
+        // interpreted as "unassigned / project-wide".
+        building_id: form.building_id ? Number(form.building_id) : 0,
       };
 
       let stageId;
@@ -626,6 +656,45 @@ const StagesTab = ({ project }) => {
             {t('add_stage')}
           </Button>
         </CardHeader>
+        {/* Building tab row (migration 333). `Hammasi` shows every stage,
+             and each following pill scopes the list to one building. */}
+        {buildings.length > 0 && (
+          <div className="px-6 pb-3 -mt-2">
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setBuildingFilter('all')}
+                className={cn(
+                  'px-3 py-1.5 rounded-full text-xs font-medium border transition-colors',
+                  buildingFilter === 'all'
+                    ? 'bg-slate-900 text-white border-slate-900'
+                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50',
+                )}
+              >
+                {t('all') || 'Hammasi'}
+                <span className="ml-1.5 text-[10px] opacity-70">
+                  {stages.length}
+                </span>
+              </button>
+              {buildings.map((b) => (
+                <button
+                  key={b.id}
+                  type="button"
+                  onClick={() => setBuildingFilter(String(b.id))}
+                  className={cn(
+                    'px-3 py-1.5 rounded-full text-xs font-medium border transition-colors',
+                    String(buildingFilter) === String(b.id)
+                      ? 'bg-slate-900 text-white border-slate-900'
+                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50',
+                  )}
+                  title={b.code || b.name}
+                >
+                  {b.name || b.code || `#${b.id}`}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <CardContent>
           {loading ? (
             <div className="text-center py-8 text-slate-400">{t('loading')}</div>
@@ -1094,6 +1163,28 @@ const StagesTab = ({ project }) => {
                 </SelectContent>
               </Select>
             </div>
+            {/* Migration 333: assign stage to a building/block (optional) */}
+            {buildings.length > 0 && (
+              <div>
+                <Label>{t('building_block') || 'Bino / Blok'}</Label>
+                <Select
+                  value={form.building_id || '__none__'}
+                  onValueChange={(v) => setForm((f) => ({ ...f, building_id: v === '__none__' ? '' : v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('project_wide') || 'Umumiy'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">{t('project_wide') || 'Umumiy (bino tanlanmagan)'}</SelectItem>
+                    {buildings.map((b) => (
+                      <SelectItem key={b.id} value={String(b.id)}>
+                        {b.name || b.code || `#${b.id}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div>
               <Label>{t('notes')}</Label>
               <Textarea value={form.notes} onChange={e => setForm(f => ({...f, notes: e.target.value}))} rows={2} />

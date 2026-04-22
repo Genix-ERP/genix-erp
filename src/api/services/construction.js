@@ -575,8 +575,15 @@ export const constructionService = {
   // CONSTRUCTION STAGES (Bosqichlar)
   // =====================================================
 
-  async listStages(projectId) {
-    const response = await apiClient.get(`/construction/projects/${projectId}/stages`);
+  async listStages(projectId, { buildingId } = {}) {
+    // Migration 333 — optional building filter. Pass a numeric id to scope
+    // stages to one building, 0 for unassigned (project-wide), or nothing for
+    // the "Hammasi" tab.
+    const params = {};
+    if (buildingId !== undefined && buildingId !== null && buildingId !== 'all') {
+      params.building_id = Number(buildingId);
+    }
+    const response = await apiClient.get(`/construction/projects/${projectId}/stages`, { params });
     return response.data.data;
   },
 
