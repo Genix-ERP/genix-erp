@@ -410,6 +410,173 @@ const AI_TEXTS = {
     salesOrdersToTrack: '**Sales orders** to track revenue',
     onceDataPersonalized: 'Once you have data, I can provide personalized insights and recommendations!',
     greeting: 'Hello! How can I help you today?',
+    // Customer
+    customerAnalytics: 'Customer Analytics',
+    noCustomers: "You don't have any customers recorded yet.",
+    goToCustomers: 'Go to **Customers** module',
+    addCustomersContacts: 'Add your customers and contacts',
+    createSalesForRevenue: 'Create sales orders to track customer revenue',
+    onceCustomerData: 'Once you have customer data, I can help you with:',
+    customerRevenueAnalysis: 'Customer revenue analysis',
+    topCustomerIdentification: 'Top customer identification',
+    customerSegmentation: 'Customer segmentation',
+    engagementTracking: 'Engagement tracking',
+    customerOverview: 'Overview:',
+    totalCustomers: 'Total Customers',
+    customersWithOrders: 'Customers with Orders',
+    customerSegmentsByRevenue: 'Customer Segments by Revenue:',
+    enterprise: 'Enterprise',
+    midMarket: 'Mid-Market',
+    smb: 'SMB',
+    accounts: 'accounts',
+    customersWithUnpaid: 'Customers with Unpaid Orders:',
+    allCustomersPaid: 'All customers have paid their orders!',
+    nurtureTopCustomer: 'Nurture relationship with',
+    topCustomerParen: '(top customer)',
+    followUpWithCustomers: 'Follow up with',
+    customersOnPayments: 'customers on payments',
+    considerLoyalty: 'Consider loyalty programs for repeat customers',
+    focusOnAcquiring: 'Focus on acquiring new customers',
+    // HR
+    hrAnalytics: 'HR Analytics',
+    noEmployees: "You don't have any employees recorded yet.",
+    goToHR: 'Go to **HR** module',
+    addEmployees: 'Add your employees',
+    setupPayrollRecords: 'Set up payroll records',
+    onceEmployeeData: 'Once you have employee data, I can help you with:',
+    workforceOverviewItem: 'Workforce overview',
+    departmentDistributionItem: 'Department distribution',
+    payrollSummariesItem: 'Payroll summaries',
+    compensationAnalysisItem: 'Compensation analysis',
+    workforceOverview: 'Workforce Overview:',
+    totalEmployees: 'Total Employees',
+    activeEmployees: 'Active Employees',
+    averageSalary: 'Average Salary',
+    departmentDistribution: 'Department Distribution:',
+    employeesWord: 'employees',
+    payrollSummary: 'Payroll Summary:',
+    totalPayrollRecords: 'Total Payroll Records',
+    processedPayrolls: 'Processed Payrolls',
+    pendingPayrolls: 'Pending Payrolls',
+    totalPayrollAmount: 'Total Payroll Amount',
+    processPending: 'Process pending payroll records:',
+    allPayrollProcessed: 'All payroll records are processed!',
+    organizeIntoDepts: 'Consider organizing employees into departments',
+    reviewCompensation: 'Review compensation benchmarks for retention',
+    // Assets
+    assetManagement: 'Asset Management',
+    noAssets: "You don't have any assets recorded yet.",
+    goToAssets: 'Go to **Assets** module',
+    addCompanyAssets: 'Add your company assets (equipment, vehicles, etc.)',
+    trackDepreciation: 'Track depreciation and maintenance',
+    onceAssetData: 'Once you have asset data, I can help you with:',
+    assetValuation: 'Asset valuation and depreciation tracking',
+    maintenanceSchedules: 'Maintenance schedules',
+    assetLifecycle: 'Asset lifecycle analysis',
+    disposalRecommendations: 'Disposal recommendations',
+    totalAssets: 'Total Assets',
+    purchaseValue: 'Purchase Value',
+    currentValue: 'Current Value',
+    totalDepreciation: 'Total Depreciation',
+    assetsByCategory: 'Assets by Category:',
+    assetsByStatus: 'Assets by Status:',
+    maintenanceDue: 'Maintenance Due:',
+    overdue: 'Overdue',
+    allMaintenanceUpToDate: 'All maintenance is up to date!',
+    scheduleMaintenance: 'Schedule maintenance for',
+    continueMaintenance: 'Continue regular maintenance schedule',
+    reviewDepreciation: 'Review depreciation schedules for accuracy',
+    considerDisposal: 'Consider disposal of fully depreciated assets',
+    // Projects
+    projectManagement: 'Project Management',
+    noProjects: "You don't have any projects recorded yet.",
+    goToProjects: 'Go to **Projects** module',
+    createFirstProject: 'Create your first project',
+    addTasksMilestones: 'Add tasks and milestones',
+    onceProjectData: 'Once you have project data, I can help you with:',
+    projectProgress: 'Project progress tracking',
+    resourceAllocation: 'Resource allocation analysis',
+    timelineMonitoring: 'Timeline and deadline monitoring',
+    budgetAnalysis: 'Budget vs actual analysis',
+    totalProjects: 'Total Projects',
+    totalBudget: 'Total Budget',
+    totalSpent: 'Total Spent',
+    budgetUtilization: 'Budget Utilization',
+    projectsByStatus: 'Projects by Status:',
+    overdueProjects: 'Overdue Projects:',
+    allOnSchedule: 'All projects are on schedule!',
+    overBudget: 'Over Budget:',
+    allWithinBudget: 'All projects within budget!',
+    addressOverdue: 'Address overdue projects:',
+    maintainTimelines: 'Maintain current project timelines',
+    reviewOverBudget: 'Review spending on over-budget projects:',
+    milestoneReviews: 'Regular milestone reviews recommended',
+    // Contracts
+    contractManagement: 'Contract Management',
+    noContracts: "You don't have any contracts recorded yet.",
+    goToContracts: 'Go to **Contracts** module',
+    addContracts: 'Add your contracts (customer, vendor, employee, etc.)',
+    setExpiryDates: 'Set expiry dates for renewal tracking',
+    onceContractData: 'Once you have contract data, I can help you with:',
+    contractExpiry: 'Contract expiry alerts',
+    renewalRecs: 'Renewal recommendations',
+    contractValueAnalysis: 'Contract value analysis',
+    complianceTracking: 'Compliance tracking',
+    totalContracts: 'Total Contracts',
+    activeContracts: 'Active Contracts',
+    totalContractValue: 'Total Contract Value',
+    contractsByType: 'Contracts by Type:',
+    contractsByStatus: 'Contracts by Status:',
+    expiringSoon30: 'Expiring Within 30 Days:',
+    noExpiringSoon: 'No contracts expiring soon!',
+    reviewForRenewal: 'Review contracts for renewal:',
+    allContractsUpToDate: 'All contracts are up to date',
+    autoRenewal: 'Set up auto-renewal where applicable',
+    complianceReviews: 'Regular compliance reviews recommended',
+    // Workflow
+    workflowSuggestions: 'Workflow Automation Suggestions',
+    basedOnProcesses: 'Based on your current processes, I can help automate:',
+    highImpact: 'High-Impact Automations:',
+    invoiceProcessing: '**Invoice Processing** - Automatically generate and send invoices when orders are fulfilled',
+    lowStockAlertsAuto: '**Low Stock Alerts** - Trigger reorder notifications when inventory hits threshold',
+    paymentReminders: '**Payment Reminders** - Send automated follow-ups for overdue invoices',
+    quickWins: 'Quick Wins:',
+    autoAssignLeads: 'Auto-assign leads based on territory rules',
+    scheduledReports: 'Scheduled report generation and email delivery',
+    welcomeSequences: 'Customer welcome email sequences',
+    implementation: 'Implementation:',
+    canCreateWorkflows: 'I can create any of these workflows for you. Just say:',
+    createInvoiceAutomation: '"Create invoice automation workflow"',
+    setupLowStockCmd: '"Set up low stock alerts"',
+    buildPaymentReminder: '"Build payment reminder sequence"',
+    whichAutomation: 'Which automation would you like to implement first?',
+    // Reports
+    reportGeneration: 'Report Generation',
+    canGenerateReports: 'I can generate the following reports for you:',
+    financialReports: 'Financial Reports:',
+    balanceSheet: 'Balance Sheet',
+    incomeStatement: 'Income Statement',
+    cashFlowStatement: 'Cash Flow Statement',
+    arAging: 'Accounts Receivable Aging',
+    apAging: 'Accounts Payable Aging',
+    salesReports: 'Sales Reports:',
+    salesByPeriod: 'Sales by Period',
+    salesByProduct: 'Sales by Product',
+    salesByCustomer: 'Sales by Customer',
+    pipelineAnalysis: 'Pipeline Analysis',
+    inventoryReports: 'Inventory Reports:',
+    stockValuation: 'Stock Valuation',
+    movementHistory: 'Movement History',
+    reorderRecsReport: 'Reorder Recommendations',
+    hrReports: 'HR Reports:',
+    headcountSummary: 'Headcount Summary',
+    payrollReport: 'Payroll Report',
+    leaveBalances: 'Leave Balances',
+    toGenerateReport: 'To generate a report, specify:',
+    reportType: 'Report type',
+    dateRange: 'Date range',
+    reportFormat: 'Format (PDF, Excel, or on-screen)',
+    reportExample: 'Example: "Generate sales report for last quarter as PDF"',
   },
   uz: {
     salesAnalysis: 'Savdo Tahlili',
@@ -540,6 +707,173 @@ const AI_TEXTS = {
     salesOrdersToTrack: 'Daromadni kuzatish uchun **Savdo buyurtmalari**',
     onceDataPersonalized: 'Ma\'lumotlaringiz bo\'lganda, shaxsiylashtirilgan tahlil va tavsiyalar bera olaman!',
     greeting: 'Salom! Bugun sizga qanday yordam bera olaman?',
+    // Customer
+    customerAnalytics: 'Mijozlar Tahlili',
+    noCustomers: "Sizda hali mijozlar yo'q.",
+    goToCustomers: '**Mijozlar** moduliga o\'ting',
+    addCustomersContacts: 'Mijozlar va kontaktlaringizni qo\'shing',
+    createSalesForRevenue: 'Mijoz daromadini kuzatish uchun savdo buyurtmalari yarating',
+    onceCustomerData: 'Mijozlar ma\'lumotingiz bo\'lganda, quyidagilar bilan yordam bera olaman:',
+    customerRevenueAnalysis: 'Mijoz daromadi tahlili',
+    topCustomerIdentification: 'Eng yaxshi mijozlarni aniqlash',
+    customerSegmentation: 'Mijozlarni segmentlash',
+    engagementTracking: 'Faollikni kuzatish',
+    customerOverview: 'Umumiy Ko\'rinish:',
+    totalCustomers: 'Jami Mijozlar',
+    customersWithOrders: 'Buyurtmali Mijozlar',
+    customerSegmentsByRevenue: 'Mijoz Segmentlari (Daromad bo\'yicha):',
+    enterprise: 'Yirik',
+    midMarket: 'O\'rta',
+    smb: 'Kichik',
+    accounts: 'ta hisob',
+    customersWithUnpaid: 'To\'lovsiz Buyurtmali Mijozlar:',
+    allCustomersPaid: 'Barcha mijozlar to\'lovlarini amalga oshirgan!',
+    nurtureTopCustomer: 'Ushbu mijoz bilan munosabatni rivojlantiring:',
+    topCustomerParen: '(eng yaxshi mijoz)',
+    followUpWithCustomers: 'Kuzatib boring:',
+    customersOnPayments: 'ta mijozning to\'lovlari',
+    considerLoyalty: 'Doimiy mijozlar uchun sodiqlik dasturlarini ko\'rib chiqing',
+    focusOnAcquiring: 'Yangi mijozlarni jalb qilishga e\'tibor bering',
+    // HR
+    hrAnalytics: 'HR Tahlili',
+    noEmployees: "Sizda hali xodimlar yo'q.",
+    goToHR: '**HR** moduliga o\'ting',
+    addEmployees: 'Xodimlaringizni qo\'shing',
+    setupPayrollRecords: 'Ish haqi yozuvlarini sozlang',
+    onceEmployeeData: 'Xodimlar ma\'lumoti bo\'lganda, quyidagilar bilan yordam bera olaman:',
+    workforceOverviewItem: 'Xodimlar umumiy ko\'rinishi',
+    departmentDistributionItem: 'Bo\'limlar taqsimoti',
+    payrollSummariesItem: 'Ish haqi xulosalari',
+    compensationAnalysisItem: 'Kompensatsiya tahlili',
+    workforceOverview: 'Xodimlar Umumiy Ko\'rinishi:',
+    totalEmployees: 'Jami Xodimlar',
+    activeEmployees: 'Faol Xodimlar',
+    averageSalary: 'O\'rtacha Maosh',
+    departmentDistribution: 'Bo\'limlar Taqsimoti:',
+    employeesWord: 'xodim',
+    payrollSummary: 'Ish Haqi Xulosasi:',
+    totalPayrollRecords: 'Jami Ish Haqi Yozuvlari',
+    processedPayrolls: 'Amalga Oshirilgan',
+    pendingPayrolls: 'Kutilayotgan',
+    totalPayrollAmount: 'Jami Ish Haqi Summasi',
+    processPending: 'Kutilayotgan ish haqini amalga oshiring:',
+    allPayrollProcessed: 'Barcha ish haqi yozuvlari amalga oshirilgan!',
+    organizeIntoDepts: 'Xodimlarni bo\'limlarga taqsimlashni ko\'rib chiqing',
+    reviewCompensation: 'Ushlab qolish uchun kompensatsiya benchmarkini ko\'rib chiqing',
+    // Assets
+    assetManagement: 'Aktivlar Boshqaruvi',
+    noAssets: "Sizda hali aktivlar yo'q.",
+    goToAssets: '**Aktivlar** moduliga o\'ting',
+    addCompanyAssets: 'Kompaniya aktivlarini qo\'shing (uskunalar, transport va h.k.)',
+    trackDepreciation: 'Amortizatsiya va texnik xizmatni kuzating',
+    onceAssetData: 'Aktivlar ma\'lumoti bo\'lganda, quyidagilar bilan yordam bera olaman:',
+    assetValuation: 'Aktivlar qiymati va amortizatsiyasini kuzatish',
+    maintenanceSchedules: 'Texnik xizmat jadvallari',
+    assetLifecycle: 'Aktiv hayot davri tahlili',
+    disposalRecommendations: 'Hisobdan chiqarish tavsiyalari',
+    totalAssets: 'Jami Aktivlar',
+    purchaseValue: 'Sotib Olish Qiymati',
+    currentValue: 'Joriy Qiymat',
+    totalDepreciation: 'Jami Amortizatsiya',
+    assetsByCategory: 'Kategoriya bo\'yicha Aktivlar:',
+    assetsByStatus: 'Holat bo\'yicha Aktivlar:',
+    maintenanceDue: 'Texnik Xizmat Kerak:',
+    overdue: 'Muddati O\'tgan',
+    allMaintenanceUpToDate: 'Barcha texnik xizmat yangilangan!',
+    scheduleMaintenance: 'Texnik xizmat rejalashtiring:',
+    continueMaintenance: 'Muntazam texnik xizmat jadvalini davom ettiring',
+    reviewDepreciation: 'Aniqlik uchun amortizatsiya jadvallarini ko\'rib chiqing',
+    considerDisposal: 'To\'liq amortizatsiya qilingan aktivlarni hisobdan chiqarishni ko\'rib chiqing',
+    // Projects
+    projectManagement: 'Loyihalar Boshqaruvi',
+    noProjects: "Sizda hali loyihalar yo'q.",
+    goToProjects: '**Loyihalar** moduliga o\'ting',
+    createFirstProject: 'Birinchi loyihangizni yarating',
+    addTasksMilestones: 'Vazifalar va bosqichlar qo\'shing',
+    onceProjectData: 'Loyihalar ma\'lumoti bo\'lganda, quyidagilar bilan yordam bera olaman:',
+    projectProgress: 'Loyiha jarayonini kuzatish',
+    resourceAllocation: 'Resurslarni taqsimlash tahlili',
+    timelineMonitoring: 'Muddat va vaqt nazorati',
+    budgetAnalysis: 'Byudjet va haqiqiy tahlil',
+    totalProjects: 'Jami Loyihalar',
+    totalBudget: 'Jami Byudjet',
+    totalSpent: 'Jami Xarajat',
+    budgetUtilization: 'Byudjetdan Foydalanish',
+    projectsByStatus: 'Holat bo\'yicha Loyihalar:',
+    overdueProjects: 'Muddati O\'tgan Loyihalar:',
+    allOnSchedule: 'Barcha loyihalar jadval bo\'yicha!',
+    overBudget: 'Byudjetdan Oshgan:',
+    allWithinBudget: 'Barcha loyihalar byudjet doirasida!',
+    addressOverdue: 'Muddati o\'tgan loyihalarni hal qiling:',
+    maintainTimelines: 'Joriy loyiha muddatlarini saqlang',
+    reviewOverBudget: 'Byudjetdan oshgan loyihalar xarajatlarini ko\'rib chiqing:',
+    milestoneReviews: 'Bosqichlarni muntazam ko\'rib chiqish tavsiya etiladi',
+    // Contracts
+    contractManagement: 'Shartnomalar Boshqaruvi',
+    noContracts: "Sizda hali shartnomalar yo'q.",
+    goToContracts: '**Shartnomalar** moduliga o\'ting',
+    addContracts: 'Shartnomalaringizni qo\'shing (mijoz, yetkazib beruvchi, xodim va h.k.)',
+    setExpiryDates: 'Yangilash kuzatuvi uchun muddatlarni o\'rnating',
+    onceContractData: 'Shartnoma ma\'lumoti bo\'lganda, quyidagilar bilan yordam bera olaman:',
+    contractExpiry: 'Shartnoma muddati ogohlantirishlari',
+    renewalRecs: 'Yangilash tavsiyalari',
+    contractValueAnalysis: 'Shartnoma qiymati tahlili',
+    complianceTracking: 'Muvofiqlikni kuzatish',
+    totalContracts: 'Jami Shartnomalar',
+    activeContracts: 'Faol Shartnomalar',
+    totalContractValue: 'Jami Shartnoma Qiymati',
+    contractsByType: 'Tur bo\'yicha Shartnomalar:',
+    contractsByStatus: 'Holat bo\'yicha Shartnomalar:',
+    expiringSoon30: '30 Kun Ichida Tugaydigan:',
+    noExpiringSoon: 'Yaqin orada tugaydigan shartnomalar yo\'q!',
+    reviewForRenewal: 'Yangilash uchun shartnomalarni ko\'rib chiqing:',
+    allContractsUpToDate: 'Barcha shartnomalar yangilangan',
+    autoRenewal: 'Imkon qadar avto-yangilanishni sozlang',
+    complianceReviews: 'Muntazam muvofiqlik tekshiruvlari tavsiya etiladi',
+    // Workflow
+    workflowSuggestions: 'Ish Jarayonini Avtomatlashtirish Takliflari',
+    basedOnProcesses: 'Joriy jarayonlaringizga asosan, avtomatlashtirishda yordam bera olaman:',
+    highImpact: 'Yuqori Samarali Avtomatlashtirishlar:',
+    invoiceProcessing: '**Hisob-faktura Ishlov Berish** - Buyurtmalar bajarilganda hisob-fakturalarni avtomatik yaratish va yuborish',
+    lowStockAlertsAuto: '**Kam Zaxira Ogohlantirishlari** - Inventar chegaraga yetganda qayta buyurtma bildirishnomalari',
+    paymentReminders: '**To\'lov Eslatmalari** - Muddati o\'tgan hisob-fakturalar uchun avtomatik kuzatuvlar',
+    quickWins: 'Tezkor Yutuqlar:',
+    autoAssignLeads: 'Lidlarni hudud qoidalariga asoslangan holda avto-tayinlash',
+    scheduledReports: 'Hisobotlarni avtomatik yaratish va email orqali yuborish',
+    welcomeSequences: 'Mijozlarga salomlashuv email ketma-ketligi',
+    implementation: 'Amalga Oshirish:',
+    canCreateWorkflows: 'Men siz uchun ushbu ish jarayonlaridan birini yarata olaman. Shunchaki ayting:',
+    createInvoiceAutomation: '"Hisob-faktura avtomatlashtirish ish jarayonini yarating"',
+    setupLowStockCmd: '"Kam zaxira ogohlantirishlarini sozlang"',
+    buildPaymentReminder: '"To\'lov eslatma ketma-ketligini yarating"',
+    whichAutomation: 'Avval qaysi avtomatlashtirishni amalga oshirmoqchisiz?',
+    // Reports
+    reportGeneration: 'Hisobot Yaratish',
+    canGenerateReports: 'Siz uchun quyidagi hisobotlarni yarata olaman:',
+    financialReports: 'Moliyaviy Hisobotlar:',
+    balanceSheet: 'Balans Hisoboti',
+    incomeStatement: 'Daromadlar Hisoboti',
+    cashFlowStatement: 'Pul Oqimi Hisoboti',
+    arAging: 'Debitorlik Qarzdorligi',
+    apAging: 'Kreditorlik Qarzdorligi',
+    salesReports: 'Savdo Hisobotlari:',
+    salesByPeriod: 'Davr bo\'yicha Savdo',
+    salesByProduct: 'Mahsulot bo\'yicha Savdo',
+    salesByCustomer: 'Mijoz bo\'yicha Savdo',
+    pipelineAnalysis: 'Quvur tahlili',
+    inventoryReports: 'Inventar Hisobotlari:',
+    stockValuation: 'Zaxira Baholash',
+    movementHistory: 'Harakat Tarixi',
+    reorderRecsReport: 'Qayta Buyurtma Tavsiyalari',
+    hrReports: 'HR Hisobotlari:',
+    headcountSummary: 'Xodimlar Soni Xulosasi',
+    payrollReport: 'Ish Haqi Hisoboti',
+    leaveBalances: 'Ta\'til Qoldiqlari',
+    toGenerateReport: 'Hisobot yaratish uchun quyidagilarni kiriting:',
+    reportType: 'Hisobot turi',
+    dateRange: 'Sana oralig\'i',
+    reportFormat: 'Format (PDF, Excel yoki ekranda)',
+    reportExample: 'Masalan: "O\'tgan chorak uchun savdo hisobotini PDF shaklida yarating"',
   },
   ru: {
     salesAnalysis: 'Анализ Продаж',
@@ -553,8 +887,290 @@ const AI_TEXTS = {
     topCustomersByRevenue: 'Топ клиенты по выручке',
     productPerformance: 'Аналитика производительности продуктов',
     salesForecasting: 'Прогнозирование продаж',
+    keyMetrics: 'Ключевые Метрики:',
+    totalRevenue: 'Общая Выручка',
+    totalOrders: 'Всего Заказов',
+    avgOrderValue: 'Средний Чек',
+    orderStatusBreakdown: 'Статусы Заказов:',
+    orders: 'заказов',
+    topCustomers: 'Топ Клиенты по Выручке:',
+    noCustomerData: 'Нет данных о клиентах',
+    outstandingPayments: 'Неоплаченные Платежи:',
+    unpaidOrdersTotaling: 'неоплаченных заказов на сумму',
+    allOrdersPaid: 'Все заказы оплачены!',
+    recommendations: 'Рекомендации:',
+    focusOnRetaining: 'Сфокусируйтесь на удержании',
+    yourTopCustomer: '(ваш лучший клиент)',
+    followUpOn: 'Проследите за',
+    unpaidInvoices: 'неоплаченных счетов',
+    considerAnalyzing: 'Рассмотрите анализ производительности продуктов для оптимизации',
+    yourDataSummary: 'Ваши Данные',
+    inventoryAnalysis: 'Анализ Инвентаря',
+    noInventoryItems: "У вас пока нет товаров в инвентаре.",
+    goToInventory: 'Перейдите в модуль **Инвентарь**',
+    addYourProducts: 'Добавьте свои товары',
+    setReorderLevels: 'Установите уровни повторного заказа для автоматических оповещений',
+    onceInventoryData: 'Когда у вас будут данные инвентаря, я могу помочь с:',
+    lowStockAlerts: 'Оповещения о низких остатках',
+    reorderRecommendations: 'Рекомендации по дозаказу',
+    deadStockIdentification: 'Идентификация неходовых товаров',
+    inventoryValuation: 'Оценка инвентаря',
+    overview: 'Обзор:',
+    totalSKUs: 'Всего SKU',
+    totalUnits: 'Всего Единиц',
+    totalValue: 'Общая Стоимость',
+    lowStockAlert: 'Предупреждение о Низком Запасе',
+    items: 'товаров',
+    product: 'Товар',
+    current: 'Текущий',
+    reorderLevel: 'Уровень Заказа',
+    status: 'Статус',
+    outOfStock: 'Закончился',
+    low: 'Низкий',
+    allItemsStocked: 'Все товары в достаточном количестве!',
+    needsImmediateAttention: 'товаров требуют внимания',
+    createPurchaseOrders: 'Создайте заказы на закупку для',
+    lowStockItems: 'товаров с низким остатком',
+    inventoryLevelsHealthy: 'Уровни инвентаря в норме',
+    urgent: 'Срочно: Пополнить',
+    outOfStockItems: 'отсутствующих товаров',
+    reviewSlowMoving: 'Рассмотрите акции для медленно продающихся товаров',
+    financialAnalysis: 'Финансовый Анализ',
+    noFinancialData: "У вас пока нет финансовых данных.",
+    createSalesOrdersToTrack: 'Создайте **Заказы на продажу** для отслеживания выручки',
+    logExpenses: 'Вносите **Расходы** для учёта затрат',
+    recordFinancialTrans: 'Записывайте **Финансовые Операции** для движения денег',
+    onceFinancialData: 'Когда у вас будут данные, я могу помочь с:',
+    cashFlowAnalysis: 'Анализ денежного потока',
+    profitMarginCalc: 'Расчёт маржи прибыли',
+    expenseBreakdowns: 'Разбивка расходов',
+    receivablesPayablesTracking: 'Учёт дебиторской и кредиторской задолженности',
+    financialHealthDashboard: 'Панель Финансового Здоровья',
+    revenueProfit: 'Выручка и Прибыль:',
+    totalPurchases: 'Всего Закупок',
+    totalExpenses: 'Всего Расходов',
+    grossProfit: 'Валовая Прибыль',
+    netProfit: 'Чистая Прибыль',
+    profitMargin: 'Маржа Прибыли',
+    receivablesPayables: 'Дебиторская и Кредиторская:',
+    accountsReceivable: 'Дебиторская Задолженность',
+    unpaidInvoicesCount: 'неоплаченных счетов',
+    accountsPayable: 'Кредиторская Задолженность',
+    unpaidBills: 'неоплаченных счетов',
+    expenseBreakdown: 'Разбивка Расходов:',
+    billsPendingPayment: 'счетов ожидают оплаты',
+    reviewExpenses: 'Пересмотрите расходы - сейчас работаете в убыток',
+    maintainProfitability: 'Поддерживайте текущие тренды прибыльности',
+    businessAtGlance: 'Ваш Бизнес Кратко:',
+    salesOrdersCount: 'Заказы на Продажу',
+    noOrdersYet: 'Ещё нет заказов',
+    inventoryItemsCount: 'Товары Инвентаря',
+    lowStockCount: 'низкий остаток',
+    noItemsYet: 'Ещё нет товаров',
+    customersCount: 'Клиенты',
+    noneYet: 'Ещё нет',
+    employeesCount: 'Сотрудники',
+    assetsCount: 'Активы',
+    projectsCount: 'Проекты',
+    contractsCount: 'Контракты',
+    whatToAnalyze: 'Что бы вы хотели проанализировать?',
+    showSalesPerformance: 'Покажи производительность продаж',
+    whatInventoryRestock: 'Какой инвентарь нужно пополнить?',
+    analyzeFinancialHealth: 'Проанализируй финансовое здоровье',
+    showCustomerInsights: 'Покажи аналитику клиентов',
+    hrPayrollSummary: 'Сводка HR и зарплат',
+    imYourCopilot: "Я ваш AI-Копилот для бизнеса Genix. Могу помочь с:",
+    analyticsInsights: 'Аналитика и Инсайты',
+    salesPerformanceAnalysis: 'Анализ производительности продаж',
+    inventoryOptimization: 'Оптимизация инвентаря',
+    financialHealthMonitoring: 'Мониторинг финансового здоровья',
+    customerBehaviorInsights: 'Инсайты поведения клиентов',
+    automation: 'Автоматизация',
+    createManageWorkflows: 'Создавайте и управляйте рабочими процессами',
+    setupAlertsNotifications: 'Настройте оповещения и уведомления',
+    automateRepetitiveTasks: 'Автоматизируйте повторяющиеся задачи',
+    reports: 'Отчёты',
+    generateFinancialStatements: 'Генерируйте финансовую отчётность',
+    createSalesReports: 'Создавайте отчёты по продажам',
+    exportDataFormats: 'Экспортируйте данные в разных форматах',
+    recommendationsSection: 'Рекомендации',
+    identifyOpportunities: 'Определите возможности',
+    flagRisksIssues: 'Отметьте риски и проблемы',
+    suggestImprovements: 'Предложите улучшения',
+    gettingStarted: 'Начало:',
+    noDataYet: "Похоже, у вас пока мало данных. Начните с добавления:",
+    customersInModule: '**Клиенты** в модуле Клиенты',
+    inventoryItemsInModule: '**Товары** в модуле Инвентарь',
+    salesOrdersToTrack: '**Заказы на продажу** для учёта выручки',
+    onceDataPersonalized: 'Когда у вас появятся данные, я смогу давать персонализированные инсайты и рекомендации!',
     greeting: 'Привет! Чем я могу вам помочь сегодня?',
-    // Add more Russian translations as needed
+    // Customer
+    customerAnalytics: 'Аналитика Клиентов',
+    noCustomers: "У вас пока нет клиентов.",
+    goToCustomers: 'Перейдите в модуль **Клиенты**',
+    addCustomersContacts: 'Добавьте своих клиентов и контакты',
+    createSalesForRevenue: 'Создайте заказы для отслеживания выручки клиента',
+    onceCustomerData: 'Когда у вас будут данные клиентов, я могу помочь с:',
+    customerRevenueAnalysis: 'Анализ выручки по клиентам',
+    topCustomerIdentification: 'Определение лучших клиентов',
+    customerSegmentation: 'Сегментация клиентов',
+    engagementTracking: 'Отслеживание вовлечённости',
+    customerOverview: 'Обзор:',
+    totalCustomers: 'Всего Клиентов',
+    customersWithOrders: 'Клиентов с Заказами',
+    customerSegmentsByRevenue: 'Сегменты Клиентов по Выручке:',
+    enterprise: 'Корпоративные',
+    midMarket: 'Средние',
+    smb: 'Малые',
+    accounts: 'аккаунтов',
+    customersWithUnpaid: 'Клиенты с Неоплаченными Заказами:',
+    allCustomersPaid: 'Все клиенты оплатили свои заказы!',
+    nurtureTopCustomer: 'Развивайте отношения с',
+    topCustomerParen: '(лучший клиент)',
+    followUpWithCustomers: 'Свяжитесь с',
+    customersOnPayments: 'клиентами по оплатам',
+    considerLoyalty: 'Рассмотрите программы лояльности для постоянных клиентов',
+    focusOnAcquiring: 'Сфокусируйтесь на привлечении новых клиентов',
+    // HR
+    hrAnalytics: 'HR Аналитика',
+    noEmployees: "У вас пока нет сотрудников.",
+    goToHR: 'Перейдите в модуль **HR**',
+    addEmployees: 'Добавьте своих сотрудников',
+    setupPayrollRecords: 'Настройте записи о зарплате',
+    onceEmployeeData: 'Когда у вас будут данные о сотрудниках, я могу помочь с:',
+    workforceOverviewItem: 'Обзор персонала',
+    departmentDistributionItem: 'Распределение по отделам',
+    payrollSummariesItem: 'Сводки по зарплате',
+    compensationAnalysisItem: 'Анализ компенсаций',
+    workforceOverview: 'Обзор Персонала:',
+    totalEmployees: 'Всего Сотрудников',
+    activeEmployees: 'Активных Сотрудников',
+    averageSalary: 'Средняя Зарплата',
+    departmentDistribution: 'Распределение по Отделам:',
+    employeesWord: 'сотрудников',
+    payrollSummary: 'Сводка по Зарплате:',
+    totalPayrollRecords: 'Всего Записей о Зарплате',
+    processedPayrolls: 'Обработано',
+    pendingPayrolls: 'В ожидании',
+    totalPayrollAmount: 'Общая Сумма Зарплаты',
+    processPending: 'Обработайте ожидающие записи:',
+    allPayrollProcessed: 'Все записи о зарплате обработаны!',
+    organizeIntoDepts: 'Рассмотрите организацию сотрудников по отделам',
+    reviewCompensation: 'Пересмотрите бенчмарки компенсации для удержания',
+    // Assets
+    assetManagement: 'Управление Активами',
+    noAssets: "У вас пока нет активов.",
+    goToAssets: 'Перейдите в модуль **Активы**',
+    addCompanyAssets: 'Добавьте активы компании (оборудование, транспорт и т.д.)',
+    trackDepreciation: 'Отслеживайте амортизацию и обслуживание',
+    onceAssetData: 'Когда у вас будут данные об активах, я могу помочь с:',
+    assetValuation: 'Оценка активов и отслеживание амортизации',
+    maintenanceSchedules: 'Графики обслуживания',
+    assetLifecycle: 'Анализ жизненного цикла актива',
+    disposalRecommendations: 'Рекомендации по списанию',
+    totalAssets: 'Всего Активов',
+    purchaseValue: 'Стоимость Покупки',
+    currentValue: 'Текущая Стоимость',
+    totalDepreciation: 'Общая Амортизация',
+    assetsByCategory: 'Активы по Категории:',
+    assetsByStatus: 'Активы по Статусу:',
+    maintenanceDue: 'Требуется Обслуживание:',
+    overdue: 'Просрочено',
+    allMaintenanceUpToDate: 'Всё обслуживание в актуальном состоянии!',
+    scheduleMaintenance: 'Запланируйте обслуживание для',
+    continueMaintenance: 'Продолжайте регулярный график обслуживания',
+    reviewDepreciation: 'Пересмотрите графики амортизации для точности',
+    considerDisposal: 'Рассмотрите списание полностью амортизированных активов',
+    // Projects
+    projectManagement: 'Управление Проектами',
+    noProjects: "У вас пока нет проектов.",
+    goToProjects: 'Перейдите в модуль **Проекты**',
+    createFirstProject: 'Создайте ваш первый проект',
+    addTasksMilestones: 'Добавьте задачи и вехи',
+    onceProjectData: 'Когда у вас будут данные о проектах, я могу помочь с:',
+    projectProgress: 'Отслеживание прогресса проекта',
+    resourceAllocation: 'Анализ распределения ресурсов',
+    timelineMonitoring: 'Мониторинг сроков',
+    budgetAnalysis: 'Анализ бюджета и фактических расходов',
+    totalProjects: 'Всего Проектов',
+    totalBudget: 'Общий Бюджет',
+    totalSpent: 'Всего Потрачено',
+    budgetUtilization: 'Использование Бюджета',
+    projectsByStatus: 'Проекты по Статусу:',
+    overdueProjects: 'Просроченные Проекты:',
+    allOnSchedule: 'Все проекты идут по графику!',
+    overBudget: 'Превышение Бюджета:',
+    allWithinBudget: 'Все проекты в рамках бюджета!',
+    addressOverdue: 'Разберитесь с просроченными проектами:',
+    maintainTimelines: 'Поддерживайте текущие сроки проектов',
+    reviewOverBudget: 'Пересмотрите расходы на проекты с превышением бюджета:',
+    milestoneReviews: 'Рекомендуются регулярные обзоры вех',
+    // Contracts
+    contractManagement: 'Управление Контрактами',
+    noContracts: "У вас пока нет контрактов.",
+    goToContracts: 'Перейдите в модуль **Контракты**',
+    addContracts: 'Добавьте свои контракты (клиент, поставщик, сотрудник и т.д.)',
+    setExpiryDates: 'Установите даты окончания для отслеживания продления',
+    onceContractData: 'Когда у вас будут данные о контрактах, я могу помочь с:',
+    contractExpiry: 'Оповещения об окончании контракта',
+    renewalRecs: 'Рекомендации по продлению',
+    contractValueAnalysis: 'Анализ стоимости контракта',
+    complianceTracking: 'Отслеживание соответствия',
+    totalContracts: 'Всего Контрактов',
+    activeContracts: 'Активных Контрактов',
+    totalContractValue: 'Общая Стоимость Контрактов',
+    contractsByType: 'Контракты по Типу:',
+    contractsByStatus: 'Контракты по Статусу:',
+    expiringSoon30: 'Истекают в Течение 30 Дней:',
+    noExpiringSoon: 'Нет контрактов, истекающих в ближайшее время!',
+    reviewForRenewal: 'Пересмотрите контракты для продления:',
+    allContractsUpToDate: 'Все контракты актуальны',
+    autoRenewal: 'Настройте автопродление где возможно',
+    complianceReviews: 'Рекомендуются регулярные проверки соответствия',
+    // Workflow
+    workflowSuggestions: 'Предложения по Автоматизации',
+    basedOnProcesses: 'Основываясь на ваших процессах, я могу помочь автоматизировать:',
+    highImpact: 'Высокоэффективные Автоматизации:',
+    invoiceProcessing: '**Обработка Счетов** - Автоматически создавать и отправлять счета при выполнении заказов',
+    lowStockAlertsAuto: '**Оповещения о Низких Остатках** - Уведомления о дозаказе при достижении порога',
+    paymentReminders: '**Напоминания об Оплате** - Автоматические напоминания об просроченных счетах',
+    quickWins: 'Быстрые Победы:',
+    autoAssignLeads: 'Автоматическое назначение лидов по правилам территории',
+    scheduledReports: 'Запланированная генерация отчётов и отправка по email',
+    welcomeSequences: 'Серии приветственных писем для клиентов',
+    implementation: 'Внедрение:',
+    canCreateWorkflows: 'Я могу создать любой из этих процессов. Просто скажите:',
+    createInvoiceAutomation: '"Создай автоматизацию счетов"',
+    setupLowStockCmd: '"Настрой оповещения о низких остатках"',
+    buildPaymentReminder: '"Построй серию напоминаний об оплате"',
+    whichAutomation: 'Какую автоматизацию хотите внедрить первой?',
+    // Reports
+    reportGeneration: 'Генерация Отчётов',
+    canGenerateReports: 'Я могу создать следующие отчёты:',
+    financialReports: 'Финансовые Отчёты:',
+    balanceSheet: 'Баланс',
+    incomeStatement: 'Отчёт о Прибылях и Убытках',
+    cashFlowStatement: 'Отчёт о Движении Денежных Средств',
+    arAging: 'Старение Дебиторской Задолженности',
+    apAging: 'Старение Кредиторской Задолженности',
+    salesReports: 'Отчёты по Продажам:',
+    salesByPeriod: 'Продажи по Периоду',
+    salesByProduct: 'Продажи по Продукту',
+    salesByCustomer: 'Продажи по Клиенту',
+    pipelineAnalysis: 'Анализ Воронки',
+    inventoryReports: 'Отчёты по Инвентарю:',
+    stockValuation: 'Оценка Запасов',
+    movementHistory: 'История Движения',
+    reorderRecsReport: 'Рекомендации по Дозаказу',
+    hrReports: 'HR Отчёты:',
+    headcountSummary: 'Сводка по Численности',
+    payrollReport: 'Отчёт по Зарплате',
+    leaveBalances: 'Остатки Отпусков',
+    toGenerateReport: 'Чтобы создать отчёт, укажите:',
+    reportType: 'Тип отчёта',
+    dateRange: 'Диапазон дат',
+    reportFormat: 'Формат (PDF, Excel или на экране)',
+    reportExample: 'Пример: "Сгенерируй отчёт по продажам за прошлый квартал в PDF"',
   }
 };
 
@@ -605,20 +1221,22 @@ const generateDemoResponse = (message, context = {}, companyId = null, systemLan
 
     if (salesOrders.length === 0) {
       return {
-        content: `**Sales Analysis:**
+        content: `## ${t('salesAnalysis')}
 
-You don't have any sales orders recorded yet.
+${t('noSalesOrders')}
 
-**To get started:**
-1. Go to **Sales Orders** module
-2. Create your first sales order
-3. Come back and ask me for insights!
+**${t('toGetStarted')}**
 
-Once you have sales data, I can help you with:
-- Revenue trends and growth analysis
-- Top customers by revenue
-- Product performance insights
-- Sales forecasting`,
+1. ${t('goToSalesOrders')}
+2. ${t('createFirstSalesOrder')}
+3. ${t('comeBackForInsights')}
+
+**${t('onceSalesData')}**
+
+- ${t('revenueTrends')}
+- ${t('topCustomersByRevenue')}
+- ${t('productPerformance')}
+- ${t('salesForecasting')}`,
         tool_calls: [{ name: 'analyze_sales_data', status: 'completed' }]
       };
     }
@@ -649,29 +1267,29 @@ Once you have sales data, I can help you with:
 
     let topCustomersText = topCustomers.length > 0
       ? topCustomers.map((c, i) => `${i + 1}. ${c[0]} - ${fmtCurrency(c[1])}`).join('\n')
-      : 'No customer data available';
+      : t('noCustomerData');
 
     return {
-      content: `**Sales Analysis - Your Data:**
+      content: `**${t('salesAnalysis')} - ${t('yourDataSummary')}:**
 
-**Key Metrics:**
-- Total Revenue: ${fmtCurrency(totalRevenue)}
-- Total Orders: ${salesOrders.length}
-- Average Order Value: ${fmtCurrency(avgOrderValue)}
+**${t('keyMetrics')}**
+- ${t('totalRevenue')}: ${fmtCurrency(totalRevenue)}
+- ${t('totalOrders')}: ${salesOrders.length}
+- ${t('avgOrderValue')}: ${fmtCurrency(avgOrderValue)}
 
-**Order Status Breakdown:**
-${Object.entries(statusCounts).map(([status, count]) => `- ${status}: ${count} orders`).join('\n')}
+**${t('orderStatusBreakdown')}**
+${Object.entries(statusCounts).map(([status, count]) => `- ${status}: ${count} ${t('orders')}`).join('\n')}
 
-**Top Customers by Revenue:**
+**${t('topCustomers')}**
 ${topCustomersText}
 
-${unpaidOrders.length > 0 ? `**⚠️ Outstanding Payments:**
-- ${unpaidOrders.length} unpaid orders totaling ${fmtCurrency(unpaidTotal)}` : '**✓ All orders are paid!**'}
+${unpaidOrders.length > 0 ? `**⚠️ ${t('outstandingPayments')}**
+- ${unpaidOrders.length} ${t('unpaidOrdersTotaling')} ${fmtCurrency(unpaidTotal)}` : `**✓ ${t('allOrdersPaid')}**`}
 
-**Recommendations:**
-${topCustomers.length > 0 ? `- Focus on retaining ${topCustomers[0][0]} (your top customer)` : '- Start building your customer base'}
-${unpaidOrders.length > 0 ? `- Follow up on ${unpaidOrders.length} unpaid invoices` : ''}
-- Consider analyzing product performance for optimization`,
+**${t('recommendations')}**
+${topCustomers.length > 0 ? `- ${t('focusOnRetaining')} ${topCustomers[0][0]} ${t('yourTopCustomer')}` : `- ${t('focusOnAcquiring')}`}
+${unpaidOrders.length > 0 ? `- ${t('followUpOn')} ${unpaidOrders.length} ${t('unpaidInvoices')}` : ''}
+- ${t('considerAnalyzing')}`,
       tool_calls: [{ name: 'analyze_sales_data', status: 'completed' }]
     };
   }
@@ -685,20 +1303,22 @@ ${unpaidOrders.length > 0 ? `- Follow up on ${unpaidOrders.length} unpaid invoic
 
     if (inventory.length === 0) {
       return {
-        content: `**Inventory Analysis:**
+        content: `## ${t('inventoryAnalysis')}
 
-You don't have any inventory items recorded yet.
+${t('noInventoryItems')}
 
-**To get started:**
-1. Go to **Inventory** module
-2. Add your products/items
-3. Set reorder levels for automatic alerts
+**${t('toGetStarted')}**
 
-Once you have inventory data, I can help you with:
-- Low stock alerts
-- Reorder recommendations
-- Dead stock identification
-- Inventory valuation`,
+1. ${t('goToInventory')}
+2. ${t('addYourProducts')}
+3. ${t('setReorderLevels')}
+
+**${t('onceInventoryData')}**
+
+- ${t('lowStockAlerts')}
+- ${t('reorderRecommendations')}
+- ${t('deadStockIdentification')}
+- ${t('inventoryValuation')}`,
         tool_calls: [{ name: 'analyze_inventory', status: 'completed' }]
       };
     }
@@ -709,28 +1329,28 @@ Once you have inventory data, I can help you with:
     const outOfStock = inventory.filter(i => (i.current_stock || 0) === 0);
 
     const lowStockTable = lowStockItems.slice(0, 5).map(i =>
-      `| ${i.name || i.item_name || 'Unknown'} | ${i.current_stock || 0} | ${i.reorder_level || 10} | ${(i.current_stock || 0) === 0 ? '🚨 Out of Stock' : '⚠️ Low'} |`
+      `| ${i.name || i.item_name || 'Unknown'} | ${i.current_stock || 0} | ${i.reorder_level || 10} | ${(i.current_stock || 0) === 0 ? `🚨 ${t('outOfStock')}` : `⚠️ ${t('low')}`} |`
     ).join('\n');
 
     return {
-      content: `**Inventory Analysis - Your Data:**
+      content: `**${t('inventoryAnalysis')} - ${t('yourDataSummary')}:**
 
-**Overview:**
-- Total SKUs: ${inventory.length}
-- Total Units: ${totalUnits.toLocaleString()}
-- Total Value: ${fmtCurrency(totalValue)}
+**${t('overview')}**
+- ${t('totalSKUs')}: ${inventory.length}
+- ${t('totalUnits')}: ${totalUnits.toLocaleString()}
+- ${t('totalValue')}: ${fmtCurrency(totalValue)}
 
-${lowStockItems.length > 0 ? `**⚠️ Low Stock Alert (${lowStockItems.length} items):**
-| Product | Current | Reorder Level | Status |
+${lowStockItems.length > 0 ? `**⚠️ ${t('lowStockAlert')} (${lowStockItems.length} ${t('items')}):**
+| ${t('product')} | ${t('current')} | ${t('reorderLevel')} | ${t('status')} |
 |---------|---------|---------------|--------|
-${lowStockTable}` : '**✓ All items are adequately stocked!**'}
+${lowStockTable}` : `**✓ ${t('allItemsStocked')}**`}
 
-${outOfStock.length > 0 ? `**🚨 Out of Stock: ${outOfStock.length} items need immediate attention**` : ''}
+${outOfStock.length > 0 ? `**🚨 ${t('outOfStock')}: ${outOfStock.length} ${t('needsImmediateAttention')}**` : ''}
 
-**Recommendations:**
-${lowStockItems.length > 0 ? `- Create purchase orders for ${lowStockItems.length} low stock items` : '- Inventory levels are healthy'}
-${outOfStock.length > 0 ? `- Urgent: Restock ${outOfStock.length} out-of-stock items` : ''}
-- Review slow-moving items for promotions`,
+**${t('recommendations')}**
+${lowStockItems.length > 0 ? `- ${t('createPurchaseOrders')} ${lowStockItems.length} ${t('lowStockItems')}` : `- ${t('inventoryLevelsHealthy')}`}
+${outOfStock.length > 0 ? `- ${t('urgent')} ${outOfStock.length} ${t('outOfStockItems')}` : ''}
+- ${t('reviewSlowMoving')}`,
       tool_calls: [{ name: 'analyze_inventory', status: 'completed' }]
     };
   }
@@ -745,20 +1365,22 @@ ${outOfStock.length > 0 ? `- Urgent: Restock ${outOfStock.length} out-of-stock i
 
     if (!hasFinancialData) {
       return {
-        content: `**Financial Analysis:**
+        content: `## ${t('financialAnalysis')}
 
-You don't have any financial data recorded yet.
+${t('noFinancialData')}
 
-**To get started:**
-1. Create **Sales Orders** to track revenue
-2. Log **Expenses** for cost tracking
-3. Record **Financial Transactions** for cash flow
+**${t('toGetStarted')}**
 
-Once you have data, I can help you with:
-- Cash flow analysis
-- Profit margin calculations
-- Expense breakdowns
-- Receivables and payables tracking`,
+1. ${t('createSalesOrdersToTrack')}
+2. ${t('logExpenses')}
+3. ${t('recordFinancialTrans')}
+
+**${t('onceFinancialData')}**
+
+- ${t('cashFlowAnalysis')}
+- ${t('profitMarginCalc')}
+- ${t('expenseBreakdowns')}
+- ${t('receivablesPayablesTracking')}`,
         tool_calls: [{ name: 'analyze_financials', status: 'completed' }]
       };
     }
@@ -788,51 +1410,54 @@ Once you have data, I can help you with:
     const profitMargin = totalRevenue > 0 ? ((netProfit / totalRevenue) * 100).toFixed(1) : 0;
 
     return {
-      content: `**Financial Health Dashboard - Your Data:**
+      content: `**${t('financialHealthDashboard')} - ${t('yourDataSummary')}:**
 
-**Revenue & Profit:**
-- Total Revenue: ${fmtCurrency(totalRevenue)}
-- Total Purchases: ${fmtCurrency(totalPurchases)}
-- Total Expenses: ${fmtCurrency(totalExpenses)}
-- Gross Profit: ${fmtCurrency(grossProfit)}
-- Net Profit: ${fmtCurrency(netProfit)}
-- Profit Margin: ${profitMargin}%
+**${t('revenueProfit')}**
+- ${t('totalRevenue')}: ${fmtCurrency(totalRevenue)}
+- ${t('totalPurchases')}: ${fmtCurrency(totalPurchases)}
+- ${t('totalExpenses')}: ${fmtCurrency(totalExpenses)}
+- ${t('grossProfit')}: ${fmtCurrency(grossProfit)}
+- ${t('netProfit')}: ${fmtCurrency(netProfit)}
+- ${t('profitMargin')}: ${profitMargin}%
 
-**Receivables & Payables:**
-- Accounts Receivable: ${fmtCurrency(accountsReceivable)} (${unpaidSales.length} unpaid invoices)
-- Accounts Payable: ${fmtCurrency(accountsPayable)} (${unpaidPurchases.length} unpaid bills)
+**${t('receivablesPayables')}**
+- ${t('accountsReceivable')}: ${fmtCurrency(accountsReceivable)} (${unpaidSales.length} ${t('unpaidInvoicesCount')})
+- ${t('accountsPayable')}: ${fmtCurrency(accountsPayable)} (${unpaidPurchases.length} ${t('unpaidBills')})
 
-${Object.keys(expenseByCategory).length > 0 ? `**Expense Breakdown:**
+${Object.keys(expenseByCategory).length > 0 ? `**${t('expenseBreakdown')}**
 ${Object.entries(expenseByCategory).map(([cat, amt]) => `- ${cat}: ${fmtCurrency(amt)}`).join('\n')}` : ''}
 
-**Recommendations:**
-${unpaidSales.length > 0 ? `- Follow up on ${unpaidSales.length} unpaid invoices totaling ${fmtCurrency(accountsReceivable)}` : '- All invoices are paid!'}
-${unpaidPurchases.length > 0 ? `- ${unpaidPurchases.length} bills pending payment` : ''}
-${netProfit < 0 ? '- ⚠️ Review expenses - currently operating at a loss' : '- Maintain current profitability trends'}`,
+**${t('recommendations')}**
+${unpaidSales.length > 0 ? `- ${t('followUpOn')} ${unpaidSales.length} ${t('unpaidInvoices')} (${fmtCurrency(accountsReceivable)})` : `- ${t('allOrdersPaid')}`}
+${unpaidPurchases.length > 0 ? `- ${unpaidPurchases.length} ${t('billsPendingPayment')}` : ''}
+${netProfit < 0 ? `- ⚠️ ${t('reviewExpenses')}` : `- ${t('maintainProfitability')}`}`,
       tool_calls: [{ name: 'analyze_financials', status: 'completed' }]
     };
   }
 
   // Customer/CRM queries
-  if (lowerMessage.includes('customer') || lowerMessage.includes('lead') || lowerMessage.includes('crm')) {
+  if (lowerMessage.includes('customer') || lowerMessage.includes('lead') || lowerMessage.includes('crm') ||
+      lowerMessage.includes('клиент') || lowerMessage.includes('покупатель')) {
     const { customers = [], salesOrders = [] } = userData;
 
     if (customers.length === 0) {
       return {
-        content: `**Customer Analytics:**
+        content: `## ${t('customerAnalytics')}
 
-You don't have any customers recorded yet.
+${t('noCustomers')}
 
-**To get started:**
-1. Go to **Customers** module
-2. Add your customers and contacts
-3. Create sales orders to track customer revenue
+**${t('toGetStarted')}**
 
-Once you have customer data, I can help you with:
-- Customer revenue analysis
-- Top customer identification
-- Customer segmentation
-- Engagement tracking`,
+1. ${t('goToCustomers')}
+2. ${t('addCustomersContacts')}
+3. ${t('createSalesForRevenue')}
+
+**${t('onceCustomerData')}**
+
+- ${t('customerRevenueAnalysis')}
+- ${t('topCustomerIdentification')}
+- ${t('customerSegmentation')}
+- ${t('engagementTracking')}`,
         tool_calls: [{ name: 'analyze_customers', status: 'completed' }]
       };
     }
@@ -862,52 +1487,54 @@ Once you have customer data, I can help you with:
     const totalCustomerRevenue = Object.values(customerRevenue).reduce((sum, r) => sum + r, 0);
 
     return {
-      content: `**Customer Analytics - Your Data:**
+      content: `**${t('customerAnalytics')} - ${t('yourDataSummary')}:**
 
-**Overview:**
-- Total Customers: ${customers.length}
-- Customers with Orders: ${Object.keys(customerRevenue).length}
-- Total Revenue: ${fmtCurrency(totalCustomerRevenue)}
+**${t('customerOverview')}**
+- ${t('totalCustomers')}: ${customers.length}
+- ${t('customersWithOrders')}: ${Object.keys(customerRevenue).length}
+- ${t('totalRevenue')}: ${fmtCurrency(totalCustomerRevenue)}
 
-**Customer Segments by Revenue:**
-- Enterprise (>${fmtCurrency(50000)}): ${enterprise.length} accounts
-- Mid-Market (${fmtCurrency(10000)}-${fmtCurrency(50000)}): ${midMarket.length} accounts
-- SMB (<${fmtCurrency(10000)}): ${smb.length} accounts
+**${t('customerSegmentsByRevenue')}**
+- ${t('enterprise')} (>${fmtCurrency(50000)}): ${enterprise.length} ${t('accounts')}
+- ${t('midMarket')} (${fmtCurrency(10000)}-${fmtCurrency(50000)}): ${midMarket.length} ${t('accounts')}
+- ${t('smb')} (<${fmtCurrency(10000)}): ${smb.length} ${t('accounts')}
 
-${topCustomers.length > 0 ? `**Top Customers by Revenue:**
+${topCustomers.length > 0 ? `**${t('topCustomers')}**
 ${topCustomers.map((c, i) => `${i + 1}. ${c[0]} - ${fmtCurrency(c[1])}`).join('\n')}` : ''}
 
-${customersWithUnpaid.length > 0 ? `**⚠️ Customers with Unpaid Orders:**
-${customersWithUnpaid.slice(0, 5).map(c => `- ${c}`).join('\n')}` : '**✓ All customers have paid their orders!**'}
+${customersWithUnpaid.length > 0 ? `**⚠️ ${t('customersWithUnpaid')}**
+${customersWithUnpaid.slice(0, 5).map(c => `- ${c}`).join('\n')}` : `**✓ ${t('allCustomersPaid')}**`}
 
-**Recommendations:**
-${topCustomers.length > 0 ? `- Nurture relationship with ${topCustomers[0][0]} (top customer)` : '- Focus on acquiring new customers'}
-${customersWithUnpaid.length > 0 ? `- Follow up with ${customersWithUnpaid.length} customers on payments` : ''}
-- Consider loyalty programs for repeat customers`,
+**${t('recommendations')}**
+${topCustomers.length > 0 ? `- ${t('nurtureTopCustomer')} ${topCustomers[0][0]} ${t('topCustomerParen')}` : `- ${t('focusOnAcquiring')}`}
+${customersWithUnpaid.length > 0 ? `- ${t('followUpWithCustomers')} ${customersWithUnpaid.length} ${t('customersOnPayments')}` : ''}
+- ${t('considerLoyalty')}`,
       tool_calls: [{ name: 'analyze_customers', status: 'completed' }]
     };
   }
 
   // HR/Employee queries
-  if (lowerMessage.includes('employee') || lowerMessage.includes('hr') || lowerMessage.includes('payroll') || lowerMessage.includes('staff')) {
+  if (lowerMessage.includes('employee') || lowerMessage.includes('hr') || lowerMessage.includes('payroll') || lowerMessage.includes('staff') ||
+      lowerMessage.includes('xodim') || lowerMessage.includes('ishchi') || lowerMessage.includes('maosh') ||
+      lowerMessage.includes('сотрудник') || lowerMessage.includes('зарплат') || lowerMessage.includes('персонал')) {
     const { employees = [], payroll = [] } = userData;
 
     if (employees.length === 0) {
       return {
-        content: `**HR Analytics:**
+        content: `**${t('hrAnalytics')}:**
 
-You don't have any employees recorded yet.
+${t('noEmployees')}
 
-**To get started:**
-1. Go to **HR** module
-2. Add your employees
-3. Set up payroll records
+**${t('toGetStarted')}**
+1. ${t('goToHR')}
+2. ${t('addEmployees')}
+3. ${t('setupPayrollRecords')}
 
-Once you have employee data, I can help you with:
-- Workforce overview
-- Department distribution
-- Payroll summaries
-- Compensation analysis`,
+${t('onceEmployeeData')}
+- ${t('workforceOverviewItem')}
+- ${t('departmentDistributionItem')}
+- ${t('payrollSummariesItem')}
+- ${t('compensationAnalysisItem')}`,
         tool_calls: [{ name: 'analyze_hr', status: 'completed' }]
       };
     }
@@ -933,50 +1560,52 @@ Once you have employee data, I can help you with:
       : 0;
 
     return {
-      content: `**HR Analytics - Your Data:**
+      content: `**${t('hrAnalytics')} - ${t('yourDataSummary')}:**
 
-**Workforce Overview:**
-- Total Employees: ${employees.length}
-- Active Employees: ${activeEmployees.length}
-- Average Salary: ${fmtCurrency(avgSalary)}
+**${t('workforceOverview')}**
+- ${t('totalEmployees')}: ${employees.length}
+- ${t('activeEmployees')}: ${activeEmployees.length}
+- ${t('averageSalary')}: ${fmtCurrency(avgSalary)}
 
-**Department Distribution:**
-${Object.entries(departments).map(([dept, count]) => `- ${dept}: ${count} employees`).join('\n')}
+**${t('departmentDistribution')}**
+${Object.entries(departments).map(([dept, count]) => `- ${dept}: ${count} ${t('employeesWord')}`).join('\n')}
 
-**Payroll Summary:**
-- Total Payroll Records: ${payroll.length}
-- Processed Payrolls: ${processedPayroll.length}
-- Pending Payrolls: ${pendingPayroll.length}
-${totalMonthlyPayroll > 0 ? `- Total Payroll Amount: ${fmtCurrency(totalMonthlyPayroll)}` : ''}
+**${t('payrollSummary')}**
+- ${t('totalPayrollRecords')}: ${payroll.length}
+- ${t('processedPayrolls')}: ${processedPayroll.length}
+- ${t('pendingPayrolls')}: ${pendingPayroll.length}
+${totalMonthlyPayroll > 0 ? `- ${t('totalPayrollAmount')}: ${fmtCurrency(totalMonthlyPayroll)}` : ''}
 
-**Recommendations:**
-${pendingPayroll.length > 0 ? `- Process ${pendingPayroll.length} pending payroll records` : '- All payroll records are processed!'}
-${Object.keys(departments).length === 1 ? '- Consider organizing employees into departments' : ''}
-- Review compensation benchmarks for retention`,
+**${t('recommendations')}**
+${pendingPayroll.length > 0 ? `- ${t('processPending')} ${pendingPayroll.length}` : `- ${t('allPayrollProcessed')}`}
+${Object.keys(departments).length === 1 ? `- ${t('organizeIntoDepts')}` : ''}
+- ${t('reviewCompensation')}`,
       tool_calls: [{ name: 'analyze_hr', status: 'completed' }]
     };
   }
 
   // Assets queries
-  if (lowerMessage.includes('asset') || lowerMessage.includes('equipment') || lowerMessage.includes('depreciation')) {
+  if (lowerMessage.includes('asset') || lowerMessage.includes('equipment') || lowerMessage.includes('depreciation') ||
+      lowerMessage.includes('aktiv') || lowerMessage.includes('uskuna') || lowerMessage.includes('amortizatsiya') ||
+      lowerMessage.includes('актив') || lowerMessage.includes('оборудовани') || lowerMessage.includes('амортизац')) {
     const { assets = [] } = userData;
 
     if (assets.length === 0) {
       return {
-        content: `**Asset Management:**
+        content: `**${t('assetManagement')}:**
 
-You don't have any assets recorded yet.
+${t('noAssets')}
 
-**To get started:**
-1. Go to **Assets** module
-2. Add your company assets (equipment, vehicles, etc.)
-3. Track depreciation and maintenance
+**${t('toGetStarted')}**
+1. ${t('goToAssets')}
+2. ${t('addCompanyAssets')}
+3. ${t('trackDepreciation')}
 
-Once you have asset data, I can help you with:
-- Asset valuation and depreciation tracking
-- Maintenance schedules
-- Asset lifecycle analysis
-- Disposal recommendations`,
+${t('onceAssetData')}
+- ${t('assetValuation')}
+- ${t('maintenanceSchedules')}
+- ${t('assetLifecycle')}
+- ${t('disposalRecommendations')}`,
         tool_calls: [{ name: 'analyze_assets', status: 'completed' }]
       };
     }
@@ -1008,51 +1637,53 @@ Once you have asset data, I can help you with:
     });
 
     return {
-      content: `**Asset Management - Your Data:**
+      content: `**${t('assetManagement')} - ${t('yourDataSummary')}:**
 
-**Overview:**
-- Total Assets: ${assets.length}
-- Purchase Value: ${fmtCurrency(totalPurchaseValue)}
-- Current Value: ${fmtCurrency(totalValue)}
-- Total Depreciation: ${fmtCurrency(totalDepreciation)}
+**${t('overview')}**
+- ${t('totalAssets')}: ${assets.length}
+- ${t('purchaseValue')}: ${fmtCurrency(totalPurchaseValue)}
+- ${t('currentValue')}: ${fmtCurrency(totalValue)}
+- ${t('totalDepreciation')}: ${fmtCurrency(totalDepreciation)}
 
-**Assets by Category:**
+**${t('assetsByCategory')}**
 ${Object.entries(byCategory).map(([cat, count]) => `- ${cat}: ${count}`).join('\n')}
 
-**Assets by Status:**
+**${t('assetsByStatus')}**
 ${Object.entries(byStatus).map(([status, count]) => `- ${status}: ${count}`).join('\n')}
 
-${needsMaintenance.length > 0 ? `**⚠️ Maintenance Due:**
-${needsMaintenance.slice(0, 5).map(a => `- ${a.name || a.asset_name}: Overdue`).join('\n')}` : '**✓ All maintenance is up to date!**'}
+${needsMaintenance.length > 0 ? `**⚠️ ${t('maintenanceDue')}**
+${needsMaintenance.slice(0, 5).map(a => `- ${a.name || a.asset_name}: ${t('overdue')}`).join('\n')}` : `**✓ ${t('allMaintenanceUpToDate')}**`}
 
-**Recommendations:**
-${needsMaintenance.length > 0 ? `- Schedule maintenance for ${needsMaintenance.length} assets` : '- Continue regular maintenance schedule'}
-- Review depreciation schedules for accuracy
-- Consider disposal of fully depreciated assets`,
+**${t('recommendations')}**
+${needsMaintenance.length > 0 ? `- ${t('scheduleMaintenance')} ${needsMaintenance.length}` : `- ${t('continueMaintenance')}`}
+- ${t('reviewDepreciation')}
+- ${t('considerDisposal')}`,
       tool_calls: [{ name: 'analyze_assets', status: 'completed' }]
     };
   }
 
   // Projects queries
-  if (lowerMessage.includes('project') || lowerMessage.includes('task') || lowerMessage.includes('milestone')) {
+  if (lowerMessage.includes('project') || lowerMessage.includes('task') || lowerMessage.includes('milestone') ||
+      lowerMessage.includes('loyiha') || lowerMessage.includes('vazifa') ||
+      lowerMessage.includes('проект') || lowerMessage.includes('задач')) {
     const { projects = [] } = userData;
 
     if (projects.length === 0) {
       return {
-        content: `**Project Management:**
+        content: `**${t('projectManagement')}:**
 
-You don't have any projects recorded yet.
+${t('noProjects')}
 
-**To get started:**
-1. Go to **Projects** module
-2. Create your first project
-3. Add tasks and milestones
+**${t('toGetStarted')}**
+1. ${t('goToProjects')}
+2. ${t('createFirstProject')}
+3. ${t('addTasksMilestones')}
 
-Once you have project data, I can help you with:
-- Project progress tracking
-- Resource allocation analysis
-- Timeline and deadline monitoring
-- Budget vs actual analysis`,
+${t('onceProjectData')}
+- ${t('projectProgress')}
+- ${t('resourceAllocation')}
+- ${t('timelineMonitoring')}
+- ${t('budgetAnalysis')}`,
         tool_calls: [{ name: 'analyze_projects', status: 'completed' }]
       };
     }
@@ -1076,51 +1707,53 @@ Once you have project data, I can help you with:
     const overBudget = projects.filter(p => (p.spent || p.actual_cost || 0) > (p.budget || 0));
 
     return {
-      content: `**Project Management - Your Data:**
+      content: `**${t('projectManagement')} - ${t('yourDataSummary')}:**
 
-**Overview:**
-- Total Projects: ${projects.length}
-- Total Budget: ${fmtCurrency(totalBudget)}
-- Total Spent: ${fmtCurrency(totalSpent)}
-- Budget Utilization: ${totalBudget > 0 ? ((totalSpent / totalBudget) * 100).toFixed(1) : 0}%
+**${t('overview')}**
+- ${t('totalProjects')}: ${projects.length}
+- ${t('totalBudget')}: ${fmtCurrency(totalBudget)}
+- ${t('totalSpent')}: ${fmtCurrency(totalSpent)}
+- ${t('budgetUtilization')}: ${totalBudget > 0 ? ((totalSpent / totalBudget) * 100).toFixed(1) : 0}%
 
-**Projects by Status:**
+**${t('projectsByStatus')}**
 ${Object.entries(byStatus).map(([status, count]) => `- ${status}: ${count}`).join('\n')}
 
-${overdue.length > 0 ? `**⚠️ Overdue Projects:**
-${overdue.slice(0, 5).map(p => `- ${p.name || p.project_name}`).join('\n')}` : '**✓ All projects are on schedule!**'}
+${overdue.length > 0 ? `**⚠️ ${t('overdueProjects')}**
+${overdue.slice(0, 5).map(p => `- ${p.name || p.project_name}`).join('\n')}` : `**✓ ${t('allOnSchedule')}**`}
 
-${overBudget.length > 0 ? `**💰 Over Budget:**
-${overBudget.slice(0, 5).map(p => `- ${p.name || p.project_name}`).join('\n')}` : '**✓ All projects within budget!**'}
+${overBudget.length > 0 ? `**💰 ${t('overBudget')}**
+${overBudget.slice(0, 5).map(p => `- ${p.name || p.project_name}`).join('\n')}` : `**✓ ${t('allWithinBudget')}**`}
 
-**Recommendations:**
-${overdue.length > 0 ? `- Address ${overdue.length} overdue projects` : '- Maintain current project timelines'}
-${overBudget.length > 0 ? `- Review spending on ${overBudget.length} over-budget projects` : ''}
-- Regular milestone reviews recommended`,
+**${t('recommendations')}**
+${overdue.length > 0 ? `- ${t('addressOverdue')} ${overdue.length}` : `- ${t('maintainTimelines')}`}
+${overBudget.length > 0 ? `- ${t('reviewOverBudget')} ${overBudget.length}` : ''}
+- ${t('milestoneReviews')}`,
       tool_calls: [{ name: 'analyze_projects', status: 'completed' }]
     };
   }
 
   // Contracts queries
-  if (lowerMessage.includes('contract') || lowerMessage.includes('agreement') || lowerMessage.includes('renewal')) {
+  if (lowerMessage.includes('contract') || lowerMessage.includes('agreement') || lowerMessage.includes('renewal') ||
+      lowerMessage.includes('shartnoma') || lowerMessage.includes('kelishuv') ||
+      lowerMessage.includes('контракт') || lowerMessage.includes('соглашение') || lowerMessage.includes('договор')) {
     const { contracts = [] } = userData;
 
     if (contracts.length === 0) {
       return {
-        content: `**Contract Management:**
+        content: `**${t('contractManagement')}:**
 
-You don't have any contracts recorded yet.
+${t('noContracts')}
 
-**To get started:**
-1. Go to **Contracts** module
-2. Add your contracts (customer, vendor, employee, etc.)
-3. Set expiry dates for renewal tracking
+**${t('toGetStarted')}**
+1. ${t('goToContracts')}
+2. ${t('addContracts')}
+3. ${t('setExpiryDates')}
 
-Once you have contract data, I can help you with:
-- Contract expiry alerts
-- Renewal recommendations
-- Contract value analysis
-- Compliance tracking`,
+${t('onceContractData')}
+- ${t('contractExpiry')}
+- ${t('renewalRecs')}
+- ${t('contractValueAnalysis')}
+- ${t('complianceTracking')}`,
         tool_calls: [{ name: 'analyze_contracts', status: 'completed' }]
       };
     }
@@ -1152,94 +1785,98 @@ Once you have contract data, I can help you with:
     }, {});
 
     return {
-      content: `**Contract Management - Your Data:**
+      content: `**${t('contractManagement')} - ${t('yourDataSummary')}:**
 
-**Overview:**
-- Total Contracts: ${contracts.length}
-- Active Contracts: ${activeContracts.length}
-- Total Contract Value: ${fmtCurrency(totalValue)}
+**${t('overview')}**
+- ${t('totalContracts')}: ${contracts.length}
+- ${t('activeContracts')}: ${activeContracts.length}
+- ${t('totalContractValue')}: ${fmtCurrency(totalValue)}
 
-**Contracts by Type:**
+**${t('contractsByType')}**
 ${Object.entries(byType).map(([type, count]) => `- ${type}: ${count}`).join('\n')}
 
-**Contracts by Status:**
+**${t('contractsByStatus')}**
 ${Object.entries(byStatus).map(([status, count]) => `- ${status}: ${count}`).join('\n')}
 
-${expiringSoon.length > 0 ? `**⚠️ Expiring Within 30 Days:**
-${expiringSoon.map(c => `- ${c.contract_name || c.contract_number}: ${c.end_date}`).join('\n')}` : '**✓ No contracts expiring soon!**'}
+${expiringSoon.length > 0 ? `**⚠️ ${t('expiringSoon30')}**
+${expiringSoon.map(c => `- ${c.contract_name || c.contract_number}: ${c.end_date}`).join('\n')}` : `**✓ ${t('noExpiringSoon')}**`}
 
-**Recommendations:**
-${expiringSoon.length > 0 ? `- Review ${expiringSoon.length} contracts for renewal` : '- All contracts are up to date'}
-- Set up auto-renewal where applicable
-- Regular compliance reviews recommended`,
+**${t('recommendations')}**
+${expiringSoon.length > 0 ? `- ${t('reviewForRenewal')} ${expiringSoon.length}` : `- ${t('allContractsUpToDate')}`}
+- ${t('autoRenewal')}
+- ${t('complianceReviews')}`,
       tool_calls: [{ name: 'analyze_contracts', status: 'completed' }]
     };
   }
 
   // Workflow/Automation queries
-  if (lowerMessage.includes('workflow') || lowerMessage.includes('automat') || lowerMessage.includes('process')) {
+  if (lowerMessage.includes('workflow') || lowerMessage.includes('automat') || lowerMessage.includes('process') ||
+      lowerMessage.includes('avtomatlash') || lowerMessage.includes('jarayon') ||
+      lowerMessage.includes('автоматиз') || lowerMessage.includes('процесс')) {
     return {
-      content: `**Workflow Automation Suggestions:**
+      content: `**${t('workflowSuggestions')}:**
 
-Based on your current processes, I can help automate:
+${t('basedOnProcesses')}
 
-**High-Impact Automations:**
-1. **Invoice Processing** - Automatically generate and send invoices when orders are fulfilled
-2. **Low Stock Alerts** - Trigger reorder notifications when inventory hits threshold
-3. **Payment Reminders** - Send automated follow-ups for overdue invoices
+**${t('highImpact')}**
+1. ${t('invoiceProcessing')}
+2. ${t('lowStockAlertsAuto')}
+3. ${t('paymentReminders')}
 
-**Quick Wins:**
-- Auto-assign leads based on territory rules
-- Scheduled report generation and email delivery
-- Customer welcome email sequences
+**${t('quickWins')}**
+- ${t('autoAssignLeads')}
+- ${t('scheduledReports')}
+- ${t('welcomeSequences')}
 
-**Implementation:**
-I can create any of these workflows for you. Just say:
-- "Create invoice automation workflow"
-- "Set up low stock alerts"
-- "Build payment reminder sequence"
+**${t('implementation')}**
+${t('canCreateWorkflows')}
+- ${t('createInvoiceAutomation')}
+- ${t('setupLowStockCmd')}
+- ${t('buildPaymentReminder')}
 
-Which automation would you like to implement first?`,
+${t('whichAutomation')}`,
       tool_calls: []
     };
   }
 
   // Report/Export queries
-  if (lowerMessage.includes('report') || lowerMessage.includes('export') || lowerMessage.includes('generate')) {
+  if (lowerMessage.includes('report') || lowerMessage.includes('export') || lowerMessage.includes('generate') ||
+      lowerMessage.includes('hisobot') || lowerMessage.includes('eksport') ||
+      lowerMessage.includes('отчёт') || lowerMessage.includes('отчет') || lowerMessage.includes('экспорт')) {
     return {
-      content: `**Report Generation:**
+      content: `**${t('reportGeneration')}:**
 
-I can generate the following reports for you:
+${t('canGenerateReports')}
 
-**Financial Reports:**
-- Balance Sheet
-- Income Statement
-- Cash Flow Statement
-- Accounts Receivable Aging
-- Accounts Payable Aging
+**${t('financialReports')}**
+- ${t('balanceSheet')}
+- ${t('incomeStatement')}
+- ${t('cashFlowStatement')}
+- ${t('arAging')}
+- ${t('apAging')}
 
-**Sales Reports:**
-- Sales by Period
-- Sales by Product
-- Sales by Customer
-- Pipeline Analysis
+**${t('salesReports')}**
+- ${t('salesByPeriod')}
+- ${t('salesByProduct')}
+- ${t('salesByCustomer')}
+- ${t('pipelineAnalysis')}
 
-**Inventory Reports:**
-- Stock Valuation
-- Movement History
-- Reorder Recommendations
+**${t('inventoryReports')}**
+- ${t('stockValuation')}
+- ${t('movementHistory')}
+- ${t('reorderRecsReport')}
 
-**HR Reports:**
-- Headcount Summary
-- Payroll Report
-- Leave Balances
+**${t('hrReports')}**
+- ${t('headcountSummary')}
+- ${t('payrollReport')}
+- ${t('leaveBalances')}
 
-To generate a report, specify:
-- Report type
-- Date range
-- Format (PDF, Excel, or on-screen)
+${t('toGenerateReport')}
+- ${t('reportType')}
+- ${t('dateRange')}
+- ${t('reportFormat')}
 
-Example: "Generate sales report for last quarter as PDF"`,
+${t('reportExample')}`,
       tool_calls: []
     };
   }
@@ -1993,10 +2630,10 @@ export function AIProvider({ children }) {
     if (!canMakeAIRequest()) {
       setAiLimitReached(true);
       const limits = getPlanLimits();
-      const limitMessage = {
-        id: `msg_${++messageIdCounter.current}`,
-        role: 'assistant',
-        content: `⚠️ **AI So'rovlar Limiti Tugadi**
+      const detectedLang = detectMessageLanguage(content);
+      const lang = detectedLang || currentLanguage || 'en';
+      const limitContent = {
+        uz: `⚠️ **AI So'rovlar Limiti Tugadi**
 
 Siz bu oydagi AI so'rovlar limitiga yetdingiz (${limits.aiRequestsPerMonth} ta so'rov).
 
@@ -2007,6 +2644,33 @@ Siz bu oydagi AI so'rovlar limitiga yetdingiz (${limits.aiRequestsPerMonth} ta s
    - **Enterprise** - Cheksiz AI so'rovlar
 
 Obunani o'zgartirish uchun **Sozlamalar** → **Obuna** bo'limiga o'ting.`,
+        ru: `⚠️ **Лимит AI Запросов Исчерпан**
+
+Вы достигли месячного лимита AI запросов (${limits.aiRequestsPerMonth} запросов).
+
+**Варианты:**
+1. Лимит сбросится в начале следующего месяца
+2. Повысьте свой тариф:
+   - **Professional** — 2 500 AI запросов/мес
+   - **Enterprise** — безлимитные AI запросы
+
+Чтобы изменить подписку, перейдите в **Настройки** → **Подписка**.`,
+        en: `⚠️ **AI Request Limit Reached**
+
+You've reached your monthly AI request limit (${limits.aiRequestsPerMonth} requests).
+
+**Options:**
+1. Your limit resets at the start of next month
+2. Upgrade your subscription:
+   - **Professional** — 2,500 AI requests/month
+   - **Enterprise** — unlimited AI requests
+
+To change your subscription, go to **Settings** → **Subscription**.`
+      };
+      const limitMessage = {
+        id: `msg_${++messageIdCounter.current}`,
+        role: 'assistant',
+        content: limitContent[lang] || limitContent.en,
         isLimitWarning: true,
         created_at: new Date().toISOString()
       };
@@ -2076,10 +2740,17 @@ Obunani o'zgartirish uchun **Sozlamalar** → **Obuna** bo'limiga o'ting.`,
 
           // Call backend AI without requiring conversation ID
           const response = await aiService.chat(content, activeConversation?.id, enhancedContext);
+          const detectedLang = detectMessageLanguage(content);
+          const lang = detectedLang || currentLanguage || 'en';
+          const fallbackText = {
+            uz: 'Kechirasiz, so\'rovingizni qayta ishlay olmadim.',
+            ru: 'Извините, я не смог обработать ваш запрос.',
+            en: 'I apologize, but I could not process your request.'
+          };
           const assistantMessage = {
             id: `msg_${++messageIdCounter.current}`,
             role: 'assistant',
-            content: response.message?.content || response.content || 'I apologize, but I could not process your request.',
+            content: response.message?.content || response.content || fallbackText[lang] || fallbackText.en,
             tool_calls: response.tool_calls || [],
             created_at: new Date().toISOString()
           };
@@ -2109,17 +2780,24 @@ Obunani o'zgartirish uchun **Sozlamalar** → **Obuna** bo'limiga o'ting.`,
 
     } catch (error) {
       console.error('Error sending message:', error);
+      const detectedLang = detectMessageLanguage(content);
+      const lang = detectedLang || currentLanguage || 'en';
+      const errorText = {
+        uz: 'Kechirasiz, so\'rovingizni qayta ishlashda xatolik yuz berdi. Iltimos, qayta urinib ko\'ring.',
+        ru: 'Извините, произошла ошибка при обработке вашего запроса. Попробуйте ещё раз.',
+        en: 'I apologize, but I encountered an error processing your request. Please try again.'
+      };
       const errorMessage = {
         id: `msg_${++messageIdCounter.current}`,
         role: 'assistant',
-        content: 'I apologize, but I encountered an error processing your request. Please try again.',
+        content: errorText[lang] || errorText.en,
         created_at: new Date().toISOString()
       };
       setMessages(prev => [...prev, errorMessage]);
       setIsLoading(false);
       return errorMessage;
     }
-  }, [isBackendConnected, activeConversation, canMakeAIRequest, incrementAIUsage, getPlanLimits, executeAction, activeCompany, formatCurrency]);
+  }, [isBackendConnected, activeConversation, canMakeAIRequest, incrementAIUsage, getPlanLimits, executeAction, activeCompany, formatCurrency, currentLanguage]);
 
   // Clear current conversation
   const clearConversation = useCallback(() => {
