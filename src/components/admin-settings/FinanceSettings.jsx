@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Calendar, FileText, Percent, Coins, Landmark, BookOpen, Lock, Users } from 'lucide-react';
 import TaxRates from '@/components/finance/TaxRates';
 import EmployeeTaxes from '@/components/finance/EmployeeTaxes';
+import CompanyTaxRates from '@/components/finance/CompanyTaxRates';
 
 // Arrays are defined inside component to use translations
 
@@ -212,6 +213,20 @@ export default function FinanceSettings() {
         icon={Users}
       >
         <EmployeeTaxes />
+      </SettingsSection>
+
+      {/* Company Tax Rates (migration 340) — activity-level taxes
+          NDS / Profit / Turnover / Dividend, complementing Employee Taxes
+          to cover the full 8-tax default catalog from TZ §1.2. */}
+      <SettingsSection
+        title={t('company_tax_rates') || "Kompaniya solig'lari"}
+        description={
+          t('company_tax_rates_desc') ||
+          "Sotuv, foyda, aylanma va dividend faoliyatidan olinadigan soliq stavkalari"
+        }
+        icon={Percent}
+      >
+        <CompanyTaxRates />
       </SettingsSection>
 
       {/* Multi-Currency */}

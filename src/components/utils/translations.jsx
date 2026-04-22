@@ -7416,6 +7416,18 @@ export const translations = {
     "netto": "Net",
     "employer_cost": "Total cost",
     "position": "Position",
+    // Company-level tax catalog (TZ §1.2 — NDS / Profit / Turnover / Dividend)
+    "company_tax_rates": "Company tax rates",
+    "company_tax_rates_desc": "Tax rates on sales, profit, turnover and dividend activity",
+    "no_company_tax_rates": "No company taxes yet",
+    "company_tax_applies_sales": "Sales turnover",
+    "company_tax_applies_profit": "Profit",
+    "company_tax_applies_turnover": "Total turnover",
+    "company_tax_applies_dividend": "Dividends",
+    "company_tax_applies_other": "Other",
+    "company_tax_form_hint": "Tax rate applied to company activity",
+    "company_tax_active_hint": "Active taxes are included in automatic calculations",
+    "confirm_delete_hint": "this action cannot be undone.",
   },
 
   uz: {
@@ -15081,6 +15093,18 @@ export const translations = {
     "netto": "Netto",
     "employer_cost": "Umumiy xarajat",
     "position": "Lavozim",
+    // Kompaniya soliqlari katalogi (TZ §1.2 — NDS / Foyda / Aylanma / Dividend)
+    "company_tax_rates": "Kompaniya soliqlari",
+    "company_tax_rates_desc": "Sotuv, foyda, aylanma va dividend faoliyatidan olinadigan soliq stavkalari",
+    "no_company_tax_rates": "Hali soliqlar qo'shilmagan",
+    "company_tax_applies_sales": "Sotuv aylanmasidan",
+    "company_tax_applies_profit": "Foydadan",
+    "company_tax_applies_turnover": "Umumiy aylanmadan",
+    "company_tax_applies_dividend": "Dividenddan",
+    "company_tax_applies_other": "Boshqa",
+    "company_tax_form_hint": "Kompaniya faoliyatidan olinadigan soliq stavkasi",
+    "company_tax_active_hint": "Faol soliqlar avtomatik hisoblashga qo'shiladi",
+    "confirm_delete_hint": "bu harakatni bekor qilib bo'lmaydi.",
   },
 
   ru: {
@@ -22825,6 +22849,18 @@ export const translations = {
     "netto": "На руки",
     "employer_cost": "Общая стоимость",
     "position": "Должность",
+    // Каталог налогов компании (ТЗ §1.2 — НДС / Налог на прибыль / Налог с оборота / Дивиденды)
+    "company_tax_rates": "Налоги компании",
+    "company_tax_rates_desc": "Ставки налогов с продаж, прибыли, оборота и дивидендов",
+    "no_company_tax_rates": "Налоги ещё не добавлены",
+    "company_tax_applies_sales": "С оборота продаж",
+    "company_tax_applies_profit": "С прибыли",
+    "company_tax_applies_turnover": "С общего оборота",
+    "company_tax_applies_dividend": "С дивидендов",
+    "company_tax_applies_other": "Другое",
+    "company_tax_form_hint": "Ставка налога, применяемая к деятельности компании",
+    "company_tax_active_hint": "Активные налоги включаются в автоматические расчёты",
+    "confirm_delete_hint": "это действие нельзя отменить.",
   }
 };
 

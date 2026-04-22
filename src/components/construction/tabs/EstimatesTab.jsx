@@ -105,7 +105,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
 
   // importColumns removed - SmetaImportModal handles parsing directly
 
-  const handleImport = async ({ estimateName, buildingId, lines, sourceType, sectionNames, subcontractId }) => {
+  const handleImport = async ({ estimateName, buildingId, lines, sourceType, sectionNames, subcontractId, sourceFileName }) => {
     try {
       // Find existing draft estimate with same name for this building, or create new
       let est = estimates.find(e =>
@@ -132,8 +132,15 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
         estId = created.id;
       }
 
-      // Bulk create all lines (replace existing if re-importing to same estimate)
-      const bulkResult = await constructionService.bulkCreateEstimateLines(estId, lines, { replace: isExisting, sourceType: sourceType || '' });
+      // Bulk create all lines (replace existing if re-importing to same estimate).
+      // `sourceFileName` lets the backend dedupe auto-created Forma 2 drafts —
+      // multiple estimate types extracted from the same uploaded Excel file
+      // will merge into one Forma 2 instead of producing one per type.
+      const bulkResult = await constructionService.bulkCreateEstimateLines(estId, lines, {
+        replace: isExisting,
+        sourceType: sourceType || '',
+        sourceFileName: sourceFileName || '',
+      });
 
       // Show toast if products were auto-created from resource lines
       if (bulkResult?.products_created > 0) {
@@ -147,28 +154,53 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
         });
       }
 
-      // Auto-create construction stages from BOP section headers
-      if (sourceType === 'vor' && sectionNames?.length > 0) {
+      // Auto-create construction stages from section headers in the
+      // uploaded file. The parser splits each source type into sections
+      // (ВОР → "Блок №1"/"Блок №2"; Единич → work-category rows; Ресурс →
+      // "ТРУДОВЫЕ РЕСУРСЫ"/"СТРОИТЕЛЬНЫЕ МАШИНЫ И МЕХАНИЗМЫ"/…), and each
+      // section becomes a stage scoped to the estimate's building.
+      //
+      // Dedupe by (building_id, upper-cased name) so re-importing or
+      // importing a sibling type from the same file doesn't create
+      // duplicate stages — and so the same section name in a different
+      // block is still allowed to produce its own stage.
+      if (sectionNames?.length > 0) {
+        // Scope the existence check to this building — migration 333 made
+        // stages building-aware, so "Блок №1" in building A and "Блок №1"
+        // in building B are legitimately separate stages.
         let existingStages = [];
         try {
-          existingStages = await constructionService.listStages(project.id);
+          existingStages = await constructionService.listStages(
+            project.id,
+            buildingId > 0 ? { buildingId } : undefined,
+          );
         } catch (e) {
-          // ignore - will create all stages
+          // ignore — we'll attempt to create all stages
         }
-        const existingNames = new Set((existingStages || []).map(s => s.name?.toUpperCase()));
+        const existingNames = new Set(
+          (existingStages || [])
+            .filter(s => (buildingId > 0 ? Number(s.building_id) === Number(buildingId) : !s.building_id))
+            .map(s => (s.name || '').toUpperCase())
+        );
 
         for (let i = 0; i < sectionNames.length; i++) {
           const name = sectionNames[i];
-          if (!existingNames.has(name.toUpperCase())) {
-            try {
-              await constructionService.createStage(project.id, {
-                name,
-                status: 'not_started',
-                planned_budget: 0,
-              });
-            } catch (e) {
-              console.error('Failed to create stage:', name, e);
-            }
+          if (!name) continue;
+          const key = name.toUpperCase();
+          if (existingNames.has(key)) continue;
+          try {
+            await constructionService.createStage(project.id, {
+              name,
+              status: 'not_started',
+              planned_budget: 0,
+              // 0 = project-wide (backend maps to NULL via nullInt64FromVal).
+              building_id: buildingId > 0 ? Number(buildingId) : 0,
+            });
+            // Remember in the local dedupe set so duplicate section names
+            // within a single import (rare but possible) don't insert twice.
+            existingNames.add(key);
+          } catch (e) {
+            console.error('Failed to create stage:', name, e);
           }
         }
       }
