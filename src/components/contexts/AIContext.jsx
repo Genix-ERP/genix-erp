@@ -1202,11 +1202,22 @@ const detectMessageLanguage = (message) => {
 };
 
 // AI response generator for demo/fallback mode - uses REAL user data (company-scoped)
-const generateDemoResponse = (message, context = {}, companyId = null, systemLang = 'en', formatCurrency = null) => {
+const generateDemoResponse = (message, context = {}, companyId = null, systemLang = 'en', formatCurrency = null, liveData = null) => {
   // Use provided formatCurrency or create a default one
   const fmtCurrency = formatCurrency || createCurrencyFormatter();
   const lowerMessage = message.toLowerCase();
-  const userData = getUserData(companyId);
+  const storedData = getUserData(companyId);
+  // Merge: live context data (from running app state) overrides stored (localStorage) data
+  // when it has content. Falls back to stored data if context isn't available.
+  const userData = {};
+  const allKeys = new Set([...Object.keys(storedData), ...(liveData ? Object.keys(liveData) : [])]);
+  allKeys.forEach(key => {
+    const live = liveData?.[key];
+    const stored = storedData[key];
+    if (Array.isArray(live) && live.length > 0) userData[key] = live;
+    else if (Array.isArray(stored) && stored.length > 0) userData[key] = stored;
+    else userData[key] = live || stored || [];
+  });
 
   // Detect language from message or use system language
   const detectedLang = detectMessageLanguage(message);
@@ -1359,9 +1370,13 @@ ${outOfStock.length > 0 ? `- ${t('urgent')} ${outOfStock.length} ${t('outOfStock
   if (lowerMessage.includes('cash') || lowerMessage.includes('financial') || lowerMessage.includes('expense') || lowerMessage.includes('profit') ||
       lowerMessage.includes('moliya') || lowerMessage.includes('pul') || lowerMessage.includes('xarajat') ||
       lowerMessage.includes('foyda') || lowerMessage.includes('kassa') || lowerMessage.includes('oqim')) {
-    const { salesOrders = [], purchaseOrders = [], expenses = [], financialTransactions = [] } = userData;
+    const { salesOrders = [], purchaseOrders = [], expenses = [], financialTransactions = [],
+            customerInvoices = [], vendorBills = [], cashTransactions = [], payments = [] } = userData;
 
-    const hasFinancialData = salesOrders.length > 0 || expenses.length > 0 || financialTransactions.length > 0;
+    const hasFinancialData = salesOrders.length > 0 || purchaseOrders.length > 0 ||
+      expenses.length > 0 || financialTransactions.length > 0 ||
+      customerInvoices.length > 0 || vendorBills.length > 0 ||
+      cashTransactions.length > 0 || payments.length > 0;
 
     if (!hasFinancialData) {
       return {
@@ -1385,18 +1400,31 @@ ${t('noFinancialData')}
       };
     }
 
-    // Calculate financial metrics from real data
-    const totalRevenue = salesOrders.reduce((sum, o) => sum + (o.total_amount || 0), 0);
-    const totalExpenses = expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
-    const totalPurchases = purchaseOrders.reduce((sum, p) => sum + (p.total_amount || 0), 0);
+    // Calculate financial metrics from real data. Fall back to invoices/bills if orders are empty.
+    const sumAmount = (arr, key = 'total_amount') => arr.reduce((sum, x) => sum + (Number(x[key]) || 0), 0);
 
-    // Accounts receivable (unpaid sales)
-    const unpaidSales = salesOrders.filter(o => o.payment_status === 'unpaid' || o.payment_status === 'pending');
-    const accountsReceivable = unpaidSales.reduce((sum, o) => sum + (o.total_amount || 0), 0);
+    const revenueFromOrders = sumAmount(salesOrders);
+    const revenueFromInvoices = sumAmount(customerInvoices);
+    const totalRevenue = revenueFromOrders || revenueFromInvoices;
 
-    // Accounts payable (unpaid purchases)
-    const unpaidPurchases = purchaseOrders.filter(p => p.payment_status === 'unpaid' || p.payment_status === 'pending');
-    const accountsPayable = unpaidPurchases.reduce((sum, p) => sum + (p.total_amount || 0), 0);
+    const expensesFromClaims = sumAmount(expenses, 'amount');
+    const totalExpenses = expensesFromClaims;
+
+    const purchasesFromOrders = sumAmount(purchaseOrders);
+    const purchasesFromBills = sumAmount(vendorBills);
+    const totalPurchases = purchasesFromOrders || purchasesFromBills;
+
+    // Accounts receivable: unpaid sales orders OR unpaid customer invoices
+    const unpaidSalesOrders = salesOrders.filter(o => o.payment_status === 'unpaid' || o.payment_status === 'pending');
+    const unpaidInvoicesList = customerInvoices.filter(i => i.status !== 'paid' && i.status !== 'cancelled');
+    const unpaidSales = unpaidSalesOrders.length > 0 ? unpaidSalesOrders : unpaidInvoicesList;
+    const accountsReceivable = unpaidSales.reduce((sum, o) => sum + (Number(o.total_amount || o.amount) || 0), 0);
+
+    // Accounts payable: unpaid purchase orders OR unpaid vendor bills
+    const unpaidPurchaseOrders = purchaseOrders.filter(p => p.payment_status === 'unpaid' || p.payment_status === 'pending');
+    const unpaidBillsList = vendorBills.filter(b => b.status !== 'paid' && b.status !== 'cancelled');
+    const unpaidPurchases = unpaidPurchaseOrders.length > 0 ? unpaidPurchaseOrders : unpaidBillsList;
+    const accountsPayable = unpaidPurchases.reduce((sum, p) => sum + (Number(p.total_amount || p.amount) || 0), 0);
 
     // Expense breakdown by category
     const expenseByCategory = expenses.reduce((acc, e) => {
@@ -2766,7 +2794,31 @@ To change your subscription, go to **Settings** → **Subscription**.`
       // Generate demo response with slight delay for realism (only as fallback)
       await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 1200));
 
-      const demoResponse = generateDemoResponse(content, context, activeCompany?.id, currentLanguage, formatCurrency);
+      // Pull live data from active contexts so responses reflect API-backed state,
+      // not just localStorage (which may be empty if data lives in backend).
+      // Prefer ModulesContext (unified hub) then fall back to domain contexts.
+      const pickNonEmpty = (...sources) => sources.find(s => Array.isArray(s) && s.length > 0) || sources.find(s => Array.isArray(s)) || [];
+      const liveData = {
+        customers: customersContext?.customers,
+        // Treat the product catalog as "inventory" for emptiness checks — users
+        // see items they added, not per-warehouse stock positions.
+        inventory: pickNonEmpty(inventoryContext?.products, inventoryContext?.inventory),
+        salesOrders: modulesContext?.salesOrders,
+        purchaseOrders: modulesContext?.purchaseOrders,
+        employees: modulesContext?.employees,
+        projects: modulesContext?.projects,
+        assets: pickNonEmpty(modulesContext?.assets, financialsContext?.fixedAssets),
+        expenses: modulesContext?.expenses,
+        payroll: modulesContext?.payrolls,
+        contracts: modulesContext?.contracts,
+        financialTransactions: financialsContext?.financialTransactions,
+        customerInvoices: financialsContext?.customerInvoices,
+        vendorBills: financialsContext?.vendorBills,
+        cashTransactions: financialsContext?.cashTransactions,
+        payments: financialsContext?.payments,
+      };
+
+      const demoResponse = generateDemoResponse(content, context, activeCompany?.id, currentLanguage, formatCurrency, liveData);
       const assistantMessage = {
         id: `msg_${++messageIdCounter.current}`,
         role: 'assistant',
@@ -2797,7 +2849,7 @@ To change your subscription, go to **Settings** → **Subscription**.`
       setIsLoading(false);
       return errorMessage;
     }
-  }, [isBackendConnected, activeConversation, canMakeAIRequest, incrementAIUsage, getPlanLimits, executeAction, activeCompany, formatCurrency, currentLanguage]);
+  }, [isBackendConnected, activeConversation, canMakeAIRequest, incrementAIUsage, getPlanLimits, executeAction, activeCompany, formatCurrency, currentLanguage, customersContext, inventoryContext, financialsContext, modulesContext]);
 
   // Clear current conversation
   const clearConversation = useCallback(() => {
