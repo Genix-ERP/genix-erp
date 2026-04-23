@@ -13495,7 +13495,7 @@ export const translations = {
     "avg_margin": "O'rtacha marjin %",
     "total_margin": "Jami marjin",
     "revenue": "Daromad",
-    "cost": "Xarajat",
+    "cost": "Tannarx",
     "markup": "Ustama",
     "default_markup": "Standart ustama",
     "markup_type": "Ustama turi",
