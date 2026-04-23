@@ -87,13 +87,15 @@ export default function Returns() {
   const [selectedReturn, setSelectedReturn] = useState(null);
 
   const [products, setProducts] = useState([]);
-  const [unpaidInvoices, setUnpaidInvoices] = useState([]);
-  const [loadingInvoices, setLoadingInvoices] = useState(false);
-  // invoiceAllocations: { [invoice_id]: amountNumber }
-  const [invoiceAllocations, setInvoiceAllocations] = useState({});
+  // Orders list for the selected customer (left column of the new modal).
+  const [customerOrders, setCustomerOrders] = useState([]);
+  const [loadingOrders, setLoadingOrders] = useState(false);
+  const [selectedOrderId, setSelectedOrderId] = useState("");
+  const [loadingOrderDetails, setLoadingOrderDetails] = useState(false);
   const [formData, setFormData] = useState({
     customer_id: "",
     customer_name: "",
+    sales_order_id: "",
     return_date: new Date().toISOString().split("T")[0],
     reason: "defective",
     items: [{ product_id: "", product_name: "", quantity: 1, unit_price: 0, condition: "damaged" }],
@@ -114,47 +116,68 @@ export default function Returns() {
     fetchProducts();
   }, []);
 
-  // Fetch the selected customer's unpaid invoices whenever customer changes.
-  // These drive the "apply return amount against which invoices?" picker below.
+  // Fetch the selected customer's sales orders whenever customer changes.
+  // User then picks an order; its lines pre-fill the return and — critically —
+  // the return's amount gets applied to THAT order's invoice on approval.
   useEffect(() => {
-    const fetchUnpaidInvoices = async () => {
+    const fetchCustomerOrders = async () => {
       if (!formData.customer_id) {
-        setUnpaidInvoices([]);
-        setInvoiceAllocations({});
+        setCustomerOrders([]);
+        setSelectedOrderId("");
         return;
       }
-      setLoadingInvoices(true);
+      setLoadingOrders(true);
       try {
-        const res = await salesService.listInvoices({
+        const res = await salesService.listOrders({
           customer_id: formData.customer_id,
-          page_size: 200,
+          page_size: 100,
         });
-        // Service may return paginated { items: [...] } or raw array.
         const all = Array.isArray(res) ? res : res?.items || res?.data || [];
-        const unpaid = all
-          .filter((inv) => (inv.invoice_type || "invoice") === "invoice")
-          .filter((inv) => inv.status !== "cancelled" && inv.status !== "draft")
-          .map((inv) => ({
-            ...inv,
-            balance: Number(inv.amount_due ?? inv.balance ?? (inv.total_amount - (inv.amount_paid || 0))),
-          }))
-          .filter((inv) => inv.balance > 0.005)
-          .sort((a, b) => {
-            const da = a.due_date ? new Date(a.due_date).getTime() : Number.MAX_SAFE_INTEGER;
-            const db = b.due_date ? new Date(b.due_date).getTime() : Number.MAX_SAFE_INTEGER;
-            return da - db;
-          });
-        setUnpaidInvoices(unpaid);
-        setInvoiceAllocations({}); // reset allocations when customer changes
+        // Returns only make sense against orders that have been confirmed or
+        // beyond — draft/cancelled aren't returnable.
+        const returnable = all
+          .filter((o) => !["draft", "cancelled", "quotation"].includes(o.status))
+          .sort((a, b) => new Date(b.order_date || b.created_at) - new Date(a.order_date || a.created_at));
+        setCustomerOrders(returnable);
       } catch (error) {
-        console.error("Failed to fetch unpaid invoices:", error);
-        setUnpaidInvoices([]);
+        console.error("Failed to fetch customer orders:", error);
+        setCustomerOrders([]);
       } finally {
-        setLoadingInvoices(false);
+        setLoadingOrders(false);
       }
     };
-    fetchUnpaidInvoices();
+    fetchCustomerOrders();
   }, [formData.customer_id]);
+
+  // When the user picks an order, fetch its full details (with lines) and
+  // populate the return items. The user can still edit qty/price/condition.
+  const handleOrderSelect = async (orderId) => {
+    if (!orderId || orderId === selectedOrderId) return;
+    setSelectedOrderId(orderId);
+    setLoadingOrderDetails(true);
+    try {
+      const order = await getOrder(orderId);
+      const lines = order?.lines || [];
+      const items = lines.length
+        ? lines.map((l) => ({
+            product_id: l.product_id || "",
+            product_name: l.product_name || l.description || "",
+            quantity: Number(l.quantity) || 1,
+            unit_price: Number(l.unit_price) || 0,
+            condition: "damaged",
+          }))
+        : [{ product_id: "", product_name: "", quantity: 1, unit_price: 0, condition: "damaged" }];
+      setFormData((prev) => ({
+        ...prev,
+        sales_order_id: orderId,
+        items,
+      }));
+    } catch (error) {
+      console.error("Failed to fetch order details:", error);
+    } finally {
+      setLoadingOrderDetails(false);
+    }
+  };
 
   const filteredReturns = useMemo(() => {
     if (!returns || !Array.isArray(returns)) return [];
@@ -231,61 +254,11 @@ export default function Returns() {
     setFormData({ ...formData, items: newItems });
   };
 
-  // Round to 2dp to avoid float noise when we diff against the return total.
-  const round2 = (n) => Math.round(Number(n || 0) * 100) / 100;
-
-  const allocatedTotal = useMemo(
-    () => Object.values(invoiceAllocations).reduce((s, v) => s + round2(v), 0),
-    [invoiceAllocations]
-  );
-
-  const handleAllocationChange = (invoiceId, rawValue) => {
-    const invoice = unpaidInvoices.find((i) => i.id === invoiceId);
-    if (!invoice) return;
-    let value = parseFloat(rawValue);
-    if (!Number.isFinite(value) || value < 0) value = 0;
-    // Clamp to invoice's remaining balance — we can't credit more than the
-    // customer owes on that invoice.
-    if (value > invoice.balance) value = invoice.balance;
-    setInvoiceAllocations((prev) => {
-      const next = { ...prev };
-      if (value === 0) delete next[invoiceId];
-      else next[invoiceId] = value;
-      return next;
-    });
-  };
-
-  // Spread the current return total across unpaid invoices FIFO-style
-  // (oldest due first). Uses the full list regardless of prior selections.
-  const autoDistribute = () => {
-    const total = formData.items.reduce(
-      (sum, item) => sum + (item.quantity || 0) * (item.unit_price || 0),
-      0
-    );
-    let remaining = round2(total);
-    const next = {};
-    for (const inv of unpaidInvoices) {
-      if (remaining <= 0.005) break;
-      const apply = Math.min(remaining, inv.balance);
-      if (apply > 0.005) {
-        next[inv.id] = round2(apply);
-        remaining = round2(remaining - apply);
-      }
-    }
-    setInvoiceAllocations(next);
-  };
-
-  const clearAllocations = () => setInvoiceAllocations({});
-
   const handleSubmit = async () => {
     const totalAmount = formData.items.reduce(
       (sum, item) => sum + item.quantity * item.unit_price,
       0
     );
-
-    const allocations = Object.entries(invoiceAllocations)
-      .filter(([, amt]) => Number(amt) > 0)
-      .map(([invoice_id, amount]) => ({ invoice_id, amount: round2(amount) }));
 
     const data = {
       ...formData,
@@ -295,7 +268,6 @@ export default function Returns() {
         total: item.quantity * item.unit_price,
       })),
       total_amount: totalAmount,
-      invoice_allocations: allocations,
     };
 
     await createReturn(data);
@@ -308,13 +280,14 @@ export default function Returns() {
     setFormData({
       customer_id: "",
       customer_name: "",
+      sales_order_id: "",
       return_date: new Date().toISOString().split("T")[0],
       reason: "defective",
       items: [{ product_id: "", product_name: "", quantity: 1, unit_price: 0, condition: "damaged" }],
       notes: "",
     });
-    setUnpaidInvoices([]);
-    setInvoiceAllocations({});
+    setCustomerOrders([]);
+    setSelectedOrderId("");
   };
 
   const handleView = (returnItem) => {
@@ -582,14 +555,16 @@ export default function Returns() {
         </CardContent>
       </Card>
 
-      {/* Create Form Modal */}
+      {/* Create Form Modal — two-column layout.
+          Left: customer's sales orders list (click to load lines).
+          Right: return detail form (products auto-filled from selected order). */}
       <Dialog open={showForm} onOpenChange={(open) => !open && resetForm()}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-6xl max-h-[92vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{t('new_return')}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-6 py-4">
-            {/* Customer Selection */}
+          <div className="space-y-4 py-2">
+            {/* Customer Selection — full width at top */}
             <div className="space-y-2">
               <Label>{t('customer')} *</Label>
               <CustomerCombobox
@@ -601,264 +576,247 @@ export default function Returns() {
                     ...formData,
                     customer_id: value,
                     customer_name: customer?.name || customer?.company_name || '',
+                    // Reset order-specific fields when customer changes.
+                    sales_order_id: "",
+                    items: [{ product_id: "", product_name: "", quantity: 1, unit_price: 0, condition: "damaged" }],
                   });
+                  setSelectedOrderId("");
                 }}
                 placeholder={t('select_customer') || 'Mijozni tanlang'}
                 t={t}
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-[320px_1fr] gap-4">
+              {/* LEFT COLUMN: Customer orders */}
               <div className="space-y-2">
-                <Label>{t('return_date')} *</Label>
-                <Input
-                  type="date"
-                  value={formData.return_date}
-                  onChange={(e) =>
-                    setFormData({ ...formData, return_date: e.target.value })
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>{t('reason')} *</Label>
-                <Select
-                  value={formData.reason}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, reason: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="defective">{t('defective_product')}</SelectItem>
-                    <SelectItem value="wrong_item">{t('wrong_item')}</SelectItem>
-                    <SelectItem value="damaged">{t('damaged')}</SelectItem>
-                    <SelectItem value="not_as_described">{t('not_as_described')}</SelectItem>
-                    <SelectItem value="changed_mind">{t('changed_mind')}</SelectItem>
-                    <SelectItem value="other">{t('other')}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Product Line Items */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label className="text-base font-semibold">{t('return_products') || 'Qaytarilayotgan mahsulotlar'}</Label>
-                <Button variant="outline" size="sm" onClick={addItemRow}>
-                  <Plus className="w-4 h-4 mr-1" />
-                  {t('add') || "Qo'shish"}
-                </Button>
-              </div>
-              <div className="space-y-3">
-                {formData.items.map((item, index) => (
-                  <div key={index} className="bg-slate-50 p-3 rounded-lg space-y-2">
-                    <div className="flex gap-2 items-end">
-                      <div className="flex-[3] min-w-0">
-                        {index === 0 && <Label className="text-xs text-slate-500 mb-1">{t('product')}</Label>}
-                        <ProductCombobox
-                          products={products}
-                          value={item.product_id || ''}
-                          onValueChange={(value) => handleProductSelect(index, value)}
-                          placeholder={t('select_product') || 'Mahsulotni tanlang'}
-                          t={t}
-                        />
-                      </div>
-                      <div className="w-20">
-                        {index === 0 && <Label className="text-xs text-slate-500 mb-1">{t('quantity')}</Label>}
-                        <Input
-                          type="number"
-                          min="1"
-                          value={item.quantity}
-                          onChange={(e) => handleItemChange(index, "quantity", e.target.value)}
-                        />
-                      </div>
-                      <div className="w-28">
-                        {index === 0 && <Label className="text-xs text-slate-500 mb-1">{t('price')}</Label>}
-                        <Input
-                          type="number"
-                          min="0"
-                          value={item.unit_price}
-                          onChange={(e) => handleItemChange(index, "unit_price", e.target.value)}
-                        />
-                      </div>
-                      <div className="w-32">
-                        {index === 0 && <Label className="text-xs text-slate-500 mb-1">{t('condition')}</Label>}
-                        <Select
-                          value={item.condition}
-                          onValueChange={(value) => handleItemChange(index, "condition", value)}
+                <Label className="text-base font-semibold">
+                  {t('customer_orders') || 'Mijoz buyurtmalari'}
+                </Label>
+                {!formData.customer_id ? (
+                  <div className="border rounded-lg p-6 text-center text-sm text-slate-500 bg-slate-50">
+                    {t('select_customer_first') || 'Avval mijozni tanlang'}
+                  </div>
+                ) : loadingOrders ? (
+                  <div className="border rounded-lg p-6 text-center text-sm text-slate-500">
+                    {t('loading') || 'Yuklanmoqda...'}
+                  </div>
+                ) : customerOrders.length === 0 ? (
+                  <div className="border rounded-lg p-6 text-center text-sm text-slate-500 bg-slate-50">
+                    {t('no_orders_for_customer') || "Bu mijozning buyurtmalari yo'q"}
+                  </div>
+                ) : (
+                  <div className="border rounded-lg overflow-hidden bg-white max-h-[480px] overflow-y-auto">
+                    {customerOrders.map((order) => {
+                      const active = selectedOrderId === order.id;
+                      return (
+                        <button
+                          key={order.id}
+                          type="button"
+                          onClick={() => handleOrderSelect(order.id)}
+                          className={
+                            'w-full text-left p-3 border-b last:border-b-0 transition-colors ' +
+                            (active
+                              ? 'bg-blue-50 border-l-4 border-l-blue-600'
+                              : 'hover:bg-slate-50')
+                          }
                         >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="damaged">{t('damaged')}</SelectItem>
-                            <SelectItem value="opened">{t('opened')}</SelectItem>
-                            <SelectItem value="sealed">{t('sealed')}</SelectItem>
-                            <SelectItem value="used">{t('used')}</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="w-24 text-right font-medium text-sm pt-1">
-                        {formatCurrency(item.quantity * item.unit_price)}
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-9 w-9 text-red-500 hover:text-red-700"
-                        onClick={() => removeItemRow(index)}
-                        disabled={formData.items.length <= 1}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-medium text-sm">
+                              {order.order_number}
+                            </span>
+                            <Badge
+                              variant="outline"
+                              className="text-xs"
+                            >
+                              {order.status}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center justify-between gap-2 mt-1 text-xs text-slate-500">
+                            <span>
+                              {order.order_date
+                                ? format(new Date(order.order_date), 'dd.MM.yyyy')
+                                : ''}
+                            </span>
+                            <span className="font-medium text-slate-700">
+                              {formatCurrency(order.total_amount || 0)}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
-                ))}
+                )}
               </div>
-            </div>
 
-            <div className="bg-slate-50 rounded-lg p-4">
-              <div className="flex justify-between font-semibold text-lg">
-                <span>{t('total_return_amount') || 'Jami qaytarish summasi'}:</span>
-                <span>{formatCurrency(totalAmount)}</span>
-              </div>
-            </div>
-
-            {/* Invoice Allocations — pick which unpaid invoices the return should
-                credit. Leave empty to let the backend FIFO-distribute. */}
-            {formData.customer_id && (
-              <div className="space-y-3 border rounded-lg p-4 bg-blue-50/30">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <div>
-                    <Label className="text-base font-semibold">
-                      {t('apply_to_invoices') || "To'lanmagan hisob-fakturalarga qo'llash"}
-                    </Label>
-                    <p className="text-xs text-slate-500 mt-1">
-                      {t('apply_to_invoices_hint') ||
-                        "Qaytarish summasini mijozning to'lanmagan hisob-fakturalariga taqsimlang. Bo'sh qoldirilsa, avtomatik eng eski faktura(lar)dan ayiriladi."}
-                    </p>
+              {/* RIGHT COLUMN: Return details */}
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>{t('return_date')} *</Label>
+                    <Input
+                      type="date"
+                      value={formData.return_date}
+                      onChange={(e) =>
+                        setFormData({ ...formData, return_date: e.target.value })
+                      }
+                    />
                   </div>
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={autoDistribute}
-                      disabled={totalAmount === 0 || unpaidInvoices.length === 0}
+                  <div className="space-y-2">
+                    <Label>{t('reason')} *</Label>
+                    <Select
+                      value={formData.reason}
+                      onValueChange={(value) =>
+                        setFormData({ ...formData, reason: value })
+                      }
                     >
-                      {t('auto_distribute') || 'Avto-taqsimlash'}
-                    </Button>
-                    {Object.keys(invoiceAllocations).length > 0 && (
-                      <Button type="button" variant="ghost" size="sm" onClick={clearAllocations}>
-                        {t('clear') || 'Tozalash'}
-                      </Button>
-                    )}
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="defective">{t('defective_product')}</SelectItem>
+                        <SelectItem value="wrong_item">{t('wrong_item')}</SelectItem>
+                        <SelectItem value="damaged">{t('damaged')}</SelectItem>
+                        <SelectItem value="not_as_described">{t('not_as_described')}</SelectItem>
+                        <SelectItem value="changed_mind">{t('changed_mind')}</SelectItem>
+                        <SelectItem value="other">{t('other')}</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
 
-                {loadingInvoices ? (
-                  <div className="text-sm text-slate-500 py-3 text-center">
-                    {t('loading') || 'Yuklanmoqda...'}
+                {/* Product Line Items */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-base font-semibold">
+                      {t('return_products') || 'Qaytarilayotgan mahsulotlar'}
+                    </Label>
+                    <Button variant="outline" size="sm" onClick={addItemRow}>
+                      <Plus className="w-4 h-4 mr-1" />
+                      {t('add') || "Qo'shish"}
+                    </Button>
                   </div>
-                ) : unpaidInvoices.length === 0 ? (
-                  <div className="text-sm text-slate-500 py-3 text-center bg-white rounded border border-dashed">
-                    {t('no_unpaid_invoices') ||
-                      "Bu mijozda to'lanmagan hisob-faktura yo'q"}
-                  </div>
-                ) : (
-                  <div className="border rounded-lg overflow-hidden bg-white">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-slate-50">
-                          <TableHead className="w-36">{t('invoice_number') || 'Faktura №'}</TableHead>
-                          <TableHead className="w-28">{t('due_date') || 'Muddat'}</TableHead>
-                          <TableHead className="text-right">{t('total') || 'Jami'}</TableHead>
-                          <TableHead className="text-right">{t('balance') || 'Qarz'}</TableHead>
-                          <TableHead className="w-40 text-right">{t('apply') || 'Qo\'llash'}</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {unpaidInvoices.map((inv) => {
-                          const applied = invoiceAllocations[inv.id] ?? '';
-                          return (
-                            <TableRow key={inv.id} className="hover:bg-slate-50">
-                              <TableCell className="font-medium">{inv.invoice_number}</TableCell>
-                              <TableCell className="text-sm text-slate-600">
-                                {inv.due_date ? format(new Date(inv.due_date), 'dd.MM.yyyy') : '—'}
-                              </TableCell>
-                              <TableCell className="text-right text-sm">
-                                {formatCurrency(inv.total_amount)}
-                              </TableCell>
-                              <TableCell className="text-right text-sm font-medium text-orange-600">
-                                {formatCurrency(inv.balance)}
-                              </TableCell>
-                              <TableCell>
-                                <Input
-                                  type="number"
-                                  min="0"
-                                  max={inv.balance}
-                                  step="any"
-                                  value={applied}
-                                  onChange={(e) => handleAllocationChange(inv.id, e.target.value)}
-                                  placeholder="0"
-                                  className="text-right h-9"
-                                />
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-
-                {Object.keys(invoiceAllocations).length > 0 && (
-                  <div className="flex justify-between items-center text-sm bg-white rounded px-3 py-2 border">
-                    <span className="font-medium">
-                      {t('allocated') || 'Taqsimlandi'}:
-                    </span>
-                    <div className="flex items-center gap-3">
-                      <span
-                        className={
-                          Math.abs(allocatedTotal - totalAmount) < 0.01
-                            ? 'font-semibold text-green-700'
-                            : allocatedTotal > totalAmount
-                            ? 'font-semibold text-red-600'
-                            : 'font-semibold text-slate-700'
-                        }
-                      >
-                        {formatCurrency(allocatedTotal)}
-                      </span>
-                      <span className="text-slate-400">/</span>
-                      <span className="font-medium">{formatCurrency(totalAmount)}</span>
+                  {loadingOrderDetails ? (
+                    <div className="text-sm text-slate-500 py-4 text-center">
+                      {t('loading') || 'Yuklanmoqda...'}
                     </div>
-                  </div>
-                )}
-              </div>
-            )}
+                  ) : (
+                    <div className="space-y-2">
+                      {formData.items.map((item, index) => (
+                        <div key={index} className="bg-slate-50 p-3 rounded-lg">
+                          <div className="flex gap-2 items-end">
+                            <div className="flex-[3] min-w-0">
+                              {index === 0 && (
+                                <Label className="text-xs text-slate-500 mb-1">
+                                  {t('product')}
+                                </Label>
+                              )}
+                              <ProductCombobox
+                                products={products}
+                                value={item.product_id || ''}
+                                onValueChange={(value) => handleProductSelect(index, value)}
+                                placeholder={t('select_product') || 'Mahsulotni tanlang'}
+                                t={t}
+                              />
+                            </div>
+                            <div className="w-20">
+                              {index === 0 && (
+                                <Label className="text-xs text-slate-500 mb-1">
+                                  {t('quantity')}
+                                </Label>
+                              )}
+                              <Input
+                                type="number"
+                                min="1"
+                                value={item.quantity}
+                                onChange={(e) => handleItemChange(index, "quantity", e.target.value)}
+                              />
+                            </div>
+                            <div className="w-28">
+                              {index === 0 && (
+                                <Label className="text-xs text-slate-500 mb-1">
+                                  {t('price')}
+                                </Label>
+                              )}
+                              <Input
+                                type="number"
+                                min="0"
+                                value={item.unit_price}
+                                onChange={(e) => handleItemChange(index, "unit_price", e.target.value)}
+                              />
+                            </div>
+                            <div className="w-32">
+                              {index === 0 && (
+                                <Label className="text-xs text-slate-500 mb-1">
+                                  {t('condition')}
+                                </Label>
+                              )}
+                              <Select
+                                value={item.condition}
+                                onValueChange={(value) => handleItemChange(index, "condition", value)}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="damaged">{t('damaged')}</SelectItem>
+                                  <SelectItem value="opened">{t('opened')}</SelectItem>
+                                  <SelectItem value="sealed">{t('sealed')}</SelectItem>
+                                  <SelectItem value="used">{t('used')}</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="w-24 text-right font-medium text-sm pt-1">
+                              {formatCurrency(item.quantity * item.unit_price)}
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-9 w-9 text-red-500 hover:text-red-700"
+                              onClick={() => removeItemRow(index)}
+                              disabled={formData.items.length <= 1}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
-            <div className="space-y-2">
-              <Label>{t('notes')}</Label>
-              <Textarea
-                value={formData.notes}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                placeholder={t('additional_info') + '...'}
-                rows={3}
-              />
+                <div className="bg-slate-50 rounded-lg p-4">
+                  <div className="flex justify-between font-semibold text-lg">
+                    <span>{t('total_return_amount') || 'Jami qaytarish summasi'}:</span>
+                    <span>{formatCurrency(totalAmount)}</span>
+                  </div>
+                  {formData.sales_order_id && (
+                    <p className="text-xs text-slate-500 mt-2">
+                      {t('return_will_deduct_from_order_invoice') ||
+                        "Qaytarish summasi tanlangan buyurtmaning hisob-fakturasidan ayiriladi"}
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label>{t('notes')}</Label>
+                  <Textarea
+                    value={formData.notes}
+                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                    placeholder={t('additional_info') + '...'}
+                    rows={2}
+                  />
+                </div>
+              </div>
             </div>
 
-            <div className="flex justify-end gap-3 pt-4">
+            <div className="flex justify-end gap-3 pt-4 border-t">
               <Button variant="outline" onClick={resetForm}>
                 {t('cancel')}
               </Button>
               <Button
                 onClick={handleSubmit}
-                disabled={
-                  !formData.customer_id ||
-                  totalAmount === 0 ||
-                  allocatedTotal - totalAmount > 0.01
-                }
+                disabled={!formData.customer_id || totalAmount === 0}
               >
                 {t('create')}
               </Button>
