@@ -59,6 +59,7 @@ import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import ProductCombobox from "@/components/shared/ProductCombobox";
 import CustomerCombobox from "@/components/shared/CustomerCombobox";
 import inventoryService from "@/api/services/inventory";
+import salesService from "@/api/services/sales";
 
 export default function Returns() {
   const { language } = useLanguage();
@@ -86,6 +87,10 @@ export default function Returns() {
   const [selectedReturn, setSelectedReturn] = useState(null);
 
   const [products, setProducts] = useState([]);
+  const [unpaidInvoices, setUnpaidInvoices] = useState([]);
+  const [loadingInvoices, setLoadingInvoices] = useState(false);
+  // invoiceAllocations: { [invoice_id]: amountNumber }
+  const [invoiceAllocations, setInvoiceAllocations] = useState({});
   const [formData, setFormData] = useState({
     customer_id: "",
     customer_name: "",
@@ -108,6 +113,48 @@ export default function Returns() {
     };
     fetchProducts();
   }, []);
+
+  // Fetch the selected customer's unpaid invoices whenever customer changes.
+  // These drive the "apply return amount against which invoices?" picker below.
+  useEffect(() => {
+    const fetchUnpaidInvoices = async () => {
+      if (!formData.customer_id) {
+        setUnpaidInvoices([]);
+        setInvoiceAllocations({});
+        return;
+      }
+      setLoadingInvoices(true);
+      try {
+        const res = await salesService.listInvoices({
+          customer_id: formData.customer_id,
+          page_size: 200,
+        });
+        // Service may return paginated { items: [...] } or raw array.
+        const all = Array.isArray(res) ? res : res?.items || res?.data || [];
+        const unpaid = all
+          .filter((inv) => (inv.invoice_type || "invoice") === "invoice")
+          .filter((inv) => inv.status !== "cancelled" && inv.status !== "draft")
+          .map((inv) => ({
+            ...inv,
+            balance: Number(inv.amount_due ?? inv.balance ?? (inv.total_amount - (inv.amount_paid || 0))),
+          }))
+          .filter((inv) => inv.balance > 0.005)
+          .sort((a, b) => {
+            const da = a.due_date ? new Date(a.due_date).getTime() : Number.MAX_SAFE_INTEGER;
+            const db = b.due_date ? new Date(b.due_date).getTime() : Number.MAX_SAFE_INTEGER;
+            return da - db;
+          });
+        setUnpaidInvoices(unpaid);
+        setInvoiceAllocations({}); // reset allocations when customer changes
+      } catch (error) {
+        console.error("Failed to fetch unpaid invoices:", error);
+        setUnpaidInvoices([]);
+      } finally {
+        setLoadingInvoices(false);
+      }
+    };
+    fetchUnpaidInvoices();
+  }, [formData.customer_id]);
 
   const filteredReturns = useMemo(() => {
     if (!returns || !Array.isArray(returns)) return [];
@@ -184,11 +231,61 @@ export default function Returns() {
     setFormData({ ...formData, items: newItems });
   };
 
+  // Round to 2dp to avoid float noise when we diff against the return total.
+  const round2 = (n) => Math.round(Number(n || 0) * 100) / 100;
+
+  const allocatedTotal = useMemo(
+    () => Object.values(invoiceAllocations).reduce((s, v) => s + round2(v), 0),
+    [invoiceAllocations]
+  );
+
+  const handleAllocationChange = (invoiceId, rawValue) => {
+    const invoice = unpaidInvoices.find((i) => i.id === invoiceId);
+    if (!invoice) return;
+    let value = parseFloat(rawValue);
+    if (!Number.isFinite(value) || value < 0) value = 0;
+    // Clamp to invoice's remaining balance — we can't credit more than the
+    // customer owes on that invoice.
+    if (value > invoice.balance) value = invoice.balance;
+    setInvoiceAllocations((prev) => {
+      const next = { ...prev };
+      if (value === 0) delete next[invoiceId];
+      else next[invoiceId] = value;
+      return next;
+    });
+  };
+
+  // Spread the current return total across unpaid invoices FIFO-style
+  // (oldest due first). Uses the full list regardless of prior selections.
+  const autoDistribute = () => {
+    const total = formData.items.reduce(
+      (sum, item) => sum + (item.quantity || 0) * (item.unit_price || 0),
+      0
+    );
+    let remaining = round2(total);
+    const next = {};
+    for (const inv of unpaidInvoices) {
+      if (remaining <= 0.005) break;
+      const apply = Math.min(remaining, inv.balance);
+      if (apply > 0.005) {
+        next[inv.id] = round2(apply);
+        remaining = round2(remaining - apply);
+      }
+    }
+    setInvoiceAllocations(next);
+  };
+
+  const clearAllocations = () => setInvoiceAllocations({});
+
   const handleSubmit = async () => {
     const totalAmount = formData.items.reduce(
       (sum, item) => sum + item.quantity * item.unit_price,
       0
     );
+
+    const allocations = Object.entries(invoiceAllocations)
+      .filter(([, amt]) => Number(amt) > 0)
+      .map(([invoice_id, amount]) => ({ invoice_id, amount: round2(amount) }));
 
     const data = {
       ...formData,
@@ -198,6 +295,7 @@ export default function Returns() {
         total: item.quantity * item.unit_price,
       })),
       total_amount: totalAmount,
+      invoice_allocations: allocations,
     };
 
     await createReturn(data);
@@ -215,6 +313,8 @@ export default function Returns() {
       items: [{ product_id: "", product_name: "", quantity: 1, unit_price: 0, condition: "damaged" }],
       notes: "",
     });
+    setUnpaidInvoices([]);
+    setInvoiceAllocations({});
   };
 
   const handleView = (returnItem) => {
@@ -625,6 +725,119 @@ export default function Returns() {
               </div>
             </div>
 
+            {/* Invoice Allocations — pick which unpaid invoices the return should
+                credit. Leave empty to let the backend FIFO-distribute. */}
+            {formData.customer_id && (
+              <div className="space-y-3 border rounded-lg p-4 bg-blue-50/30">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <Label className="text-base font-semibold">
+                      {t('apply_to_invoices') || "To'lanmagan hisob-fakturalarga qo'llash"}
+                    </Label>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {t('apply_to_invoices_hint') ||
+                        "Qaytarish summasini mijozning to'lanmagan hisob-fakturalariga taqsimlang. Bo'sh qoldirilsa, avtomatik eng eski faktura(lar)dan ayiriladi."}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={autoDistribute}
+                      disabled={totalAmount === 0 || unpaidInvoices.length === 0}
+                    >
+                      {t('auto_distribute') || 'Avto-taqsimlash'}
+                    </Button>
+                    {Object.keys(invoiceAllocations).length > 0 && (
+                      <Button type="button" variant="ghost" size="sm" onClick={clearAllocations}>
+                        {t('clear') || 'Tozalash'}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                {loadingInvoices ? (
+                  <div className="text-sm text-slate-500 py-3 text-center">
+                    {t('loading') || 'Yuklanmoqda...'}
+                  </div>
+                ) : unpaidInvoices.length === 0 ? (
+                  <div className="text-sm text-slate-500 py-3 text-center bg-white rounded border border-dashed">
+                    {t('no_unpaid_invoices') ||
+                      "Bu mijozda to'lanmagan hisob-faktura yo'q"}
+                  </div>
+                ) : (
+                  <div className="border rounded-lg overflow-hidden bg-white">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-slate-50">
+                          <TableHead className="w-36">{t('invoice_number') || 'Faktura №'}</TableHead>
+                          <TableHead className="w-28">{t('due_date') || 'Muddat'}</TableHead>
+                          <TableHead className="text-right">{t('total') || 'Jami'}</TableHead>
+                          <TableHead className="text-right">{t('balance') || 'Qarz'}</TableHead>
+                          <TableHead className="w-40 text-right">{t('apply') || 'Qo\'llash'}</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {unpaidInvoices.map((inv) => {
+                          const applied = invoiceAllocations[inv.id] ?? '';
+                          return (
+                            <TableRow key={inv.id} className="hover:bg-slate-50">
+                              <TableCell className="font-medium">{inv.invoice_number}</TableCell>
+                              <TableCell className="text-sm text-slate-600">
+                                {inv.due_date ? format(new Date(inv.due_date), 'dd.MM.yyyy') : '—'}
+                              </TableCell>
+                              <TableCell className="text-right text-sm">
+                                {formatCurrency(inv.total_amount)}
+                              </TableCell>
+                              <TableCell className="text-right text-sm font-medium text-orange-600">
+                                {formatCurrency(inv.balance)}
+                              </TableCell>
+                              <TableCell>
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  max={inv.balance}
+                                  step="any"
+                                  value={applied}
+                                  onChange={(e) => handleAllocationChange(inv.id, e.target.value)}
+                                  placeholder="0"
+                                  className="text-right h-9"
+                                />
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+
+                {Object.keys(invoiceAllocations).length > 0 && (
+                  <div className="flex justify-between items-center text-sm bg-white rounded px-3 py-2 border">
+                    <span className="font-medium">
+                      {t('allocated') || 'Taqsimlandi'}:
+                    </span>
+                    <div className="flex items-center gap-3">
+                      <span
+                        className={
+                          Math.abs(allocatedTotal - totalAmount) < 0.01
+                            ? 'font-semibold text-green-700'
+                            : allocatedTotal > totalAmount
+                            ? 'font-semibold text-red-600'
+                            : 'font-semibold text-slate-700'
+                        }
+                      >
+                        {formatCurrency(allocatedTotal)}
+                      </span>
+                      <span className="text-slate-400">/</span>
+                      <span className="font-medium">{formatCurrency(totalAmount)}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label>{t('notes')}</Label>
               <Textarea
@@ -641,7 +854,11 @@ export default function Returns() {
               </Button>
               <Button
                 onClick={handleSubmit}
-                disabled={!formData.customer_id || totalAmount === 0}
+                disabled={
+                  !formData.customer_id ||
+                  totalAmount === 0 ||
+                  allocatedTotal - totalAmount > 0.01
+                }
               >
                 {t('create')}
               </Button>
