@@ -28,6 +28,7 @@ import {
 import { jsPDF } from "jspdf";
 import "jspdf-autotable";
 import { format } from "date-fns";
+import { ensurePdfFonts, registerPdfFontsSync } from "./pdfFonts";
 
 // Document templates
 export const DOCUMENT_TEMPLATES = {
@@ -144,6 +145,13 @@ export const generateDocumentPDF = (config) => {
     format: "a4",
   });
 
+  // Register Unicode font (Roboto) so Cyrillic / Latin-extended renders
+  // correctly. No-op if fonts haven't preloaded yet — in that case Helvetica
+  // is used and Cyrillic will garble. Async paths (printDocument, download,
+  // PrintPreviewModal) await ensurePdfFonts() before calling this.
+  const hasUnicodeFont = registerPdfFontsSync(doc);
+  const fontFamily = hasUnicodeFont ? "Roboto" : undefined;
+
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const contentWidth = pageWidth - margins.left - margins.right;
@@ -165,21 +173,21 @@ export const generateDocumentPDF = (config) => {
 
   // Company name - top left
   doc.setFontSize(16);
-  doc.setFont(undefined, "bold");
+  doc.setFont(fontFamily, "bold");
   doc.setTextColor(15, 23, 42);
   doc.text(company.name, margins.left, yPos + 6);
 
   // Document number - top right, colored
   if (documentNumber) {
     doc.setFontSize(12);
-    doc.setFont(undefined, "bold");
+    doc.setFont(fontFamily, "bold");
     doc.setTextColor(37, 99, 235);
     doc.text(documentNumber, pageWidth - margins.right, yPos + 6, { align: "right" });
   }
 
   // Company details - second line
   doc.setFontSize(8);
-  doc.setFont(undefined, "normal");
+  doc.setFont(fontFamily, "normal");
   doc.setTextColor(100, 116, 139);
   const companyDetails = [company.address, `info@genix.uz`, `INN: ${company.inn}`].filter(Boolean).join("  |  ");
   doc.text(companyDetails, margins.left, yPos + 12);
@@ -200,7 +208,7 @@ export const generateDocumentPDF = (config) => {
   doc.setFillColor(37, 99, 235);
   doc.rect(margins.left, yPos, contentWidth, barHeight, 'F');
   doc.setFontSize(12);
-  doc.setFont(undefined, "bold");
+  doc.setFont(fontFamily, "bold");
   doc.setTextColor(255, 255, 255);
   doc.text(title || templateConfig.title, pageWidth / 2, yPos + 7, { align: "center" });
 
@@ -223,11 +231,11 @@ export const generateDocumentPDF = (config) => {
         const y = yPos + row * 8;
 
         // Label
-        doc.setFont(undefined, "normal");
+        doc.setFont(fontFamily, "normal");
         doc.setTextColor(100, 116, 139);
         doc.text(`${field.label}`, x, y);
         // Value
-        doc.setFont(undefined, "bold");
+        doc.setFont(fontFamily, "bold");
         doc.setTextColor(15, 23, 42);
         doc.text(String(field.value || "-"), x, y + 4.5);
       }
@@ -265,6 +273,7 @@ export const generateDocumentPDF = (config) => {
         lineColor: [226, 232, 240],
         lineWidth: 0.2,
         textColor: [15, 23, 42],
+        font: fontFamily, // Use Roboto so Cyrillic renders correctly in table cells
       },
       headStyles: {
         fillColor: [37, 99, 235],
@@ -272,6 +281,7 @@ export const generateDocumentPDF = (config) => {
         fontStyle: "bold",
         cellPadding: 4,
         fontSize: 9,
+        font: fontFamily,
       },
       alternateRowStyles: { fillColor: [248, 250, 252] },
       columnStyles: tableColumns.reduce((acc, col, index) => {
@@ -313,14 +323,14 @@ export const generateDocumentPDF = (config) => {
         doc.setFillColor(37, 99, 235);
         doc.roundedRect(margins.left, yPos - 1, contentWidth, barH, 1.5, 1.5, 'F');
         doc.setFontSize(10);
-        doc.setFont(undefined, "bold");
+        doc.setFont(fontFamily, "bold");
         doc.setTextColor(255, 255, 255);
         doc.text(`${total.label}:`, margins.left + 4, yPos + 5.5);
         doc.text(String(total.value), pageWidth - margins.right - 4, yPos + 5.5, { align: "right" });
         yPos += barH + 4;
       } else {
         doc.setFontSize(9);
-        doc.setFont(undefined, total.bold ? "bold" : "normal");
+        doc.setFont(fontFamily, total.bold ? "bold" : "normal");
         doc.setTextColor(71, 85, 105);
         doc.text(`${total.label}:`, lineX + 2, yPos + 2);
         doc.setTextColor(15, 23, 42);
@@ -337,10 +347,10 @@ export const generateDocumentPDF = (config) => {
   if (footerFields.length > 0) {
     doc.setFontSize(9);
     footerFields.forEach((field) => {
-      doc.setFont(undefined, "bold");
+      doc.setFont(fontFamily, "bold");
       doc.setTextColor(71, 85, 105);
       doc.text(`${field.label}:`, margins.left, yPos);
-      doc.setFont(undefined, "normal");
+      doc.setFont(fontFamily, "normal");
       doc.setTextColor(15, 23, 42);
       doc.text(String(field.value || "-"), margins.left + 30, yPos);
       yPos += 5;
@@ -351,7 +361,9 @@ export const generateDocumentPDF = (config) => {
   // Notes
   if (notes) {
     doc.setFontSize(8);
-    doc.setFont(undefined, "italic");
+    // Roboto italic variant is not registered; fall back to normal to avoid
+    // jsPDF font-missing warnings. Text still renders Cyrillic correctly.
+    doc.setFont(fontFamily, "normal");
     doc.setTextColor(100, 116, 139);
     const splitNotes = doc.splitTextToSize(notes, contentWidth);
     doc.text(splitNotes, margins.left, yPos);
@@ -369,12 +381,12 @@ export const generateDocumentPDF = (config) => {
     doc.setFontSize(9);
 
     // Left signature - Topshirdi
-    doc.setFont(undefined, "bold");
+    doc.setFont(fontFamily, "bold");
     doc.text("Topshirdi:", margins.left, yPos);
     doc.setLineWidth(0.3);
     doc.line(margins.left, yPos + 14, margins.left + 55, yPos + 14);
     doc.setFontSize(8);
-    doc.setFont(undefined, "normal");
+    doc.setFont(fontFamily, "normal");
     doc.setTextColor(100, 116, 139);
     doc.text("(imzo)", margins.left + 18, yPos + 19);
 
@@ -392,14 +404,14 @@ export const generateDocumentPDF = (config) => {
 
     // Right signature - Qabul qildi
     doc.setFontSize(9);
-    doc.setFont(undefined, "bold");
+    doc.setFont(fontFamily, "bold");
     doc.setTextColor(15, 23, 42);
     doc.text("Qabul qildi:", pageWidth - margins.right - 55, yPos);
     doc.setDrawColor(150, 150, 150);
     doc.setLineWidth(0.3);
     doc.line(pageWidth - margins.right - 55, yPos + 14, pageWidth - margins.right, yPos + 14);
     doc.setFontSize(8);
-    doc.setFont(undefined, "normal");
+    doc.setFont(fontFamily, "normal");
     doc.setTextColor(100, 116, 139);
     doc.text("(imzo)", pageWidth - margins.right - 37, yPos + 19);
 
@@ -436,14 +448,16 @@ export const generateDocumentPDF = (config) => {
 };
 
 // Print document directly
-export const printDocument = (config) => {
+export const printDocument = async (config) => {
+  await ensurePdfFonts().catch(() => {});
   const doc = generateDocumentPDF(config);
   doc.autoPrint();
   window.open(doc.output("bloburl"), "_blank");
 };
 
 // Download document as PDF
-export const downloadDocument = (config, filename = "document") => {
+export const downloadDocument = async (config, filename = "document") => {
+  await ensurePdfFonts().catch(() => {});
   const doc = generateDocumentPDF(config);
   doc.save(`${filename}.pdf`);
 };
@@ -470,20 +484,28 @@ export function PrintPreviewModal({
   const iframeRef = useRef(null);
 
   React.useEffect(() => {
+    let cancelled = false;
     if (open && config) {
       setIsLoading(true);
-      try {
-        const doc = generateDocumentPDF(config);
-        const url = doc.output("bloburl");
-        setPdfUrl(url);
-      } catch (error) {
-        console.error("PDF yaratishda xatolik:", error);
-      } finally {
-        setIsLoading(false);
-      }
+      (async () => {
+        try {
+          await ensurePdfFonts().catch(() => {}); // ensure Cyrillic fonts are ready
+          if (cancelled) return;
+          const doc = generateDocumentPDF(config);
+          const url = doc.output("bloburl");
+          if (!cancelled) setPdfUrl(url);
+        } catch (error) {
+          console.error("PDF yaratishda xatolik:", error);
+        } finally {
+          if (!cancelled) setIsLoading(false);
+        }
+      })();
     } else {
       setPdfUrl(null);
     }
+    return () => {
+      cancelled = true;
+    };
   }, [open, config]);
 
   const handlePrint = () => {
@@ -702,7 +724,7 @@ export function BatchPrintModal({
     for (let i = 0; i < totalDocs; i++) {
       const doc = selectedItems[i];
       const config = generateConfig(doc);
-      downloadDocument(config, `${entityName}_${doc.id}`);
+      await downloadDocument(config, `${entityName}_${doc.id}`);
       setProgress(((i + 1) / totalDocs) * 100);
       await new Promise((resolve) => setTimeout(resolve, 500));
     }

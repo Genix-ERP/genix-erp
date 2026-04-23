@@ -270,8 +270,13 @@ export default function CostCalculation() {
     }
   }
 
-  function downloadPDF(calc) {
+  async function downloadPDF(calc) {
+    const { ensurePdfFonts, registerPdfFontsSync } = await import("../shared/pdfFonts");
+    await ensurePdfFonts().catch(() => {});
+
     const doc = new jsPDF();
+    const hasUnicodeFont = registerPdfFontsSync(doc);
+    const fontFamily = hasUnicodeFont ? "Roboto" : undefined;
     const pageW = doc.internal.pageSize.getWidth();
 
     // Header
@@ -315,11 +320,11 @@ export default function CostCalculation() {
     doc.setTextColor(255, 255, 255);
     doc.text('Jami narx:', 20, summaryY + 50);
     doc.setFontSize(14);
-    doc.setFont(undefined, 'bold');
+    doc.setFont(fontFamily, 'bold');
     doc.text(fmtMoney(calc.total_with_profit) + ' so\'m', pageW - 18, summaryY + 50, { align: 'right' });
 
     if (calc.notes) {
-      doc.setFont(undefined, 'normal');
+      doc.setFont(fontFamily, 'normal');
       doc.setFontSize(9);
       doc.setTextColor(120, 120, 120);
       doc.text('* ' + calc.notes, 14, summaryY + 64);

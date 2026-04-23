@@ -173,15 +173,22 @@ export const exportToCSV = (data, columns, filename) => {
 };
 
 // Export to PDF
-export const exportToPDF = (data, columns, filename, title = "Report") => {
+export const exportToPDF = async (data, columns, filename, title = "Report") => {
+  const { ensurePdfFonts, registerPdfFontsSync } = await import("./pdfFonts");
+  await ensurePdfFonts().catch(() => {});
+
   const doc = new jsPDF();
+  const hasUnicodeFont = registerPdfFontsSync(doc);
+  const fontFamily = hasUnicodeFont ? "Roboto" : undefined;
 
   // Title
   doc.setFontSize(16);
+  if (fontFamily) doc.setFont(fontFamily, "bold");
   doc.text(title, 14, 15);
 
   // Date
   doc.setFontSize(10);
+  if (fontFamily) doc.setFont(fontFamily, "normal");
   doc.text(`Yaratilgan: ${new Date().toLocaleDateString("uz-UZ")}`, 14, 22);
 
   // Table
@@ -196,8 +203,8 @@ export const exportToPDF = (data, columns, filename, title = "Report") => {
     head: [columns.map((col) => col.label)],
     body: tableData,
     startY: 28,
-    styles: { fontSize: 8 },
-    headStyles: { fillColor: [59, 130, 246] },
+    styles: { fontSize: 8, font: fontFamily },
+    headStyles: { fillColor: [59, 130, 246], font: fontFamily },
   });
 
   doc.save(`${filename}.pdf`);
