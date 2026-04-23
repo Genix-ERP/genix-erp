@@ -978,7 +978,14 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                             ) : (
                               <Receipt className="w-4 h-4 text-slate-400" />
                             )}
-                            <span className="font-medium">{invoice.invoice_number}</span>
+                            <div className="flex flex-col">
+                              <span className="font-medium">{invoice.invoice_number}</span>
+                              {invoice.order_number && (
+                                <span className="text-xs text-slate-500">
+                                  {t('order') || 'Buyurtma'}: {invoice.order_number}
+                                </span>
+                              )}
+                            </div>
                             {invoice.invoice_type === "credit_note" && (
                               <Badge className="bg-red-100 text-red-700 text-xs">{t("credit_note")}</Badge>
                             )}
