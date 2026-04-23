@@ -4,8 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, ChevronDown, ChevronRight, Download, Loader2, Calendar, TrendingUp, TrendingDown, CheckCircle2, AlertCircle } from "lucide-react";
+import { Search, ChevronDown, ChevronRight, Download, Loader2, Calendar, TrendingUp, TrendingDown, CheckCircle2, AlertCircle, Columns3 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { format } from "date-fns";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
@@ -31,6 +33,34 @@ export default function GeneralLedgerView() {
   const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   const [periodFrom, setPeriodFrom] = useState(format(firstOfMonth, 'yyyy-MM-dd'));
   const [periodTo, setPeriodTo] = useState(format(now, 'yyyy-MM-dd'));
+
+  // Column visibility (persisted to localStorage). The "account" column is
+  // always on — it identifies the row, hiding it makes no sense.
+  const COLUMN_PREFS_KEY = 'generalLedger:visibleColumns';
+  const defaultVisibleColumns = {
+    opening: true,
+    debit_turnover: true,
+    credit_turnover: true,
+    debit_balance: true,
+    credit_balance: true,
+    closing: true,
+  };
+  const [visibleColumns, setVisibleColumns] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(COLUMN_PREFS_KEY) || 'null');
+      return saved ? { ...defaultVisibleColumns, ...saved } : defaultVisibleColumns;
+    } catch {
+      return defaultVisibleColumns;
+    }
+  });
+  const [columnsDialogOpen, setColumnsDialogOpen] = useState(false);
+
+  useEffect(() => {
+    try { localStorage.setItem(COLUMN_PREFS_KEY, JSON.stringify(visibleColumns)); } catch { /* ignore */ }
+  }, [visibleColumns]);
+
+  const toggleColumn = (key) =>
+    setVisibleColumns((prev) => ({ ...prev, [key]: !prev[key] }));
 
   const fetchLedger = useCallback(async () => {
     setIsLoading(true);
@@ -217,6 +247,37 @@ export default function GeneralLedgerView() {
               <Button variant="outline" size="sm" onClick={collapseAll}>
                 {t('collapse_all') || 'Collapse All'}
               </Button>
+              <Dialog open={columnsDialogOpen} onOpenChange={setColumnsDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <Columns3 className="w-4 h-4 mr-1" />
+                    {t('columns') || 'Columns'}
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-sm">
+                  <DialogHeader>
+                    <DialogTitle>{t('toggle_columns') || 'Toggle columns'}</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-3 pt-2">
+                    {[
+                      { key: 'opening',         label: t('opening')                || 'Opening' },
+                      { key: 'debit_turnover',  label: t('debit_turnover')         || 'Debit (turnover)' },
+                      { key: 'credit_turnover', label: t('credit_turnover')        || 'Credit (turnover)' },
+                      { key: 'debit_balance',   label: t('closing_debit_balance')  || "Debet qoldig'i" },
+                      { key: 'credit_balance',  label: t('closing_credit_balance') || "Kredit qoldig'i" },
+                      { key: 'closing',         label: t('closing')                || 'Closing' },
+                    ].map((col) => (
+                      <label key={col.key} className="flex items-center gap-3 cursor-pointer">
+                        <Checkbox
+                          checked={visibleColumns[col.key]}
+                          onCheckedChange={() => toggleColumn(col.key)}
+                        />
+                        <span className="text-sm">{col.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </DialogContent>
+              </Dialog>
             </div>
           </div>
         </CardContent>
@@ -320,16 +381,28 @@ export default function GeneralLedgerView() {
                   <TableRow className="bg-slate-50/80">
                     <TableHead className="w-8"></TableHead>
                     <TableHead className="text-xs font-semibold">{t('account') || 'Account'}</TableHead>
-                    <TableHead className="w-[120px] text-right text-xs font-semibold">{t('opening') || 'Opening'}</TableHead>
-                    <TableHead className="w-[120px] text-right text-xs font-semibold">{t('debit_turnover') || 'Debit (turnover)'}</TableHead>
-                    <TableHead className="w-[120px] text-right text-xs font-semibold">{t('credit_turnover') || 'Credit (turnover)'}</TableHead>
-                    <TableHead className="w-[120px] text-right text-xs font-semibold bg-blue-50/60 text-blue-700">
-                      {t('closing_debit_balance') || "Debet qoldig'i"}
-                    </TableHead>
-                    <TableHead className="w-[120px] text-right text-xs font-semibold bg-emerald-50/60 text-emerald-700">
-                      {t('closing_credit_balance') || "Kredit qoldig'i"}
-                    </TableHead>
-                    <TableHead className="w-[130px] text-right text-xs font-semibold">{t('closing') || 'Closing'}</TableHead>
+                    {visibleColumns.opening && (
+                      <TableHead className="w-[120px] text-right text-xs font-semibold">{t('opening') || 'Opening'}</TableHead>
+                    )}
+                    {visibleColumns.debit_turnover && (
+                      <TableHead className="w-[120px] text-right text-xs font-semibold">{t('debit_turnover') || 'Debit (turnover)'}</TableHead>
+                    )}
+                    {visibleColumns.credit_turnover && (
+                      <TableHead className="w-[120px] text-right text-xs font-semibold">{t('credit_turnover') || 'Credit (turnover)'}</TableHead>
+                    )}
+                    {visibleColumns.debit_balance && (
+                      <TableHead className="w-[120px] text-right text-xs font-semibold bg-blue-50/60 text-blue-700">
+                        {t('closing_debit_balance') || "Debet qoldig'i"}
+                      </TableHead>
+                    )}
+                    {visibleColumns.credit_balance && (
+                      <TableHead className="w-[120px] text-right text-xs font-semibold bg-emerald-50/60 text-emerald-700">
+                        {t('closing_credit_balance') || "Kredit qoldig'i"}
+                      </TableHead>
+                    )}
+                    {visibleColumns.closing && (
+                      <TableHead className="w-[130px] text-right text-xs font-semibold">{t('closing') || 'Closing'}</TableHead>
+                    )}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -370,24 +443,36 @@ export default function GeneralLedgerView() {
                               )}
                             </div>
                           </TableCell>
-                          <TableCell className="text-right py-3 text-sm font-medium">
-                            {formatCurrency(acc.opening_balance)}
-                          </TableCell>
-                          <TableCell className="text-right py-3 text-sm font-medium text-blue-600">
-                            {formatCurrency(acc.total_debit)}
-                          </TableCell>
-                          <TableCell className="text-right py-3 text-sm font-medium text-red-600">
-                            {formatCurrency(acc.total_credit)}
-                          </TableCell>
-                          <TableCell className="text-right py-3 text-sm font-semibold tabular-nums bg-blue-50/30 text-blue-700">
-                            {(acc.closing_debit || 0) > 0 ? formatCurrency(acc.closing_debit) : '—'}
-                          </TableCell>
-                          <TableCell className="text-right py-3 text-sm font-semibold tabular-nums bg-emerald-50/30 text-emerald-700">
-                            {(acc.closing_credit || 0) > 0 ? formatCurrency(acc.closing_credit) : '—'}
-                          </TableCell>
-                          <TableCell className="text-right py-3 text-sm font-semibold">
-                            {formatCurrency(acc.closing_balance)}
-                          </TableCell>
+                          {visibleColumns.opening && (
+                            <TableCell className="text-right py-3 text-sm font-medium">
+                              {formatCurrency(acc.opening_balance)}
+                            </TableCell>
+                          )}
+                          {visibleColumns.debit_turnover && (
+                            <TableCell className="text-right py-3 text-sm font-medium text-blue-600">
+                              {formatCurrency(acc.total_debit)}
+                            </TableCell>
+                          )}
+                          {visibleColumns.credit_turnover && (
+                            <TableCell className="text-right py-3 text-sm font-medium text-red-600">
+                              {formatCurrency(acc.total_credit)}
+                            </TableCell>
+                          )}
+                          {visibleColumns.debit_balance && (
+                            <TableCell className="text-right py-3 text-sm font-semibold tabular-nums bg-blue-50/30 text-blue-700">
+                              {(acc.closing_debit || 0) > 0 ? formatCurrency(acc.closing_debit) : '—'}
+                            </TableCell>
+                          )}
+                          {visibleColumns.credit_balance && (
+                            <TableCell className="text-right py-3 text-sm font-semibold tabular-nums bg-emerald-50/30 text-emerald-700">
+                              {(acc.closing_credit || 0) > 0 ? formatCurrency(acc.closing_credit) : '—'}
+                            </TableCell>
+                          )}
+                          {visibleColumns.closing && (
+                            <TableCell className="text-right py-3 text-sm font-semibold">
+                              {formatCurrency(acc.closing_balance)}
+                            </TableCell>
+                          )}
                         </TableRow>
 
                         {/* Expanded Transactions */}
@@ -396,7 +481,7 @@ export default function GeneralLedgerView() {
                             {/* Sub-header */}
                             <TableRow className="bg-slate-100/60">
                               <TableCell></TableCell>
-                              <TableCell colSpan={7} className="p-0">
+                              <TableCell colSpan={1 + Object.values(visibleColumns).filter(Boolean).length} className="p-0">
                                 <Table>
                                   <TableHeader>
                                     <TableRow className="bg-slate-100/60 border-0">
@@ -468,22 +553,32 @@ export default function GeneralLedgerView() {
                   <TableRow className="bg-slate-100 border-t-2 border-slate-300 font-semibold">
                     <TableCell></TableCell>
                     <TableCell className="py-3 text-sm">{t('total') || 'Jami'}</TableCell>
-                    <TableCell className="text-right py-3 text-sm tabular-nums">
-                      {formatCurrency(totals.totalOpening)}
-                    </TableCell>
-                    <TableCell className="text-right py-3 text-sm tabular-nums text-blue-700">
-                      {formatCurrency(totals.totalDebit)}
-                    </TableCell>
-                    <TableCell className="text-right py-3 text-sm tabular-nums text-red-700">
-                      {formatCurrency(totals.totalCredit)}
-                    </TableCell>
-                    <TableCell className="text-right py-3 text-sm tabular-nums bg-blue-100 text-blue-800">
-                      {formatCurrency(totals.closingDebit)}
-                    </TableCell>
-                    <TableCell className="text-right py-3 text-sm tabular-nums bg-emerald-100 text-emerald-800">
-                      {formatCurrency(totals.closingCredit)}
-                    </TableCell>
-                    <TableCell></TableCell>
+                    {visibleColumns.opening && (
+                      <TableCell className="text-right py-3 text-sm tabular-nums">
+                        {formatCurrency(totals.totalOpening)}
+                      </TableCell>
+                    )}
+                    {visibleColumns.debit_turnover && (
+                      <TableCell className="text-right py-3 text-sm tabular-nums text-blue-700">
+                        {formatCurrency(totals.totalDebit)}
+                      </TableCell>
+                    )}
+                    {visibleColumns.credit_turnover && (
+                      <TableCell className="text-right py-3 text-sm tabular-nums text-red-700">
+                        {formatCurrency(totals.totalCredit)}
+                      </TableCell>
+                    )}
+                    {visibleColumns.debit_balance && (
+                      <TableCell className="text-right py-3 text-sm tabular-nums bg-blue-100 text-blue-800">
+                        {formatCurrency(totals.closingDebit)}
+                      </TableCell>
+                    )}
+                    {visibleColumns.credit_balance && (
+                      <TableCell className="text-right py-3 text-sm tabular-nums bg-emerald-100 text-emerald-800">
+                        {formatCurrency(totals.closingCredit)}
+                      </TableCell>
+                    )}
+                    {visibleColumns.closing && <TableCell></TableCell>}
                   </TableRow>
                 </TableBody>
               </Table>

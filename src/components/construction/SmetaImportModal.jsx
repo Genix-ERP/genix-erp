@@ -870,8 +870,20 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
   const [file, setFile] = useState(null);
   const [workbook, setWorkbook] = useState(null);
   const [availableSheets, setAvailableSheets] = useState([]);
+  // `selectedType` is the type currently focused in the preview (step 3).
+  // `selectedTypes` is the full set the user has ticked for import.
+  // Keeping them separate means every downstream render that references
+  // `selectedType` (e.g. the preview table branch) keeps working while the
+  // outer flow iterates over `selectedTypes` on import.
   const [selectedType, setSelectedType] = useState(null);
+  const [selectedTypes, setSelectedTypes] = useState([]);
   const [parsedData, setParsedData] = useState(null);
+  // Per-type parsed results so we can switch the preview between types
+  // without re-parsing. Keys are 'vor' | 'edinich' | 'resurs' | 'svod'.
+  const [parsedResults, setParsedResults] = useState({});
+  // Per-type estimate names so the user can name each one. Keyed the
+  // same way. Svod uses the project name and doesn't need this.
+  const [estimateNames, setEstimateNames] = useState({});
   const [expandedSections, setExpandedSections] = useState({});
   const [estimateName, setEstimateName] = useState('');
   const [selectedBuildingId, setSelectedBuildingId] = useState('');
@@ -886,7 +898,10 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
     setWorkbook(null);
     setAvailableSheets([]);
     setSelectedType(null);
+    setSelectedTypes([]);
     setParsedData(null);
+    setParsedResults({});
+    setEstimateNames({});
     setExpandedSections({});
     setEstimateName('');
     setSelectedBuildingId('');
@@ -911,10 +926,12 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
       const sheets = detectSheets(wb);
       setAvailableSheets(sheets);
 
-      // Auto-select ВОР if available
+      // Auto-select ВОР if available. Single-element selection matches the
+      // old default; the user can tick additional checkboxes in step 2.
       const vorSheet = sheets.find((s) => s.type === 'vor' && s.enabled);
       if (vorSheet) {
         setSelectedType('vor');
+        setSelectedTypes(['vor']);
       }
 
       if (sheets.length === 0) {
@@ -939,47 +956,80 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
     e.preventDefault();
   };
 
-  // Step 2: Parse selected sheet type
+  // Pure parser dispatcher — no side effects, so we can reuse it both for
+  // the single-type path and the multi-type loop.
+  const parseByType = (type) => {
+    if (type === 'vor')      return parseVOR(workbook);
+    if (type === 'edinich')  return parseEdinich(workbook);
+    if (type === 'resurs')   return parseResurs(workbook);
+    if (type === 'svod')     return parseSvod(workbook);
+    return null;
+  };
+
+  const isParsedOk = (type, result) => {
+    if (!result) return false;
+    if (type === 'svod')  return Array.isArray(result.categories) && result.categories.length > 0;
+    return Array.isArray(result.sections) && result.sections.length > 0;
+  };
+
+  // Step 2: Parse every selected type. Results are stashed in
+  // `parsedResults` keyed by type so the preview can flip between them
+  // without re-parsing. Per-type names are seeded here too.
   const handleParseSheet = () => {
-    if (!workbook || !selectedType) return;
+    if (!workbook) return;
+    // Honour the multi-select, but fall back to single selectedType so
+    // legacy callers keep working.
+    const types = (selectedTypes && selectedTypes.length > 0)
+      ? selectedTypes
+      : (selectedType ? [selectedType] : []);
+    if (types.length === 0) return;
+
     setIsProcessing(true);
     setErrors([]);
 
     try {
-      let result = null;
-      if (selectedType === 'vor') {
-        result = parseVOR(workbook);
-      } else if (selectedType === 'edinich') {
-        result = parseEdinich(workbook);
-      } else if (selectedType === 'resurs') {
-        result = parseResurs(workbook);
-      } else if (selectedType === 'svod') {
-        result = parseSvod(workbook);
-      }
-
-      if (!result) {
-        setErrors(["Ma'lumot topilmadi. Fayl formati to'g'ri ekanligini tekshiring."]);
-        setIsProcessing(false);
-        return;
-      }
-
-      // Svod has categories, others have sections
-      if (selectedType === 'svod') {
-        if (!result.categories || result.categories.length === 0) {
-          setErrors(["Ma'lumot topilmadi. Fayl formati to'g'ri ekanligini tekshiring."]);
-          setIsProcessing(false);
-          return;
+      const results = {};
+      const names = {};
+      const failed = [];
+      for (const type of types) {
+        const result = parseByType(type);
+        if (!isParsedOk(type, result)) {
+          failed.push(type);
+          continue;
         }
-      } else if (!result.sections || result.sections.length === 0) {
-        setErrors(["Ma'lumot topilmadi. Fayl formati to'g'ri ekanligini tekshiring."]);
+        results[type] = result;
+        names[type] = type === 'svod'
+          ? (result.projectName || '')
+          : (result.objectName || '');
+      }
+
+      if (Object.keys(results).length === 0) {
+        setErrors([
+          "Ma'lumot topilmadi. Fayl formati to'g'ri ekanligini tekshiring."
+          + (failed.length ? ` (${failed.join(', ')})` : ''),
+        ]);
         setIsProcessing(false);
         return;
       }
+      if (failed.length > 0) {
+        // Non-fatal: we still proceed with the types that parsed, but
+        // surface the problem so the user knows some sheets were skipped.
+        setErrors([
+          `Quyidagi turlar uchun ma'lumot topilmadi, o'tkazib yuborildi: ${failed.join(', ')}`,
+        ]);
+      }
 
-      setParsedData(result);
-      setEstimateName(selectedType === 'svod' ? (result.projectName || '') : (result.objectName || ''));
-      // Expand first section by default
-      if (result.sections && result.sections.length > 0) {
+      setParsedResults(results);
+      setEstimateNames(names);
+
+      // Pick the first successfully-parsed type as the initial preview
+      // focus. Prefer the user's previously-selected type if it's still
+      // valid so the UI doesn't jump unexpectedly.
+      const firstType = results[selectedType] ? selectedType : Object.keys(results)[0];
+      setSelectedType(firstType);
+      setParsedData(results[firstType]);
+      setEstimateName(names[firstType] || '');
+      if (results[firstType]?.sections?.length > 0) {
         setExpandedSections({ 0: true });
       }
       setStep(3);
@@ -990,93 +1040,146 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
     }
   };
 
-  // Step 3 → Step 4: Execute import
+  // Switch the preview to a different parsed type without leaving step 3.
+  // Saves the current type's editable estimate name first so it isn't
+  // lost if the user comes back to it.
+  const switchPreviewType = (type) => {
+    if (!parsedResults[type]) return;
+    setEstimateNames((prev) => ({ ...prev, [selectedType]: estimateName }));
+    setSelectedType(type);
+    setParsedData(parsedResults[type]);
+    setEstimateName(estimateNames[type] || '');
+    setExpandedSections(parsedResults[type]?.sections?.length > 0 ? { 0: true } : {});
+  };
+
+  // Build the per-type payload for `onImport` from a parsed result.
+  // Extracted so the multi-type loop below can reuse the exact same
+  // transformation that the single-type flow used to do inline.
+  const buildImportPayloadFor = (type, result, nameOverride) => {
+    const allLines = [];
+    let sortIdx = 0;
+    let importedCount = 0;
+    for (const section of result.sections || []) {
+      if (!section.items || section.items.length === 0) continue;
+      for (const item of section.items) {
+        sortIdx++;
+        const unitPrice = item.unit_price || 0;
+        const rt = item.resource_type || '';
+        allLines.push({
+          name: item.name,
+          uom: item.uom || 'шт',
+          quantity: item.quantity || 0,
+          material_rate: rt === 'material' ? unitPrice : 0,
+          labor_rate: rt === 'labor' ? unitPrice : 0,
+          equipment_rate: rt === 'equipment' ? unitPrice : 0,
+          code: item.code || '',
+          item_number: item.item_number || '',
+          resource_type: rt,
+          parent_item_number: item.parent_item_number || '',
+          sort_order: sortIdx,
+        });
+      }
+      importedCount += section.items.length;
+    }
+    const sectionNames = (result.sections || [])
+      .filter((s) => s.items?.length > 0 && s.name)
+      .map((s) => s.name);
+    return {
+      lines: allLines,
+      sectionNames,
+      importedCount,
+      sectionCount: result.sections?.length || 0,
+      defaultName: nameOverride || result.objectName || result.sections?.[0]?.name || 'Imported',
+    };
+  };
+
+  // Step 3 → Step 4: Execute import. Iterates over every type the user
+  // ticked in step 2 so a single file can seed multiple estimates in one
+  // click. Svod is handled via the dedicated `onImportSvod` callback; all
+  // other types go through `onImport` one-by-one.
   const handleImport = async () => {
-    // Svod doesn't require building selection
-    if (!parsedData || (selectedType !== 'svod' && !selectedBuildingId)) {
+    // Honour the multi-select, but fall back to the single focused type.
+    const types = (selectedTypes && selectedTypes.length > 0)
+      ? selectedTypes.filter((t) => parsedResults[t])
+      : (selectedType && parsedResults[selectedType] ? [selectedType] : []);
+    if (types.length === 0) {
+      setErrors(["Import uchun tur tanlanmagan"]);
+      return;
+    }
+
+    // Non-svod types need a building; if at least one non-svod type is
+    // selected, building is required.
+    const anyNonSvod = types.some((t) => t !== 'svod');
+    if (anyNonSvod && !selectedBuildingId) {
       setErrors(["Binoni tanlang"]);
       return;
     }
+
+    // Commit any in-flight name edit on the focused tab before we loop.
+    const names = { ...estimateNames, [selectedType]: estimateName };
 
     setIsProcessing(true);
     setErrors([]);
     setStep(4);
 
     try {
-      if (selectedType === 'svod') {
-        // Svod import: flatten cross-tab into rows
-        const rows = [];
-        for (const cat of parsedData.categories) {
-          for (const buildingName of parsedData.buildings) {
-            rows.push({
-              row_number: cat.row_number,
-              category_name: cat.name,
-              building_column: buildingName,
-              amount: cat.amounts[buildingName] || 0,
-            });
+      let totalLines = 0;
+      let totalSections = 0;
+      let estimatesCreated = 0;
+      let svodImported = false;
+      const buildingId = selectedBuildingId === 'project' ? 0 : parseInt(selectedBuildingId);
+      const subcontractId = selectedSubcontractId ? parseInt(selectedSubcontractId) : undefined;
+
+      for (const type of types) {
+        const result = parsedResults[type];
+        if (!result) continue;
+
+        if (type === 'svod') {
+          // Svod cross-tab → flat rows, like the old single-type branch.
+          const rows = [];
+          for (const cat of result.categories || []) {
+            for (const buildingName of result.buildings || []) {
+              rows.push({
+                row_number: cat.row_number,
+                category_name: cat.name,
+                building_column: buildingName,
+                amount: cat.amounts?.[buildingName] || 0,
+              });
+            }
           }
+          if (onImportSvod) await onImportSvod(rows);
+          svodImported = true;
+          totalLines += result.categories?.length || 0;
+          continue;
         }
 
-        await onImportSvod(rows);
-
-        setImportResult({
-          success: true,
-          count: parsedData.categories.length,
-          sections: 1,
-          isSvod: true,
+        const payload = buildImportPayloadFor(type, result, names[type]);
+        if (payload.lines.length === 0) continue;
+        await onImport({
+          estimateName: payload.defaultName,
+          buildingId,
+          sourceType: type,
+          // Forwarding the uploaded file name lets the backend's Forma 2
+          // auto-create dedupe by it — every estimate type extracted from
+          // this same file merges into the same Forma 2 draft.
+          sourceFileName: file?.name || '',
+          lines: payload.lines,
+          sectionNames: payload.sectionNames,
+          subcontractId,
         });
-      } else {
-        const buildingId = selectedBuildingId === 'project' ? 0 : parseInt(selectedBuildingId);
-        let importedCount = 0;
-
-        // Merge all sections into a single estimate with all lines
-        const allLines = [];
-        let sortIdx = 0;
-        for (const section of parsedData.sections) {
-          if (section.items.length === 0) continue;
-          for (const item of section.items) {
-            sortIdx++;
-            const unitPrice = item.unit_price || 0;
-            const rt = item.resource_type || '';
-            allLines.push({
-              name: item.name,
-              uom: item.uom || 'шт',
-              quantity: item.quantity || 0,
-              material_rate: rt === 'material' ? unitPrice : 0,
-              labor_rate: rt === 'labor' ? unitPrice : 0,
-              equipment_rate: rt === 'equipment' ? unitPrice : 0,
-              code: item.code || '',
-              item_number: item.item_number || '',
-              resource_type: rt,
-              parent_item_number: item.parent_item_number || '',
-              sort_order: sortIdx,
-            });
-          }
-          importedCount += section.items.length;
-        }
-
-        if (allLines.length > 0) {
-          // Collect section names for auto-creating stages
-          const sectionNames = parsedData.sections
-            .filter(s => s.items.length > 0 && s.name)
-            .map(s => s.name);
-
-          await onImport({
-            estimateName: estimateName || parsedData.objectName || parsedData.sections[0]?.name || 'Imported',
-            buildingId,
-            sourceType: selectedType,
-            lines: allLines,
-            sectionNames,
-            subcontractId: selectedSubcontractId ? parseInt(selectedSubcontractId) : undefined,
-          });
-        }
-
-        setImportResult({
-          success: true,
-          count: importedCount,
-          sections: parsedData.sections.length,
-        });
+        totalLines += payload.importedCount;
+        totalSections += payload.sectionCount;
+        estimatesCreated += 1;
       }
+
+      setImportResult({
+        success: true,
+        count: totalLines,
+        sections: totalSections,
+        estimatesCreated,
+        isSvod: svodImported && estimatesCreated === 0, // keep old message shape when svod-only
+        typeCount: types.length,
+      });
     } catch (error) {
       setErrors(["Import xatolik: " + error.message]);
       setImportResult({ success: false });
@@ -1196,69 +1299,100 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
             </p>
 
             <div className="space-y-2">
-              <Label>Import turini tanlang:</Label>
-              {availableSheets.map((sheet) => (
-                <div
-                  key={sheet.type}
-                  className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                    selectedType === sheet.type
-                      ? 'border-blue-500 bg-blue-50'
-                      : sheet.enabled
-                      ? 'border-slate-200 hover:border-slate-300'
-                      : 'border-slate-100 bg-slate-50 opacity-50 cursor-not-allowed'
-                  }`}
-                  onClick={() => sheet.enabled && setSelectedType(sheet.type)}
-                >
+              {/* Multi-select: user can tick any combination of detected
+                  types. Each ticked type will end up as its own estimate
+                  after import (svod stays a summary import as before). */}
+              <Label>Import turlari (bir nechtasini tanlashingiz mumkin):</Label>
+              {availableSheets.map((sheet) => {
+                const isChecked = selectedTypes.includes(sheet.type);
+                const isFocused = selectedType === sheet.type;
+                const toggle = () => {
+                  if (!sheet.enabled) return;
+                  setSelectedTypes((prev) => {
+                    const next = prev.includes(sheet.type)
+                      ? prev.filter((t) => t !== sheet.type)
+                      : [...prev, sheet.type];
+                    // Keep `selectedType` consistent with the set so the
+                    // preview focus is always on a currently-checked type.
+                    if (next.length === 0) setSelectedType(null);
+                    else if (!next.includes(selectedType)) setSelectedType(next[next.length - 1]);
+                    else if (!selectedType) setSelectedType(next[0]);
+                    return next;
+                  });
+                };
+                return (
                   <div
-                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                      selectedType === sheet.type ? 'border-blue-500' : 'border-slate-300'
+                    key={sheet.type}
+                    className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
+                      !sheet.enabled
+                        ? 'border-slate-100 bg-slate-50 opacity-50 cursor-not-allowed'
+                        : isChecked
+                        ? (isFocused ? 'border-blue-500 bg-blue-50' : 'border-blue-300 bg-blue-50/40')
+                        : 'border-slate-200 hover:border-slate-300 cursor-pointer'
                     }`}
+                    onClick={toggle}
                   >
-                    {selectedType === sheet.type && (
-                      <div className="w-2 h-2 rounded-full bg-blue-500" />
-                    )}
-                  </div>
-                  <div className="flex-1">
-                    <div>
-                      <span className="font-medium text-sm">
-                        {language === 'uz'
-                          ? { vor: "Ishlar ro'yxati (ВОР)", edinich: 'Batafsil miqdor (Единич)', resurs: 'Resurslar (Ресурс)', svod: 'Svod' }[sheet.type] || sheet.label
-                          : sheet.label
-                        }
-                      </span>
-                      <span className="text-xs text-slate-500 ml-2">({sheet.name})</span>
-                    </div>
-                    {typeDescriptions[sheet.type] && (
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        {language === 'uz' ? typeDescriptions[sheet.type].uz : typeDescriptions[sheet.type].ru}
-                      </p>
-                    )}
-                  </div>
-                  {sheet.enabled && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-xs h-7 px-2 text-slate-500 hover:text-slate-700"
-                      onClick={(e) => { e.stopPropagation(); downloadTemplate(sheet.type); }}
-                      title={language === 'uz' ? 'Namuna yuklab olish' : 'Скачать шаблон'}
+                    {/* Square checkbox (multi-select), not a radio. */}
+                    <div
+                      className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
+                        isChecked ? 'border-blue-500 bg-blue-500' : 'border-slate-300'
+                      }`}
                     >
-                      <Download className="w-3.5 h-3.5" />
-                    </Button>
-                  )}
-                  {!sheet.enabled && (
-                    <Badge variant="secondary" className="text-xs">
-                      Tez kunda
-                    </Badge>
-                  )}
-                </div>
-              ))}
+                      {isChecked && (
+                        <svg className="w-3 h-3 text-white" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <div>
+                        <span className="font-medium text-sm">
+                          {language === 'uz'
+                            ? { vor: "Ishlar ro'yxati (ВОР)", edinich: 'Batafsil miqdor (Единич)', resurs: 'Resurslar (Ресурс)', svod: 'Svod' }[sheet.type] || sheet.label
+                            : sheet.label
+                          }
+                        </span>
+                        <span className="text-xs text-slate-500 ml-2">({sheet.name})</span>
+                      </div>
+                      {typeDescriptions[sheet.type] && (
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          {language === 'uz' ? typeDescriptions[sheet.type].uz : typeDescriptions[sheet.type].ru}
+                        </p>
+                      )}
+                    </div>
+                    {sheet.enabled && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-xs h-7 px-2 text-slate-500 hover:text-slate-700"
+                        onClick={(e) => { e.stopPropagation(); downloadTemplate(sheet.type); }}
+                        title={language === 'uz' ? 'Namuna yuklab olish' : 'Скачать шаблон'}
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                      </Button>
+                    )}
+                    {!sheet.enabled && (
+                      <Badge variant="secondary" className="text-xs">
+                        Tez kunda
+                      </Badge>
+                    )}
+                  </div>
+                );
+              })}
+              {selectedTypes.length > 1 && (
+                <p className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded px-3 py-2 mt-2">
+                  {language === 'uz'
+                    ? `${selectedTypes.length} tur tanlangan — keyingi qadamda har biri uchun alohida smeta yaratiladi.`
+                    : `Выбрано ${selectedTypes.length} типа — на следующем шаге создастся отдельная смета для каждого.`}
+                </p>
+              )}
             </div>
 
             <div className="flex justify-between pt-4">
               <Button variant="outline" onClick={() => setStep(1)}>
                 <ArrowLeft className="w-4 h-4 mr-1" /> Orqaga
               </Button>
-              <Button onClick={handleParseSheet} disabled={!selectedType || isProcessing}>
+              <Button onClick={handleParseSheet} disabled={selectedTypes.length === 0 || isProcessing}>
                 {isProcessing ? (
                   <Loader2 className="w-4 h-4 mr-1 animate-spin" />
                 ) : (
@@ -1273,6 +1407,40 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
         {/* Step 3: Preview + Configure */}
         {step === 3 && parsedData && (
           <div className="flex-1 flex flex-col min-h-0 space-y-3">
+            {/* Type switcher — lets the user jump between previews of the
+                types they ticked in step 2 without leaving step 3. Hidden
+                when only one type is selected so the UI isn't noisy for
+                the single-type case. */}
+            {Object.keys(parsedResults).length > 1 && (
+              <div className="flex flex-wrap gap-1.5 p-1 bg-slate-50 rounded-lg border">
+                {Object.keys(parsedResults).map((type) => {
+                  const r = parsedResults[type];
+                  const active = selectedType === type;
+                  const count = type === 'svod'
+                    ? (r.categories?.length || 0)
+                    : (r.sections?.reduce((s, sec) => s + (sec.items?.length || 0), 0) || 0);
+                  const label = language === 'uz'
+                    ? { vor: 'ВОР', edinich: 'Единич', resurs: 'Ресурс', svod: 'Свод' }[type] || type
+                    : { vor: 'ВОР', edinich: 'Единич', resurs: 'Ресурс', svod: 'Свод' }[type] || type;
+                  return (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => switchPreviewType(type)}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                        active
+                          ? 'bg-white text-blue-700 shadow-sm border border-blue-200'
+                          : 'text-slate-600 hover:bg-white hover:text-slate-900'
+                      }`}
+                    >
+                      {label}
+                      <span className="ml-1.5 text-slate-400">({count})</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
             <div className="flex items-center justify-between">
               <div className="text-sm text-slate-600">
                 <span className="font-medium">{totalItems}</span> qator
@@ -1466,14 +1634,32 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
               </Button>
               <Button
                 onClick={handleImport}
-                disabled={(selectedType !== 'svod' && !selectedBuildingId) || isProcessing}
+                disabled={
+                  // Building is required only if at least one non-svod
+                  // type is in the selection set.
+                  (selectedTypes.some((t) => t !== 'svod') && !selectedBuildingId) ||
+                  isProcessing
+                }
               >
                 {isProcessing ? (
                   <Loader2 className="w-4 h-4 mr-1 animate-spin" />
                 ) : (
                   <CheckCircle className="w-4 h-4 mr-1" />
                 )}
-                Import ({totalItems} qator)
+                {(() => {
+                  // Aggregate line count across every parsed type so the
+                  // button reflects the full import scope, not just the
+                  // currently-focused preview.
+                  const total = Object.entries(parsedResults).reduce((acc, [type, r]) => {
+                    if (!r) return acc;
+                    if (type === 'svod') return acc + (r.categories?.length || 0);
+                    return acc + (r.sections?.reduce((s, sec) => s + (sec.items?.length || 0), 0) || 0);
+                  }, 0);
+                  const typeCount = Object.keys(parsedResults).length;
+                  return typeCount > 1
+                    ? `Import (${typeCount} tur, ${total} qator)`
+                    : `Import (${total} qator)`;
+                })()}
               </Button>
             </div>
           </div>
@@ -1492,10 +1678,17 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
                 <CheckCircle className="w-12 h-12 text-green-500 mx-auto" />
                 <p className="text-lg font-medium text-slate-800">{t('import_success') || "Import muvaffaqiyatli!"}</p>
                 <p className="text-sm text-slate-600">
-                  {importResult.isSvod
-                    ? `${importResult.count} ${t('categories_imported') || "kategoriya import qilindi"}`
-                    : `${importResult.count} ${t('lines_imported') || "qator import qilindi"}`
-                  }
+                  {importResult.isSvod ? (
+                    `${importResult.count} ${t('categories_imported') || "kategoriya import qilindi"}`
+                  ) : (importResult.estimatesCreated || 0) > 1 ? (
+                    // Multi-type path: mention both the estimate count and
+                    // the total line count so the user can see what landed.
+                    language === 'uz'
+                      ? `${importResult.estimatesCreated} ta smeta, ${importResult.count} qator import qilindi`
+                      : `Импортировано ${importResult.estimatesCreated} смет, ${importResult.count} строк`
+                  ) : (
+                    `${importResult.count} ${t('lines_imported') || "qator import qilindi"}`
+                  )}
                 </p>
                 <Button onClick={handleClose} className="mt-4">
                   {t('close') || "Yopish"}

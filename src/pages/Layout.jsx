@@ -75,6 +75,7 @@ import { AdminSettingsProvider } from "@/components/contexts/AdminSettingsContex
 import { CargoProvider } from "@/components/contexts/CargoContext";
 import { ConstructionProvider } from "@/components/contexts/ConstructionContext";
 import { useTranslation } from "@/components/utils/translations";
+import { renderNotification } from "@/utils/notificationCatalog";
 import { useAuth } from "@/components/contexts/AuthContext";
 import { useInventory } from "@/components/contexts/InventoryContext";
 import { useModules } from "@/components/contexts/ModulesContext";
@@ -337,6 +338,11 @@ function LayoutContent({ children, currentPageName }) {
       badge: null,
       moduleId: 'expenses'
     },
+    // NOTE: ТЗ_Ish_Haqi_Soliq_Tolik.docx §8.1 lists "Фойда солиғи" as a
+    // TAB ("Солиқ ҳисоби") inside an existing screen, not a standalone
+    // sidebar module. The route /profit-tax still exists so the page can
+    // be linked from inside another page (Financials/Expenses), but we
+    // don't surface it as a top-level sidebar entry.
     'payroll': {
       title: t("payroll"),
       url: createPageUrl("Payroll"),
@@ -628,19 +634,25 @@ function LayoutContent({ children, currentPageName }) {
                               <p style={{ fontSize: '14px', margin: 0 }}>{t('no_notifications') || 'No new notifications'}</p>
                             </div>
                           ) : (
-                            recentNotifications.map((n) => (
-                              <div
-                                key={n.id}
-                                className="hover:bg-blue-50"
-                                style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', backgroundColor: '#ffffff', cursor: 'pointer', transition: 'background-color 0.15s' }}
-                              >
-                                <p style={{ fontSize: '14px', fontWeight: 500, color: '#1e293b', margin: 0 }}>{n.title}</p>
-                                <p style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>{n.message}</p>
-                                <p style={{ fontSize: '10px', color: '#94a3b8', marginTop: '4px' }}>
-                                  {new Date(n.created_at).toLocaleString()}
-                                </p>
-                              </div>
-                            ))
+                            recentNotifications.map((n) => {
+                              // Re-render title/body in the current UI language.
+                              // Falls back to stored `title`/`message` (what mobile
+                              // uses) for unknown types or rows missing data fields.
+                              const view = renderNotification(n, t, language);
+                              return (
+                                <div
+                                  key={n.id}
+                                  className="hover:bg-blue-50"
+                                  style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', backgroundColor: '#ffffff', cursor: 'pointer', transition: 'background-color 0.15s' }}
+                                >
+                                  <p style={{ fontSize: '14px', fontWeight: 500, color: '#1e293b', margin: 0 }}>{view.title}</p>
+                                  <p style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>{view.body}</p>
+                                  <p style={{ fontSize: '10px', color: '#94a3b8', marginTop: '4px' }}>
+                                    {new Date(n.created_at).toLocaleString()}
+                                  </p>
+                                </div>
+                              );
+                            })
                           )}
                         </div>
                         <Link
