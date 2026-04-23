@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { constructionService } from '@/api/services/construction';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { TrendingUp, ChevronLeft, ChevronRight } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -30,12 +31,33 @@ const BudgetTab = ({ project }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 20;
 
+  // Buildings tab (mirrors StagesTab / migration 333). One pill per building;
+  // an extra "Hammasi" pill keeps the existing project-wide view available
+  // since budget totals make sense at the project level too, unlike Stages.
+  const [buildings, setBuildings] = useState([]);
+  const [buildingFilter, setBuildingFilter] = useState('all');
+
+  // Load buildings once per project for the tab row.
+  useEffect(() => {
+    if (!project?.id) return;
+    let cancelled = false;
+    constructionService
+      .listBuildings(project.id)
+      .then((rows) => { if (!cancelled) setBuildings(Array.isArray(rows) ? rows : []); })
+      .catch(() => { if (!cancelled) setBuildings([]); });
+    return () => { cancelled = true; };
+  }, [project?.id]);
+
   const load = useCallback(async () => {
     if (!project?.id) return;
     setLoading(true);
     setError(null);
     try {
-      const data = await constructionService.getStageBudgetReport(project.id);
+      // The service helper drops the param when the filter is 'all', so the
+      // backend keeps its original project-wide behaviour by default.
+      const data = await constructionService.getStageBudgetReport(project.id, {
+        buildingId: buildingFilter,
+      });
       setReport(data);
     } catch (e) {
       setError(t('budget_load_error') || 'Error loading budget report');
@@ -43,9 +65,13 @@ const BudgetTab = ({ project }) => {
     } finally {
       setLoading(false);
     }
-  }, [project?.id]);
+  }, [project?.id, buildingFilter]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Reset pagination whenever the active building tab changes so the user
+  // never lands on a blank page after filtering to a smaller block.
+  useEffect(() => { setCurrentPage(1); }, [buildingFilter]);
 
   if (loading) return <div className="text-center py-8 text-slate-400">{t('loading')}</div>;
   if (error) return <div className="text-center py-8 text-red-500">{error}</div>;
@@ -70,6 +96,43 @@ const BudgetTab = ({ project }) => {
 
   return (
     <div className="space-y-4">
+      {/* Building tab row — mirrors Bosqichlar tab (migration 333). Unlike
+          Stages, we keep a "Hammasi" pill so the user can still see the
+          project-wide totals (which is the default view). Only render when
+          the project actually has buildings attached. */}
+      {buildings.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setBuildingFilter('all')}
+            className={cn(
+              'px-3 py-1.5 rounded-full text-xs font-medium border transition-colors',
+              buildingFilter === 'all'
+                ? 'bg-slate-900 text-white border-slate-900'
+                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50',
+            )}
+          >
+            {t('all') || 'Hammasi'}
+          </button>
+          {buildings.map((b) => (
+            <button
+              key={b.id}
+              type="button"
+              onClick={() => setBuildingFilter(String(b.id))}
+              className={cn(
+                'px-3 py-1.5 rounded-full text-xs font-medium border transition-colors',
+                String(buildingFilter) === String(b.id)
+                  ? 'bg-slate-900 text-white border-slate-900'
+                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50',
+              )}
+              title={b.code || b.name}
+            >
+              {b.name || b.code || `#${b.id}`}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Summary KPIs */}
       <div className="grid grid-cols-4 gap-4">
         <Card><CardContent className="p-4">

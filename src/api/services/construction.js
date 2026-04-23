@@ -1096,8 +1096,19 @@ export const constructionService = {
     return response.data.data;
   },
 
-  async getStageBudgetReport(projectId) {
-    const response = await apiClient.get(`/construction/projects/${projectId}/reports/budget`);
+  async getStageBudgetReport(projectId, { buildingId } = {}) {
+    // `buildingId` is optional. When present (falsy values are skipped) the
+    // backend scopes both the stage rows AND the total_planned / total_actual
+    // KPIs to stages belonging to that building, matching the per-block tab
+    // behaviour on the Bosqichlar page.
+    const params = {};
+    if (buildingId !== undefined && buildingId !== null && buildingId !== '' && buildingId !== 'all') {
+      params.building_id = buildingId;
+    }
+    const response = await apiClient.get(
+      `/construction/projects/${projectId}/reports/budget`,
+      { params },
+    );
     return response.data.data;
   },
 
