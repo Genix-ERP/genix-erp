@@ -18,6 +18,7 @@ import { MODULES } from "@/config/permissions";
 import { inventoryService, bomsService, productionOrdersService } from '@/api/services';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { toast } from 'sonner';
+import ProductCombobox from '@/components/shared/ProductCombobox';
 
 export default function ProductionOrders() {
   const { language } = useLanguage();
@@ -712,10 +713,13 @@ export default function ProductionOrders() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium mb-1 block">{t('product') || 'Product'} *</label>
-                <Select
+                <ProductCombobox
+                  products={products.filter(p => p.id)}
                   value={newOrder.product_id}
-                  onValueChange={(value) => {
-                    const product = products.find(p => p.id === value);
+                  onValueChange={(value, productFromCombobox) => {
+                    const product =
+                      productFromCombobox ||
+                      products.find(p => p.id === value);
                     setNewOrder({
                       ...newOrder,
                       product_id: value,
@@ -724,18 +728,9 @@ export default function ProductionOrders() {
                       bom_id: '' // Reset BOM when product changes
                     });
                   }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={t('select_product') || 'Select a product'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {products.filter(product => product.id).map((product) => (
-                      <SelectItem key={product.id} value={product.id}>
-                        {product.name} ({product.sku || product.code || 'No SKU'})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  placeholder={t('select_product') || 'Select a product'}
+                  t={t}
+                />
               </div>
               <div>
                 <label className="text-sm font-medium mb-1 block">{t('bill_of_materials') || 'Bill of Materials'}</label>
