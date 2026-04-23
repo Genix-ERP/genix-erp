@@ -625,11 +625,8 @@ export default function Returns() {
                             <span className="font-medium text-sm">
                               {order.order_number}
                             </span>
-                            <Badge
-                              variant="outline"
-                              className="text-xs"
-                            >
-                              {order.status}
+                            <Badge variant="outline" className="text-xs">
+                              {t(order.status) || order.status}
                             </Badge>
                           </div>
                           <div className="flex items-center justify-between gap-2 mt-1 text-xs text-slate-500">
@@ -732,7 +729,7 @@ export default function Returns() {
                                 onChange={(e) => handleItemChange(index, "quantity", e.target.value)}
                               />
                             </div>
-                            <div className="w-28">
+                            <div className="w-32">
                               {index === 0 && (
                                 <Label className="text-xs text-slate-500 mb-1">
                                   {t('price')}
@@ -766,7 +763,7 @@ export default function Returns() {
                                 </SelectContent>
                               </Select>
                             </div>
-                            <div className="w-24 text-right font-medium text-sm pt-1">
+                            <div className="w-32 text-right font-medium text-sm whitespace-nowrap pt-1">
                               {formatCurrency(item.quantity * item.unit_price)}
                             </div>
                             <Button
