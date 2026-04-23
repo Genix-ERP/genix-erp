@@ -763,7 +763,7 @@ export default function Returns() {
                                 </SelectContent>
                               </Select>
                             </div>
-                            <div className="w-32 text-right font-medium text-sm whitespace-nowrap pt-1">
+                            <div className="w-32 h-10 flex items-center justify-end font-medium text-sm whitespace-nowrap">
                               {formatCurrency(item.quantity * item.unit_price)}
                             </div>
                             <Button
