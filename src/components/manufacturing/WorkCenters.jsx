@@ -168,7 +168,9 @@ export default function WorkCenters() {
         capacity_per_hour: parseFloat(newWorkCenter.capacity_per_hour) || 1,
         efficiency_factor: parseFloat(newWorkCenter.efficiency_factor) || 100,
         working_hours_per_day: parseFloat(newWorkCenter.working_hours_per_day) || 8,
-        hourly_cost: parseFloat(newWorkCenter.hourly_cost) || 0,
+        // hourly_cost is no longer editable in the form — always derive it
+        // from the breakdown so the stored value matches what's displayed.
+        hourly_cost: calculatedCosts.total || 0,
         overhead_cost: parseFloat(newWorkCenter.overhead_cost) || 0,
         currency: newWorkCenter.currency || 'USD',
         status: newWorkCenter.status || 'active',
@@ -266,7 +268,9 @@ export default function WorkCenters() {
         capacity_per_hour: parseFloat(newWorkCenter.capacity_per_hour) || 1,
         efficiency_factor: parseFloat(newWorkCenter.efficiency_factor) || 100,
         working_hours_per_day: parseFloat(newWorkCenter.working_hours_per_day) || 8,
-        hourly_cost: parseFloat(newWorkCenter.hourly_cost) || 0,
+        // hourly_cost is no longer editable in the form — always derive it
+        // from the breakdown so the stored value matches what's displayed.
+        hourly_cost: calculatedCosts.total || 0,
         overhead_cost: parseFloat(newWorkCenter.overhead_cost) || 0,
         currency: newWorkCenter.currency || 'USD',
         status: newWorkCenter.status || 'active',
@@ -585,14 +589,18 @@ export default function WorkCenters() {
 
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <LabelWithHelp htmlFor="wc_hourly_cost" label={t('hourly_cost')} helpText={t('help_workcenter_hourly_cost')} />
+                <LabelWithHelp htmlFor="wc_hourly_cost" label={t('hourly_cost')} helpText="Avtomatik hisoblanadi — quyidagi komponentlar asosida." />
                 <Input
                   id="wc_hourly_cost"
-                  type="number"
-                  placeholder="0"
-                  value={newWorkCenter.hourly_cost || ''}
-                  onChange={(e) => setNewWorkCenter({...newWorkCenter, hourly_cost: e.target.value})}
+                  type="text"
+                  readOnly
+                  disabled
+                  className="bg-slate-50 text-slate-700 cursor-not-allowed font-semibold"
+                  value={calculatedCosts.total > 0
+                    ? `${calculatedCosts.total.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat`
+                    : '0 so\'m/soat'}
                 />
+                <p className="text-[10px] text-slate-500">Quyidagi komponentlardan avtomatik hisoblanadi.</p>
               </div>
             </div>
 
@@ -909,14 +917,18 @@ export default function WorkCenters() {
 
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <LabelWithHelp htmlFor="edit_wc_hourly_cost" label={t('hourly_cost')} helpText={t('help_workcenter_hourly_cost')} />
+                <LabelWithHelp htmlFor="edit_wc_hourly_cost" label={t('hourly_cost')} helpText="Avtomatik hisoblanadi — quyidagi komponentlar asosida." />
                 <Input
                   id="edit_wc_hourly_cost"
-                  type="number"
-                  placeholder="0"
-                  value={newWorkCenter.hourly_cost || ''}
-                  onChange={(e) => setNewWorkCenter({...newWorkCenter, hourly_cost: e.target.value})}
+                  type="text"
+                  readOnly
+                  disabled
+                  className="bg-slate-50 text-slate-700 cursor-not-allowed font-semibold"
+                  value={calculatedCosts.total > 0
+                    ? `${calculatedCosts.total.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat`
+                    : '0 so\'m/soat'}
                 />
+                <p className="text-[10px] text-slate-500">Quyidagi komponentlardan avtomatik hisoblanadi.</p>
               </div>
             </div>
 
