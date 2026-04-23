@@ -275,8 +275,23 @@ export default function Orders({
                           <TableCell>
                             <div className="flex gap-1 flex-wrap">
                               {canUpdate(MODULES.SALES) && (order.status === 'draft' || order.status === 'quotation') && onUpdateStatus && (
-                                <Button size="sm" variant="ghost" onClick={() => onUpdateStatus(order.id, 'confirmed')} title={t('confirm') || 'Confirm'}>
-                                  <CheckCircle className="w-4 h-4" />
+                                <Button size="sm" variant="ghost" onClick={() => onUpdateStatus(order.id, 'confirmed')} title={t('confirm') || 'Tasdiqlash'}>
+                                  <CheckCircle className="w-4 h-4 text-purple-600" />
+                                </Button>
+                              )}
+                              {canUpdate(MODULES.SALES) && order.status === 'confirmed' && onUpdateStatus && (
+                                <Button size="sm" variant="ghost" onClick={() => onUpdateStatus(order.id, 'processing')} title={t('start_processing') || 'Ishlov berishni boshlash'}>
+                                  <Package className="w-4 h-4 text-yellow-600" />
+                                </Button>
+                              )}
+                              {canUpdate(MODULES.SALES) && order.status === 'processing' && onUpdateStatus && (
+                                <Button size="sm" variant="ghost" onClick={() => onUpdateStatus(order.id, 'shipped')} title={t('mark_shipped') || 'Jo\'natildi'}>
+                                  <Truck className="w-4 h-4 text-indigo-600" />
+                                </Button>
+                              )}
+                              {canUpdate(MODULES.SALES) && order.status === 'shipped' && onUpdateStatus && (
+                                <Button size="sm" variant="ghost" onClick={() => onUpdateStatus(order.id, 'delivered')} title={t('mark_delivered') || 'Yetkazildi'}>
+                                  <CheckCircle className="w-4 h-4 text-green-600" />
                                 </Button>
                               )}
                               {canCreate(MODULES.SALES) && ['confirmed', 'processing', 'shipped', 'delivered'].includes(order.status) && !orderHasInvoice(order) && onCreateInvoice && (

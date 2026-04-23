@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Switch } from '@/components/ui/switch';
 import { Loader2, ChevronsUpDown, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -61,6 +62,11 @@ export default function SublineModal({ open, onClose, parent, estimateId, projec
 
   const isEdit = !!initial;
 
+  // `quantity_override` toggles the sub-line between AUTO (quantity derived
+  // from parent.quantity × norm_rate) and MANUAL (user types the quantity
+  // directly — used e.g. when booking "10 pump-hours" regardless of what the
+  // parent volume × norm would produce). `manual_quantity` holds the raw
+  // user input while in MANUAL mode so it survives re-renders.
   const [form, setForm] = useState({
     item_number: '',
     resource_type: 'equipment',
@@ -68,6 +74,8 @@ export default function SublineModal({ open, onClose, parent, estimateId, projec
     norm_rate: '',
     unit_price: '',
     uom: '',
+    quantity_override: false,
+    manual_quantity: '',
   });
   const [saving, setSaving] = useState(false);
 
@@ -94,6 +102,10 @@ export default function SublineModal({ open, onClose, parent, estimateId, projec
         norm_rate: formatNormInput(String(initial.norm_rate ?? '').replace('.', ',')),
         unit_price: formatPriceInput(String(rateFromType ?? 0)),
         uom: initial.uom || '',
+        quantity_override: !!initial.quantity_override,
+        manual_quantity: initial.quantity_override
+          ? formatNormInput(String(initial.quantity ?? '').replace('.', ','))
+          : '',
       });
     } else {
       const parentNum = parent?.item_number || String(parent?.id || '');
@@ -104,6 +116,8 @@ export default function SublineModal({ open, onClose, parent, estimateId, projec
         norm_rate: '',
         unit_price: '',
         uom: '',
+        quantity_override: false,
+        manual_quantity: '',
       });
     }
     setResourceSearch('');
@@ -129,15 +143,21 @@ export default function SublineModal({ open, onClose, parent, estimateId, projec
     return () => { cancelled = true; };
   }, [open, projectId, form.resource_type]);
 
-  // Derived preview values
+  // Derived preview values.
+  //
+  // AUTO mode (default): effectiveQty = parent.quantity × norm_rate.
+  // MANUAL mode (quantity_override): effectiveQty = user-entered value. The
+  // norm_rate stays visible as a reference figure but no longer drives the
+  // amount, matching the "10 pump-hours independent of parent volume" case.
   const preview = useMemo(() => {
     const norm = parseFloat(parseNormInput(form.norm_rate)) || 0;
     const unitPrice = parseFloat(parsePriceInput(form.unit_price)) || 0;
     const parentQty = Number(parent?.quantity) || 0;
-    const effectiveQty = parentQty * norm;
+    const manualQty = parseFloat(parseNormInput(form.manual_quantity)) || 0;
+    const effectiveQty = form.quantity_override ? manualQty : parentQty * norm;
     const amount = effectiveQty * unitPrice;
-    return { norm, unitPrice, parentQty, effectiveQty, amount };
-  }, [form.norm_rate, form.unit_price, parent]);
+    return { norm, unitPrice, parentQty, manualQty, effectiveQty, amount };
+  }, [form.norm_rate, form.unit_price, form.manual_quantity, form.quantity_override, parent]);
 
   const resourceTypeLabel = (v) => {
     const row = RESOURCE_TYPE_OPTIONS.find((r) => r.value === v);
@@ -180,6 +200,12 @@ export default function SublineModal({ open, onClose, parent, estimateId, projec
     }
     const norm = parseFloat(parseNormInput(form.norm_rate)) || 0;
     const unitPrice = parseFloat(parsePriceInput(form.unit_price)) || 0;
+    const manualQty = parseFloat(parseNormInput(form.manual_quantity)) || 0;
+
+    if (form.quantity_override && manualQty <= 0) {
+      toast.error(t('manual_quantity_required') || "Qo'lda kiritilgan hajm musbat bo'lishi kerak");
+      return;
+    }
 
     setSaving(true);
     try {
@@ -190,6 +216,11 @@ export default function SublineModal({ open, onClose, parent, estimateId, projec
         norm_rate: norm,
         unit_price: unitPrice,
         item_number: form.item_number || undefined,
+        // Migration 342: when the sub-line is in MANUAL mode, send the user-
+        // entered quantity AND the override flag so the backend skips its
+        // parent.quantity × norm_rate derivation.
+        quantity_override: !!form.quantity_override,
+        ...(form.quantity_override ? { quantity: manualQty } : {}),
       };
       if (isEdit) {
         await constructionService.updateEstimateLine(estimateId, initial.id, payload);
@@ -391,6 +422,55 @@ export default function SublineModal({ open, onClose, parent, estimateId, projec
             </Popover>
           </div>
 
+          {/*
+            Manual-vs-auto mode toggle. Default is AUTO (quantity derived from
+            parent.quantity × ShRNK norma). Flipping to MANUAL surfaces an
+            editable Hajm field so foremen can book the real figure (e.g. 10
+            pump-hours) without the parent's volume rewriting it. This directly
+            addresses the field-team concern raised against the normative
+            auto-calculation being too rigid for real-world resource bookings.
+          */}
+          <div className="flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 p-3 min-w-0">
+            <div className="min-w-0 pr-3">
+              <p className="text-sm font-medium">
+                {t('manual_quantity') || "Hajmni qo'lda kiritish"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {form.quantity_override
+                  ? (t('manual_quantity_hint') || "Hajm qo'lda kiritiladi, ota qatordan olinmaydi")
+                  : (t('auto_quantity_hint') || "Hajm avtomatik: ota qator hajmi × ShRNK normasi")}
+              </p>
+            </div>
+            <Switch
+              checked={!!form.quantity_override}
+              onCheckedChange={(v) => setForm((f) => ({
+                ...f,
+                quantity_override: !!v,
+                // Preload the manual field with the current auto-derived value
+                // the moment the user flips into MANUAL mode — so they have a
+                // reasonable starting point to edit from (instead of "0").
+                manual_quantity: v && !f.manual_quantity
+                  ? formatNormInput(String(preview.effectiveQty || '').replace('.', ','))
+                  : f.manual_quantity,
+              }))}
+            />
+          </div>
+
+          {form.quantity_override && (
+            <div className="min-w-0">
+              <label className="text-xs text-muted-foreground">
+                {t('manual_quantity') || "Qo'lda kiritilgan hajm"} *
+              </label>
+              <Input
+                type="text"
+                inputMode="decimal"
+                value={form.manual_quantity}
+                onChange={(e) => setForm({ ...form, manual_quantity: formatNormInput(e.target.value) })}
+                placeholder="10"
+              />
+            </div>
+          )}
+
           <div className="grid grid-cols-3 gap-3">
             <div className="min-w-0">
               <label className="text-xs text-muted-foreground">{t('shrnk_norm') || "ShRNK normasi"}</label>
@@ -400,6 +480,11 @@ export default function SublineModal({ open, onClose, parent, estimateId, projec
                 value={form.norm_rate}
                 onChange={(e) => setForm({ ...form, norm_rate: formatNormInput(e.target.value) })}
                 placeholder="0,204"
+                // In MANUAL mode the norm is informational only — it no longer
+                // drives the quantity. The field is disabled to make this
+                // explicit: the user's typed Hajm is the single source of
+                // truth for the sub-line amount.
+                disabled={form.quantity_override}
               />
             </div>
             <div className="min-w-0">
@@ -451,9 +536,20 @@ export default function SublineModal({ open, onClose, parent, estimateId, projec
                   <span className="truncate">
                     {t('price') || "Narx"}: <b>{formatCurrency(preview.unitPrice)}</b>
                   </span>
-                  <span className="truncate">
-                    {t('quantity_short') || "Hajm"}: {preview.parentQty} × {preview.norm || 0} = <b>{preview.effectiveQty.toFixed(2)}</b>
-                  </span>
+                  {/*
+                    Quantity display forks on mode so the formula matches what
+                    will actually be persisted: auto → parent × norm, manual
+                    → the user-typed value in plain form (no multiplication).
+                  */}
+                  {form.quantity_override ? (
+                    <span className="truncate">
+                      {t('quantity_short') || "Hajm"} ({t('manual_short') || "qo'lda"}): <b>{preview.effectiveQty.toFixed(2)}</b>
+                    </span>
+                  ) : (
+                    <span className="truncate">
+                      {t('quantity_short') || "Hajm"}: {preview.parentQty} × {preview.norm || 0} = <b>{preview.effectiveQty.toFixed(2)}</b>
+                    </span>
+                  )}
                 </div>
               </div>
               <div className="text-right shrink-0">

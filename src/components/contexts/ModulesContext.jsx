@@ -337,7 +337,10 @@ export function ModulesProvider({ children }) {
       location: data.location,
       custodian_name: data.custodian_name,
       warranty_expiry: data.warranty_expiry,
-      notes: data.notes
+      notes: data.notes,
+      supplier_id: data.supplier_id,
+      supplier_name: data.supplier_name,
+      payment_method: data.payment_method,
     };
     const result = await financeService.createFixedAsset(apiData);
     if (result && result.id) {
@@ -421,7 +424,10 @@ export function ModulesProvider({ children }) {
       payment_method: data.payment_method,
       reference: data.reference || data.claim_number,
       reimbursable: data.reimbursable || false,
-      notes: data.notes
+      notes: data.notes,
+      // Profit-tax recognition flag — forwarded when caller provides it;
+      // backend defaults to TRUE otherwise (migration 336).
+      ...(data.is_recognized !== undefined && { is_recognized: Boolean(data.is_recognized) }),
     };
     const result = await financeService.createExpense(apiData);
     if (result && result.id) {
@@ -453,7 +459,8 @@ export function ModulesProvider({ children }) {
       reference: data.reference,
       reimbursable: data.reimbursable,
       notes: data.notes,
-      status: data.status
+      status: data.status,
+      ...(data.is_recognized !== undefined && { is_recognized: Boolean(data.is_recognized) }),
     };
     const result = await financeService.updateExpense(id, apiData);
     if (result) {
@@ -482,6 +489,18 @@ export function ModulesProvider({ children }) {
       return result;
     }
     throw new Error('Failed to approve expense');
+  }, []);
+
+  // Flip the profit-tax recognition flag on a single expense. Uses the
+  // dedicated PATCH /expenses/:id/recognize endpoint (see §7.2 of
+  // ТЗ_Ish_Haqi_Soliq_Tolik.docx) and mirrors the change locally so the
+  // Expenses table re-colours immediately without a full reload.
+  const recognizeExpense = useCallback(async (id, isRecognized) => {
+    const result = await financeService.recognizeExpense(id, isRecognized);
+    setExpenses(prev =>
+      prev.map(e => (e.id === id ? { ...e, ...(result || {}), is_recognized: Boolean(isRecognized) } : e))
+    );
+    return result;
   }, []);
 
   // Payroll CRUD (maps to payroll periods in backend) - API only
@@ -726,7 +745,7 @@ export function ModulesProvider({ children }) {
     // Asset methods
     createAsset, updateAsset, deleteAsset, disposeAsset,
     // Expense methods
-    createExpense, updateExpense, deleteExpense, approveExpense,
+    createExpense, updateExpense, deleteExpense, approveExpense, recognizeExpense,
     // Payroll methods
     createPayroll, updatePayroll, deletePayroll, processPayroll,
     // Contract methods

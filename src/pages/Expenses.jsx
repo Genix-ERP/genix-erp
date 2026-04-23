@@ -23,7 +23,7 @@ const COLORS = ['#0ea5e9', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444'];
 export default function Expenses() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { expenses, createExpense, updateExpense, isLoading, employees, refreshData } = useModules();
+  const { expenses, createExpense, updateExpense, recognizeExpense, isLoading, employees, refreshData } = useModules();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
 
   // Refresh data when navigating to this page
@@ -37,6 +37,10 @@ export default function Expenses() {
   const [filteredClaims, setFilteredClaims] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  // Profit-tax recognition filter: 'all' | 'recognized' | 'unrecognized'.
+  // See §6 of ТЗ_Ish_Haqi_Soliq_Tolik.docx — lets accountants review the
+  // unrecognized ("тан олинмаган") list in isolation when closing a period.
+  const [recognitionFilter, setRecognitionFilter] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editClaim, setEditClaim] = useState(null);
@@ -49,6 +53,10 @@ export default function Expenses() {
     expense_date: new Date().toISOString().split('T')[0],
     category: 'travel',
     amount: 0,
+    // Matches the DB default from migration 336. Accountants flip this
+    // to false for fines, undocumented costs, personal items, etc. —
+    // see the "YO'Q" list in §6.3 of ТЗ_Ish_Haqi_Soliq_Tolik.docx.
+    is_recognized: true,
     description: ''
   });
 
@@ -57,6 +65,13 @@ export default function Expenses() {
     if (statusFilter !== 'all') {
       filtered = filtered.filter(c => c.status === statusFilter);
     }
+    if (recognitionFilter !== 'all') {
+      // `is_recognized` defaults to true for any row the backend hasn't
+      // populated yet — we coerce undefined to true to match the column
+      // default in migration 336.
+      const want = recognitionFilter === 'recognized';
+      filtered = filtered.filter(c => (c.is_recognized !== false) === want);
+    }
     if (searchQuery) {
       filtered = filtered.filter(c =>
         c.claim_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -64,7 +79,7 @@ export default function Expenses() {
       );
     }
     setFilteredClaims(filtered);
-  }, [expenses, searchQuery, statusFilter]);
+  }, [expenses, searchQuery, statusFilter, recognitionFilter]);
 
   const handleCreateClaim = async () => {
     setIsSubmitting(true);
@@ -84,7 +99,8 @@ export default function Expenses() {
         expense_date: new Date().toISOString().split('T')[0],
         category: 'travel',
         amount: 0,
-        description: ''
+        description: '',
+        is_recognized: true,
       });
     } catch (error) {
       console.error('Error creating claim:', error);
@@ -112,7 +128,8 @@ export default function Expenses() {
         category: editClaim.category,
         amount: parseFloat(editClaim.amount) || 0,
         description: editClaim.description,
-        status: editClaim.status
+        status: editClaim.status,
+        is_recognized: editClaim.is_recognized,
       });
       setShowEditModal(false);
       setEditClaim(null);
@@ -447,6 +464,18 @@ export default function Expenses() {
                     <SelectItem value="cancelled">{t('cancelled')}</SelectItem>
                   </SelectContent>
                 </Select>
+
+                {/* Profit-tax recognition filter — mirrors §8.2 of the TZ. */}
+                <Select value={recognitionFilter} onValueChange={setRecognitionFilter}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t('recognition_all') || 'Barchasi (tan olish)'}</SelectItem>
+                    <SelectItem value="recognized">{t('recognition_recognized') || 'Tan olingan'}</SelectItem>
+                    <SelectItem value="unrecognized">{t('recognition_unrecognized') || 'Tan olinmagan'}</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </CardHeader>
             <CardContent className="p-0">
@@ -472,13 +501,23 @@ export default function Expenses() {
                         <TableHead>{t('date')}</TableHead>
                         <TableHead>{t('category')}</TableHead>
                         <TableHead>{t('amount')}</TableHead>
+                        <TableHead>{t('recognition') || 'Tan olinadi?'}</TableHead>
                         <TableHead>{t('status')}</TableHead>
                         <TableHead>{t('actions')}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredClaims.map((claim) => (
-                        <TableRow key={claim.id} className="hover:bg-slate-50">
+                      {filteredClaims.map((claim) => {
+                        // Treat missing flag as recognized (matches DB
+                        // default from migration 336). Row tint follows
+                        // the colour standard from §8.3 of the TZ:
+                        // light-green for recognized, light-red otherwise.
+                        const isRecognized = claim.is_recognized !== false;
+                        const rowTint = isRecognized
+                          ? 'hover:bg-emerald-50/60'
+                          : 'bg-red-50/50 hover:bg-red-50';
+                        return (
+                        <TableRow key={claim.id} className={rowTint}>
                           <TableCell className="font-mono text-sm">{claim.claim_number}</TableCell>
                           <TableCell className="font-medium">{claim.employee_name}</TableCell>
                           <TableCell className="text-sm">
@@ -488,6 +527,36 @@ export default function Expenses() {
                             <Badge variant="outline">{t(claim.category)}</Badge>
                           </TableCell>
                           <TableCell className="font-semibold">{formatCurrency(claim.amount || 0)}</TableCell>
+                          <TableCell>
+                            {/* Recognition toggle — click flips is_recognized
+                                via PATCH /expenses/:id/recognize. Guarded
+                                by the same update permission as the edit
+                                button so view-only users can't toggle. */}
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className={`h-7 px-2 rounded-full text-xs font-medium border ${
+                                isRecognized
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                                  : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                              }`}
+                              disabled={!canUpdate(MODULES.FINANCIALS)}
+                              title={
+                                isRecognized
+                                  ? (t('recognition_click_to_unrecognize') || 'Tan olinmaydi qilish uchun bosing')
+                                  : (t('recognition_click_to_recognize') || 'Tan olinadi qilish uchun bosing')
+                              }
+                              onClick={async () => {
+                                try {
+                                  await recognizeExpense(claim.id, !isRecognized);
+                                } catch (e) {
+                                  console.error('Failed to toggle recognition', e);
+                                }
+                              }}
+                            >
+                              {isRecognized ? (t('recognized_short') || 'HA') : (t('unrecognized_short') || "YO'Q")}
+                            </Button>
+                          </TableCell>
                           <TableCell>
                             <Badge className={getStatusColor(claim.status)}>{t(claim.status)}</Badge>
                           </TableCell>
@@ -526,7 +595,8 @@ export default function Expenses() {
                             </div>
                           </TableCell>
                         </TableRow>
-                      ))}
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>
@@ -609,6 +679,32 @@ export default function Expenses() {
                   value={newClaim.description}
                   onChange={(e) => setNewClaim({...newClaim, description: e.target.value})}
                 />
+              </div>
+
+              {/* Profit-tax recognition toggle — lets the submitter flag
+                  non-deductible expenses up front (fines, undocumented
+                  spending, personal costs). Defaults to "recognized"
+                  which matches the DB default from migration 336. */}
+              <div className="flex items-center justify-between rounded-md border p-3">
+                <div className="text-sm">
+                  <p className="font-medium">{t('recognition') || 'Tan olinadi?'}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {t('recognition_help') || "Tan olinmagan xarajat foyda solig'i bazasidan chiqarilmaydi."}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className={`h-7 px-3 rounded-full text-xs font-medium ${
+                    newClaim.is_recognized
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                      : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                  }`}
+                  onClick={() => setNewClaim({ ...newClaim, is_recognized: !newClaim.is_recognized })}
+                >
+                  {newClaim.is_recognized ? (t('recognized_short') || 'HA') : (t('unrecognized_short') || "YO'Q")}
+                </Button>
               </div>
 
               <div className="flex gap-3 pt-4">
@@ -732,6 +828,33 @@ export default function Expenses() {
                     value={editClaim.description || ''}
                     onChange={(e) => setEditClaim({...editClaim, description: e.target.value})}
                   />
+                </div>
+
+                {/* Same recognition toggle as the create modal — reusing
+                    the same component-level semantics so a row can be
+                    re-classified without having to use the table pill. */}
+                <div className="flex items-center justify-between rounded-md border p-3">
+                  <div className="text-sm">
+                    <p className="font-medium">{t('recognition') || 'Tan olinadi?'}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {t('recognition_help') || "Tan olinmagan xarajat foyda solig'i bazasidan chiqarilmaydi."}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className={`h-7 px-3 rounded-full text-xs font-medium ${
+                      editClaim.is_recognized !== false
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                        : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                    }`}
+                    onClick={() => setEditClaim({ ...editClaim, is_recognized: !(editClaim.is_recognized !== false) })}
+                  >
+                    {editClaim.is_recognized !== false
+                      ? (t('recognized_short') || 'HA')
+                      : (t('unrecognized_short') || "YO'Q")}
+                  </Button>
                 </div>
 
                 <div className="flex gap-3 pt-4">
