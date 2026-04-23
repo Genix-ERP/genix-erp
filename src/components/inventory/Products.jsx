@@ -1449,6 +1449,7 @@ export default function Products() {
                     <TableHead className="hidden lg:table-cell font-semibold text-slate-700 min-w-[100px] whitespace-nowrap">{t('category')}</TableHead>
                     <TableHead className="hidden md:table-cell font-semibold text-slate-700 text-right min-w-[80px] whitespace-nowrap">{t('cost')}</TableHead>
                     <TableHead className="font-semibold text-slate-700 text-right min-w-[80px] whitespace-nowrap">{t('price')}</TableHead>
+                    <TableHead className="hidden md:table-cell font-semibold text-slate-700 text-right min-w-[80px] whitespace-nowrap">{t('profit_margin')}</TableHead>
                     <TableHead className="font-semibold text-slate-700 text-right min-w-[80px] whitespace-nowrap">{t('stock')}</TableHead>
                     <TableHead className="hidden sm:table-cell font-semibold text-slate-700 min-w-[80px] whitespace-nowrap">{t('status')}</TableHead>
                     <TableHead className="font-semibold text-slate-700 text-center min-w-[100px] whitespace-nowrap">{t('actions')}</TableHead>
@@ -1508,6 +1509,27 @@ export default function Products() {
                         </TableCell>
                         <TableCell className="text-right font-semibold text-slate-900 tabular-nums">
                           {formatCurrency(product.list_price || 0)}
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell text-right tabular-nums">
+                          {(() => {
+                            const cost = Number(product.cost_price) || 0;
+                            const price = Number(product.list_price) || 0;
+                            if (cost <= 0 || price <= 0) {
+                              return <span className="text-slate-400">—</span>;
+                            }
+                            const pct = ((price - cost) / cost) * 100;
+                            const cls =
+                              pct > 0
+                                ? 'text-green-700 font-semibold'
+                                : pct < 0
+                                ? 'text-red-600 font-semibold'
+                                : 'text-slate-600';
+                            return (
+                              <span className={cls}>
+                                {pct.toFixed(1)}%
+                              </span>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell className="text-right">
                           {product.is_stockable ? (
