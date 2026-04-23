@@ -126,7 +126,7 @@ function LayoutContent({ children, currentPageName }) {
   const location = useLocation();
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { installedApps, isAppInstalled } = useInstalledApps();
+  const { isAppInstalled } = useInstalledApps();
   const [searchQuery, setSearchQuery] = React.useState("");
   const [isAIChatOpen, setIsAIChatOpen] = React.useState(false);
   const [isPhoneOpen, setIsPhoneOpen] = React.useState(false);
@@ -135,7 +135,7 @@ function LayoutContent({ children, currentPageName }) {
   const [notifDropdownOpen, setNotifDropdownOpen] = React.useState(false);
   const [recentNotifications, setRecentNotifications] = React.useState([]);
   const { user: currentUser, logout, isSiteAdmin, isOwner } = useAuth();
-  const { canAccessModule, isAdmin, isLoading: permissionsLoading } = useEmployeePermissions();
+  const { canAccessModule, isAdmin } = useEmployeePermissions();
 
   // Set browser title based on language
   React.useEffect(() => {

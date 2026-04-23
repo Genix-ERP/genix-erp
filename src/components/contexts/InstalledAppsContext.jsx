@@ -42,13 +42,14 @@ export function InstalledAppsProvider({ children }) {
     // Load from localStorage immediately (no blocking)
     const companyId = activeCompany?.id;
     const storageKey = getStorageKey(STORAGE_KEY, companyId);
+    let localApps = [];
     try {
       const stored = localStorage.getItem(storageKey);
       if (stored) {
         const apps = JSON.parse(stored);
-        const activeApps = (apps || []).filter(app => app.status === 'active');
-        if (activeApps.length > 0) {
-          setInstalledApps(activeApps);
+        localApps = (apps || []).filter(app => app.status === 'active');
+        if (localApps.length > 0) {
+          setInstalledApps(localApps);
           setIsLoading(false);
         }
       }
@@ -61,12 +62,22 @@ export function InstalledAppsProvider({ children }) {
 
       if (isAvailable) {
         const apps = await installedAppsService.getInstalledApps();
-        const activeApps = (apps || []).filter(app => app.status === 'active');
-        setInstalledApps(activeApps);
-        localStorage.setItem(storageKey, JSON.stringify(activeApps));
+        const backendApps = (apps || []).filter(app => app.status === 'active');
+
+        // Merge: backend is source of truth for apps it knows about,
+        // but preserve local-only apps (pending sync / offline installs).
+        // This prevents clobbering local installs when backend returns empty
+        // due to auth issues, empty tenant state, or partial outages.
+        const backendIds = new Set(backendApps.map(a => a.app_id));
+        const localOnly = localApps.filter(a => !backendIds.has(a.app_id) && a._localOnly);
+        const merged = [...backendApps, ...localOnly];
+
+        setInstalledApps(merged);
+        localStorage.setItem(storageKey, JSON.stringify(merged));
       }
     } catch (error) {
       console.error('Error loading installed apps from backend:', error);
+      // Keep whatever was loaded from localStorage; don't clear on network error.
     }
 
     setIsLoading(false);
