@@ -94,10 +94,13 @@ export default function WorkCenters() {
     const monthlySalary = parseFloat(newWorkCenter.operator_monthly_salary) || 0;
     const overhead = parseFloat(newWorkCenter.overhead_cost) || 0;
 
+    // Monthly salary → hourly. Uzbek work schedule: 27 working days/month
+    // (6-day weeks), workingHours per day from the work center config.
+    const monthlyHours = workingHours * 27;
     const depreciation = assetValue > 0 && usefulLife > 0 ? assetValue / usefulLife / annualHours : 0;
     const electricity = powerKw * elecRate;
     const maintenance = annualMaint > 0 ? annualMaint / annualHours : 0;
-    const labor = monthlySalary > 0 ? monthlySalary / 176 : 0;
+    const labor = monthlySalary > 0 && monthlyHours > 0 ? monthlySalary / monthlyHours : 0;
     const total = depreciation + electricity + maintenance + labor + overhead;
 
     return { depreciation, electricity, maintenance, labor, overhead, total };
@@ -626,7 +629,7 @@ export default function WorkCenters() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <LabelWithHelp htmlFor="wc_operator_salary" label="Operator ish haqi (so'm/oy)" helpText="Operator oylik ish haqi" />
+                  <LabelWithHelp htmlFor="wc_operator_salary" label="Operator ish haqi (so'm/oy)" helpText="Operator oylik ish haqi. Soatlik tarifga oyiga 27 ish kuni × kunlik ish soatlari orqali aylantiriladi." />
                   <Input
                     id="wc_operator_salary"
                     type="number"
@@ -950,7 +953,7 @@ export default function WorkCenters() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <LabelWithHelp htmlFor="edit_wc_operator_salary" label="Operator ish haqi (so'm/oy)" helpText="Operator oylik ish haqi" />
+                  <LabelWithHelp htmlFor="edit_wc_operator_salary" label="Operator ish haqi (so'm/oy)" helpText="Operator oylik ish haqi. Soatlik tarifga oyiga 27 ish kuni × kunlik ish soatlari orqali aylantiriladi." />
                   <Input
                     id="edit_wc_operator_salary"
                     type="number"
@@ -1226,10 +1229,12 @@ export default function WorkCenters() {
                 const monthlySalary = parseFloat(wc.operator_monthly_salary) || 0;
                 const overhead = parseFloat(wc.overhead_cost) || 0;
 
+                // 27 working days/month × configured hours per day.
+                const monthlyHours = workingHours * 27;
                 const depreciation = assetValue > 0 && usefulLife > 0 ? assetValue / usefulLife / annualHours : 0;
                 const electricity = powerKw * elecRate;
                 const maintenance = annualMaint > 0 ? annualMaint / annualHours : 0;
-                const labor = monthlySalary > 0 ? monthlySalary / 176 : 0;
+                const labor = monthlySalary > 0 && monthlyHours > 0 ? monthlySalary / monthlyHours : 0;
                 const total = depreciation + electricity + maintenance + labor + overhead;
 
                 if (total <= 0) return null;
