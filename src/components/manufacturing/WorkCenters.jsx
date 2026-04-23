@@ -82,6 +82,32 @@ export default function WorkCenters() {
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState([]);
   const [employeeSearch, setEmployeeSearch] = useState('');
 
+  // Compute the effective hourly cost for a work center. If the stored
+  // hourly_cost is 0 but breakdown components are populated, return the sum
+  // of those components. This protects against records where hourly_cost
+  // was never persisted (e.g. older WCs edited to add breakdown fields
+  // before the backend was fixed to auto-overwrite on update).
+  const getEffectiveHourlyCost = (wc) => {
+    if (!wc) return 0;
+    const stored = parseFloat(wc.hourly_cost) || 0;
+    if (stored > 0) return stored;
+    const workingHours = parseFloat(wc.working_hours_per_day) || 8;
+    const annualHours = workingHours * 365;
+    const monthlyHours = workingHours * 27;
+    const assetValue = parseFloat(wc.asset_value) || 0;
+    const usefulLife = parseFloat(wc.useful_life_years) || 10;
+    const powerKw = parseFloat(wc.power_kw) || 0;
+    const elecRate = parseFloat(wc.electricity_rate) || 0;
+    const annualMaint = parseFloat(wc.annual_maintenance) || 0;
+    const monthlySalary = parseFloat(wc.operator_monthly_salary) || 0;
+    const overhead = parseFloat(wc.overhead_cost) || 0;
+    const depreciation = assetValue > 0 && usefulLife > 0 ? assetValue / usefulLife / annualHours : 0;
+    const electricity = powerKw * elecRate;
+    const maintenance = annualMaint > 0 ? annualMaint / annualHours : 0;
+    const labor = monthlySalary > 0 && monthlyHours > 0 ? monthlySalary / monthlyHours : 0;
+    return depreciation + electricity + maintenance + labor + overhead;
+  };
+
   // Auto-calculate cost breakdown from detailed inputs
   const calculatedCosts = useMemo(() => {
     const workingHours = parseFloat(newWorkCenter.working_hours_per_day) || 8;
@@ -395,7 +421,7 @@ export default function WorkCenters() {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-600">{t('hourly_cost')}:</span>
-                      <span className="font-semibold">{formatCurrency(wc.hourly_cost || 0)}</span>
+                      <span className="font-semibold">{formatCurrency(getEffectiveHourlyCost(wc))}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-600">{t('working_hours_per_day')}:</span>
@@ -1208,7 +1234,7 @@ export default function WorkCenters() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-3 bg-amber-50 rounded-lg text-center">
                   <p className="text-xs text-amber-600 font-medium">{t('hourly_cost')}</p>
-                  <p className="text-lg font-bold text-amber-900">{formatCurrency(selectedWorkCenter.hourly_cost || 0)}</p>
+                  <p className="text-lg font-bold text-amber-900">{formatCurrency(getEffectiveHourlyCost(selectedWorkCenter))}</p>
                 </div>
                 <div className="p-3 bg-slate-50 rounded-lg text-center">
                   <p className="text-xs text-slate-600 font-medium">{t('working_hours_per_day')}</p>
