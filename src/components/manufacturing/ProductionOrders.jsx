@@ -714,7 +714,7 @@ export default function ProductionOrders() {
               <div>
                 <label className="text-sm font-medium mb-1 block">{t('product') || 'Product'} *</label>
                 <ProductCombobox
-                  products={products.filter(p => p.id)}
+                  products={products.filter(p => p.id && (p.can_be_sold || p.is_sellable))}
                   value={newOrder.product_id}
                   onValueChange={(value, productFromCombobox) => {
                     const product =
