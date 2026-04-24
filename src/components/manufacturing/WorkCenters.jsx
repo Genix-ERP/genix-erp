@@ -82,6 +82,22 @@ export default function WorkCenters() {
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState([]);
   const [employeeSearch, setEmployeeSearch] = useState('');
 
+  // Format a numeric string with spaces as thousand separators for display
+  // in text inputs (e.g. 240000000 -> "240 000 000"). Preserves trailing
+  // decimal points and digits so the user can keep typing "12.5" etc.
+  const formatThousands = (val) => {
+    if (val === '' || val === null || val === undefined) return '';
+    const raw = String(val).replace(/[^\d.]/g, '');
+    if (!raw) return '';
+    const [intPart, ...decParts] = raw.split('.');
+    const formattedInt = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    // Keep the user's decimal part verbatim (incl. a trailing ".")
+    return decParts.length > 0 ? `${formattedInt}.${decParts.join('')}` : formattedInt;
+  };
+  // Strip display separators before storing so the stored value is a
+  // valid numeric string that parseFloat/backend can consume.
+  const stripThousands = (val) => String(val ?? '').replace(/\s/g, '');
+
   // Compute the effective hourly cost for a work center. If the stored
   // hourly_cost is 0 but breakdown components are populated, return the sum
   // of those components. This protects against records where hourly_cost
@@ -612,10 +628,11 @@ export default function WorkCenters() {
                   <LabelWithHelp htmlFor="wc_asset_value" label="Stanok narxi" helpText="Uskunaning umumiy narxi (sotib olish qiymati)" />
                   <Input
                     id="wc_asset_value"
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     placeholder="0"
-                    value={newWorkCenter.asset_value}
-                    onChange={(e) => setNewWorkCenter({...newWorkCenter, asset_value: e.target.value})}
+                    value={formatThousands(newWorkCenter.asset_value)}
+                    onChange={(e) => setNewWorkCenter({...newWorkCenter, asset_value: stripThousands(e.target.value)})}
                   />
                 </div>
                 <div className="space-y-2">
@@ -644,10 +661,11 @@ export default function WorkCenters() {
                   <LabelWithHelp htmlFor="wc_elec_rate" label="Elektr narxi (so'm/kVt)" helpText="1 kVt soat elektr energiyasi narxi" />
                   <Input
                     id="wc_elec_rate"
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     placeholder="0"
-                    value={newWorkCenter.electricity_rate}
-                    onChange={(e) => setNewWorkCenter({...newWorkCenter, electricity_rate: e.target.value})}
+                    value={formatThousands(newWorkCenter.electricity_rate)}
+                    onChange={(e) => setNewWorkCenter({...newWorkCenter, electricity_rate: stripThousands(e.target.value)})}
                   />
                 </div>
               </div>
@@ -656,20 +674,22 @@ export default function WorkCenters() {
                   <LabelWithHelp htmlFor="wc_annual_maint" label="Yillik ta'mirlash" helpText="Yillik ta'mirlash va texnik xizmat xarajatlari" />
                   <Input
                     id="wc_annual_maint"
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     placeholder="0"
-                    value={newWorkCenter.annual_maintenance}
-                    onChange={(e) => setNewWorkCenter({...newWorkCenter, annual_maintenance: e.target.value})}
+                    value={formatThousands(newWorkCenter.annual_maintenance)}
+                    onChange={(e) => setNewWorkCenter({...newWorkCenter, annual_maintenance: stripThousands(e.target.value)})}
                   />
                 </div>
                 <div className="space-y-2">
                   <LabelWithHelp htmlFor="wc_operator_salary" label="Operator ish haqi (so'm/oy)" helpText="Operator oylik ish haqi. Soatlik tarifga oyiga 27 ish kuni × kunlik ish soatlari orqali aylantiriladi." />
                   <Input
                     id="wc_operator_salary"
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     placeholder="0"
-                    value={newWorkCenter.operator_monthly_salary}
-                    onChange={(e) => setNewWorkCenter({...newWorkCenter, operator_monthly_salary: e.target.value})}
+                    value={formatThousands(newWorkCenter.operator_monthly_salary)}
+                    onChange={(e) => setNewWorkCenter({...newWorkCenter, operator_monthly_salary: stripThousands(e.target.value)})}
                   />
                 </div>
               </div>
@@ -940,10 +960,11 @@ export default function WorkCenters() {
                   <LabelWithHelp htmlFor="edit_wc_asset_value" label="Stanok narxi" helpText="Uskunaning umumiy narxi (sotib olish qiymati)" />
                   <Input
                     id="edit_wc_asset_value"
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     placeholder="0"
-                    value={newWorkCenter.asset_value}
-                    onChange={(e) => setNewWorkCenter({...newWorkCenter, asset_value: e.target.value})}
+                    value={formatThousands(newWorkCenter.asset_value)}
+                    onChange={(e) => setNewWorkCenter({...newWorkCenter, asset_value: stripThousands(e.target.value)})}
                   />
                 </div>
                 <div className="space-y-2">
@@ -972,10 +993,11 @@ export default function WorkCenters() {
                   <LabelWithHelp htmlFor="edit_wc_elec_rate" label="Elektr narxi (so'm/kVt)" helpText="1 kVt soat elektr energiyasi narxi" />
                   <Input
                     id="edit_wc_elec_rate"
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     placeholder="0"
-                    value={newWorkCenter.electricity_rate}
-                    onChange={(e) => setNewWorkCenter({...newWorkCenter, electricity_rate: e.target.value})}
+                    value={formatThousands(newWorkCenter.electricity_rate)}
+                    onChange={(e) => setNewWorkCenter({...newWorkCenter, electricity_rate: stripThousands(e.target.value)})}
                   />
                 </div>
               </div>
@@ -984,20 +1006,22 @@ export default function WorkCenters() {
                   <LabelWithHelp htmlFor="edit_wc_annual_maint" label="Yillik ta'mirlash" helpText="Yillik ta'mirlash va texnik xizmat xarajatlari" />
                   <Input
                     id="edit_wc_annual_maint"
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     placeholder="0"
-                    value={newWorkCenter.annual_maintenance}
-                    onChange={(e) => setNewWorkCenter({...newWorkCenter, annual_maintenance: e.target.value})}
+                    value={formatThousands(newWorkCenter.annual_maintenance)}
+                    onChange={(e) => setNewWorkCenter({...newWorkCenter, annual_maintenance: stripThousands(e.target.value)})}
                   />
                 </div>
                 <div className="space-y-2">
                   <LabelWithHelp htmlFor="edit_wc_operator_salary" label="Operator ish haqi (so'm/oy)" helpText="Operator oylik ish haqi. Soatlik tarifga oyiga 27 ish kuni × kunlik ish soatlari orqali aylantiriladi." />
                   <Input
                     id="edit_wc_operator_salary"
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     placeholder="0"
-                    value={newWorkCenter.operator_monthly_salary}
-                    onChange={(e) => setNewWorkCenter({...newWorkCenter, operator_monthly_salary: e.target.value})}
+                    value={formatThousands(newWorkCenter.operator_monthly_salary)}
+                    onChange={(e) => setNewWorkCenter({...newWorkCenter, operator_monthly_salary: stripThousands(e.target.value)})}
                   />
                 </div>
               </div>
