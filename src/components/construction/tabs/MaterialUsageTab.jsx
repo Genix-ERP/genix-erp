@@ -13,6 +13,7 @@ import { Plus, Edit, Trash2, Package, BarChart3, ChevronLeft, ChevronRight } fro
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { sortBuildings } from '@/utils/naturalSort';
 import { toast } from 'sonner';
 
 const SUMMARY_STATUS_COLORS = {
@@ -76,7 +77,8 @@ const MaterialUsageTab = ({ project }) => {
       ]);
       setUsageRecords(usageData || []);
       setWbsList(wbsData || []);
-      setBuildings(buildingData || []);
+      // Natural-sort ("block 1 / block 2 / block 10" order).
+      setBuildings(sortBuildings(buildingData || []));
     } catch (e) {
       console.error('Failed to load material usage:', e);
     } finally {

@@ -7,6 +7,7 @@ import { Progress } from '@/components/ui/progress';
 import { BarChart3, Table2, TrendingUp, CheckCircle, AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { naturalCompare } from '@/utils/naturalSort';
 import { toast } from 'sonner';
 import {
   BarChart,
@@ -215,14 +216,20 @@ const ProgressTab = ({ project }) => {
       );
     }
 
-    // Build an ordered, de-duplicated list of blocks found in the items.
+    // Build a de-duplicated list of blocks found in the items, then sort it
+    // naturally so "block 1 / block 2 / block 10" appear in that order
+    // regardless of insertion/API order (the previous implementation kept
+    // whatever order the backend returned, which surfaced as "block 2" then
+    // "block 1" on the Jarayon tab).
     const blockTabs = (() => {
       const seen = new Map();
       for (const it of items) {
         const key = it.building_name;
         if (!seen.has(key)) seen.set(key, key);
       }
-      return Array.from(seen.entries()).map(([key, label]) => ({ key, label }));
+      return Array.from(seen.entries())
+        .map(([key, label]) => ({ key, label }))
+        .sort((a, b) => naturalCompare(a.label, b.label));
     })();
 
     const filteredItems = items.filter(

@@ -976,6 +976,14 @@ export const constructionService = {
     return response.data;
   },
   async deleteF2(projectId, f2Id) {
+    // Defensive: reject malformed calls client-side. Dropping `f2Id` used
+    // to produce `/construction/acts/undefined` 400s on the backend; we
+    // now fail fast so the caller's bug is obvious. `projectId` is kept in
+    // the signature for parity with `deleteF19` but not used in the URL
+    // because the Forma 2 delete endpoint is project-agnostic.
+    if (f2Id === undefined || f2Id === null || f2Id === '') {
+      throw new Error('deleteF2: f2Id is required');
+    }
     const response = await apiClient.delete(`/construction/acts/${f2Id}`);
     return response.data.data;
   },
@@ -1042,6 +1050,14 @@ export const constructionService = {
     return response.data.data;
   },
   async deleteF19(projectId, actId) {
+    // Defensive: both args must be present. A missing actId used to produce
+    // URLs like `/construction/projects/1/f19/undefined` and return 400.
+    if (projectId === undefined || projectId === null || projectId === '') {
+      throw new Error('deleteF19: projectId is required');
+    }
+    if (actId === undefined || actId === null || actId === '') {
+      throw new Error('deleteF19: actId is required');
+    }
     const response = await apiClient.delete(`/construction/projects/${projectId}/f19/${actId}`);
     return response.data.data;
   },

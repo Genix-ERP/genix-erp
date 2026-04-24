@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { sortBuildings } from '@/utils/naturalSort';
 
 const getRowColor = (pct) => {
   if (pct <= 0) return '';
@@ -43,7 +44,9 @@ const BudgetTab = ({ project }) => {
     let cancelled = false;
     constructionService
       .listBuildings(project.id)
-      .then((rows) => { if (!cancelled) setBuildings(Array.isArray(rows) ? rows : []); })
+      // Natural-sort (block 1 / block 2 / block 10 order) — backend ORDER BY
+      // defaults to sort_order → code, which doesn't respect numeric suffixes.
+      .then((rows) => { if (!cancelled) setBuildings(sortBuildings(Array.isArray(rows) ? rows : [])); })
       .catch(() => { if (!cancelled) setBuildings([]); });
     return () => { cancelled = true; };
   }, [project?.id]);

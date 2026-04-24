@@ -15,6 +15,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Plus, Trash2, ChevronDown, ChevronRight, ChevronLeft, Package, Wrench, Edit, TrendingUp, TrendingDown, Minus, AlertTriangle, Download, Clock, Printer, ShieldCheck, Users, Truck } from 'lucide-react';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
+import { sortBuildings } from '@/utils/naturalSort';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { toast } from 'sonner';
@@ -141,7 +142,9 @@ const RejaFaktTab = ({ project }) => {
     if (!project?.id) return;
     let cancelled = false;
     constructionService.listBuildings(project.id)
-      .then((rows) => { if (!cancelled) setBuildings(Array.isArray(rows) ? rows : []); })
+      // Natural-sort so the block tab row renders "block 1 / block 2 /
+      // block 10" instead of the raw backend order.
+      .then((rows) => { if (!cancelled) setBuildings(sortBuildings(Array.isArray(rows) ? rows : [])); })
       .catch(() => { if (!cancelled) setBuildings([]); });
     return () => { cancelled = true; };
   }, [project?.id]);
