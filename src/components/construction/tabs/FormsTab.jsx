@@ -14,6 +14,7 @@ import { Plus, Trash2, CheckCircle, XCircle, ArrowLeft, FileText, Zap, Eye, Down
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { sortBuildings } from '@/utils/naturalSort';
 import { toast } from 'sonner';
 
 const TYPE_COLORS = {
@@ -230,7 +231,8 @@ const FormsTab = ({ project }) => {
       setActs([...(f2s || []), ...(f3s || []), ...(f19s || [])]);
       setSubcontracts(subData || []);
       setStages(stagesData || []);
-      setBuildings(buildingsData || []);
+      // Natural-sort ("block 1 / block 2 / block 10" order).
+      setBuildings(sortBuildings(buildingsData || []));
     } catch (e) {
       console.error('Failed to load forms:', e);
     } finally {
@@ -752,11 +754,24 @@ const FormsTab = ({ project }) => {
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
+    // Guard against a malformed deleteTarget: without a numeric id the
+    // service helpers would build URLs like `/construction/acts/undefined`
+    // and the backend would return 400. Fail loudly in the UI instead so
+    // a regression (e.g., a caller not wired to `id`) surfaces immediately.
+    if (deleteTarget.id == null) {
+      toast.error(t('error_occurred') || "Xatolik yuz berdi");
+      setDeleteTarget(null);
+      return;
+    }
     try {
+      // `deleteF2(projectId, f2Id)` and `deleteF19(projectId, actId)` both
+      // require the project id as their first argument. Passing only one
+      // argument was the source of the DELETE /construction/acts/undefined
+      // 400s seen in the backend logs.
       if (deleteTarget.act_type === 'ks2') {
-        await constructionService.deleteF2(deleteTarget.id);
+        await constructionService.deleteF2(project?.id, deleteTarget.id);
       } else if (deleteTarget.act_type === 'hidden_work') {
-        await constructionService.deleteF19(deleteTarget.id);
+        await constructionService.deleteF19(project?.id, deleteTarget.id);
       }
       setDeleteTarget(null);
       if (selectedAct?.id === deleteTarget.id) setSelectedAct(null);

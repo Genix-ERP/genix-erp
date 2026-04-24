@@ -17,6 +17,7 @@ import { Plus, Edit, Trash2, Layers, X, ChevronDown, ChevronsUpDown, Check, Chev
 import { cn } from '@/lib/utils';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
+import { sortBuildings } from '@/utils/naturalSort';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useAuth } from '@/components/contexts/AuthContext';
@@ -274,7 +275,10 @@ const StagesTab = ({ project }) => {
     let cancelled = false;
     constructionService
       .listBuildings(project.id)
-      .then((rows) => { if (!cancelled) setBuildings(Array.isArray(rows) ? rows : []); })
+      // Natural-sort by display name so "block 1 / block 2 / block 10"
+      // always appear in that order, not by the backend's sort_order → code
+      // default which can surface them as "block 2 / block 1 / block 3".
+      .then((rows) => { if (!cancelled) setBuildings(sortBuildings(Array.isArray(rows) ? rows : [])); })
       .catch(() => { if (!cancelled) setBuildings([]); });
     return () => { cancelled = true; };
   }, [project?.id]);
