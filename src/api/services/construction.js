@@ -284,6 +284,57 @@ export const constructionService = {
     return response.data.data;
   },
 
+  // Resource prices — backs the Smeta boshqaruvi → Resurslar tab.
+  // Wraps the bulk-edit + history endpoints introduced by migration 348.
+  // `estimateId` is optional. When supplied, the catalog is scoped to the
+  // resources used by that one estimate so the Resurslar tab stays in sync
+  // with the estimate selector at the top of the page. Without it, the
+  // response covers every estimate in the project (mockup-faithful behaviour).
+  async listResourcePrices(projectId, { type, estimateId } = {}) {
+    const params = {};
+    if (type) params.type = type;
+    if (estimateId) params.estimate_id = estimateId;
+    const response = await apiClient.get(`/construction/projects/${projectId}/resource-prices`, { params });
+    return response.data.data || [];
+  },
+  async bulkUpdateResourcePrice(projectId, payload) {
+    // payload: { resource_name, uom, resource_type, new_price, note? }
+    const response = await apiClient.post(`/construction/projects/${projectId}/resource-prices/bulk-update`, payload);
+    return response.data.data;
+  },
+  async bulkUpdateResourceMaterialType(projectId, payload) {
+    // payload: { resource_name, uom, material_type }
+    const response = await apiClient.post(`/construction/projects/${projectId}/resource-prices/material-type`, payload);
+    return response.data.data;
+  },
+  async getResourcePriceHistory(projectId, { name, uom } = {}) {
+    const params = { name };
+    if (uom) params.uom = uom;
+    const response = await apiClient.get(`/construction/projects/${projectId}/resource-prices/history`, { params });
+    return response.data.data || [];
+  },
+  // Reset endpoints (migration 349 anchors).
+  // Per-resource: revert unit_rate to original_unit_rate for every matching line.
+  async resetResourcePrice(projectId, payload) {
+    // payload: { resource_name, uom }
+    const response = await apiClient.post(`/construction/projects/${projectId}/resource-prices/reset`, payload);
+    return response.data.data;
+  },
+  // Project-wide: revert every line's price to its original anchor.
+  async resetAllResourcePrices(projectId) {
+    const response = await apiClient.post(`/construction/projects/${projectId}/resource-prices/reset-all`, {});
+    return response.data.data;
+  },
+  // Per-line: revert one work's quantity to original_quantity. The handler
+  // also re-derives any non-override sub-line quantities downstream.
+  async resetLineQuantity(estimateId, lineId) {
+    const response = await apiClient.post(
+      `/construction/estimates/${estimateId}/lines/${lineId}/reset-quantity`,
+      {},
+    );
+    return response.data.data;
+  },
+
   // =====================================================
   // PROJECT VENDORS (Future)
   // =====================================================

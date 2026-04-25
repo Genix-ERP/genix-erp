@@ -731,55 +731,10 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                             <Badge className={`text-xs ${getStateColor(est.state)}`}>
                               {getStateLabel(est.state)}
                             </Badge>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-                                  <MoreHorizontal className="w-4 h-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                                {est.state === 'draft' && (
-                                  <DropdownMenuItem onClick={() => handleEditEstimate(est)}>
-                                    <Edit className="w-4 h-4 mr-2 text-blue-600" />
-                                    {t('edit_estimate') || 'Tahrirlash'}
-                                  </DropdownMenuItem>
-                                )}
-                                {est.state === 'draft' && (
-                                  <DropdownMenuItem onClick={() => handleApprove(est)}>
-                                    <CheckCircle className="w-4 h-4 mr-2 text-green-600" />
-                                    {t('approve') || 'Tasdiqlash'}
-                                  </DropdownMenuItem>
-                                )}
-                                {est.source_type === 'resurs' && (
-                                  <DropdownMenuItem onClick={async () => {
-                                    try {
-                                      const result = await constructionService.createProductsFromEstimate(est.id);
-                                      if (result?.products_created > 0) {
-                                        toast.success(`${result.products_created} ${t('products_created_success') || "ta mahsulot yaratildi"}`);
-                                      } else {
-                                        toast.info(t('all_products_already_exist') || "Barcha mahsulotlar allaqachon mavjud");
-                                      }
-                                    } catch (err) {
-                                      console.error(err);
-                                      toast.error(t('error_occurred') || 'Xatolik yuz berdi');
-                                    }
-                                  }}>
-                                    <Package className="w-4 h-4 mr-2 text-green-600" />
-                                    {t('create_products') || "Mahsulotlar yaratish"}
-                                  </DropdownMenuItem>
-                                )}
-                                <DropdownMenuItem onClick={() => handleDuplicate(est)}>
-                                  <Copy className="w-4 h-4 mr-2" />
-                                  {t('duplicate') || 'Nusxalash'}
-                                </DropdownMenuItem>
-                                {est.state === 'draft' && (
-                                  <DropdownMenuItem onClick={() => handleDeleteEstimate(est)} className="text-red-600">
-                                    <Trash2 className="w-4 h-4 mr-2" />
-                                    {t('delete') || "O'chirish"}
-                                  </DropdownMenuItem>
-                                )}
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                            {/* Per-estimate "..." kebab menu (Tahrirlash / Tasdiqlash /
+                               Nusxalash / O'chirish / Mahsulotlar yaratish) removed —
+                               those operations now live in the Smeta boshqaruvi tab so
+                               this Smetalar list stays a read-only summary. */}
                           </div>
                         </div>
                         <div className="flex items-center justify-between ml-6">
@@ -792,19 +747,9 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                       {isExpanded && (
                         <div className="border-t border-blue-200 bg-slate-50/70">
                           {/* Add line button */}
-                          {est.state === 'draft' && (
-                            <div className="px-4 py-2 flex justify-end border-b border-slate-200">
-                              <Button size="sm" variant="outline" onClick={() => {
-                                const currentLines = estimateLines[est.id] || [];
-                                setLineForm({ id: null, estimate_id: est.id, product_id: '', name: '', uom: '', quantity: '', material_rate: '', labor_rate: '', equipment_rate: '', sort_order: String(currentLines.length) });
-                                setAddLines([{ product_id: '', quantity: '' }]);
-                                setShowLineModal(true);
-                              }}>
-                                <Plus className="w-4 h-4 mr-1" />
-                                {t('add_line') || "Qator qo'shish"}
-                              </Button>
-                            </div>
-                          )}
+                          {/* "Qator qo'shish" toolbar removed — line creation lives in the
+                             new Smeta boshqaruvi tab via the Yangi etap / Qo'shimcha resurs
+                             flow, so this Smetalar table stays a read-only overview. */}
 
                           {isLoadingLines ? (
                             <div className="text-center py-6 text-slate-500 text-sm">{t('loading') || 'Yuklanmoqda...'}</div>
@@ -860,7 +805,9 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                         <th className="text-right py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">{t('unit_rate') || 'Birlik narxi'}</th>
                                         <th className="text-right py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">{t('total') || 'Jami'}</th>
                                       </>}
-                                      {est.state === 'draft' && <th className="whitespace-nowrap"></th>}
+                                      {/* Inline +/edit/trash row actions removed — line editing is
+                                         now done from the dedicated Smeta boshqaruvi tab so this
+                                         table stays a read-only summary. */}
                                     </tr>
                                   </thead>
                                   <tbody>
@@ -954,40 +901,8 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                               <td className="py-2 px-2 text-right text-xs font-medium whitespace-nowrap">{formatCurrency(line.unit_rate)}</td>
                                               <td className="py-2 px-2 text-right text-xs font-medium whitespace-nowrap">{formatCurrency(line.total_amount)}</td>
                                             </>}
-                                            {est.state === 'draft' && (
-                                              <td className="py-2 px-2 text-center">
-                                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 justify-end">
-                                                  {!isSubline && (
-                                                    <Button
-                                                      variant="ghost" size="sm"
-                                                      className="h-6 w-6 p-0"
-                                                      title={t('add_subline') || "Podkator qo'shish"}
-                                                      onClick={() => {
-                                                        const children = byParent.get(line.id) || [];
-                                                        const nextSeq = children.reduce((mx, c) => Math.max(mx, Number(c.subline_seq) || 0), 0) + 1;
-                                                        setSublineDialog({ open: true, parent: line, estimateId: est.id, nextSeq, initial: null });
-                                                      }}
-                                                    >
-                                                      <Plus className="w-3 h-3" />
-                                                    </Button>
-                                                  )}
-                                                  <Button
-                                                    variant="ghost" size="sm"
-                                                    className="h-6 w-6 p-0"
-                                                    onClick={() => setEditLineDialog({ open: true, line, parent: parent || null, estimateId: est.id })}
-                                                  >
-                                                    <Edit className="w-3 h-3" />
-                                                  </Button>
-                                                  <Button
-                                                    variant="ghost" size="sm"
-                                                    className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
-                                                    onClick={() => handleDeleteLine(est.id, line.id)}
-                                                  >
-                                                    <Trash2 className="w-3 h-3" />
-                                                  </Button>
-                                                </div>
-                                              </td>
-                                            )}
+                                            {/* Per-row +/edit/trash actions removed — Smeta boshqaruvi tab
+                                               is the single editing surface for estimate lines. */}
                                           </tr>
                                         );
                                       };

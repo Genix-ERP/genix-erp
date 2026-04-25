@@ -917,7 +917,10 @@ export default function SalesOrders() {
     setDiscountCodeInput('');
     setDiscountValidation({ valid: false, message: '' });
     setIsDeliveryDateManual(false);
-    setIntercompanyProjects([]);
+    // The state is named `allIntercompanyProjects`; an earlier rename missed
+    // this reset call, which threw `setIntercompanyProjects is not defined`
+    // whenever the new-order dialog closed.
+    setAllIntercompanyProjects([]);
   };
 
   // Helper: check stock for order lines, returns { issues, inStock, outOfStock }
