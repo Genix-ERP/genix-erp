@@ -1,5 +1,6 @@
 import React from 'react';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Building2,
   DollarSign,
@@ -89,19 +90,28 @@ export function StatsCard({ title, value, subtitle, icon: Icon, trend }) {
 // ─────────────────────────────────────────────
 // Progress Widget — clean, neutral, no gradient
 // ─────────────────────────────────────────────
-export function ProgressWidget({ project }) {
+// Project status options shown in the inline ProgressWidget dropdown.
+// Mirrors the values the project filter / edit form already accept so the
+// statuses stay consistent across every place users can read/write them.
+const PROJECT_STATUSES = [
+  { value: 'draft',       tkey: 'draft',       fallback: 'Qoralama',       cls: 'bg-slate-100 text-slate-700' },
+  { value: 'planning',    tkey: 'planning',    fallback: 'Rejalashtirish', cls: 'bg-violet-100 text-violet-700' },
+  { value: 'in_progress', tkey: 'in_progress', fallback: 'Jarayonda',      cls: 'bg-amber-100 text-amber-700' },
+  { value: 'on_hold',     tkey: 'on_hold',     fallback: "To'xtatilgan",   cls: 'bg-orange-100 text-orange-700' },
+  { value: 'completed',   tkey: 'completed',   fallback: 'Tugallangan',    cls: 'bg-emerald-100 text-emerald-700' },
+];
+
+export function ProgressWidget({ project, onStatusChange }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const progress = Math.max(0, Math.min(100, Number(project.progress_percent) || 0));
 
-  const getStatusLabel = () => {
-    if (progress === 0) return t('not_started_label') || 'Boshlanmagan';
-    if (progress < 25) return t('initial') || 'Dastlabki';
-    if (progress < 50) return t('developing') || 'Rivojlanmoqda';
-    if (progress < 75) return t('active') || 'Faol';
-    if (progress < 100) return t('finishing') || 'Yakunlanmoqda';
-    return t('completed') || 'Tugallangan';
-  };
+  // Resolve current status — fall back to first option (draft) so the
+  // Select always has a defined value and the trigger never goes blank.
+  const currentStatus = project.status && PROJECT_STATUSES.some((s) => s.value === project.status)
+    ? project.status
+    : PROJECT_STATUSES[0].value;
+  const currentMeta = PROJECT_STATUSES.find((s) => s.value === currentStatus) || PROJECT_STATUSES[0];
 
   const barColor =
     progress >= 100
@@ -114,13 +124,42 @@ export function ProgressWidget({ project }) {
 
   return (
     <Panel className="p-5 h-full">
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex items-center justify-between mb-5 gap-2">
         <h3 className="text-sm font-semibold text-slate-900">
           {t('overall_progress') || 'Umumiy bajarilish'}
         </h3>
-        <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
-          {getStatusLabel()}
-        </span>
+        {/* Inline status dropdown — replaces the previous progress-derived
+           label so users can move the project across lifecycle states
+           (draft → planning → in_progress → on_hold → completed) directly
+           from the overview. The trigger pill picks up the matching status
+           color so it still reads at a glance. */}
+        {onStatusChange ? (
+          <Select value={currentStatus} onValueChange={(v) => onStatusChange(v)}>
+            <SelectTrigger
+              className={cn(
+                'h-7 w-auto min-w-[140px] gap-1.5 px-2.5 py-0.5 rounded-md border-0 text-xs font-medium',
+                currentMeta.cls,
+              )}
+              aria-label={t('status') || 'Holat'}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PROJECT_STATUSES.map((s) => (
+                <SelectItem key={s.value} value={s.value} className="text-xs">
+                  {t(s.tkey) || s.fallback}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          // Read-only fallback when no change handler is supplied (keeps
+          // the widget usable on summary screens where editing isn't
+          // appropriate).
+          <span className={cn('inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium', currentMeta.cls)}>
+            {t(currentMeta.tkey) || currentMeta.fallback}
+          </span>
+        )}
       </div>
 
       <div className="mb-6">
