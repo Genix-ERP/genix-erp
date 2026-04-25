@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { sortBuildings } from '@/utils/naturalSort';
+import { formatApiError } from '@/utils/apiErrors';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useAuth } from '@/components/contexts/AuthContext';
@@ -152,15 +153,28 @@ const StagesTab = ({ project }) => {
     ) || null;
   };
 
-  // Approve / Reject handlers
+  // Approve / Reject handlers.
+  //
+  // Errors go through `formatApiError(err, t, fallback)` which:
+  //   * Unwraps both the legacy {error: "string"} shape and the structured
+  //     {error: {code, message, details}} shape so Sonner never tries to
+  //     render an object (the root cause of the "Objects are not valid as a
+  //     React child" crash we saw before).
+  //   * Looks up known codes (e.g. INSUFFICIENT_STOCK) in a tiny registry and
+  //     interpolates the localised template against `details`, so the toast
+  //     reads "Omborda yetarli emas. Mavjud: 151, So'ralgan: 200" in Uzbek
+  //     instead of the raw English "Insufficient stock. Available: 151.00…".
   const handleApproveReservation = async (reservationId) => {
     try {
       await inventoryService.approveReservation(reservationId);
       toast.success(language === 'ru' ? 'Материал одобрен' : language === 'en' ? 'Material approved' : 'Material tasdiqlandi');
       await loadReservations();
     } catch (e) {
-      const msg = e?.response?.data?.error || e?.response?.data?.message || (language === 'ru' ? 'Ошибка при одобрении' : language === 'en' ? 'Approval error' : 'Tasdiqlashda xatolik');
-      toast.error(msg);
+      toast.error(formatApiError(
+        e,
+        t,
+        language === 'ru' ? 'Ошибка при одобрении' : language === 'en' ? 'Approval error' : 'Tasdiqlashda xatolik',
+      ));
     }
   };
 
@@ -170,8 +184,11 @@ const StagesTab = ({ project }) => {
       toast.success(language === 'ru' ? 'Материал отклонён' : language === 'en' ? 'Material rejected' : 'Material rad etildi');
       await loadReservations();
     } catch (e) {
-      const msg = e?.response?.data?.error || e?.response?.data?.message || (language === 'ru' ? 'Ошибка при отклонении' : language === 'en' ? 'Rejection error' : 'Rad etishda xatolik');
-      toast.error(msg);
+      toast.error(formatApiError(
+        e,
+        t,
+        language === 'ru' ? 'Ошибка при отклонении' : language === 'en' ? 'Rejection error' : 'Rad etishda xatolik',
+      ));
     }
   };
 

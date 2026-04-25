@@ -13,6 +13,7 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { companyTaxRatesService } from "@/api/services/companyTaxRates";
 import { financeService } from "@/api/services/finance";
+import { formatApiError } from "@/utils/apiErrors";
 
 // CompanyTaxRates — admin settings component for activity-level taxes
 // (NDS / Profit / Turnover / Dividend / …). Complements the existing
@@ -63,7 +64,7 @@ export default function CompanyTaxRates() {
       const items = Array.isArray(acctList) ? acctList : (acctList?.data || acctList?.items || []);
       setAccounts(items);
     } catch (e) {
-      toast.error(e?.response?.data?.message || t('error_occurred') || 'Xatolik');
+      toast.error(formatApiError(e, t, t('error_occurred') || 'Xatolik'));
     } finally {
       setLoading(false);
     }
@@ -129,7 +130,7 @@ export default function CompanyTaxRates() {
       setForm(EMPTY_FORM);
       loadRates();
     } catch (e) {
-      toast.error(e?.response?.data?.message || t('error_occurred') || 'Xatolik');
+      toast.error(formatApiError(e, t, t('error_occurred') || 'Xatolik'));
     } finally {
       setSaving(false);
     }
@@ -143,7 +144,7 @@ export default function CompanyTaxRates() {
       setConfirmDelete(null);
       loadRates();
     } catch (e) {
-      toast.error(e?.response?.data?.message || t('error_occurred') || 'Xatolik');
+      toast.error(formatApiError(e, t, t('error_occurred') || 'Xatolik'));
     }
   };
 

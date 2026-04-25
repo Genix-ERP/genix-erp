@@ -209,3 +209,34 @@ button:focus-visible {
 .glow-purple {
   animation: glow-purple 3s ease-in-out infinite;
 }
+
+/* Smeta boshqaruvi modals — dark theme with forced widths.
+   Defined here in the global stylesheet so the rules win the cascade
+   over shadcn DialogContents default w-full max-w-lg. !important is
+   used because tailwind-merge does not deduplicate across breakpoint
+   prefixes, and inline style.maxWidth gets out-cascaded by class rules
+   under some conditions. */
+.smeta-add-stage-modal {
+  max-width: 620px !important;
+  width: calc(100vw - 32px) !important;
+}
+.smeta-add-resource-modal {
+  max-width: 760px !important;
+  width: calc(100vw - 32px) !important;
+}
+.smeta-history-modal {
+  max-width: 540px !important;
+  width: calc(100vw - 32px) !important;
+}
+/* Make the auto-injected Close (<X>) button visible on dark dialog bg. */
+.smeta-add-stage-modal > button.absolute,
+.smeta-add-resource-modal > button.absolute,
+.smeta-history-modal > button.absolute {
+  color: #cbd5e1 !important;
+  opacity: 1 !important;
+}
+.smeta-add-stage-modal > button.absolute:hover,
+.smeta-add-resource-modal > button.absolute:hover,
+.smeta-history-modal > button.absolute:hover {
+  color: #ffffff !important;
+}

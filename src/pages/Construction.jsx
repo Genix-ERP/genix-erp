@@ -83,6 +83,11 @@ import { WBSTree } from '@/components/construction/WBSTree';
 // opens the relevant section. This reduces initial bundle size by ~60%.
 const ActivityTab = lazy(() => import('@/components/construction/tabs/ActivityTab'));
 const EstimatesTab = lazy(() => import('@/components/construction/tabs/EstimatesTab'));
+// Smeta boshqaruvi — focused per-estimate view: KPI cards (labor / machine /
+// material / total), works grouped by section, sub-line breakdown.
+// Modeled on the Form2_Works_v2 mockup; uses existing /estimates + /lines
+// endpoints, no new backend routes.
+const SmetaManagementTab = lazy(() => import('@/components/construction/tabs/SmetaManagementTab'));
 const DailyJournalTab = lazy(() => import('@/components/construction/tabs/DailyJournalTab'));
 const StagesTab = lazy(() => import('@/components/construction/tabs/StagesTab'));
 const ExpensesTab = lazy(() => import('@/components/construction/tabs/ExpensesTab'));
@@ -100,6 +105,7 @@ const TeamTab = lazy(() => import('@/components/construction/tabs/TeamTab'));
 import { ImportModal, ExportModal, ImportExportButtons } from '@/components/shared';
 import { ReportGenerator } from '@/components/construction/ReportGenerator';
 import { ProjectKanban } from '@/components/construction/ProjectKanban';
+import { UZ_REGIONS, citiesForRegion } from '@/components/construction/uzRegions';
 import {
   ProgressWidget,
   TimelineWidget,
@@ -883,7 +889,12 @@ const OverviewTabContent = React.memo(function OverviewTabContent({
   setActiveTab,
 }) {
   const EMPTY = '—';
-  const locationStr = [project.address, project.city, project.region].filter(Boolean).join(', ');
+  // Location parts kept as a list (not a single comma-joined string) so the
+  // overview card can render them on separate lines — region / city / street
+  // address all carry distinct meaning and the comma-join made them read
+  // like one long sentence on real projects (e.g. "Marg'ilon, Farg'ona viloyati").
+  const locationParts = [project.region, project.city, project.address].filter(Boolean);
+  const locationStr = locationParts.join(', '); // still used by other call sites for tooltips
 
   const quickActions = [
     {
@@ -922,12 +933,26 @@ const OverviewTabContent = React.memo(function OverviewTabContent({
   // overview card, which looked like missing data rather than an
   // inapplicable field.
   const infoItems = [
-    { label: t('location') || 'Manzil', value: locationStr || EMPTY },
+    {
+      label: t('location') || 'Manzil',
+      // JSX so each part (Viloyat, Shahar, Manzil) renders on its own line.
+      // Falls back to EMPTY when nothing's filled in so the muted-grey
+      // styling in the renderer below still kicks in.
+      value: locationParts.length > 0 ? (
+        <span className="flex flex-col gap-0.5">
+          {locationParts.map((p, i) => (
+            <span key={i}>{p}</span>
+          ))}
+        </span>
+      ) : EMPTY,
+    },
     {
       label: t('project_type') || 'Loyiha turi',
       value: project.project_type ? (t(project.project_type) || project.project_type) : EMPTY,
     },
-    { label: t('building_type') || 'Bino turi', value: project.building_type || EMPTY },
+    // "Bino turi" row removed per product feedback — the field rarely
+    // carried meaningful data on real projects and the value was
+    // duplicated/contradicted by `project_type` above.
     {
       label: t('total_area') || 'Umumiy maydon',
       value: project.total_area ? `${project.total_area} m²` : EMPTY,
@@ -1038,6 +1063,7 @@ const ProjectDetailView = ({
     ]},
     { key: 'moliya', label: t('nav_finance') || 'Moliya', icon: DollarSign, subs: [
       { key: 'estimates', label: t('nav_estimates') || 'Smetalar' },
+      { key: 'smeta_management', label: t('nav_smeta_management') || 'Smeta boshqaruvi' },
       { key: 'budget', label: t('nav_budget') || 'Byudjet' },
       { key: 'expenses', label: t('nav_expenses') || 'Xarajatlar' },
       { key: 'financial', label: t('nav_analysis') || 'Tahlil' },
@@ -1455,6 +1481,34 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
     if (bytes < 1024) return bytes + ' B';
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
+
+  // Download a building file through apiClient instead of an <a href> link.
+  // file_url is "/api/v1/files/{id}" — a path relative to the page origin.
+  // In dev (Vite at :5173, API at :8080) the browser would resolve it to
+  // localhost:5173/api/v1/files/... and Vite would serve index.html, which
+  // gets saved as a blank xlsx. apiClient has the right baseURL so it hits
+  // the actual file endpoint and we trigger save-as with the original name.
+  const handleDownloadBuildingFile = async (file) => {
+    try {
+      const url = (file.file_url || '').replace(/^\/?api\/v1\/?/, '/');
+      const response = await apiClient.get(url, { responseType: 'blob' });
+      const blob = new Blob([response.data], {
+        type: file.mime_type || response.headers?.['content-type'] || 'application/octet-stream',
+      });
+      const objectUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = file.filename || 'download';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // Revoke after a tick so Safari can finish streaming.
+      setTimeout(() => window.URL.revokeObjectURL(objectUrl), 1000);
+    } catch (err) {
+      console.error('Error downloading building file:', err);
+      toast.error(t('error_occurred') || 'Xatolik yuz berdi');
+    }
   };
 
 
@@ -2376,6 +2430,11 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
         {/* Estimates Tab */}
         {activeTab === 'estimates' && (
           <EstimatesTab project={project} wbsItems={wbsTree} buildings={buildings} subcontracts={projectSubcontracts} />
+        )}
+
+        {/* Smeta boshqaruvi — drilled-in per-estimate dashboard. */}
+        {activeTab === 'smeta_management' && (
+          <SmetaManagementTab project={project} />
         )}
 
         {/* Daily Journal Tab (WBS-linked progress) */}
@@ -4075,20 +4134,16 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                       </div>
                     </div>
                     <div className="flex items-center gap-1 shrink-0 ml-2">
-                      {/* Real download — uses <a download> to force save-as rather than
-                          opening the file inline in the browser. The old "open"
-                          (eye) button was redundant with Download, so it was
-                          removed to keep this row tidy. */}
-                      <a
-                        href={file.file_url}
-                        download={file.filename}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      {/* Download via apiClient (correct backend baseURL) — see
+                         handleDownloadBuildingFile above. */}
+                      <Button
+                        variant="ghost" size="sm"
+                        className="h-8 w-8 p-0 text-slate-500 hover:bg-slate-100"
+                        onClick={() => handleDownloadBuildingFile(file)}
                         title={t('download') || 'Yuklab olish'}
-                        className="inline-flex items-center justify-center h-8 w-8 rounded-md hover:bg-slate-100 text-slate-500"
                       >
                         <Download className="w-4 h-4" />
-                      </a>
+                      </Button>
                       <Button
                         variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-400 hover:text-red-600"
                         onClick={() => handleDeleteBuildingFile(file.id)}
@@ -4303,6 +4358,25 @@ export default function Construction() {
           'Tugash sanasi boshlanish sanasidan oldin bo\'lishi mumkin emas'
       );
       return;
+    }
+
+    // Reject any planned date outside the ±5 year window around today.
+    // The HTML5 min/max on the inputs already prevents picker selection,
+    // but typed values bypass that — so we re-check on submit too.
+    {
+      const today = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      const fmtIso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+      const lo = (() => { const d = new Date(today); d.setFullYear(d.getFullYear() - 5); return fmtIso(d); })();
+      const hi = (() => { const d = new Date(today); d.setFullYear(d.getFullYear() + 5); return fmtIso(d); })();
+      const outOfRange = (s) => s && (s < lo || s > hi);
+      if (outOfRange(projectForm.planned_start_date) || outOfRange(projectForm.planned_end_date)) {
+        toast.error(
+          t('date_out_of_range') ||
+            "Sana bugundan ±5 yil oraliqida bo'lishi kerak"
+        );
+        return;
+      }
     }
 
     try {
@@ -4756,7 +4830,11 @@ export default function Construction() {
               </div>
 
               <div>
-                <Label htmlFor="project-desc">{t('description') || 'Tavsif'}</Label>
+                {/* Label changed Tavsif → Izoh per product feedback. The
+                   underlying field stays `description` to keep DB schema
+                   and existing data intact; only the human-facing label
+                   uses the dedicated `project_note` translation key. */}
+                <Label htmlFor="project-desc">{t('project_note') || 'Izoh'}</Label>
                 <Textarea
                   id="project-desc"
                   value={projectForm.description}
@@ -4769,7 +4847,12 @@ export default function Construction() {
 
             <Separator />
 
-            {/* SECTION 2: Location */}
+            {/* SECTION 2: Location — flow goes broad-to-narrow, top-down:
+               Viloyat first (12 regions + Toshkent shahri + Qoraqalpog'iston),
+               then Shahar/Tuman scoped to the chosen region, then the
+               specific street address. Picking the region clears any
+               previously selected city, since the prior city wouldn't
+               necessarily exist in the new region's list. */}
             <section className="space-y-3">
               <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
                 <MapPin className="w-4 h-4 text-green-600" />
@@ -4777,27 +4860,56 @@ export default function Construction() {
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
+                  <Label htmlFor="proj-region">{t('region') || 'Viloyat'}</Label>
+                  <Select
+                    value={projectForm.region || '__none__'}
+                    onValueChange={(v) => {
+                      const next = v === '__none__' ? '' : v;
+                      // City list is region-scoped — clear it whenever the
+                      // region changes, otherwise we'd show a stale city
+                      // string that doesn't belong to the new region.
+                      const nextCity = next && projectForm.city &&
+                        citiesForRegion(next).includes(projectForm.city)
+                        ? projectForm.city : '';
+                      setProjectForm({ ...projectForm, region: next, city: nextCity });
+                    }}
+                  >
+                    <SelectTrigger id="proj-region">
+                      <SelectValue placeholder={t('select') || 'Tanlash'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">{t('select') || '— tanlang —'}</SelectItem>
+                      {UZ_REGIONS.map((r) => (
+                        <SelectItem key={r.key} value={r.name}>{r.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="proj-city">{t('city') || 'Shahar'}</Label>
+                  <Select
+                    value={projectForm.city || '__none__'}
+                    onValueChange={(v) => setProjectForm({ ...projectForm, city: v === '__none__' ? '' : v })}
+                    disabled={!projectForm.region}
+                  >
+                    <SelectTrigger id="proj-city">
+                      <SelectValue placeholder={projectForm.region ? (t('select') || 'Tanlash') : (t('pick_region_first') || 'Avval viloyatni tanlang')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">{t('select') || '— tanlang —'}</SelectItem>
+                      {citiesForRegion(projectForm.region).map((c) => (
+                        <SelectItem key={c} value={c}>{c}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
                   <Label htmlFor="proj-address">{t('address') || 'Manzil'}</Label>
                   <Input
                     id="proj-address"
                     value={projectForm.address}
                     onChange={(e) => setProjectForm({ ...projectForm, address: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="proj-city">{t('city') || 'Shahar'}</Label>
-                  <Input
-                    id="proj-city"
-                    value={projectForm.city}
-                    onChange={(e) => setProjectForm({ ...projectForm, city: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="proj-region">{t('region') || 'Viloyat'}</Label>
-                  <Input
-                    id="proj-region"
-                    value={projectForm.region}
-                    onChange={(e) => setProjectForm({ ...projectForm, region: e.target.value })}
+                    placeholder={t('address_placeholder') || "Ko'cha, uy raqami"}
                   />
                 </div>
               </div>
@@ -4861,35 +4973,70 @@ export default function Construction() {
                 <Calendar className="w-4 h-4 text-purple-600" />
                 {t('schedule') || 'Muddatlar'}
               </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <Label htmlFor="proj-start">{t('planned_start_date') || 'Rejadagi boshlanish'}</Label>
-                  <Input
-                    id="proj-start"
-                    type="date"
-                    value={projectForm.planned_start_date}
-                    onChange={(e) => setProjectForm({ ...projectForm, planned_start_date: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="proj-end">{t('planned_end_date') || 'Rejadagi tugash'}</Label>
-                  <Input
-                    id="proj-end"
-                    type="date"
-                    value={projectForm.planned_end_date}
-                    onChange={(e) => setProjectForm({ ...projectForm, planned_end_date: e.target.value })}
-                    min={projectForm.planned_start_date || undefined}
-                  />
-                  {projectForm.planned_start_date &&
-                    projectForm.planned_end_date &&
-                    projectForm.planned_end_date < projectForm.planned_start_date && (
-                      <p className="text-xs text-red-500 mt-1">
-                        {t('end_before_start') ||
-                          'Tugash sanasi boshlanish sanasidan oldin bo\'lishi mumkin emas'}
-                      </p>
-                    )}
-                </div>
-              </div>
+              {/* Date bounds: a project's planned start/end must fall within
+                 a ±5 year window around today. Stops the placeholder
+                 `0001-01-01` and other obviously-bogus values from sneaking
+                 in via keyboard typing. The end-date `min` follows the
+                 typed start so the picker can't even offer an earlier day. */}
+              {(() => {
+                const today = new Date();
+                const pad = (n) => String(n).padStart(2, '0');
+                const fmtIso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+                const minDate = (() => { const d = new Date(today); d.setFullYear(d.getFullYear() - 5); return fmtIso(d); })();
+                const maxDate = (() => { const d = new Date(today); d.setFullYear(d.getFullYear() + 5); return fmtIso(d); })();
+                const start = projectForm.planned_start_date;
+                const end = projectForm.planned_end_date;
+                const startOutOfRange = !!start && (start < minDate || start > maxDate);
+                const endOutOfRange = !!end && (end < minDate || end > maxDate);
+                const endBeforeStart = !!start && !!end && end < start;
+                return (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <Label htmlFor="proj-start">{t('planned_start_date') || 'Rejadagi boshlanish'}</Label>
+                      <Input
+                        id="proj-start"
+                        type="date"
+                        value={start}
+                        min={minDate}
+                        max={maxDate}
+                        onChange={(e) => setProjectForm({ ...projectForm, planned_start_date: e.target.value })}
+                      />
+                      {startOutOfRange && (
+                        <p className="text-xs text-red-500 mt-1">
+                          {t('date_out_of_range') ||
+                            "Sana bugundan ±5 yil oraliqida bo'lishi kerak"}
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <Label htmlFor="proj-end">{t('planned_end_date') || 'Rejadagi tugash'}</Label>
+                      <Input
+                        id="proj-end"
+                        type="date"
+                        value={end}
+                        // End must be >= start AND within the ±5 year window.
+                        // We pick whichever lower bound is later so both
+                        // constraints hold simultaneously.
+                        min={(start && start > minDate) ? start : minDate}
+                        max={maxDate}
+                        onChange={(e) => setProjectForm({ ...projectForm, planned_end_date: e.target.value })}
+                      />
+                      {endOutOfRange && (
+                        <p className="text-xs text-red-500 mt-1">
+                          {t('date_out_of_range') ||
+                            "Sana bugundan ±5 yil oraliqida bo'lishi kerak"}
+                        </p>
+                      )}
+                      {endBeforeStart && !endOutOfRange && (
+                        <p className="text-xs text-red-500 mt-1">
+                          {t('end_before_start') ||
+                            "Tugash sanasi boshlanish sanasidan oldin bo'lishi mumkin emas"}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
             </section>
 
             <Separator />

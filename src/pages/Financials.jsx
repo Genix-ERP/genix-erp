@@ -35,6 +35,11 @@ import TaxReports from "@/components/finance/TaxReports";
 // ТЗ_Ish_Haqi_Soliq_Tolik.docx. Mounted here as a tab inside Financials
 // (not a standalone sidebar page); see Layout.jsx for the rationale.
 import ProfitTax from "@/pages/ProfitTax";
+// TaxSummary — director-level dashboard aggregating the 8 TZ-listed
+// taxes for a period. Sits next to ProfitTax; each is useful on its own
+// but TaxSummary is the "headline" view that shows Kompaniya soliqlari
+// rates actually driving numbers.
+import TaxSummary from "@/pages/TaxSummary";
 import GeneralLedger from "@/components/finance/GeneralLedger";
 import AgedReceivables from "@/components/finance/AgedReceivables";
 import AgedPayables from "@/components/finance/AgedPayables";
@@ -138,6 +143,12 @@ export default function Financials() {
               <span className="hidden sm:inline">{t('profit_tax') || "Foyda solig'i"}</span>
             </TabsTrigger>
 
+            {/* 14b. Umumiy soliq jamlanmasi (§10 of TZ_Ish_Haqi_Soliq_Tolik.docx) */}
+            <TabsTrigger value="tax-summary" className={tabTriggerClass}>
+              <Percent className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('tax_summary') || 'Umumiy soliq jamlanmasi'}</span>
+            </TabsTrigger>
+
             {/* 15. Hisobotlar */}
             <TabsTrigger value="reports" className={tabTriggerClass}>
               <FileText className="w-4 h-4" />
@@ -177,6 +188,9 @@ export default function Financials() {
           </TabsContent>
           <TabsContent value="profit-tax" className="mt-6">
             <ProfitTax />
+          </TabsContent>
+          <TabsContent value="tax-summary" className="mt-6">
+            <TaxSummary />
           </TabsContent>
           <TabsContent value="reports" className="mt-6">
             <Tabs defaultValue="financial-reports" className="w-full">
