@@ -334,6 +334,157 @@ export const constructionService = {
     );
     return response.data.data;
   },
+  // Bulk: zero every top-level work qty in the estimate. Cascades to
+  // non-override sub-line qtys via parent.qty × norm_rate. Used by the
+  // "Reset all quantities" button on Smeta boshqaruvi.
+  async resetAllEstimateQuantities(estimateId) {
+    const response = await apiClient.post(
+      `/construction/estimates/${estimateId}/reset-quantities`,
+      {},
+    );
+    return response.data.data;
+  },
+
+  // =====================================================
+  // FORMA 2 SNAPSHOTS  (Smeta boshqaruvi → Tarix tab)
+  // =====================================================
+  // Saved versions of a Form 2 (KS-2) document for an estimate. The list
+  // endpoint omits the heavy snapshot_data payload; call getForm2Snapshot
+  // to fetch the full saved state when re-opening a row.
+
+  async listForm2Snapshots(estimateId) {
+    const response = await apiClient.get(
+      `/construction/estimates/${estimateId}/form2-snapshots`,
+    );
+    return response.data.data || [];
+  },
+
+  async getForm2Snapshot(snapshotId) {
+    const response = await apiClient.get(
+      `/construction/form2-snapshots/${snapshotId}`,
+    );
+    return response.data.data;
+  },
+
+  async createForm2Snapshot(estimateId, payload) {
+    // payload: {
+    //   period_from, period_to,           // ISO date strings or null
+    //   other_costs_pct, use_vat,
+    //   total_with_vat, total_without_vat,
+    //   construction_total, equipment_total,
+    //   act_number,                       // optional KS-2 number
+    //   snapshot_data,                    // full JSON state of the lines
+    // }
+    const response = await apiClient.post(
+      `/construction/estimates/${estimateId}/form2-snapshots`,
+      payload,
+    );
+    return response.data.data;
+  },
+
+  async deleteForm2Snapshot(snapshotId) {
+    const response = await apiClient.delete(
+      `/construction/form2-snapshots/${snapshotId}`,
+    );
+    return response.data.data;
+  },
+
+  // =====================================================
+  // SMETA AUDIT LOG  (Smeta boshqaruvi → Jurnal tab)
+  // =====================================================
+
+  async listSmetaAudit(estimateId, { limit = 200, action } = {}) {
+    const params = { limit };
+    if (action) params.action = action;
+    const response = await apiClient.get(
+      `/construction/estimates/${estimateId}/audit`,
+      { params },
+    );
+    return response.data.data || [];
+  },
+
+  async listProjectSmetaAudit(projectId, { limit = 500 } = {}) {
+    const response = await apiClient.get(
+      `/construction/projects/${projectId}/smeta-audit`,
+      { params: { limit } },
+    );
+    return response.data.data || [];
+  },
+
+  // =====================================================
+  // BOSQICHLAR v2  — work approval workflow
+  // =====================================================
+  // Per construction_module_v2.html. Each "work" is a construction_estimate_line
+  // row with an approval_status field (migration 353). Three roles drive the
+  // transitions: foreman / supervisor / engineer.
+  //
+  // The frontend resolves the user's role for a project via getMyProjectRole;
+  // the backend enforces it again on every transition.
+
+  async getMyProjectRole(projectId) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/my-role`);
+    return response.data.data; // { role, assigned }
+  },
+
+  // Foreman.
+  async updateWorkDoneQuantity(workId, doneQuantity) {
+    const response = await apiClient.post(
+      `/construction/works/${workId}/done-quantity`,
+      { done_quantity: Number(doneQuantity) || 0 },
+    );
+    return response.data.data;
+  },
+  async submitWork(workId) {
+    const response = await apiClient.post(`/construction/works/${workId}/submit`, {});
+    return response.data.data;
+  },
+  async bulkSubmitWorks(workIds) {
+    const response = await apiClient.post(
+      `/construction/works/bulk-submit`,
+      { work_ids: workIds },
+    );
+    return response.data.data;
+  },
+
+  // Supervisor.
+  async confirmWorkSupervisor(workId) {
+    const response = await apiClient.post(`/construction/works/${workId}/confirm-supervisor`, {});
+    return response.data.data;
+  },
+  async rejectWorkSupervisor(workId, note = '') {
+    const response = await apiClient.post(
+      `/construction/works/${workId}/reject-supervisor`,
+      { note },
+    );
+    return response.data.data;
+  },
+  async bulkConfirmSupervisor(workIds) {
+    const response = await apiClient.post(
+      `/construction/works/bulk-confirm-supervisor`,
+      { work_ids: workIds },
+    );
+    return response.data.data;
+  },
+
+  // Engineer (final).
+  async confirmWorkEngineer(workId) {
+    const response = await apiClient.post(`/construction/works/${workId}/confirm-engineer`, {});
+    return response.data.data;
+  },
+  async rejectWorkEngineer(workId, note = '') {
+    const response = await apiClient.post(
+      `/construction/works/${workId}/reject-engineer`,
+      { note },
+    );
+    return response.data.data;
+  },
+  async bulkConfirmEngineer(workIds) {
+    const response = await apiClient.post(
+      `/construction/works/bulk-confirm-engineer`,
+      { work_ids: workIds },
+    );
+    return response.data.data;
+  },
 
   // =====================================================
   // PROJECT VENDORS (Future)

@@ -33,6 +33,48 @@ import { useTranslation } from '@/components/utils/translations';
 // =====================================================
 // ВОР PARSER
 // =====================================================
+//
+// Output shape — every item carries its own `parent_item_number` which
+// IS the section/stage path the row belongs to. To preserve the
+// hierarchy that the spreadsheet implies (СЕКЦИЯ №1 → ПЕРЕКРЫТИЕ →
+// МОНОЛИТНЫЕ УЧАСТКИ → ...) we encode the path with a single delimiter
+// HIERARCHY_DELIM. The downstream UI (StagesTabV2.deriveStages) splits
+// on the delimiter to nest sub-stages under their parent stages without
+// requiring a schema change.
+//
+// Heuristics for the level of a header row:
+//   • Top-level (sections):  "СЕКЦИЯ", "РАЗДЕЛ"
+//   • Sub-stages:            keywords that mark sub-elements of a major
+//                            structural element — МОНОЛИТНЫЕ УЧАСТКИ,
+//                            ПОЯСА, ДИАФРАГМЫ, МЕТАЛЛИЧЕСКАЯ … etc.
+//                            When matched, the sub-stage attaches to the
+//                            most recent stage; if there's no current
+//                            stage the sub-stage is promoted to a stage.
+//   • Stage (default):       any other section-like row.
+//
+// The keyword list below was derived from the common BOP estimate files
+// in /files_estimates (Жилдом Саттепо Авеню Блок 1.xlsx etc).
+const HIERARCHY_DELIM = ' › ';
+const SUB_STAGE_PATTERNS = [
+  /^МОНОЛИТНЫЕ\s+УЧАСТКИ/i,
+  /^ПОЯСА$/i,
+  /^ДИАФРАГМ/i,
+  /^МЕТАЛЛИЧЕСКАЯ\s/i,
+  /^МЕТАЛЛИЧЕСКИЙ\s/i,
+  /^КРЕПЕЖНЫЙ/i,
+  /^ПЛАН\s+ПОКРЫТИЯ/i,
+  // Interior-finishing sub-rooms (Гостиная, Ванная, Прихожая, …)
+  /^(ГОСТИННАЯ|ГОСТИНАЯ|ВАННАЯ|ПРИХОЖАЯ|СПАЛЬНЯ|ОБЩАЯ|КУХНЯ|МАГАЗИН|ТЕХ\.?ПОМЕЩЕНИЯ?)/i,
+];
+function isSubStageHeader(name) {
+  if (!name) return false;
+  return SUB_STAGE_PATTERNS.some((re) => re.test(name));
+}
+const TOP_SECTION_PATTERNS = [/^СЕКЦИЯ/i, /^РАЗДЕЛ/i];
+function isTopSectionHeader(name) {
+  if (!name) return false;
+  return TOP_SECTION_PATTERNS.some((re) => re.test(name));
+}
 
 function parseVOR(workbook) {
   // Find ВОР sheet
@@ -81,9 +123,38 @@ function parseVOR(workbook) {
     }
   }
 
-  // Parse data rows starting from row 12 (index 11)
+  // Parse data rows starting from row 12 (index 11). The ВОР sheet has
+  // up to three header levels: top-level sections (СЕКЦИЯ / РАЗДЕЛ),
+  // stages, and sub-stages. We track the current header at each level
+  // so every work row carries its full path in `parent_item_number`.
+  //
+  // The path is rebuilt on every header-level change. A new top-level
+  // section resets stage + sub-stage; a new stage resets sub-stage; a
+  // new sub-stage just sits under the current stage.
   const sections = [];
+  let currentTopSection = '';
+  let currentStage = '';
+  let currentSubStage = '';
   let currentSection = { name: objectName || 'Imported', items: [] };
+  // Helper to materialise the section bucket for the current path.
+  // Sections are bucketed by their full path so works under different
+  // sub-stages don't collapse into the same bucket downstream.
+  const pathOf = () => {
+    const parts = [];
+    if (currentTopSection) parts.push(currentTopSection);
+    if (currentStage)      parts.push(currentStage);
+    if (currentSubStage)   parts.push(currentSubStage);
+    return parts.join(HIERARCHY_DELIM) || (objectName || 'Imported');
+  };
+  const flushSection = () => {
+    if (currentSection.items.length > 0) {
+      sections.push(currentSection);
+    }
+  };
+  const startSection = () => {
+    flushSection();
+    currentSection = { name: pathOf(), items: [] };
+  };
 
   for (let i = 11; i < rawData.length; i++) {
     const row = rawData[i];
@@ -122,13 +193,20 @@ function parseVOR(workbook) {
     const isSectionHeader = isClassicHeader || isNumberedHeader;
 
     if (isSectionHeader) {
-      // Start new section if current one has items
-      if (currentSection.items.length > 0) {
-        sections.push(currentSection);
-        currentSection = { name: colC, items: [] };
+      // Decide which level of the header hierarchy this row sits at.
+      if (isTopSectionHeader(colC)) {
+        currentTopSection = colC;
+        currentStage      = '';
+        currentSubStage   = '';
+      } else if (isSubStageHeader(colC) && currentStage) {
+        // Genuine sub-stage: attaches under the current stage.
+        currentSubStage = colC;
       } else {
-        currentSection.name = colC;
+        // Default: a regular stage. Resets sub-stage.
+        currentStage    = colC;
+        currentSubStage = '';
       }
+      startSection();
       continue;
     }
 
@@ -220,10 +298,26 @@ function parseEdinich(workbook) {
     }
   }
 
-  // Parse data rows starting from row 12 (index 11)
+  // Parse data rows starting from row 12 (index 11). See parseVOR above
+  // for the rationale behind the three-level hierarchy bookkeeping —
+  // same idea here, just adapted to the единич sheet.
   const sections = [];
+  let currentTopSection = '';
+  let currentStage = '';
+  let currentSubStage = '';
   let currentSection = { name: objectName || 'Imported', items: [] };
   let lastParentNumber = '';
+  const pathOf = () => {
+    const parts = [];
+    if (currentTopSection) parts.push(currentTopSection);
+    if (currentStage)      parts.push(currentStage);
+    if (currentSubStage)   parts.push(currentSubStage);
+    return parts.join(HIERARCHY_DELIM) || (objectName || 'Imported');
+  };
+  const startSection = () => {
+    if (currentSection.items.length > 0) sections.push(currentSection);
+    currentSection = { name: pathOf(), items: [] };
+  };
 
   for (let i = 11; i < rawData.length; i++) {
     const row = rawData[i];
@@ -244,12 +338,17 @@ function parseEdinich(workbook) {
     const isMergedHeader = mergedSectionRows.has(i) && !colA;
     const isNumberedHeader = colA && /^\d+$/.test(colA) && !colD && (colE === 0 || isNaN(colE)) && colC.length > 5 && colC === colC.toUpperCase() && !/\d{2,}/.test(colC);
     if (isMergedHeader || isNumberedHeader) {
-      if (currentSection.items.length > 0) {
-        sections.push(currentSection);
-        currentSection = { name: colC, items: [] };
+      if (isTopSectionHeader(colC)) {
+        currentTopSection = colC;
+        currentStage      = '';
+        currentSubStage   = '';
+      } else if (isSubStageHeader(colC) && currentStage) {
+        currentSubStage = colC;
       } else {
-        currentSection.name = colC;
+        currentStage    = colC;
+        currentSubStage = '';
       }
+      startSection();
       continue;
     }
 
@@ -1055,12 +1154,21 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
   // Build the per-type payload for `onImport` from a parsed result.
   // Extracted so the multi-type loop below can reuse the exact same
   // transformation that the single-type flow used to do inline.
+  //
+  // IMPORTANT: every item inherits its containing section's `name` as
+  // its `parent_item_number` unless the parser already gave it a
+  // hand-tagged value (e.g. единич's resource children that point at
+  // their numeric parent line). Without this fallback every section
+  // collapses into a single anonymous bucket on the backend, which is
+  // why the v2 Bosqichlar tab showed only "Boshqalar" with all 277
+  // works after import.
   const buildImportPayloadFor = (type, result, nameOverride) => {
     const allLines = [];
     let sortIdx = 0;
     let importedCount = 0;
     for (const section of result.sections || []) {
       if (!section.items || section.items.length === 0) continue;
+      const sectionPath = section.name || '';
       for (const item of section.items) {
         sortIdx++;
         const unitPrice = item.unit_price || 0;
@@ -1075,7 +1183,10 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
           code: item.code || '',
           item_number: item.item_number || '',
           resource_type: rt,
-          parent_item_number: item.parent_item_number || '',
+          // Use the parser's explicit value first (resource sub-lines
+          // point at their numeric parent), otherwise fall back to the
+          // section path so the v2 hierarchy survives the round-trip.
+          parent_item_number: item.parent_item_number || sectionPath,
           sort_order: sortIdx,
         });
       }

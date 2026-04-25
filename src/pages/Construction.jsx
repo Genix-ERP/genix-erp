@@ -17,6 +17,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Progress } from '@/components/ui/progress';
@@ -68,7 +70,9 @@ import {
   Image,
   Layers,
   Scale,
-  Paperclip
+  Paperclip,
+  ChevronsUpDown,
+  Check,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -89,7 +93,11 @@ const EstimatesTab = lazy(() => import('@/components/construction/tabs/Estimates
 // endpoints, no new backend routes.
 const SmetaManagementTab = lazy(() => import('@/components/construction/tabs/SmetaManagementTab'));
 const DailyJournalTab = lazy(() => import('@/components/construction/tabs/DailyJournalTab'));
-const StagesTab = lazy(() => import('@/components/construction/tabs/StagesTab'));
+// StagesTabV2 — full v2 mockup (construction_module_v2.html) with the
+// foreman → supervisor → engineer approval workflow. The original
+// StagesTab is kept around in the repo for reference/rollback but no
+// longer mounted.
+const StagesTab = lazy(() => import('@/components/construction/tabs/StagesTabV2'));
 const ExpensesTab = lazy(() => import('@/components/construction/tabs/ExpensesTab'));
 const BudgetTab = lazy(() => import('@/components/construction/tabs/BudgetTab'));
 const MaterialUsageTab = lazy(() => import('@/components/construction/tabs/MaterialUsageTab'));
@@ -887,6 +895,9 @@ const OverviewTabContent = React.memo(function OverviewTabContent({
   t,
   setActiveGroup,
   setActiveTab,
+  // Forwarded from ProjectDetailView so the inline status dropdown in
+  // ProgressWidget can call the parent's update handler. Optional.
+  onProjectStatusChange,
 }) {
   const EMPTY = '—';
   // Location parts kept as a list (not a single comma-joined string) so the
@@ -972,6 +983,7 @@ const OverviewTabContent = React.memo(function OverviewTabContent({
           sections_count: sections.length,
           team_count: team.length,
         }}
+        onStatusChange={onProjectStatusChange}
       />
 
       <TimelineWidget project={project} />
@@ -1047,12 +1059,28 @@ const ProjectDetailView = ({
   onBack,
   t,
   formatCurrency,
-  getStatusBadge
+  getStatusBadge,
+  // Optional: when supplied, the overview ProgressWidget renders an
+  // inline status dropdown that calls this handler (instead of the
+  // read-only progress label). Parent component owns the API + refresh.
+  onProjectStatusChange,
 }) => {
   const { formatCurrencyCompact } = useCurrencyFormatter();
   const [activeGroup, setActiveGroup] = useState('dashboard');
   const [activeTab, setActiveTab] = useState('overview');
 
+  // Top-level navigation groups for the project page.
+  //
+  // Recent changes:
+  //   • "Materiallar" hidden — the materials forms aren't part of the
+  //     v2 workflow yet, and the Smeta boshqaruvi tab covers what
+  //     foremen actually need today. The constants stay defined inside
+  //     the component so the materials sub-tabs can be re-enabled
+  //     without restructuring NAV_GROUPS.
+  //   • "Smeta boshqaruvi" promoted to its own top-level group instead
+  //     of being a sub-pill under Moliya. It's the page foremen and
+  //     supervisors hit most often, so giving it a dedicated entry
+  //     saves a click.
   const NAV_GROUPS = [
     { key: 'dashboard', label: t('nav_overview') || "Umumiy ko'rinish", icon: LayoutDashboard, subs: [] },
     { key: 'qurilish', label: t('nav_objects') || 'Obyekt', icon: Building2, subs: [
@@ -1061,17 +1089,22 @@ const ProjectDetailView = ({
       { key: 'stages', label: t('nav_stages') || 'Bosqichlar' },
       { key: 'reja_fakt', label: t('nav_plan_fact') || 'Reja vs Fakt' },
     ]},
+    // Smeta boshqaruvi promoted out of the Moliya sub-pills into its own
+    // top-level entry. Single-tab group → no sub-pill row needed.
+    { key: 'smeta_boshqaruvi', label: t('nav_smeta_management') || 'Smeta boshqaruvi', icon: ClipboardList, subs: [
+      { key: 'smeta_management', label: t('nav_smeta_management') || 'Smeta boshqaruvi' },
+    ]},
     { key: 'moliya', label: t('nav_finance') || 'Moliya', icon: DollarSign, subs: [
       { key: 'estimates', label: t('nav_estimates') || 'Smetalar' },
-      { key: 'smeta_management', label: t('nav_smeta_management') || 'Smeta boshqaruvi' },
       { key: 'budget', label: t('nav_budget') || 'Byudjet' },
       { key: 'expenses', label: t('nav_expenses') || 'Xarajatlar' },
       { key: 'financial', label: t('nav_analysis') || 'Tahlil' },
     ]},
-    { key: 'materiallar', label: t('nav_materials') || 'Materiallar', icon: Package, subs: [
-      { key: 'forms', label: 'Forma' },
-      { key: 'material_usage', label: t('nav_material_usage') || 'Material sarfi' },
-    ]},
+    // Materiallar hidden for now — uncomment to bring it back.
+    // { key: 'materiallar', label: t('nav_materials') || 'Materiallar', icon: Package, subs: [
+    //   { key: 'forms', label: 'Forma' },
+    //   { key: 'material_usage', label: t('nav_material_usage') || 'Material sarfi' },
+    // ]},
     { key: 'hujjatlar', label: t('nav_documents') || 'Hujjatlar', icon: FileText, subs: [
       { key: 'acts', label: t('nav_acts') || 'Aktlar' },
       { key: 'daily_logs', label: t('nav_daily_log') || 'Kunlik jurnal' },
@@ -2127,6 +2160,13 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <div className="min-w-0">
+            {/* Breadcrumb above the title — matches the v2 mockup's
+               "Ishlab chiqarish · Loyihalar · {project name}" line. */}
+            <div className="text-[12px] text-slate-500 mb-1 truncate">
+              {t('nav_production') || 'Ishlab chiqarish'} ·{' '}
+              {t('nav_projects') || 'Loyihalar'} ·{' '}
+              <span className="text-slate-700">{project.name}</span>
+            </div>
             <div className="flex items-center gap-2.5 flex-wrap">
               <h1 className="text-2xl font-semibold text-slate-900 tracking-tight truncate">
                 {project.name}
@@ -2135,7 +2175,15 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
             </div>
           </div>
         </div>
-        <div className="shrink-0">
+        <div className="shrink-0 flex items-center gap-3 flex-wrap">
+          {/* StagesTabV2 portals its "Прораб / Технадзор / Гл.инженер"
+             role switcher into this slot when active, so the demo role
+             selector lives in the topbar exactly like the v2 mockup
+             instead of sitting below the navigation tabs. The element
+             is empty whenever the Bosqichlar tab is not the active
+             tab — the portal mounts and unmounts automatically with
+             the StagesTabV2 component. */}
+          <div id="stages-tab-topbar-slot" className="contents" />
           <ReportGenerator
             project={project}
             sections={sections}
@@ -2227,6 +2275,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
             t={t}
             setActiveGroup={setActiveGroup}
             setActiveTab={setActiveTab}
+            onProjectStatusChange={onProjectStatusChange}
           />
         )}
 
@@ -2951,7 +3000,11 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
 
         {/* Stages Tab */}
         {activeTab === 'stages' && (
-          <StagesTab project={project} />
+          <StagesTab
+            project={project}
+            setActiveGroup={setActiveGroup}
+            setActiveTab={setActiveTab}
+          />
         )}
 
         {/* Expenses Tab */}
@@ -4263,6 +4316,12 @@ export default function Construction() {
     client_chief_accountant_name: '',
   });
 
+  // Open state for the two searchable combobox dropdowns (region/city) on
+  // the project create/edit form. Kept separate from `projectForm` so the
+  // popovers don't trigger a full form re-render when toggled.
+  const [regionPickerOpen, setRegionPickerOpen] = useState(false);
+  const [cityPickerOpen, setCityPickerOpen] = useState(false);
+
   useEffect(() => {
     loadProjects();
   }, []);
@@ -4340,13 +4399,13 @@ export default function Construction() {
       return;
     }
 
+    // Contract amount is no longer collected on the project form (Shartnoma
+    // summasi section removed per product feedback). Existing projects keep
+    // whatever amount is already in DB; new ones default to 0 and the value
+    // can be set later via a different flow when one exists.
     const contractNum = projectForm.contract_amount
       ? parseFloat(parsePriceInput(String(projectForm.contract_amount)))
       : 0;
-    if (!Number.isFinite(contractNum) || contractNum <= 0) {
-      toast.error(t('contract_amount_required') || "Shartnoma summasi kiritilishi va 0'dan katta bo'lishi shart");
-      return;
-    }
 
     if (
       projectForm.planned_start_date &&
@@ -4651,6 +4710,22 @@ export default function Construction() {
           t={t}
           formatCurrency={formatCurrency}
           getStatusBadge={getStatusBadge}
+          // Inline status changes from the ProgressWidget go through the
+          // standard updateProject endpoint, then trigger loadProjects so
+          // selectedProject (derived from the projects array) re-renders
+          // with the new value. Errors surface via toast like the rest of
+          // the project mutations.
+          onProjectStatusChange={async (newStatus) => {
+            try {
+              await constructionService.updateProject(selectedProject.id, { status: newStatus });
+              await loadProjects();
+              toast.success(t('status_updated') || 'Holat yangilandi');
+            } catch (error) {
+              console.error('Failed to update project status:', error);
+              const msg = error?.response?.data?.message || t('error_occurred') || 'Xatolik yuz berdi';
+              toast.error(msg);
+            }
+          }}
         />
       </div>
     );
@@ -4859,49 +4934,141 @@ export default function Construction() {
                 {t('location') || 'Manzil'}
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {/* Viloyat — searchable combobox. Popover + Command lets the
+                   user type to filter the 14 regions instead of scrolling
+                   a long native <select>. */}
                 <div>
                   <Label htmlFor="proj-region">{t('region') || 'Viloyat'}</Label>
-                  <Select
-                    value={projectForm.region || '__none__'}
-                    onValueChange={(v) => {
-                      const next = v === '__none__' ? '' : v;
-                      // City list is region-scoped — clear it whenever the
-                      // region changes, otherwise we'd show a stale city
-                      // string that doesn't belong to the new region.
-                      const nextCity = next && projectForm.city &&
-                        citiesForRegion(next).includes(projectForm.city)
-                        ? projectForm.city : '';
-                      setProjectForm({ ...projectForm, region: next, city: nextCity });
-                    }}
-                  >
-                    <SelectTrigger id="proj-region">
-                      <SelectValue placeholder={t('select') || 'Tanlash'} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">{t('select') || '— tanlang —'}</SelectItem>
-                      {UZ_REGIONS.map((r) => (
-                        <SelectItem key={r.key} value={r.name}>{r.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Popover open={regionPickerOpen} onOpenChange={setRegionPickerOpen} modal>
+                    <PopoverTrigger asChild>
+                      <Button
+                        id="proj-region"
+                        type="button"
+                        variant="outline"
+                        role="combobox"
+                        className="w-full min-w-0 justify-between font-normal text-left"
+                      >
+                        <span className={cn('truncate min-w-0 flex-1', !projectForm.region && 'text-muted-foreground')}>
+                          {projectForm.region || (t('select') || 'Tanlash')}
+                        </span>
+                        <ChevronsUpDown className="h-4 w-4 opacity-50 shrink-0 ml-2" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      className="w-[--radix-popover-trigger-width] p-0"
+                      align="start"
+                      onWheel={(e) => e.stopPropagation()}
+                    >
+                      <Command>
+                        <CommandInput placeholder={t('search') || 'Qidirish…'} />
+                        <CommandList>
+                          <CommandEmpty>
+                            <div className="py-2 text-xs text-muted-foreground">
+                              {t('not_found') || 'Topilmadi'}
+                            </div>
+                          </CommandEmpty>
+                          <CommandGroup>
+                            <CommandItem
+                              value=""
+                              onSelect={() => {
+                                setProjectForm({ ...projectForm, region: '', city: '' });
+                                setRegionPickerOpen(false);
+                              }}
+                              className="cursor-pointer"
+                            >
+                              <Check className={cn('mr-2 h-4 w-4', !projectForm.region ? 'opacity-100' : 'opacity-0')} />
+                              <span className="text-muted-foreground">{t('select') || '— tanlang —'}</span>
+                            </CommandItem>
+                            {UZ_REGIONS.map((r) => (
+                              <CommandItem
+                                key={r.key}
+                                value={r.name}
+                                onSelect={() => {
+                                  // Clear city if the previously-chosen city
+                                  // isn't part of the new region's list.
+                                  const nextCity = projectForm.city && citiesForRegion(r.name).includes(projectForm.city)
+                                    ? projectForm.city : '';
+                                  setProjectForm({ ...projectForm, region: r.name, city: nextCity });
+                                  setRegionPickerOpen(false);
+                                }}
+                                className="cursor-pointer"
+                              >
+                                <Check className={cn('mr-2 h-4 w-4', projectForm.region === r.name ? 'opacity-100' : 'opacity-0')} />
+                                {r.name}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 </div>
+                {/* Shahar — also searchable. Disabled until a region is
+                   chosen since the city list is region-scoped. */}
                 <div>
                   <Label htmlFor="proj-city">{t('city') || 'Shahar'}</Label>
-                  <Select
-                    value={projectForm.city || '__none__'}
-                    onValueChange={(v) => setProjectForm({ ...projectForm, city: v === '__none__' ? '' : v })}
-                    disabled={!projectForm.region}
-                  >
-                    <SelectTrigger id="proj-city">
-                      <SelectValue placeholder={projectForm.region ? (t('select') || 'Tanlash') : (t('pick_region_first') || 'Avval viloyatni tanlang')} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">{t('select') || '— tanlang —'}</SelectItem>
-                      {citiesForRegion(projectForm.region).map((c) => (
-                        <SelectItem key={c} value={c}>{c}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Popover open={cityPickerOpen} onOpenChange={setCityPickerOpen} modal>
+                    <PopoverTrigger asChild>
+                      <Button
+                        id="proj-city"
+                        type="button"
+                        variant="outline"
+                        role="combobox"
+                        disabled={!projectForm.region}
+                        className="w-full min-w-0 justify-between font-normal text-left"
+                      >
+                        <span className={cn('truncate min-w-0 flex-1', !projectForm.city && 'text-muted-foreground')}>
+                          {projectForm.city || (projectForm.region
+                            ? (t('select') || 'Tanlash')
+                            : (t('pick_region_first') || 'Avval viloyatni tanlang'))}
+                        </span>
+                        <ChevronsUpDown className="h-4 w-4 opacity-50 shrink-0 ml-2" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      className="w-[--radix-popover-trigger-width] p-0"
+                      align="start"
+                      onWheel={(e) => e.stopPropagation()}
+                    >
+                      <Command>
+                        <CommandInput placeholder={t('search') || 'Qidirish…'} />
+                        <CommandList>
+                          <CommandEmpty>
+                            <div className="py-2 text-xs text-muted-foreground">
+                              {t('not_found') || 'Topilmadi'}
+                            </div>
+                          </CommandEmpty>
+                          <CommandGroup>
+                            <CommandItem
+                              value=""
+                              onSelect={() => {
+                                setProjectForm({ ...projectForm, city: '' });
+                                setCityPickerOpen(false);
+                              }}
+                              className="cursor-pointer"
+                            >
+                              <Check className={cn('mr-2 h-4 w-4', !projectForm.city ? 'opacity-100' : 'opacity-0')} />
+                              <span className="text-muted-foreground">{t('select') || '— tanlang —'}</span>
+                            </CommandItem>
+                            {citiesForRegion(projectForm.region).map((c) => (
+                              <CommandItem
+                                key={c}
+                                value={c}
+                                onSelect={() => {
+                                  setProjectForm({ ...projectForm, city: c });
+                                  setCityPickerOpen(false);
+                                }}
+                                className="cursor-pointer"
+                              >
+                                <Check className={cn('mr-2 h-4 w-4', projectForm.city === c ? 'opacity-100' : 'opacity-0')} />
+                                {c}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 </div>
                 <div>
                   <Label htmlFor="proj-address">{t('address') || 'Manzil'}</Label>
@@ -5039,40 +5206,11 @@ export default function Construction() {
               })()}
             </section>
 
-            <Separator />
-
-            {/* SECTION 5: Financials */}
-            <section className="space-y-3">
-              <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-                <DollarSign className="w-4 h-4 text-emerald-600" />
-                {t('financials') || "Moliyaviy ma'lumotlar"}
-              </h3>
-              <div>
-                <Label htmlFor="proj-contract-amount">
-                  {t('contract_amount') || 'Shartnoma summasi (so\'m)'} <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="proj-contract-amount"
-                  type="text"
-                  inputMode="decimal"
-                  value={
-                    projectForm.contract_amount
-                      ? formatPriceInput(String(projectForm.contract_amount))
-                      : ''
-                  }
-                  onChange={(e) =>
-                    setProjectForm({
-                      ...projectForm,
-                      contract_amount: parsePriceInput(e.target.value),
-                    })
-                  }
-                  placeholder="1 000 000"
-                />
-                <p className="text-xs text-slate-500 mt-1">
-                  {t('contract_amount_hint') || "Buyurtmachi bilan tuzilgan shartnoma bo'yicha umumiy summa"}
-                </p>
-              </div>
-            </section>
+            {/* Financials section (Shartnoma summasi input) removed —
+               not collected at project creation any more. The
+               `contract_amount` field still flows through the form
+               state (with default 0) so the backend payload stays
+               schema-compatible for both new and edited projects. */}
 
             {editingProject && (
               <>

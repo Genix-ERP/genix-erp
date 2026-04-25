@@ -95,9 +95,9 @@ export default function AddSubWorkModal({ open, onClose, projectId, estimateId, 
             width: 'calc(100vw - 32px)',
             maxWidth: 620,
             zIndex: 101,
-            background: '#FFFFFF',
-            color: '#0F172A',
-            border: '1px solid #CBD5E1',
+            background: '#1E293B',
+            color: '#F1F5F9',
+            border: '1px solid #334155',
             borderRadius: 12,
             fontFamily: "'Inter', system-ui, sans-serif",
             overflow: 'hidden',
@@ -107,10 +107,10 @@ export default function AddSubWorkModal({ open, onClose, projectId, estimateId, 
           {/* Head */}
           <div
             className="px-6 py-5 flex justify-between items-start gap-4"
-            style={{ borderBottom: '1px solid #E2E8F0' }}
+            style={{ borderBottom: '1px solid #1E293B' }}
           >
             <div className="min-w-0 flex-1">
-              <div className="text-[11px] uppercase tracking-[0.1em] mb-1" style={{ color: '#64748B' }}>
+              <div className="text-[11px] uppercase tracking-[0.1em] mb-1" style={{ color: '#94A3B8' }}>
                 {t('new_extra_stage') || "Yangi qo'shimcha etap"}
               </div>
               <DialogPrimitive.Title className="text-base font-semibold truncate" title={parentLabel}>
@@ -119,7 +119,7 @@ export default function AddSubWorkModal({ open, onClose, projectId, estimateId, 
             </div>
             <DialogPrimitive.Close
               className="w-8 h-8 rounded-md flex items-center justify-center shrink-0"
-              style={{ background: '#F1F5F9', border: '1px solid #CBD5E1', color: '#475569' }}
+              style={{ background: '#1E293B', border: '1px solid #334155', color: '#CBD5E1' }}
             >
               <X className="w-4 h-4" />
             </DialogPrimitive.Close>
@@ -128,7 +128,7 @@ export default function AddSubWorkModal({ open, onClose, projectId, estimateId, 
           {/* Body */}
           <div className="px-6 py-5">
             <div className="mb-4">
-              <label className="text-[11px] block mb-1.5" style={{ color: '#64748B' }}>
+              <label className="text-[11px] block mb-1.5" style={{ color: '#94A3B8' }}>
                 {/* `stage_name` translation already includes "*" — don't double it. */}
                 {t('stage_name') || 'Etap nomi *'}
               </label>
@@ -138,21 +138,21 @@ export default function AddSubWorkModal({ open, onClose, projectId, estimateId, 
                 onChange={(e) => setName(e.target.value)}
                 placeholder={t('stage_name_placeholder') || "Masalan: Qo'shimcha bo'yoq ishlari"}
                 className="w-full px-3 py-2.5 rounded-md text-[13px] outline-none"
-                style={{ background: '#F8FAFC', color: '#0F172A', border: '1px solid #CBD5E1', fontFamily: 'inherit' }}
+                style={{ background: '#0B1220', color: '#F1F5F9', border: '1px solid #334155', fontFamily: 'inherit' }}
                 autoFocus
               />
             </div>
 
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
-                <label className="text-[11px] block mb-1.5" style={{ color: '#64748B' }}>
+                <label className="text-[11px] block mb-1.5" style={{ color: '#94A3B8' }}>
                   {t('uom') || "O'lchov birligi"} *
                 </label>
                 <select
                   value={uom}
                   onChange={(e) => setUom(e.target.value)}
                   className="w-full px-3 py-2.5 rounded-md text-[13px] outline-none cursor-pointer"
-                  style={{ background: '#F8FAFC', color: '#0F172A', border: '1px solid #CBD5E1', fontFamily: 'inherit' }}
+                  style={{ background: '#0B1220', color: '#F1F5F9', border: '1px solid #334155', fontFamily: 'inherit' }}
                 >
                   <option value="">{t('select') || '— tanlang —'}</option>
                   {Object.entries(UOMS_BY_CATEGORY).map(([cat, units]) => (
@@ -163,17 +163,17 @@ export default function AddSubWorkModal({ open, onClose, projectId, estimateId, 
                       : cat === 'machines' ? (t('group_machines') || "Mashina (mashina-soat)")
                                            : (t('group_material') || "Material (o'lchov)")
                       }
-                      style={{ background: '#F8FAFC', color: '#0D9488', fontWeight: 600 }}
+                      style={{ background: '#0B1220', color: '#14B8A6', fontWeight: 600 }}
                     >
                       {units.map((u) => (
-                        <option key={u} value={u} style={{ background: '#FFFFFF', color: '#0F172A' }}>{u}</option>
+                        <option key={u} value={u} style={{ background: '#1E293B', color: '#F1F5F9' }}>{u}</option>
                       ))}
                     </optgroup>
                   ))}
                 </select>
               </div>
               <div>
-                <label className="text-[11px] block mb-1.5" style={{ color: '#64748B' }}>
+                <label className="text-[11px] block mb-1.5" style={{ color: '#94A3B8' }}>
                   {t('initial_qty_optional') || 'Hajmi (keyinroq kiritish mumkin)'}
                 </label>
                 <input
@@ -183,7 +183,7 @@ export default function AddSubWorkModal({ open, onClose, projectId, estimateId, 
                   onChange={(e) => setQty(e.target.value)}
                   onFocus={(e) => e.target.select()}
                   className="w-full px-3 py-2.5 rounded-md text-[13px] font-mono outline-none"
-                  style={{ background: '#F8FAFC', color: '#0F172A', border: '1px solid #CBD5E1' }}
+                  style={{ background: '#0B1220', color: '#F1F5F9', border: '1px solid #334155' }}
                 />
               </div>
             </div>
@@ -191,12 +191,12 @@ export default function AddSubWorkModal({ open, onClose, projectId, estimateId, 
             <div
               className="px-3 py-3 rounded-md text-[12px]"
               style={{
-                background: 'rgba(13,148,136,0.05)',
-                border: '1px solid rgba(13,148,136,0.15)',
-                color: '#475569',
+                background: 'rgba(20,184,166,0.05)',
+                border: '1px solid rgba(20,184,166,0.15)',
+                color: '#CBD5E1',
               }}
             >
-              <strong style={{ color: '#0D9488' }}>{t('info') || "Ma'lumot"}:</strong>{' '}
+              <strong style={{ color: '#14B8A6' }}>{t('info') || "Ma'lumot"}:</strong>{' '}
               {t('stage_info_hint')
                 || "Etap yaratilgandan so'ng unga resurs (material / mashina-soat / odam-soat) qo'shishingiz mumkin."}
             </div>
@@ -205,13 +205,13 @@ export default function AddSubWorkModal({ open, onClose, projectId, estimateId, 
           {/* Foot */}
           <div
             className="px-6 py-4 flex justify-end gap-2.5"
-            style={{ borderTop: '1px solid #E2E8F0' }}
+            style={{ borderTop: '1px solid #1E293B' }}
           >
             <button
               onClick={onClose}
               disabled={saving}
               className="px-4 py-2 rounded-md text-xs disabled:opacity-50"
-              style={{ background: 'transparent', color: '#475569', border: '1px solid #CBD5E1' }}
+              style={{ background: 'transparent', color: '#CBD5E1', border: '1px solid #334155' }}
             >
               {t('cancel') || 'Bekor qilish'}
             </button>
@@ -219,7 +219,7 @@ export default function AddSubWorkModal({ open, onClose, projectId, estimateId, 
               onClick={handleSave}
               disabled={saving}
               className="px-4 py-2 rounded-md text-xs font-medium flex items-center gap-1.5 disabled:opacity-50"
-              style={{ background: '#0D9488', color: '#FFFFFF', border: 'none' }}
+              style={{ background: '#14B8A6', color: '#1E293B', border: 'none' }}
             >
               {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               {t('create') || 'Yaratish'}

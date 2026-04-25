@@ -2,18 +2,28 @@ import React, { useState, useEffect } from 'react';
 import { useAdminSettings } from '@/components/contexts/AdminSettingsContext';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
-import { SettingsSection, SettingsField, SettingsRow, SettingsToggle } from './SettingsSection';
+import { SettingsSection, SettingsField, SettingsRow } from './SettingsSection';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ShieldCheck, Users } from 'lucide-react';
+import { Users } from 'lucide-react';
 import { hrService } from '@/api/services';
 
+// Construction settings — assigns the three workflow roles (foreman /
+// supervisor / engineer) at the tenant level. The Bosqichlar v2 page
+// reads these to gate the per-row actions; the backend's
+// resolveProjectRole helper falls back to these tenant-wide values
+// when a project-team-level role isn't set.
+//
+// The legacy "Material Approver" single-approver concept has been
+// replaced by the three-role workflow — one person to "approve" stages
+// is no longer enough now that we have explicit foreman → supervisor →
+// engineer hand-offs.
 export default function ConstructionSettings() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { settings, updateSetting, resetSection } = useAdminSettings();
 
   const construction = settings.construction || {};
-  const materialApproval = construction.material_approval || {};
+  const roles = construction.roles || {};
 
   const [employees, setEmployees] = useState([]);
   const [loadingEmployees, setLoadingEmployees] = useState(false);
@@ -29,56 +39,87 @@ export default function ConstructionSettings() {
       .finally(() => setLoadingEmployees(false));
   }, []);
 
+  // Each of the three slots renders the same dropdown shape — keep it
+  // in one helper so the role keys, copy, and emoji stay consistent.
+  const ROLE_SLOTS = [
+    {
+      key:   'foreman',
+      emoji: '👷',
+      labelKey:       'role_foreman',
+      descKey:        'role_foreman_setting_desc',
+    },
+    {
+      key:   'supervisor',
+      emoji: '🔍',
+      labelKey:       'role_supervisor',
+      descKey:        'role_supervisor_setting_desc',
+    },
+    {
+      key:   'engineer',
+      emoji: '🛠️',
+      labelKey:       'role_engineer',
+      descKey:        'role_engineer_setting_desc',
+    },
+  ];
+
   return (
     <div className="space-y-4">
-      {/* Material Approval Settings */}
       <SettingsSection
-        title={t('material_approval_settings')}
-        description={t('material_approval_settings_desc')}
-        icon={ShieldCheck}
+        title={t('construction_roles_title') || 'Construction roles'}
+        description={t('construction_roles_desc')
+          || 'Assign the foreman, tech supervisor, and chief engineer for the construction module. The Stages page hides costs from the foreman, lets the tech supervisor confirm submitted works, and lets the chief engineer finalise (lock) confirmed works.'}
+        icon={Users}
         onReset={() => resetSection('construction')}
         resetLabel={t('reset')}
       >
-        <div className="mb-4">
-          <SettingsToggle
-            label={t('require_material_approval')}
-            description={t('require_material_approval_desc')}
-            checked={materialApproval.require_approval !== false}
-            onChange={(checked) => updateSetting('construction.material_approval.require_approval', checked)}
-          />
-        </div>
-
-        <SettingsRow>
-          <SettingsField label={t('material_approver')} description={t('material_approver_desc')}>
-            <Select
-              value={materialApproval.approver_user_id || ''}
-              onValueChange={(value) => updateSetting('construction.material_approval.approver_user_id', value === '__none__' ? '' : value)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder={loadingEmployees ? t('loading') : (t('select_approver'))} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__">
-                  <div className="flex items-center gap-2 text-slate-500">
-                    <Users className="w-4 h-4" />
-                    {t('no_approver_set')}
-                  </div>
-                </SelectItem>
-                {employees.map(emp => (
-                  <SelectItem key={emp.id} value={emp.user_id || emp.id}>
-                    <div className="flex items-center gap-2">
-                      <Users className="w-4 h-4 text-blue-500" />
-                      <span>{[emp.first_name, emp.last_name].filter(Boolean).join(' ') || emp.email}</span>
-                      {emp.job_position_name && (
-                        <span className="text-xs text-slate-400">— {emp.job_position_name}</span>
-                      )}
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </SettingsField>
-        </SettingsRow>
+        {ROLE_SLOTS.map((slot) => {
+          const userId = roles[`${slot.key}_user_id`] || '';
+          return (
+            <SettingsRow key={slot.key}>
+              <SettingsField
+                label={
+                  <span className="inline-flex items-center gap-2">
+                    <span className="text-base leading-none">{slot.emoji}</span>
+                    {t(slot.labelKey)}
+                  </span>
+                }
+                description={t(slot.descKey)}
+              >
+                <Select
+                  value={userId || '__none__'}
+                  onValueChange={(value) =>
+                    updateSetting(`construction.roles.${slot.key}_user_id`, value === '__none__' ? '' : value)
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={loadingEmployees ? t('loading') : t('select_user')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">
+                      <div className="flex items-center gap-2 text-slate-500">
+                        <Users className="w-4 h-4" />
+                        {t('not_assigned')}
+                      </div>
+                    </SelectItem>
+                    {employees.map((emp) => (
+                      <SelectItem key={emp.id} value={emp.user_id || emp.id}>
+                        <div className="flex items-center gap-2">
+                          <Users className="w-4 h-4 text-blue-500" />
+                          <span>
+                            {[emp.first_name, emp.last_name].filter(Boolean).join(' ') || emp.email}
+                          </span>
+                          {emp.job_position_name && (
+                            <span className="text-xs text-slate-400">— {emp.job_position_name}</span>
+                          )}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </SettingsField>
+            </SettingsRow>
+          );
+        })}
       </SettingsSection>
     </div>
   );

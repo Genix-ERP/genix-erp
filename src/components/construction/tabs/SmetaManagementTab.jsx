@@ -3,9 +3,12 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import {
   Loader2, Search, Users, Wrench, Package, FileText, RefreshCw,
   Plus, Trash2, ChevronDown, RotateCcw, ListChecks, Boxes, Grid3x3,
+  History as HistoryIcon, Activity, Eye, Edit3, DollarSign,
+  Tag, Save as SaveIcon, ToggleLeft, Percent, User as UserIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLanguage } from '@/components/contexts/LanguageContext';
+import { useAuth } from '@/components/contexts/AuthContext';
 import { useTranslation } from '@/components/utils/translations';
 import { constructionService } from '@/api/services/construction';
 import { formatApiError } from '@/utils/apiErrors';
@@ -37,10 +40,11 @@ import AddSubWorkModal from '@/components/construction/AddSubWorkModal';
 //   - Per-work footer: Mehnat / Mashina / Material / JAMI breakdown
 //   - Pulse animation on empty qty inputs (matches mockup keyframe)
 
-// Color tokens — light theme. Same role names as the original mockup
-// palette (so the JSX doesn't change), but mapped to white-background
-// equivalents so the tab reads like a clean printed sheet rather than
-// the dark dashboard the mockup originally targeted.
+// Color tokens — light theme. Was switched back to the v23 dark mockup
+// briefly, but the user wants the Smeta boshqaruvi tab to read like a
+// printed-sheet (white background, slate text) so it integrates with
+// the rest of the white app shell. All JSX consumes these tokens by
+// name; flipping back to dark is one palette change away.
 const C = {
   bg:        '#FFFFFF',  // main background
   card:      '#FFFFFF',  // card surface
@@ -84,9 +88,16 @@ const fmt = (n) => {
 const fmtShort = (n) => {
   const v = Number(n);
   if (!Number.isFinite(v) || v === 0) return '0';
-  if (Math.abs(v) >= 1e9) return (v / 1e9).toFixed(2) + ' B';
-  if (Math.abs(v) >= 1e6) return (v / 1e6).toFixed(2) + ' M';
-  if (Math.abs(v) >= 1e3) return (v / 1e3).toFixed(1) + ' K';
+  // Compact Uzbek labels matching the v23 mockup. Comma decimal separator
+  // matches the rest of the app's ru/uz number formatting (e.g. "18,5 mln").
+  const ru = (x, digits) => x.toLocaleString('ru-RU', {
+    minimumFractionDigits: digits, maximumFractionDigits: digits,
+  });
+  const a = Math.abs(v);
+  if (a >= 1e12) return ru(v / 1e12, 1) + ' trln';
+  if (a >= 1e9)  return ru(v / 1e9, 1)  + ' mlrd';
+  if (a >= 1e6)  return ru(v / 1e6, 1)  + ' mln';
+  if (a >= 1e3)  return ru(v / 1e3, 0)  + ' ming';
   return fmt(v);
 };
 const parseNum = (s) => Number(String(s ?? '').replace(/\s/g, '').replace(',', '.').replace(/[^\d.\-]/g, '')) || 0;
@@ -113,6 +124,14 @@ const CAT_COLOR = {
 export default function SmetaManagementTab({ project }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  // Current user — drives the "Foydalanuvchi" pill in the topbar so the
+  // foreman can see at a glance whose account is making edits (every
+  // mutation is also persisted into construction_smeta_audit with this
+  // user's id + name on the server side).
+  const { user } = useAuth();
+  const userDisplay = user
+    ? [user.first_name, user.last_name].filter(Boolean).join(' ').trim() || user.email || ''
+    : '';
 
   const [estimates, setEstimates] = useState([]);
   const [estimateId, setEstimateId] = useState('');
@@ -139,6 +158,16 @@ export default function SmetaManagementTab({ project }) {
   // original. Pulled separately from the main lines query because resource
   // pricing is bucketed per (name, uom), not per line.
   const [changedCount, setChangedCount] = useState(0);
+
+  // ── Tarix (snapshots) and Jurnal (audit log) state ────────────────
+  // Both are loaded lazily — only when the user actually opens the tab —
+  // so the Ishlar/Resurslar pages stay snappy.
+  const [snapshots, setSnapshots] = useState([]);
+  const [loadingSnapshots, setLoadingSnapshots] = useState(false);
+  const [snapshotPreview, setSnapshotPreview] = useState(null); // full payload from getForm2Snapshot
+  const [auditEntries, setAuditEntries] = useState([]);
+  const [loadingAudit, setLoadingAudit] = useState(false);
+  const [auditFilter, setAuditFilter] = useState('');
 
   // ── Load estimates ─────────────────────────────────────────────────
   useEffect(() => {
@@ -199,6 +228,117 @@ export default function SmetaManagementTab({ project }) {
       .catch(() => { if (!cancelled) setChangedCount(0); });
     return () => { cancelled = true; };
   }, [project?.id, lines]);
+
+  // ── Tarix / Jurnal loaders ───────────────────────────────────────
+  // Both callbacks use empty deps + eslint-disable (same pattern as
+  // loadLines above). `t` from useTranslation is a fresh function every
+  // render, so depending on it would re-create these callbacks every
+  // render — and because they're in the effect deps below, the effect
+  // would re-fire each render, triggering an infinite request loop
+  // (one request per render × ~30 renders/s before the rate-limiter
+  // returned 429s).
+  const loadSnapshots = useCallback(async (id) => {
+    if (!id) { setSnapshots([]); return; }
+    setLoadingSnapshots(true);
+    try {
+      const rows = await constructionService.listForm2Snapshots(id);
+      setSnapshots(Array.isArray(rows) ? rows : []);
+    } catch (e) {
+      toast.error(formatApiError(e, t, 'Xatolik'));
+      setSnapshots([]);
+    } finally {
+      setLoadingSnapshots(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const loadAudit = useCallback(async (id, action) => {
+    if (!id) { setAuditEntries([]); return; }
+    setLoadingAudit(true);
+    try {
+      const rows = await constructionService.listSmetaAudit(id, { limit: 200, action: action || undefined });
+      setAuditEntries(Array.isArray(rows) ? rows : []);
+    } catch (e) {
+      toast.error(formatApiError(e, t, 'Xatolik'));
+      setAuditEntries([]);
+    } finally {
+      setLoadingAudit(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Lazily refresh whenever the user opens Tarix or Jurnal.
+  // Deps must NOT include loadSnapshots/loadAudit — they're stable
+  // (empty-dep useCallback), and listing them would put us right back
+  // in the infinite loop if the empty-dep guarantee ever drifts.
+  useEffect(() => {
+    if (page === 'history') loadSnapshots(estimateId);
+    if (page === 'audit')   loadAudit(estimateId, auditFilter);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, estimateId, auditFilter]);
+
+  // Background prefetch of snapshot + audit counts so the inner-tab badges
+  // ("Formalar tarixi 2", "O'zgarishlar jurnali 13" in v23) show real
+  // numbers even before the user opens those tabs. One request each per
+  // estimate change; cheap because both endpoints return small payloads.
+  useEffect(() => {
+    if (!estimateId) return;
+    let cancelled = false;
+    if (page !== 'history') {
+      constructionService.listForm2Snapshots(estimateId)
+        .then((rows) => { if (!cancelled) setSnapshots(Array.isArray(rows) ? rows : []); })
+        .catch(() => {});
+    }
+    if (page !== 'audit') {
+      constructionService.listSmetaAudit(estimateId, { limit: 200 })
+        .then((rows) => { if (!cancelled) setAuditEntries(Array.isArray(rows) ? rows : []); })
+        .catch(() => {});
+    }
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [estimateId]);
+
+  // ── Snapshot save / delete ───────────────────────────────────────
+  // Same loop hazard as loadSnapshots/loadAudit: depending on `t` (which
+  // changes identity every render) would re-create these handlers each
+  // render. They're passed down to memo'd children, so a new identity
+  // would defeat the memoisation and trigger renders of those subtrees.
+  const handleSaveSnapshot = useCallback(async (payload) => {
+    if (!estimateId) return;
+    try {
+      await constructionService.createForm2Snapshot(estimateId, payload);
+      toast.success(t('snapshot_saved') || 'Forma 2 saqlandi');
+      // If the user is currently viewing the History tab refresh the list.
+      if (page === 'history') loadSnapshots(estimateId);
+    } catch (e) {
+      toast.error(formatApiError(e, t, 'Xatolik'));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [estimateId, page]);
+
+  const handleDeleteSnapshot = useCallback(async (snap) => {
+    if (!snap?.id) return;
+    if (!window.confirm(t('snapshot_delete_confirm') || 'Saqlangan Forma 2 ni o\'chirilsinmi?')) return;
+    try {
+      await constructionService.deleteForm2Snapshot(snap.id);
+      toast.success(t('deleted') || 'O\'chirildi');
+      loadSnapshots(estimateId);
+    } catch (e) {
+      toast.error(formatApiError(e, t, 'Xatolik'));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [estimateId]);
+
+  const handleViewSnapshot = useCallback(async (snap) => {
+    if (!snap?.id) return;
+    try {
+      const full = await constructionService.getForm2Snapshot(snap.id);
+      setSnapshotPreview(full);
+    } catch (e) {
+      toast.error(formatApiError(e, t, 'Xatolik'));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Build child map and sections ──────────────────────────────────
   const subByParent = useMemo(() => {
@@ -270,6 +410,20 @@ export default function SmetaManagementTab({ project }) {
     return { labor, machines, materials, grand, filled, total };
   }, [lines, subByParent]);
 
+  // Resource count for the inner-tab badge ("Resurslar 554" in v23).
+  // Counts unique (name, uom) buckets across every resource line in this
+  // estimate — the same grouping ResourcesPanel uses internally.
+  const resourceCount = useMemo(() => {
+    const buckets = new Set();
+    for (const ln of lines) {
+      const rt = String(ln.resource_type || '').trim();
+      if (!rt) continue; // skip work rows / sub-stages
+      const key = `${(ln.name || '').toLowerCase()}::${(ln.uom || '').toLowerCase()}`;
+      buckets.add(key);
+    }
+    return buckets.size;
+  }, [lines]);
+
   const sections = useMemo(() => {
     const sectionMap = new Map();
     for (const ln of lines) {
@@ -332,6 +486,25 @@ export default function SmetaManagementTab({ project }) {
     }
   }, [estimateId, t]);
 
+  // Bulk-zero every work qty in the selected estimate. Confirmation
+  // required because this is destructive (the only way back is per-line
+  // reset-to-original or re-import). Cascades to non-override sub-lines
+  // server-side; we just refetch when it returns.
+  const resetAllQuantities = useCallback(async () => {
+    if (!estimateId) return;
+    const msg = t('reset_all_qty_confirm')
+      || "Bu smetadagi barcha ish hajmlari 0 ga tushiriladi. Davom etamizmi?";
+    // eslint-disable-next-line no-alert
+    if (!window.confirm(msg)) return;
+    try {
+      const result = await constructionService.resetAllEstimateQuantities(estimateId);
+      toast.success(`${t('reset_all_qty_done') || 'Hajmlar tushirildi'} · ${result?.works_zeroed || 0}`);
+      loadLines(estimateId);
+    } catch (e) {
+      toast.error(formatApiError(e, t, 'Xatolik'));
+    }
+  }, [estimateId, loadLines, t]);
+
   // ── Add-flow handlers — open the right modal with the right parent ─
   const openAddStage = (work) => { setAddTarget(work); setAddStageOpen(true); };
   const openAddResource = (parentRow) => { setAddTarget(parentRow); setAddResOpen(true); };
@@ -348,12 +521,23 @@ export default function SmetaManagementTab({ project }) {
     if (n.has(id)) n.delete(id); else n.add(id);
     return n;
   });
+  // Section accordion bulk-toggle ("Ochish" / "Yopish" in the mockup).
+  // Distinct from work-card toggling — the section row is the dark
+  // expandable strip that wraps a list of works.
+  const expandSections  = () => setCollapsedSections({});
+  const collapseSections = () => {
+    const next = {};
+    for (const sec of sections) next[sec.name] = true;
+    setCollapsedSections(next);
+  };
+  // Work-card bulk-toggle ("Hammasini yoqish" / "Hammasini o'chirish"
+  // in the mockup). Opens / closes every individual work card AND its
+  // sub-stages so the user can see the whole tree at once.
   const expandAll = () => {
     const all = new Set();
     for (const sec of sections) {
       for (const ln of sec.lines) {
         all.add(ln.id);
-        // Auto-open sub-stages too so the user sees the whole tree.
         for (const ss of (subByParent.get(Number(ln.id)) || []).filter(isSubStageRow)) all.add(ss.id);
       }
     }
@@ -391,7 +575,7 @@ export default function SmetaManagementTab({ project }) {
             Ishlab chiqarish · Форма 2 · ВОР
           </div>
           <h1 className="text-[22px] font-semibold mt-1" style={{ color: C.text }}>
-            {t('nav_smeta_management') || 'Lokal resurs smeta'}
+            {t('lokal_resurs_smeta') || 'Lokal resurs smeta'}
           </h1>
           <div className="text-xs mt-1" style={{ color: C.muted }}>
             {project?.name || ''}
@@ -417,6 +601,27 @@ export default function SmetaManagementTab({ project }) {
               <span>{changedCount}</span>&nbsp;{t('changes') || "o'zgarish"}
             </div>
           )}
+          {/* Current user pill — matches the v23 mockup's
+             "Foydalanuvchi: …" indicator. Read-only because every
+             mutation is already attributed server-side via the JWT;
+             the pill is purely informational so the foreman knows
+             which account is leaving an audit trail. Falls back to
+             "— kiriting —" when not signed in (matches mockup copy). */}
+          <div
+            className="px-2.5 py-1.5 rounded-md text-[11px] flex items-center gap-1.5"
+            style={{
+              background: C.inset,
+              color: userDisplay ? C.text : C.muted,
+              border: `1px solid ${C.border2}`,
+            }}
+            title={user?.email || ''}
+          >
+            <UserIcon className="w-3 h-3" style={{ color: C.muted }} />
+            <span style={{ color: C.muted }}>{t('user_label') || 'Foydalanuvchi'}:</span>
+            <span style={{ fontWeight: 500 }}>
+              {userDisplay || (t('user_not_signed_in') || '— kiriting —')}
+            </span>
+          </div>
           <select
             value={estimateId}
             onChange={(e) => setEstimateId(e.target.value)}
@@ -466,8 +671,10 @@ export default function SmetaManagementTab({ project }) {
         }}
       >
         {[
-          { key: 'works',     icon: ListChecks, label: t('inner_tab_works')     || 'Ishlar',    count: kpis.total },
-          { key: 'resources', icon: Boxes,      label: t('inner_tab_resources') || 'Resurslar', count: null },
+          { key: 'works',     icon: ListChecks,  label: t('inner_tab_works')     || 'Ishlar',              count: kpis.total },
+          { key: 'resources', icon: Boxes,       label: t('inner_tab_resources') || 'Resurslar',           count: resourceCount },
+          { key: 'history',   icon: HistoryIcon, label: t('inner_tab_history')   || 'Formalar tarixi',     count: snapshots.length },
+          { key: 'audit',     icon: Activity,    label: t('inner_tab_audit')     || "O'zgarishlar jurnali", count: auditEntries.length },
         ].map((tab) => {
           const active = page === tab.key;
           const Icon = tab.icon;
@@ -484,7 +691,7 @@ export default function SmetaManagementTab({ project }) {
             >
               <Icon className="w-3.5 h-3.5" />
               <span>{tab.label}</span>
-              {tab.count !== null && (
+              {(tab.count !== null && tab.count !== undefined) && (
                 <span
                   className="text-[10px] font-mono px-1.5 py-0.5 rounded"
                   style={{
@@ -546,8 +753,11 @@ export default function SmetaManagementTab({ project }) {
                   <option key={s} value={s} style={{ background: C.card, color: C.text }}>{s}</option>
                 ))}
               </select>
+              {/* Section accordion toggle — opens/closes the dark section
+                 strips themselves. Distinct from the work-card bulk
+                 buttons next to it. */}
               <button
-                onClick={expandAll}
+                onClick={expandSections}
                 disabled={sections.length === 0}
                 className="px-3.5 py-2 rounded-md text-xs transition disabled:opacity-50"
                 style={{ background: 'transparent', color: C.dim, border: `1px solid ${C.border2}` }}
@@ -555,12 +765,52 @@ export default function SmetaManagementTab({ project }) {
                 {t('expand_all') || 'Ochish'}
               </button>
               <button
-                onClick={collapseAll}
+                onClick={collapseSections}
                 disabled={sections.length === 0}
                 className="px-3.5 py-2 rounded-md text-xs transition disabled:opacity-50"
                 style={{ background: 'transparent', color: C.dim, border: `1px solid ${C.border2}` }}
               >
                 {t('collapse_all') || 'Yopish'}
+              </button>
+              {/* Bulk-toggle every work card (and every sub-stage card) at
+                 once. Mockup colours: green for "all on", red for "all off". */}
+              <button
+                onClick={expandAll}
+                disabled={sections.length === 0}
+                className="px-3.5 py-2 rounded-md text-xs flex items-center gap-1.5 transition disabled:opacity-50"
+                style={{
+                  background: 'rgba(13,148,136,0.1)', color: C.teal,
+                  border: '1px solid rgba(13,148,136,0.4)',
+                }}
+                title={t('expand_all_works_hint') || 'Barcha ish kartalarini ochish'}
+              >
+                <span>✓</span>
+                {t('expand_all_works') || "Hammasini yoqish"}
+              </button>
+              <button
+                onClick={collapseAll}
+                disabled={sections.length === 0}
+                className="px-3.5 py-2 rounded-md text-xs flex items-center gap-1.5 transition disabled:opacity-50"
+                style={{
+                  background: 'rgba(220,38,38,0.08)', color: C.red,
+                  border: '1px solid rgba(220,38,38,0.3)',
+                }}
+                title={t('collapse_all_works_hint') || 'Barcha ish kartalarini yopish'}
+              >
+                <span>×</span>
+                {t('collapse_all_works') || "Hammasini o'chirish"}
+              </button>
+              {/* Reset all qty — destructive, hence the amber-tinted style.
+                 Disabled when no estimate is selected. Confirms before firing. */}
+              <button
+                onClick={resetAllQuantities}
+                disabled={!estimateId || loadingLines}
+                className="px-3.5 py-2 rounded-md text-xs flex items-center gap-1.5 transition disabled:opacity-50"
+                style={{ background: 'transparent', color: C.amber, border: `1px solid ${C.amber}` }}
+                title={t('reset_all_qty') || "Barcha hajmlarni tushirish"}
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                {t('reset_all_qty') || "Hajmlarni tushirish"}
               </button>
             </div>
           </div>
@@ -680,6 +930,35 @@ export default function SmetaManagementTab({ project }) {
         </div>
       )}
 
+      {/* HISTORY (Tarix) PAGE — saved Forma 2 documents */}
+      {page === 'history' && (
+        <div className="px-8 pt-6 pb-12">
+          <HistoryPage
+            t={t}
+            loading={loadingSnapshots}
+            snapshots={snapshots}
+            onView={handleViewSnapshot}
+            onDelete={handleDeleteSnapshot}
+            onRefresh={() => loadSnapshots(estimateId)}
+            onSaveCurrent={() => setForm2Open(true)}
+          />
+        </div>
+      )}
+
+      {/* AUDIT (Jurnal) PAGE — chronological log of every mutation */}
+      {page === 'audit' && (
+        <div className="px-8 pt-6 pb-12">
+          <AuditPage
+            t={t}
+            loading={loadingAudit}
+            entries={auditEntries}
+            filter={auditFilter}
+            onFilterChange={(v) => setAuditFilter(v)}
+            onRefresh={() => loadAudit(estimateId, auditFilter)}
+          />
+        </div>
+      )}
+
       {/* MODALS */}
       <AddResourcePickerModal
         open={addResOpen}
@@ -708,7 +987,34 @@ export default function SmetaManagementTab({ project }) {
               lines={lines}
               project={project}
               onClose={() => setForm2Open(false)}
+              onSaveSnapshot={handleSaveSnapshot}
             />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Snapshot preview — read-only Forma 2 rebuilt from the saved
+          snapshot_data payload. We hand the saved lines to Form2Preview so
+          the same renderer is reused; period/pct/vat are loaded from the
+          snapshot's saved fields. */}
+      <Dialog open={!!snapshotPreview} onOpenChange={(o) => { if (!o) setSnapshotPreview(null); }}>
+        <DialogContent className="max-w-[1200px] w-[95vw] h-[95vh] p-0 overflow-hidden flex flex-col">
+          <div className="flex-1 overflow-auto bg-stone-100">
+            {snapshotPreview && (
+              <Form2Preview
+                estimate={selectedEstimate}
+                lines={(() => {
+                  try {
+                    const d = typeof snapshotPreview.snapshot_data === 'string'
+                      ? JSON.parse(snapshotPreview.snapshot_data)
+                      : snapshotPreview.snapshot_data;
+                    return Array.isArray(d?.lines) && d.lines.length > 0 ? d.lines : (lines || []);
+                  } catch { return lines || []; }
+                })()}
+                project={project}
+                onClose={() => setSnapshotPreview(null)}
+              />
+            )}
           </div>
         </DialogContent>
       </Dialog>
@@ -1118,6 +1424,247 @@ function FooterItem({ label, value, color }) {
     <div className="flex items-center gap-2">
       <span className="text-[11px]" style={{ color: C.muted }}>{label}:</span>
       <span className="font-mono font-semibold" style={{ color }}>{fmt(value)}</span>
+    </div>
+  );
+}
+
+// =====================================================================
+// HistoryPage — Tarix tab. Lists every saved Forma 2 snapshot for the
+// selected estimate. Each row has Ko'rish + O'chirish, plus a header
+// "Yangisi" button that opens the live Forma 2 dialog (which has its own
+// Saqlash button). The list endpoint omits the heavy snapshot_data blob;
+// when the user clicks Ko'rish we fetch the full row and render it via
+// Form2Preview in read-only mode.
+// =====================================================================
+function HistoryPage({ t, loading, snapshots, onView, onDelete, onRefresh, onSaveCurrent }) {
+  const fmtDate = (s) => {
+    if (!s) return '—';
+    try {
+      const d = new Date(s);
+      return d.toLocaleDateString('ru-RU') + ' ' + d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    } catch { return s; }
+  };
+  const fmtPeriod = (a, b) => {
+    if (!a && !b) return '—';
+    const fmtD = (s) => s ? new Date(s).toLocaleDateString('ru-RU') : '—';
+    return `${fmtD(a)} — ${fmtD(b)}`;
+  };
+  return (
+    <div>
+      <div className="rounded-[10px] p-3 flex items-center gap-2 mb-3"
+           style={{ background: C.card, border: `1px solid ${C.border}` }}>
+        <h3 className="text-[13px] font-semibold flex-1" style={{ color: C.text }}>
+          {t('history_saved_form2') || "Saqlangan Forma 2 hujjatlari"}
+        </h3>
+        <button
+          onClick={onRefresh}
+          className="text-[12px] px-3 py-1.5 rounded-[6px] flex items-center gap-1.5"
+          style={{ background: C.inset, border: `1px solid ${C.border2}`, color: C.dim }}
+        >
+          <RefreshCw className="w-3 h-3" />
+          {t('refresh') || 'Yangilash'}
+        </button>
+        <button
+          onClick={onSaveCurrent}
+          className="text-[12px] px-3 py-1.5 rounded-[6px] flex items-center gap-1.5"
+          style={{ background: C.teal, color: '#fff' }}
+        >
+          <SaveIcon className="w-3 h-3" />
+          {t('history_save_current') || 'Joriy holatdan saqlash'}
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-12" style={{ color: C.muted }}>
+          <Loader2 className="w-5 h-5 animate-spin mr-2" />
+          {t('loading') || 'Yuklanmoqda...'}
+        </div>
+      ) : snapshots.length === 0 ? (
+        <div className="rounded-[10px] py-12 text-center" style={{ background: C.card, border: `1px dashed ${C.border2}`, color: C.muted }}>
+          <HistoryIcon className="w-6 h-6 mx-auto mb-2" />
+          <div className="text-[13px]">{t('history_empty') || "Hali bironta saqlangan Forma 2 yo'q"}</div>
+          <div className="text-[11px] mt-1">{t('history_empty_hint') || "Forma 2 ni oching va o'ng yuqoridagi 'Saqlash' tugmasini bosing"}</div>
+        </div>
+      ) : (
+        <div className="rounded-[10px] overflow-hidden" style={{ background: C.card, border: `1px solid ${C.border}` }}>
+          <table className="w-full text-[12px]" style={{ borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: C.sec, borderBottom: `1px solid ${C.border}` }}>
+                <th className="px-3 py-2 text-left font-medium" style={{ color: C.muted }}>{t('history_col_saved') || 'Sana'}</th>
+                <th className="px-3 py-2 text-left font-medium" style={{ color: C.muted }}>{t('history_col_act') || 'Akt №'}</th>
+                <th className="px-3 py-2 text-left font-medium" style={{ color: C.muted }}>{t('history_col_period') || 'Davr'}</th>
+                <th className="px-3 py-2 text-right font-medium" style={{ color: C.muted }}>{t('history_col_total') || 'Jami'}</th>
+                <th className="px-3 py-2 text-center font-medium" style={{ color: C.muted }}>{t('history_col_vat') || 'НДС'}</th>
+                <th className="px-3 py-2 text-left font-medium" style={{ color: C.muted }}>{t('history_col_user') || 'Kim'}</th>
+                <th className="px-3 py-2" style={{ width: 110 }}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {snapshots.map((s) => (
+                <tr key={s.id} style={{ borderBottom: `1px solid ${C.border}` }}>
+                  <td className="px-3 py-2 font-mono" style={{ color: C.text }}>{fmtDate(s.created_at)}</td>
+                  <td className="px-3 py-2" style={{ color: C.dim }}>{s.act_number || '—'}</td>
+                  <td className="px-3 py-2" style={{ color: C.dim }}>{fmtPeriod(s.period_from, s.period_to)}</td>
+                  <td className="px-3 py-2 text-right font-mono font-semibold" style={{ color: C.amber }}>
+                    {fmt(Number(s.use_vat ? s.total_with_vat : s.total_without_vat) || 0)}
+                  </td>
+                  <td className="px-3 py-2 text-center" style={{ color: s.use_vat ? C.teal : C.muted }}>
+                    {s.use_vat ? '✓' : '—'}
+                  </td>
+                  <td className="px-3 py-2" style={{ color: C.dim }}>{s.created_by_name || '—'}</td>
+                  <td className="px-3 py-2 text-right">
+                    <div className="flex gap-1 justify-end">
+                      <button
+                        onClick={() => onView(s)}
+                        className="w-7 h-7 rounded-[5px] flex items-center justify-center"
+                        title={t('view') || "Ko'rish"}
+                        style={{ background: C.hover, border: `1px solid ${C.border2}`, color: C.teal }}
+                      >
+                        <Eye className="w-3 h-3" />
+                      </button>
+                      <button
+                        onClick={() => onDelete(s)}
+                        className="w-7 h-7 rounded-[5px] flex items-center justify-center"
+                        title={t('delete') || "O'chirish"}
+                        style={{ background: C.hover, border: `1px solid ${C.border2}`, color: C.red }}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =====================================================================
+// AuditPage — Jurnal tab. Newest-first audit log of every mutation done
+// from the Smeta boshqaruvi UI. Each row has an action icon, target name,
+// from/to values, free-form description, who did it and when. The header
+// includes a filter dropdown that re-queries the backend with ?action=.
+// =====================================================================
+const AUDIT_ACTION_META = {
+  qty_change:      { color: '#0D9488', icon: Edit3,        label_uz: 'Hajm',         label_ru: 'Объём' },
+  price_change:    { color: '#D97706', icon: DollarSign,   label_uz: 'Narx',         label_ru: 'Цена' },
+  mat_type:        { color: '#7C3AED', icon: Tag,          label_uz: 'Material',     label_ru: 'Тип материала' },
+  subwork_add:     { color: '#16A34A', icon: Plus,         label_uz: 'Yangi etap',   label_ru: 'Новый этап' },
+  subwork_del:     { color: '#DC2626', icon: Trash2,       label_uz: "Etap o'chdi",  label_ru: 'Этап удалён' },
+  res_add:         { color: '#0D9488', icon: Plus,         label_uz: 'Resurs +',     label_ru: 'Ресурс +' },
+  res_del:         { color: '#DC2626', icon: Trash2,       label_uz: "Resurs o'chdi",label_ru: 'Ресурс удалён' },
+  reset_qty:       { color: '#475569', icon: RotateCcw,    label_uz: 'Hajm reset',   label_ru: 'Сброс объёма' },
+  reset_qty_all:   { color: '#475569', icon: RotateCcw,    label_uz: 'Barcha hajm',  label_ru: 'Сброс всех объёмов' },
+  reset_price:     { color: '#475569', icon: RotateCcw,    label_uz: 'Narx reset',   label_ru: 'Сброс цены' },
+  reset_price_all: { color: '#475569', icon: RotateCcw,    label_uz: 'Barcha narx',  label_ru: 'Сброс всех цен' },
+  form_save:       { color: '#0D9488', icon: SaveIcon,     label_uz: 'Forma 2',      label_ru: 'Сохр. Форма 2' },
+  form_delete:     { color: '#DC2626', icon: Trash2,       label_uz: 'Forma 2 ←',    label_ru: 'Удал. Форма 2' },
+  other_pct:       { color: '#7C3AED', icon: Percent,      label_uz: 'Прочие %',     label_ru: 'Прочие %' },
+  use_vat:         { color: '#7C3AED', icon: ToggleLeft,   label_uz: 'НДС',          label_ru: 'НДС' },
+};
+
+function AuditPage({ t, loading, entries, filter, onFilterChange, onRefresh }) {
+  const fmtDate = (s) => {
+    if (!s) return '—';
+    try {
+      const d = new Date(s);
+      return d.toLocaleDateString('ru-RU') + ' ' + d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    } catch { return s; }
+  };
+  return (
+    <div>
+      <div className="rounded-[10px] p-3 flex items-center gap-2 mb-3"
+           style={{ background: C.card, border: `1px solid ${C.border}` }}>
+        <h3 className="text-[13px] font-semibold flex-1" style={{ color: C.text }}>
+          {t('audit_log_title') || "O'zgarishlar jurnali"}
+        </h3>
+        <select
+          value={filter}
+          onChange={(e) => onFilterChange(e.target.value)}
+          className="text-[12px] px-2.5 py-1.5 rounded-[6px]"
+          style={{ background: C.inset, border: `1px solid ${C.border2}`, color: C.text, minWidth: 180 }}
+        >
+          <option value="">{t('audit_filter_all') || 'Barchasi'}</option>
+          {Object.entries(AUDIT_ACTION_META).map(([k, m]) => (
+            <option key={k} value={k}>{m.label_uz}</option>
+          ))}
+        </select>
+        <button
+          onClick={onRefresh}
+          className="text-[12px] px-3 py-1.5 rounded-[6px] flex items-center gap-1.5"
+          style={{ background: C.inset, border: `1px solid ${C.border2}`, color: C.dim }}
+        >
+          <RefreshCw className="w-3 h-3" />
+          {t('refresh') || 'Yangilash'}
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-12" style={{ color: C.muted }}>
+          <Loader2 className="w-5 h-5 animate-spin mr-2" />
+          {t('loading') || 'Yuklanmoqda...'}
+        </div>
+      ) : entries.length === 0 ? (
+        <div className="rounded-[10px] py-12 text-center" style={{ background: C.card, border: `1px dashed ${C.border2}`, color: C.muted }}>
+          <Activity className="w-6 h-6 mx-auto mb-2" />
+          <div className="text-[13px]">{t('audit_empty') || "Hech qanday o'zgarish yozib olinmagan"}</div>
+        </div>
+      ) : (
+        <div className="rounded-[10px] overflow-hidden" style={{ background: C.card, border: `1px solid ${C.border}` }}>
+          <table className="w-full text-[12px]" style={{ borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: C.sec, borderBottom: `1px solid ${C.border}` }}>
+                <th className="px-3 py-2 text-left font-medium" style={{ color: C.muted, width: 150 }}>{t('audit_col_when') || 'Vaqt'}</th>
+                <th className="px-3 py-2 text-left font-medium" style={{ color: C.muted, width: 150 }}>{t('audit_col_action') || 'Harakat'}</th>
+                <th className="px-3 py-2 text-left font-medium" style={{ color: C.muted }}>{t('audit_col_target') || "Ob'ekt"}</th>
+                <th className="px-3 py-2 text-left font-medium" style={{ color: C.muted, width: 200 }}>{t('audit_col_change') || "O'zgarish"}</th>
+                <th className="px-3 py-2 text-left font-medium" style={{ color: C.muted, width: 140 }}>{t('audit_col_user') || 'Kim'}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map((e) => {
+                const meta = AUDIT_ACTION_META[e.action] || { color: C.muted, icon: Activity, label_uz: e.action };
+                const Icon = meta.icon;
+                return (
+                  <tr key={e.id} style={{ borderBottom: `1px solid ${C.border}` }}>
+                    <td className="px-3 py-2 font-mono" style={{ color: C.dim }}>{fmtDate(e.created_at)}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className="w-5 h-5 rounded-[4px] flex items-center justify-center"
+                          style={{ background: `${meta.color}1a`, color: meta.color }}
+                        >
+                          <Icon className="w-3 h-3" />
+                        </span>
+                        <span className="text-[12px]" style={{ color: meta.color, fontWeight: 500 }}>{meta.label_uz}</span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2" style={{ color: C.text }}>
+                      {e.target || '—'}
+                      {e.description && (
+                        <div className="text-[11px]" style={{ color: C.muted }}>{e.description}</div>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 font-mono" style={{ color: C.dim }}>
+                      {e.from_value || e.to_value
+                        ? <>
+                            {e.from_value && <span style={{ color: C.muted }}>{e.from_value}</span>}
+                            {e.from_value && e.to_value && <span style={{ color: C.fade }}> → </span>}
+                            {e.to_value && <span style={{ color: C.text, fontWeight: 600 }}>{e.to_value}</span>}
+                          </>
+                        : '—'}
+                    </td>
+                    <td className="px-3 py-2" style={{ color: C.dim }}>{e.user_name || '—'}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
