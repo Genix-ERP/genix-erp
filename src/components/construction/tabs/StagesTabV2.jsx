@@ -9,6 +9,7 @@ import { useAuth } from '@/components/contexts/AuthContext';
 import { useTranslation } from '@/components/utils/translations';
 import { constructionService } from '@/api/services/construction';
 import { formatApiError } from '@/utils/apiErrors';
+import AddResourcePickerModal from '@/components/construction/AddResourcePickerModal';
 
 // =====================================================================
 // StagesTabV2 — full port of construction_module_v2.html
@@ -420,8 +421,18 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
   const [estimates, setEstimates] = useState([]);    // current building → primary estimate
   const [activeBuildingId, setActiveBuildingId] = useState(null);
   const [lines, setLines] = useState([]);            // works of the active estimate
+  const [activeEstimateId, setActiveEstimateId] = useState(null); // edinich estimate id of active building
   const [loading, setLoading] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0); // bump to force a reload
+  const [buildingStageCounts, setBuildingStageCounts] = useState({}); // buildingId → stage count
+
+  // ── Add-resource modal ────────────────────────────────────────────
+  // Foreman clicks "+" on a work row → modal lets them pick a resource
+  // from the project's smeta resources, enter a quantity, and the new
+  // sub-line attaches to the work via parent_line_id. From there the
+  // standard reserve-on-submit / deduct-on-engineer-confirm pipeline
+  // handles inventory automatically.
+  const [addResWorkParent, setAddResWorkParent] = useState(null);
 
   // ── Role state ────────────────────────────────────────────────────
   // `realRole` = role the backend reports for the current project.
@@ -439,6 +450,18 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
     if (n.has(key)) n.delete(key); else n.add(key);
     return n;
   });
+
+  // ── Per-work expansion (resource breakdown) ──────────────────────
+  // The user wants to see "what gets consumed" per work — labour, machines,
+  // materials sized as parent.done_quantity × subline.norm_rate. The data
+  // is already in `lines` (every estimate sub-line has parent_line_id =
+  // its work). We just toggle a Set of work IDs to control visibility.
+  const [expandedWorks, setExpandedWorks] = useState(new Set());
+  const toggleWork = useCallback((id) => setExpandedWorks((s) => {
+    const n = new Set(s);
+    if (n.has(id)) n.delete(id); else n.add(id);
+    return n;
+  }), []);
 
   // ── Local optimistic draft for done-quantity inputs ──────────────
   const [doneDraft, setDoneDraft] = useState({});
@@ -460,7 +483,9 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
     constructionService.listBuildings(project.id)
       .then((rows) => {
         if (cancelled) return;
-        const list = Array.isArray(rows) ? rows : [];
+        const list = (Array.isArray(rows) ? rows : []).slice().sort((a, b) =>
+          (a.name || '').localeCompare(b.name || '', undefined, { numeric: true, sensitivity: 'base' })
+        );
         setBuildings(list);
         if (list.length > 0 && !activeBuildingId) setActiveBuildingId(list[0].id);
       })
@@ -516,9 +541,11 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
         ) || null;
         if (!matchedEst) {
           setLines([]);
+          setActiveEstimateId(null);
           setLoading(false);
           return;
         }
+        setActiveEstimateId(matchedEst.id);
         try {
           const lineRows = await constructionService.listEstimateLines(matchedEst.id, { page_size: 5000 });
           if (cancelled) return;
@@ -533,6 +560,45 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project?.id, activeBuildingId, refreshTick]);
+
+  // Per-building stage counts — fetched once per estimates list change so
+  // each block button can show its own etap count instead of repeating the
+  // active building's count.
+  useEffect(() => {
+    if (!estimates || estimates.length === 0) {
+      setBuildingStageCounts({});
+      return;
+    }
+    let cancelled = false;
+    const edinich = estimates.filter(
+      (e) => String(e.source_type || '').toLowerCase() === 'edinich'
+    );
+    Promise.all(
+      edinich.map((est) =>
+        constructionService.listEstimateLines(est.id, { page_size: 5000 })
+          .then((rows) => {
+            const arr = Array.isArray(rows) ? rows : (rows?.data || rows?.items || []);
+            return [Number(est.building_id), deriveStages(arr).length];
+          })
+          .catch(() => [Number(est.building_id), 0])
+      )
+    ).then((pairs) => {
+      if (cancelled) return;
+      // A building can have multiple единич estimates (re-imports stack
+      // up as new rows). Picking just `counts[bid] = cnt` would let the
+      // last one in the array win — and depending on the sort order
+      // returned by listEstimates, "last" could mean the OLDEST half-
+      // imported test row that has very few stages. Take the MAX so the
+      // badge reflects the richest estimate, which is what the user
+      // sees when they actually open the block.
+      const counts = {};
+      for (const [bid, cnt] of pairs) {
+        counts[bid] = Math.max(counts[bid] || 0, cnt);
+      }
+      setBuildingStageCounts(counts);
+    });
+    return () => { cancelled = true; };
+  }, [estimates]);
 
   const reload = () => setRefreshTick((n) => n + 1);
 
@@ -555,6 +621,64 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
     [stages],
   );
 
+  // ── Sub-resources index ─────────────────────────────────────────
+  // Map from work-id → its resource sub-lines (labor, machine, material).
+  //
+  // The bulk import we use today doesn't populate parent_line_id (the FK
+  // columns exist but BulkCreateEstimateLines never writes them). Instead,
+  // children carry parent_item_number = parent.item_number (the local "1",
+  // "2" etc. inside a section) and they always come right after their
+  // parent in sort_order — that's how parseEdinich emits them.
+  //
+  // So we walk the lines sorted by sort_order: each top-level work resets
+  // a "currentParent" pointer; each subsequent child line whose
+  // parent_item_number equals currentParent.item_number is bucketed under
+  // that work. This naturally resolves the cross-section "1" ambiguity
+  // because we never look further than the most recent parent.
+  //
+  // We ALSO honour parent_line_id when it's set (for any future code path
+  // that writes the FK directly), so callers don't need to choose.
+  const subResourcesByWork = useMemo(() => {
+    const m = new Map();
+    if (!Array.isArray(lines) || lines.length === 0) return m;
+
+    // Stable copy ordered by sort_order then id, mirroring how the backend
+    // returns paginated estimate lines.
+    const ordered = [...lines].sort((a, b) => {
+      const sa = Number(a.sort_order || 0), sb = Number(b.sort_order || 0);
+      if (sa !== sb) return sa - sb;
+      return Number(a.id || 0) - Number(b.id || 0);
+    });
+
+    let currentParent = null;
+    for (const l of ordered) {
+      const pid = l?.parent_line_id;
+      const isWork = isWorkRow(l); // top-level work: empty resource_type, no parent_line_id
+
+      if (isWork) {
+        currentParent = l;
+        continue;
+      }
+
+      // Child sub-resource: prefer explicit parent_line_id, else fall back
+      // to (currentParent.item_number == child.parent_item_number).
+      let parentId = null;
+      if (pid != null && Number(pid) !== 0) {
+        parentId = Number(pid);
+      } else if (currentParent) {
+        const childParentNum = String(l.parent_item_number || '').trim();
+        const curParentNum = String(currentParent.item_number || '').trim();
+        if (childParentNum && childParentNum === curParentNum) {
+          parentId = Number(currentParent.id);
+        }
+      }
+      if (parentId == null) continue;
+      if (!m.has(parentId)) m.set(parentId, []);
+      m.get(parentId).push(l);
+    }
+    return m;
+  }, [lines]);
+
   // Permission helpers — based on viewRole (what the user is currently
   // simulating) for UI gating; the server independently enforces using
   // the real role on every action.
@@ -574,7 +698,12 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
   // ── Action handlers ──────────────────────────────────────────────
   const updateDone = useCallback(async (work, raw) => {
     const v = Number(String(raw).replace(/\s/g, '').replace(',', '.'));
-    const newQty = Number.isFinite(v) ? Math.max(0, Math.min(v, Number(work.quantity || 0))) : 0;
+    // Template-mode imports leave plan quantity = 0; the foreman's
+    // BAJARILDI IS the recorded work volume. So the only constraint is
+    // non-negative — we don't cap at work.quantity any more (which used
+    // to lock everyone at 0 because the smeta plan was 0). The backend
+    // also doesn't enforce a ceiling, so this matches.
+    const newQty = Number.isFinite(v) ? Math.max(0, v) : 0;
     if (Math.abs(newQty - Number(work.done_quantity || 0)) < 0.0001) return;
     try {
       await constructionService.updateWorkDoneQuantity(work.id, newQty);
@@ -789,7 +918,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
                       color: active ? '#FFFFFF' : (hasEst ? '#64748B' : '#B45309'),
                     }}
                   >
-                    {hasEst ? `${stages.length || '·'} ${t('stage_short_suffix')}` : t('empty')}
+                    {hasEst ? `${buildingStageCounts[b.id] ?? '·'} ${t('stage_short_suffix')}` : t('empty')}
                   </span>
                 </button>
               );
@@ -931,6 +1060,17 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
                       onConfirmEngineer={confirmAsEngineer}
                       onRejectEngineer={rejectAsEngineer}
                       viewRole={viewRole}
+                      expandedWorks={expandedWorks}
+                      toggleWork={toggleWork}
+                      subResourcesByWork={subResourcesByWork}
+                      onAddResource={(w) => {
+                        // Auto-expand the work so the foreman can SEE the
+                        // newly-added line as soon as the modal closes.
+                        setExpandedWorks((s) => {
+                          const n = new Set(s); n.add(Number(w.id)); return n;
+                        });
+                        setAddResWorkParent(w);
+                      }}
                       t={t}
                     />
 
@@ -963,6 +1103,24 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
           t={t}
         />
       )}
+
+      {/* Add-resource modal — opened from the per-row "+" button. The new
+         sub-line attaches to the work via parent_line_id, so it shows up
+         in the expanded sub-resources table immediately and is picked up
+         by reserveMaterialsForWork on the next submit (and deducted from
+         inventory on engineer-confirm). */}
+      <AddResourcePickerModal
+        open={!!addResWorkParent}
+        onClose={() => setAddResWorkParent(null)}
+        projectId={project?.id}
+        estimateId={activeEstimateId}
+        parent={addResWorkParent}
+        nextSeq={(addResWorkParent && (subResourcesByWork.get(Number(addResWorkParent.id))?.length || 0) + 1) || 1}
+        onSaved={() => {
+          setAddResWorkParent(null);
+          reload();
+        }}
+      />
     </div>
   );
 }
@@ -1181,13 +1339,23 @@ function WorksTable({
   onUpdateDone, onSubmit,
   onConfirmSupervisor, onRejectSupervisor,
   onConfirmEngineer, onRejectEngineer,
-  viewRole, t,
+  viewRole,
+  expandedWorks,
+  toggleWork,
+  subResourcesByWork,
+  onAddResource,
+  t,
 }) {
+  // Total column count (used for the colspan of the expanded sub-row).
+  // 1 chevron + # + name + uom + plan + done + progress + status + action = 9
+  // + (unit_price + plan_total + fact_total) when canSeeCost = 12
+  const colCount = canSeeCost ? 12 : 9;
   return (
     <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
       <table className="w-full text-[12px] border-collapse">
         <thead>
           <tr className="bg-slate-50">
+            <th className="py-2.5 px-2" style={{ width: 28 }} />
             <th className="text-center py-2.5 px-3 text-[10.5px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 40 }}>#</th>
             <th className="text-left   py-2.5 px-3 text-[10.5px] uppercase tracking-wider font-bold text-slate-500">{t('work_name')}</th>
             <th className="text-center py-2.5 px-3 text-[10.5px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 90 }}>{t('unit')}</th>
@@ -1214,9 +1382,26 @@ function WorksTable({
             const stMeta = STATUS_META[w.approval_status] || STATUS_META.pending;
             const draftKey = `q_${w.id}`;
             const inputValue = doneDraft[draftKey] !== undefined ? doneDraft[draftKey] : fmt(doneQty);
+            const subs = subResourcesByWork?.get(Number(w.id)) || [];
+            const isExpanded = expandedWorks?.has(Number(w.id)) || false;
+            const hasSubs = subs.length > 0;
 
             return (
-              <tr key={w.id} style={{ background: rowBg, borderTop: '1px solid #F1F5F9' }}>
+              <React.Fragment key={w.id}>
+              <tr style={{ background: rowBg, borderTop: '1px solid #F1F5F9' }}>
+                <td className="text-center py-2.5 px-1">
+                  {hasSubs && (
+                    <button
+                      type="button"
+                      onClick={() => toggleWork(Number(w.id))}
+                      title={t('show_consumption') || 'Sarflanishni ko\'rsatish'}
+                      className="w-5 h-5 inline-flex items-center justify-center rounded hover:bg-slate-200 text-slate-500"
+                    >
+                      <span className="inline-block transition-transform text-[10px]"
+                            style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0)' }}>▶</span>
+                    </button>
+                  )}
+                </td>
                 <td className="text-center py-2.5 px-3 font-bold">{w.item_number || (idx + 1)}</td>
                 <td className="py-2.5 px-3">
                   <div className="font-medium text-slate-900">{w.name}</div>
@@ -1232,21 +1417,33 @@ function WorksTable({
                 <td className="text-right py-2.5 px-3 font-mono">{fmt(planQty)}</td>
                 <td className="text-right py-2.5 px-3">
                   {canEditQty(w) ? (
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={inputValue}
-                      onChange={(e) => setDoneDraft((d) => ({ ...d, [draftKey]: e.target.value }))}
-                      onBlur={(e) => {
-                        const draft = doneDraft[draftKey];
-                        if (draft !== undefined) {
-                          onUpdateDone(w, e.target.value);
-                          setDoneDraft((d) => { const n = { ...d }; delete n[draftKey]; return n; });
-                        }
-                      }}
-                      onFocus={(e) => e.target.select()}
-                      className="w-[90px] px-2 py-1 rounded border border-slate-300 font-mono text-right text-[11.5px] outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                    />
+                    <div className="inline-flex items-center gap-1.5">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={inputValue}
+                        onChange={(e) => setDoneDraft((d) => ({ ...d, [draftKey]: e.target.value }))}
+                        onBlur={(e) => {
+                          const draft = doneDraft[draftKey];
+                          if (draft !== undefined) {
+                            onUpdateDone(w, e.target.value);
+                            setDoneDraft((d) => { const n = { ...d }; delete n[draftKey]; return n; });
+                          }
+                        }}
+                        onFocus={(e) => e.target.select()}
+                        className="w-[90px] px-2 py-1 rounded border border-slate-300 font-mono text-right text-[11.5px] outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                      />
+                      {onAddResource && (
+                        <button
+                          type="button"
+                          onClick={() => onAddResource(w)}
+                          title={t('add_resource_to_work') || "Resurs qo'shish"}
+                          className="w-6 h-6 inline-flex items-center justify-center rounded border border-teal-600 text-teal-600 hover:bg-teal-50 text-[14px] leading-none font-bold"
+                        >
+                          +
+                        </button>
+                      )}
+                    </div>
                   ) : (
                     <span className="font-mono text-slate-500">{fmt(doneQty)}</span>
                   )}
@@ -1323,6 +1520,132 @@ function WorksTable({
                     <span className="text-[11px] text-slate-300">—</span>
                   )}
                 </td>
+              </tr>
+              {isExpanded && hasSubs && (
+                <tr style={{ background: '#FAFAFA', borderTop: '1px dashed #E5E7EB' }}>
+                  <td colSpan={colCount} className="py-3 px-6">
+                    <SubResourcesTable
+                      subs={subs}
+                      doneQty={doneQty}
+                      planQty={planQty}
+                      canSeeCost={canSeeCost}
+                      workStatus={w.approval_status}
+                      t={t}
+                    />
+                  </td>
+                </tr>
+              )}
+              </React.Fragment>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// =====================================================================
+// SUB-RESOURCES TABLE (consumed materials/labor/machines per work)
+// =====================================================================
+//
+// What this is: a small table that opens INSIDE a work row when the
+// foreman clicks the chevron. It shows every resource sub-line of that
+// work (labour, machines, materials) with the consumption split into:
+//   • plan_qty = sub.quantity            (planned: parent.qty × norm_rate)
+//   • fact_qty = doneQty × sub.norm_rate (actual, recomputed live as the
+//                                         foreman types BAJARILDI above)
+//
+// Material rows additionally surface a small status badge that reflects
+// the warehouse step:
+//   • work submitted        → "📦 bron qilindi"   (quantity_reserved += qty)
+//   • work confirmed_engineer → "✅ skladdan yechildi" (on_hand decreased)
+function SubResourcesTable({ subs, doneQty, planQty, canSeeCost, workStatus, t }) {
+  const RES_TAG = {
+    labor:     { bg: 'rgba(245,158,11,0.12)', fg: '#B45309', label: t('mehnat') || 'Mehnat' },
+    equipment: { bg: 'rgba(167,139,250,0.12)', fg: '#6D28D9', label: t('mashina') || 'Mashina' },
+    material:  { bg: 'rgba(20,184,166,0.12)', fg: '#0F766E', label: t('material') || 'Material' },
+  };
+  const isReserved  = workStatus === 'submitted' || workStatus === 'confirmed_supervisor';
+  const isFinalised = workStatus === 'confirmed_engineer';
+  const titleSuffix = isFinalised
+    ? ` · ${t('deducted_from_warehouse') || 'Skladdan yechildi'}`
+    : isReserved
+      ? ` · ${t('materials_reserved') || 'Mahsulot bron qilindi'}`
+      : '';
+
+  // Sort: materials first (most actionable for warehouse), then machines, then labour.
+  const order = { material: 0, equipment: 1, labor: 2 };
+  const sortedSubs = [...subs].sort((a, b) => {
+    const ra = order[String(a.resource_type || '').toLowerCase()] ?? 99;
+    const rb = order[String(b.resource_type || '').toLowerCase()] ?? 99;
+    return ra - rb;
+  });
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-2 text-[11px] font-semibold text-slate-700 uppercase tracking-wider">
+        <span>📋 {t('consumed_resources_title') || 'Sarflanadigan resurslar'}{titleSuffix}</span>
+        {(isReserved || isFinalised) && (
+          <span
+            className="px-2 py-0.5 rounded-full text-[9.5px] font-bold tracking-wide"
+            style={{
+              background: isFinalised ? '#D1FAE5' : '#DBEAFE',
+              color: isFinalised ? '#065F46' : '#1E40AF',
+            }}
+          >
+            {isFinalised
+              ? `✅ ${t('deducted_from_warehouse') || 'Skladdan yechildi'}`
+              : `📦 ${t('materials_reserved') || 'Bron qilindi'}`}
+          </span>
+        )}
+      </div>
+      <table className="w-full text-[11.5px] border-collapse bg-white rounded-md overflow-hidden border border-slate-200">
+        <thead>
+          <tr className="bg-slate-100 text-[10px] uppercase font-bold tracking-wider text-slate-500">
+            <th className="text-left   py-2 px-3" style={{ width: 80 }}>{t('type') || 'Tur'}</th>
+            <th className="text-left   py-2 px-3">{t('resource_name') || 'Resurs nomi'}</th>
+            <th className="text-center py-2 px-2" style={{ width: 70 }}>{t('unit') || "O'lchov"}</th>
+            <th className="text-right  py-2 px-2" style={{ width: 90 }}>{t('plan_consumption') || 'Reja sarf'}</th>
+            <th className="text-right  py-2 px-2" style={{ width: 100 }}>{t('fact_consumption') || 'Fakt sarf'}</th>
+            {canSeeCost && (<>
+              <th className="text-right py-2 px-2" style={{ width: 100 }}>{t('unit_price') || 'Birlik narxi'}</th>
+              <th className="text-right py-2 px-2" style={{ width: 110 }}>{t('fact_total') || 'Fakt summa'}</th>
+            </>)}
+          </tr>
+        </thead>
+        <tbody>
+          {sortedSubs.map((s) => {
+            const rt = String(s.resource_type || '').toLowerCase();
+            const tag = RES_TAG[rt] || RES_TAG.material;
+            const norm = Number(s.norm_rate || 0);
+            const planSubQty = Number(s.quantity || 0);
+            // Live fact = parent's done × this sub's norm_rate. Recomputed
+            // on every render so typing in BAJARILDI flows through here.
+            const factSubQty = norm > 0 ? doneQty * norm : (planQty > 0 ? (doneQty / planQty) * planSubQty : 0);
+            const unitPrice = Number(s.unit_rate || 0);
+            const factTotal = factSubQty * unitPrice;
+            return (
+              <tr key={s.id} className="border-t border-slate-100">
+                <td className="py-1.5 px-3">
+                  <span
+                    className="inline-block px-1.5 py-0.5 rounded text-[9.5px] font-bold uppercase tracking-wide"
+                    style={{ background: tag.bg, color: tag.fg }}
+                  >
+                    {tag.label}
+                  </span>
+                </td>
+                <td className="py-1.5 px-3 text-slate-800">{s.name}</td>
+                <td className="text-center py-1.5 px-2 text-slate-500">{s.uom || '—'}</td>
+                <td className="text-right py-1.5 px-2 font-mono text-slate-600">{fmt(planSubQty)}</td>
+                <td className="text-right py-1.5 px-2 font-mono font-semibold text-emerald-700">
+                  {factSubQty > 0 ? fmt(factSubQty) : '—'}
+                </td>
+                {canSeeCost && (<>
+                  <td className="text-right py-1.5 px-2 font-mono text-slate-600">{fmt(unitPrice)}</td>
+                  <td className="text-right py-1.5 px-2 font-mono font-semibold text-slate-900">
+                    {factTotal > 0 ? fmt(Math.round(factTotal)) : '—'}
+                  </td>
+                </>)}
               </tr>
             );
           })}

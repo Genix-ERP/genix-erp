@@ -631,11 +631,24 @@ export default function SmetaManagementTab({ project }) {
           >
             {loadingEstimates && <option value="">{t('loading') || 'Yuklanmoqda…'}</option>}
             {!loadingEstimates && estimates.length === 0 && <option value="">{t('no_estimates') || "Smeta yo'q"}</option>}
-            {estimates.map((est) => (
-              <option key={est.id} value={String(est.id)} style={{ background: C.card, color: C.text }}>
-                v{est.version || 1} · {est.name || est.source_type || `#${est.id}`} · {est.state || 'draft'}
-              </option>
-            ))}
+            {estimates.map((est) => {
+              // Source type label — show the actual smeta flavour next to
+              // the version + name + state so the user can tell at a
+              // glance whether they're picking a ВОР, Единич, or Ресурс
+              // estimate (the building can have all three).
+              const stRaw = String(est.source_type || '').toLowerCase();
+              const stLabel = stRaw === 'vor' ? 'ВОР'
+                : stRaw === 'edinich' ? 'Единич'
+                : stRaw === 'resurs'  ? 'Ресурс'
+                : stRaw === 'svod'    ? 'Свод'
+                : '';
+              const baseName = est.name || `#${est.id}`;
+              return (
+                <option key={est.id} value={String(est.id)} style={{ background: C.card, color: C.text }}>
+                  v{est.version || 1} · {baseName}{stLabel ? ` · ${stLabel}` : ''} · {est.state || 'draft'}
+                </option>
+              );
+            })}
           </select>
           <button
             onClick={() => loadLines(estimateId)}
