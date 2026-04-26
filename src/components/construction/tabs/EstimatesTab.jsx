@@ -142,9 +142,22 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
         sourceFileName: sourceFileName || '',
       });
 
-      // Show toast if products were auto-created from resource lines
+      // Show toast if products were auto-created from resource lines.
+      // For Ресурс imports we ALWAYS announce the result (even when 0 new
+      // products were added) because the most common confusion is "I
+      // imported a resurs file but nothing showed up in inventory" — 0
+      // here usually means the same-named products already exist.
       if (bulkResult?.products_created > 0) {
-        toast.success(`${bulkResult.products_created} ${t('products_auto_created') || "ta mahsulot avtomatik yaratildi"}`);
+        toast.success(
+          `${bulkResult.products_created} ${t('products_auto_created') || "ta mahsulot avtomatik yaratildi"}`,
+          { description: t('products_auto_created_desc') || "Mahsulotlar bo'limida ko'rishingiz mumkin" }
+        );
+      } else if (sourceType === 'resurs') {
+        toast.message(
+          t('products_auto_create_zero') || "Yangi mahsulot qo'shilmadi",
+          { description: t('products_auto_create_zero_desc') ||
+            "Smetadagi materiallar Mahsulotlar ro'yxatida allaqachon mavjud bo'lishi mumkin." }
+        );
       }
 
       // Show toast if Forma 2 was auto-created from VOR/Edinich estimate
@@ -154,17 +167,19 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
         });
       }
 
-      // Auto-create construction stages from section headers in the
-      // uploaded file. The parser splits each source type into sections
-      // (ВОР → "Блок №1"/"Блок №2"; Единич → work-category rows; Ресурс →
-      // "ТРУДОВЫЕ РЕСУРСЫ"/"СТРОИТЕЛЬНЫЕ МАШИНЫ И МЕХАНИЗМЫ"/…), and each
-      // section becomes a stage scoped to the estimate's building.
+      // Auto-create construction stages — ONLY for `edinich` imports.
+      // ВОР sections are just block names ("Блок №1") and Ресурс sections
+      // are resource-type buckets ("ТРУДОВЫЕ РЕСУРСЫ", "МАТЕРИАЛЬНЫЕ
+      // РЕСУРСЫ", …) — neither maps to a real construction stage, and
+      // both used to clutter the Bosqichlar tab with bogus stage rows.
+      // Only the единич estimate carries genuine work-category headers
+      // that should drive stages, so the auto-create is now scoped to it.
       //
-      // Dedupe by (building_id, upper-cased name) so re-importing or
-      // importing a sibling type from the same file doesn't create
-      // duplicate stages — and so the same section name in a different
-      // block is still allowed to produce its own stage.
-      if (sectionNames?.length > 0) {
+      // Dedupe by (building_id, upper-cased name) so re-importing the
+      // same единич file doesn't create duplicate stages, and so the same
+      // section name in a different block is still allowed to produce
+      // its own stage.
+      if (sourceType === 'edinich' && sectionNames?.length > 0) {
         // Scope the existence check to this building — migration 333 made
         // stages building-aware, so "Блок №1" in building A and "Блок №1"
         // in building B are legitimately separate stages.
@@ -560,7 +575,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                       <div className="flex items-center gap-2">
                         <Building2 className="w-4 h-4 text-slate-500 flex-shrink-0" />
                         <span className="text-sm font-medium truncate flex-1">
-                          {building.code ? `${building.code} - ${building.name}` : building.name}
+                          {building.name}
                         </span>
                       </div>
                       {subNames.length > 0 && (
@@ -613,7 +628,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
             {selectedBuilding === 'project'
               ? (t('entire_project') || "Butun loyiha")
               : selectedBuilding?.name
-                ? (selectedBuilding.code ? `${selectedBuilding.code} - ${selectedBuilding.name}` : selectedBuilding.name)
+                ? selectedBuilding.name
                 : (t('select_building_first') || "Avval bino tanlang")}
           </CardTitle>
           {selectedBuilding && (
@@ -1065,7 +1080,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                       <SelectItem value="none">{t('entire_project') || "Butun loyiha"}</SelectItem>
                       {buildings.map(b => (
                         <SelectItem key={b.id} value={String(b.id)}>
-                          {b.code ? `${b.code} - ${b.name}` : b.name}
+                          {b.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1171,7 +1186,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                       <SelectItem value="none">{t('entire_project') || "Butun loyiha"}</SelectItem>
                       {buildings.map(b => (
                         <SelectItem key={b.id} value={String(b.id)}>
-                          {b.code ? `${b.code} - ${b.name}` : b.name}
+                          {b.name}
                         </SelectItem>
                       ))}
                     </SelectContent>

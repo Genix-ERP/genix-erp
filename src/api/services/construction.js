@@ -298,12 +298,14 @@ export const constructionService = {
     return response.data.data || [];
   },
   async bulkUpdateResourcePrice(projectId, payload) {
-    // payload: { resource_name, uom, resource_type, new_price, note? }
+    // payload: { resource_name, uom, resource_type, new_price, note?, estimate_id? }
+    // When estimate_id is set the UPDATE is scoped to that single estimate
+    // (block) so price edits in one block don't bleed into the others.
     const response = await apiClient.post(`/construction/projects/${projectId}/resource-prices/bulk-update`, payload);
     return response.data.data;
   },
   async bulkUpdateResourceMaterialType(projectId, payload) {
-    // payload: { resource_name, uom, material_type }
+    // payload: { resource_name, uom, material_type, estimate_id? }
     const response = await apiClient.post(`/construction/projects/${projectId}/resource-prices/material-type`, payload);
     return response.data.data;
   },
@@ -315,14 +317,18 @@ export const constructionService = {
   },
   // Reset endpoints (migration 349 anchors).
   // Per-resource: revert unit_rate to original_unit_rate for every matching line.
+  // When `estimate_id` is included, the rollback is scoped to that estimate.
   async resetResourcePrice(projectId, payload) {
-    // payload: { resource_name, uom }
+    // payload: { resource_name, uom, estimate_id? }
     const response = await apiClient.post(`/construction/projects/${projectId}/resource-prices/reset`, payload);
     return response.data.data;
   },
-  // Project-wide: revert every line's price to its original anchor.
-  async resetAllResourcePrices(projectId) {
-    const response = await apiClient.post(`/construction/projects/${projectId}/resource-prices/reset-all`, {});
+  // Revert every line's price to its original anchor. With `estimateId`
+  // the rollback is per-estimate; without it, it's project-wide.
+  async resetAllResourcePrices(projectId, { estimateId } = {}) {
+    const body = {};
+    if (estimateId) body.estimate_id = estimateId;
+    const response = await apiClient.post(`/construction/projects/${projectId}/resource-prices/reset-all`, body);
     return response.data.data;
   },
   // Per-line: revert one work's quantity to original_quantity. The handler

@@ -499,23 +499,21 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
         if (cancelled) return;
         const list = Array.isArray(rows) ? rows : [];
         setEstimates(list);
-        // Pick the right estimate for this building. A building can have
-        // up to three flavours of estimate imported from the same xlsx:
-        //   vor      — has actual stages + works (THE one we want)
-        //   edinich  — also has stage + work hierarchy with prices
-        //   resurs   — flat resource catalogue, NO stages
-        // Prefer in that order so the v2 Bosqichlar page never lands on
-        // the resurs estimate (whose three resource-category headers
-        // would otherwise show up as fake stages).
+        // Pick the right estimate for this building. The Bosqichlar tab
+        // is now driven EXCLUSIVELY by `edinich`-type estimates — the
+        // ВОР flavour's "sections" are just block names and the Ресурс
+        // flavour's "sections" are resource-type buckets, so neither
+        // produces meaningful stages. Only единич has the work-category
+        // hierarchy that maps to real construction stages and works.
+        //
+        // If a building has no единич estimate, the tab shows the empty
+        // state — we do NOT silently fall back to ВОР/Ресурс anymore
+        // because that would put fake stages back on the page.
         const sameBuilding = list.filter((e) =>
           activeBuildingId ? Number(e.building_id) === Number(activeBuildingId) : !e.building_id);
-        const preferOrder = ['vor', 'edinich', 'resurs'];
-        let matchedEst = null;
-        for (const want of preferOrder) {
-          matchedEst = sameBuilding.find((e) => String(e.source_type || '').toLowerCase() === want);
-          if (matchedEst) break;
-        }
-        if (!matchedEst) matchedEst = sameBuilding[0] || null;
+        let matchedEst = sameBuilding.find(
+          (e) => String(e.source_type || '').toLowerCase() === 'edinich'
+        ) || null;
         if (!matchedEst) {
           setLines([]);
           setLoading(false);
@@ -757,28 +755,13 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
         />
       </div>
 
-      {/* BLOCK TABS */}
+      {/* BLOCK TABS — the "Smeta yuklash" CTA used to live in this header
+         row, but the user prefers the upload affordance to stay in
+         Moliya → Smetalar where the actual import-from-Excel flow is.
+         Removed per request. */}
       <div className="rounded-xl border border-slate-200 bg-white p-4">
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <h2 className="text-base font-bold text-slate-900">📐 {t('blocks_section')}</h2>
-          {(realRole === 'engineer' || realRole === '' || realRole === 'supervisor') && setActiveGroup && setActiveTab ? (
-            <button
-              type="button"
-              onClick={() => {
-                // Smeta upload lives on the Smetalar tab (Moliya group),
-                // which is where the import-from-Excel flow already
-                // exists. Jumping there matches the mockup's "upload"
-                // affordance without requiring a parallel import flow
-                // inside Bosqichlar.
-                setActiveGroup('moliya');
-                setActiveTab('estimates');
-              }}
-              className="px-3 py-1.5 rounded-md text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white inline-flex items-center gap-1.5"
-            >
-              <span className="text-[14px] leading-none">📤</span>
-              {t('upload_smeta')}
-            </button>
-          ) : null}
         </div>
         <div className="flex gap-2 flex-wrap">
           {buildings.length === 0 ? (
@@ -827,23 +810,12 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
           <h3 className="text-base font-semibold text-slate-900 mb-1">
             {t('no_stages_for_block')}
           </h3>
-          <p className="text-sm text-slate-500 max-w-md mx-auto mb-5">
+          <p className="text-sm text-slate-500 max-w-md mx-auto">
             {t('no_stages_hint')}
           </p>
-          {/* Upload CTA — mirrors the mockup's empty-state button so a
-             foreman / supervisor / engineer (anyone but a strict-foreman)
-             can jump straight to the smeta upload flow when a block has
-             no stages yet. */}
-          {setActiveGroup && setActiveTab && (
-            <button
-              type="button"
-              onClick={() => { setActiveGroup('moliya'); setActiveTab('estimates'); }}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold"
-            >
-              <span className="text-[16px] leading-none">📤</span>
-              {t('upload_smeta')}
-            </button>
-          )}
+          {/* The Smeta yuklash CTA used to live here too. Removed per
+             user request — uploads are exclusively handled from
+             Moliya → Smetalar. */}
         </div>
       ) : (
         <div className="space-y-3">

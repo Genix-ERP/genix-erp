@@ -945,7 +945,7 @@ const OverviewTabContent = React.memo(function OverviewTabContent({
   // inapplicable field.
   const infoItems = [
     {
-      label: t('location') || 'Manzil',
+      label: t('project_address') || 'Manzil',
       // JSX so each part (Viloyat, Shahar, Manzil) renders on its own line.
       // Falls back to EMPTY when nothing's filled in so the muted-grey
       // styling in the renderer below still kicks in.
@@ -1088,6 +1088,7 @@ const ProjectDetailView = ({
       { key: 'progress', label: t('nav_progress') || 'Jarayon' },
       { key: 'stages', label: t('nav_stages') || 'Bosqichlar' },
       { key: 'reja_fakt', label: t('nav_plan_fact') || 'Reja vs Fakt' },
+      { key: 'estimates', label: t('nav_estimates') || 'Smetalar' },
     ]},
     // Smeta boshqaruvi promoted out of the Moliya sub-pills into its own
     // top-level entry. Single-tab group → no sub-pill row needed.
@@ -1095,7 +1096,6 @@ const ProjectDetailView = ({
       { key: 'smeta_management', label: t('nav_smeta_management') || 'Smeta boshqaruvi' },
     ]},
     { key: 'moliya', label: t('nav_finance') || 'Moliya', icon: DollarSign, subs: [
-      { key: 'estimates', label: t('nav_estimates') || 'Smetalar' },
       { key: 'budget', label: t('nav_budget') || 'Byudjet' },
       { key: 'expenses', label: t('nav_expenses') || 'Xarajatlar' },
       { key: 'financial', label: t('nav_analysis') || 'Tahlil' },
@@ -2317,9 +2317,47 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                             <h3 className="font-semibold text-slate-800">{building.name}</h3>
                           </div>
                           <div className="flex items-center gap-2">
-                            <Badge className={building.status === 'completed' ? 'bg-green-500' : building.status === 'in_progress' ? 'bg-orange-500' : 'bg-gray-500'}>
-                              {t(building.status) || building.status}
-                            </Badge>
+                            {/* Inline status switcher — single click to change
+                               Qoralama → Jarayonda → Tugallangan without
+                               opening the edit modal. The button is colored
+                               to match the previous Badge palette so visual
+                               state-at-a-glance is preserved. */}
+                            <Select
+                              value={building.status || 'draft'}
+                              onValueChange={async (newStatus) => {
+                                if (!newStatus || newStatus === building.status) return;
+                                const prev = buildings;
+                                setBuildings(buildings.map((b) =>
+                                  b.id === building.id ? { ...b, status: newStatus } : b
+                                ));
+                                try {
+                                  await constructionService.updateBuilding(project.id, building.id, { status: newStatus });
+                                  toast.success(t('status_updated') || 'Holat yangilandi');
+                                } catch (error) {
+                                  console.error('Error updating building status:', error);
+                                  setBuildings(prev);
+                                  toast.error(t('error_occurred') || 'Xatolik yuz berdi');
+                                }
+                              }}
+                            >
+                              <SelectTrigger
+                                className={cn(
+                                  'h-7 w-auto min-w-[110px] gap-1 rounded-full border-0 px-3 py-0 text-xs font-medium text-white focus:ring-0 focus:ring-offset-0',
+                                  building.status === 'completed'
+                                    ? 'bg-green-500 hover:bg-green-600'
+                                    : building.status === 'in_progress'
+                                    ? 'bg-orange-500 hover:bg-orange-600'
+                                    : 'bg-gray-500 hover:bg-gray-600'
+                                )}
+                              >
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="draft">{t('draft') || 'Qoralama'}</SelectItem>
+                                <SelectItem value="in_progress">{t('in_progress') || 'Jarayonda'}</SelectItem>
+                                <SelectItem value="completed">{t('completed') || 'Tugallangan'}</SelectItem>
+                              </SelectContent>
+                            </Select>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
@@ -2399,10 +2437,9 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                             <span className="text-slate-500">{t('apartments') || 'Xonadonlar'}</span>
                             <span className="font-medium">{building.apartments_count || '-'}</span>
                           </div>
-                          <div className="flex justify-between">
-                            <span className="text-slate-500">{t('estimated_cost') || 'Taxminiy narx'}</span>
-                            <span className="font-medium">{building.estimated_cost ? formatCurrency(building.estimated_cost) : '-'}</span>
-                          </div>
+                          {/* "Taxminiy xarajat" row removed — there's no input
+                             for it in the create/edit building modal, so the
+                             value was always "-" and looked like missing data. */}
                         </div>
                         <div className="mt-4">
                           <p className="text-xs text-slate-500 mb-1">{t('progress') || 'Progress'}</p>
@@ -2433,47 +2470,9 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
             </CardContent>
           </Card>
 
-          {/* WBS Tree */}
-          <Card className="mt-6">
-            <CardHeader>
-              <CardTitle>{t('work_breakdown_structure') || 'Ishlar tuzilmasi (WBS)'}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <WBSTree
-                items={wbsTree}
-                projectId={project.id}
-                t={t}
-                formatCurrency={formatCurrency}
-                onCreateItem={async (projectId, data) => {
-                  try {
-                    await constructionService.createWBS(projectId, data);
-                    const wbsData = await constructionService.getWBSTree(project.id);
-                    setWbsTree(wbsData || []);
-                  } catch (error) {
-                    console.error('Error creating WBS item:', error);
-                  }
-                }}
-                onUpdateItem={async (id, data) => {
-                  try {
-                    await constructionService.updateWBS(id, data);
-                    const wbsData = await constructionService.getWBSTree(project.id);
-                    setWbsTree(wbsData || []);
-                  } catch (error) {
-                    console.error('Error updating WBS item:', error);
-                  }
-                }}
-                onDeleteItem={async (id) => {
-                  try {
-                    await constructionService.deleteWBS(id);
-                    const wbsData = await constructionService.getWBSTree(project.id);
-                    setWbsTree(wbsData || []);
-                  } catch (error) {
-                    console.error('Error deleting WBS item:', error);
-                  }
-                }}
-              />
-            </CardContent>
-          </Card>
+          {/* "Ishlar tuzilmasi (WBS)" section removed from the Binolar tab —
+             the team uses the Smeta boshqaruvi flow for work structure now,
+             so the empty WBS tree below the buildings card was just noise. */}
         </>)}
 
         {/* Estimates Tab */}
@@ -4931,7 +4930,7 @@ export default function Construction() {
             <section className="space-y-3">
               <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
                 <MapPin className="w-4 h-4 text-green-600" />
-                {t('location') || 'Manzil'}
+                {t('project_address') || 'Manzil'}
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 {/* Viloyat — searchable combobox. Popover + Command lets the
@@ -5071,7 +5070,7 @@ export default function Construction() {
                   </Popover>
                 </div>
                 <div>
-                  <Label htmlFor="proj-address">{t('address') || 'Manzil'}</Label>
+                  <Label htmlFor="proj-address">{t('street_house_number') || "Ko'cha va uy raqami"}</Label>
                   <Input
                     id="proj-address"
                     value={projectForm.address}

@@ -401,14 +401,56 @@ function parseEdinich(workbook) {
 // РЕСУРС PARSER
 // =====================================================
 
+// detectResourceSection — returns BOTH the broad resource_type bucket
+// (labor / equipment / material) and the material sub-bucket
+// (standard / cable / equipment) used by the v23 chips.
+//
+// The original implementation collapsed every material-side section
+// down to a single string, which is why КАБЕЛЬНАЯ ПРОДУКЦИЯ rows ended
+// up in "Stroyamaterial 7%" and ОБОРУДОВАНИЕ rows collided with the
+// СТРОИТЕЛЬНЫЕ МАШИНЫ bucket. The Госкомархитектстрой regulation
+// requires three different overhead %'s for these (7 / 3.2 / 1.5 / 2),
+// so they MUST be tracked as distinct material_type values.
+//
+// Returns null when the text is not a recognised section header.
 function detectResourceSection(text) {
   if (!text) return null;
   const upper = text.toUpperCase();
-  if (upper.includes('ТРУДОВЫЕ РЕСУРСЫ') || upper.includes('ТРУДОВЫХ РЕСУРС')) return 'labor';
-  if (upper.includes('СТРОИТЕЛЬНЫЕ МАШИНЫ') || upper.includes('СТРОИТЕЛЬНЫХ МАШИН')) return 'equipment';
-  if (upper.includes('МАТЕРИАЛЬНЫЕ РЕСУРСЫ') || upper.includes('МАТЕРИАЛЬНЫХ РЕСУРС')) return 'material';
-  if (upper.includes('КАБЕЛЬНАЯ ПРОДУКЦИЯ') || upper.includes('КАБЕЛЬНОЙ ПРОДУКЦИИ')) return 'material';
-  if (upper.includes('ОБОРУДОВАНИЕ') || upper.includes('ОБОРУДОВАНИ')) return 'equipment';
+  if (upper.includes('ТРУДОВЫЕ РЕСУРСЫ') || upper.includes('ТРУДОВЫХ РЕСУРС')) {
+    return { resourceType: 'labor', materialType: null };
+  }
+  // СТРОИТЕЛЬНЫЕ МАШИНЫ И МЕХАНИЗМЫ → Mashina tab (МАШ.-Ч hours).
+  // Note we use resource_type='equipment' here only because that's the
+  // historical convention for МАШ.-Ч rows; it has nothing to do with
+  // material_type='equipment' (which is for оборудование items).
+  if (upper.includes('СТРОИТЕЛЬНЫЕ МАШИНЫ') || upper.includes('СТРОИТЕЛЬНЫХ МАШИН')) {
+    return { resourceType: 'equipment', materialType: null };
+  }
+  if (upper.includes('КАБЕЛЬНАЯ ПРОДУКЦИЯ') || upper.includes('КАБЕЛЬНОЙ ПРОДУКЦИИ')) {
+    return { resourceType: 'material', materialType: 'cable' };
+  }
+  if (upper.includes('ОБОРУДОВАНИЕ') || upper.includes('ОБОРУДОВАНИ')) {
+    return { resourceType: 'material', materialType: 'equipment' };
+  }
+  if (upper.includes('МАТЕРИАЛЬНЫЕ РЕСУРСЫ') || upper.includes('МАТЕРИАЛЬНЫХ РЕСУРС')) {
+    return { resourceType: 'material', materialType: 'standard' };
+  }
+  return null;
+}
+
+// Fallback classifier — runs per-item when the section header didn't
+// disambiguate (Блок 1 has only one big МАТЕРИАЛЬНЫЕ РЕСУРСЫ bucket
+// even though some files mix in cable/equipment items inline). Returns
+// 'cable' / 'equipment' / null. The keyword lists are intentionally
+// conservative — false negatives are easy to fix from the per-row
+// dropdown later, false positives are not.
+const CABLE_NAME_RE = /\b(КАБЕЛ|ПРОВОД(?!\s*НЫЙ\s*РАСЧ)|ВВГ|ВВГНГ|АВВГ|КГ-|ПВ-1|ПВ-3|СИП-|ПУГВ|ПУНП|ПВС|ШВВП|ППГ|ВРГ)/i;
+const EQUIPMENT_NAME_RE = /(ШКАФ\b|ЩИТ\b|ЩИТОК|ЩМП|ВРУ-|УРЩ-|АВТОМАТ\.?\s+ВЫКЛ|РОЗЕТКА|ВЫКЛЮЧАТЕЛЬ\b|СВЕТИЛЬНИК|СЧ[ЕЁ]ТЧИК|ЛАМПА\b|ДАТЧИК\b|НАСОС\b|КОТ[ЕЁ]Л\b|КРАН\s+ШАРОВ|ВЕНТИЛЯТОР\b|РАДИАТОР\b|ТЕПЛОСЧ[ЕЁ]ТЧИК|ЗАДВИЖКА|ОБОРУДОВАНИ)/i;
+function classifyMaterialByName(name) {
+  if (!name) return null;
+  const u = String(name).toUpperCase();
+  if (CABLE_NAME_RE.test(u)) return 'cable';
+  if (EQUIPMENT_NAME_RE.test(u)) return 'equipment';
   return null;
 }
 
@@ -439,7 +481,14 @@ function parseResurs(workbook) {
   }
 
   const sections = [];
-  let currentSection = { name: objectName || 'Resurslar', items: [], resourceType: 'material' };
+  // currentSection tracks BOTH the broad bucket and the material sub-bucket.
+  // materialType is null for non-material sections (labor / machines).
+  let currentSection = {
+    name: objectName || 'Resurslar',
+    items: [],
+    resourceType: 'material',
+    materialType: 'standard',
+  };
 
   for (let i = 11; i < rawData.length; i++) {
     const row = rawData[i];
@@ -456,18 +505,40 @@ function parseResurs(workbook) {
     // Skip empty description
     if (!colC && !colB) continue;
 
-    // Check for ИТОГО rows
+    // Check for ИТОГО rows AND the per-section "ТРАНСПОРТНЫЕ РАСХОДЫ"
+    // subtotals — those are calculated overhead lines that should never
+    // be persisted as items.
     const textToCheck = (colC || colB || '').toUpperCase();
     if (textToCheck.includes('ИТОГО')) continue;
+    if (textToCheck.includes('ТРАНСПОРТНЫЕ') && textToCheck.includes('РАСХОД')) continue;
 
-    // Detect section header (resource type group) or numbered section header
-    const sectionType = detectResourceSection(colC);
+    // Detect section header (resource type group) or numbered section header.
+    // detectResourceSection now returns { resourceType, materialType }.
+    //
+    // CRITICAL: only treat the row as a typed section header when it
+    // ACTUALLY looks like one — empty item number AND empty UOM. The
+    // keyword check is a substring match (we want "КАБЕЛЬНОЙ ПРОДУКЦИИ"
+    // to register), so without this guard a genuine line item like
+    // "КРАНЫ НА АВТОМОБИЛЬНОМ ХОДУ ПРИ РАБОТЕ НА МОНТАЖЕ ТЕХНОЛОГИЧЕСКОГО
+    // ОБОРУДОВАНИЯ" (a МАШ.-Ч machine entry) would re-classify every
+    // following line as a material/equipment row.
+    const looksLikeHeaderRow = !colA && !colD;
+    const sectionMeta = looksLikeHeaderRow ? detectResourceSection(colC) : null;
     const isNumberedSectionHeader = colA && /^\d+$/.test(colA) && !colD && (colE === 0 || isNaN(colE)) && colC.length > 5 && colC === colC.toUpperCase() && !/\d{2,}/.test(colC);
-    if (sectionType || isNumberedSectionHeader) {
+    if (sectionMeta || isNumberedSectionHeader) {
       if (currentSection.items.length > 0) {
         sections.push(currentSection);
       }
-      currentSection = { name: colC, items: [], resourceType: sectionType || currentSection.resourceType };
+      currentSection = {
+        name: colC,
+        items: [],
+        resourceType: sectionMeta?.resourceType || currentSection.resourceType,
+        // Inherit current material sub-bucket on numbered (non-typed)
+        // headers so a sub-section under КАБЕЛЬНАЯ ПРОДУКЦИЯ stays cable.
+        materialType: sectionMeta
+          ? sectionMeta.materialType
+          : currentSection.materialType,
+      };
       continue;
     }
 
@@ -478,6 +549,22 @@ function parseResurs(workbook) {
     const unitPrice = isNaN(colF) ? 0 : colF;
     const total = isNaN(colG) ? 0 : colG;
 
+    // Material-type resolution:
+    //   1. Section's explicit material_type wins (КАБЕЛЬНАЯ ПРОДУКЦИЯ →
+    //      'cable', ОБОРУДОВАНИЕ → 'equipment', МАТЕРИАЛЬНЫЕ РЕСУРСЫ →
+    //      'standard').
+    //   2. If the section is just "МАТЕРИАЛЬНЫЕ РЕСУРСЫ" (one big bucket
+    //      like in Блок 1), let the item-name fallback try to spot the
+    //      occasional cable or equipment line mixed in.
+    let materialType = null;
+    if (currentSection.resourceType === 'material') {
+      materialType = currentSection.materialType || 'standard';
+      if (materialType === 'standard') {
+        const guess = classifyMaterialByName(colC);
+        if (guess) materialType = guess;
+      }
+    }
+
     currentSection.items.push({
       item_number: colA,
       code: '',
@@ -487,6 +574,7 @@ function parseResurs(workbook) {
       unit_price: unitPrice,
       total_price: total,
       resource_type: currentSection.resourceType,
+      material_type: materialType,
     });
   }
 
@@ -1183,6 +1271,12 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
           code: item.code || '',
           item_number: item.item_number || '',
           resource_type: rt,
+          // Material sub-bucket — defaults to 'standard' on the backend
+          // when omitted; the РЕСУРС parser fills this in based on the
+          // section header (КАБЕЛЬНАЯ ПРОДУКЦИЯ → 'cable', ОБОРУДОВАНИЕ
+          // → 'equipment') so the new resource gets bucketed into the
+          // right Stroyamaterial / Uskuna / Kabel chip on import.
+          material_type: item.material_type || undefined,
           // Use the parser's explicit value first (resource sub-lines
           // point at their numeric parent), otherwise fall back to the
           // section path so the v2 hierarchy survives the round-trip.
