@@ -170,6 +170,10 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
     && Math.abs(Number(r.price || 0) - Number(r.original_price || 0)) > 0.01,
   );
 
+  // Every mutation below carries `estimateId` when set so the UPDATE on
+  // the backend is scoped to a single estimate (block). Without this,
+  // editing Block 1's cement price would also overwrite Block 2's row,
+  // which is exactly what the user asked us to stop doing.
   const commitPrice = useCallback(async (row, raw) => {
     const newPrice = Number(String(raw).replace(/\s/g, '').replace(',', '.').replace(/[^\d.\-]/g, ''));
     if (!Number.isFinite(newPrice) || newPrice < 0) return;
@@ -180,6 +184,7 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
         uom: row.uom || '',
         resource_type: row.resource_type,
         new_price: newPrice,
+        estimate_id: estimateId || undefined,
       });
       setItems((rows) => rows.map((r) => rowKey(r) === rowKey(row)
         ? { ...r, price: newPrice, history_count: (r.history_count || 0) + 1 }
@@ -190,7 +195,7 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
       toast.error(formatApiError(e, t, 'Xatolik'));
       load();
     }
-  }, [project?.id, t, onResourceChanged, load]);
+  }, [project?.id, estimateId, t, onResourceChanged, load]);
 
   const updateMatType = useCallback(async (row, value) => {
     try {
@@ -198,19 +203,21 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
         resource_name: row.name,
         uom: row.uom || '',
         material_type: value,
+        estimate_id: estimateId || undefined,
       });
       setItems((rows) => rows.map((r) => rowKey(r) === rowKey(row) ? { ...r, material_type: value } : r));
       onResourceChanged?.();
     } catch (e) {
       toast.error(formatApiError(e, t, 'Xatolik'));
     }
-  }, [project?.id, t, onResourceChanged]);
+  }, [project?.id, estimateId, t, onResourceChanged]);
 
   const resetPrice = useCallback(async (row) => {
     try {
       const result = await constructionService.resetResourcePrice(project.id, {
         resource_name: row.name,
         uom: row.uom || '',
+        estimate_id: estimateId || undefined,
       });
       const newP = Number(result?.new_price ?? row.original_price ?? row.price);
       setItems((rows) => rows.map((r) => rowKey(r) === rowKey(row)
@@ -222,14 +229,16 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
       toast.error(formatApiError(e, t, 'Xatolik'));
       load();
     }
-  }, [project?.id, t, onResourceChanged, load]);
+  }, [project?.id, estimateId, t, onResourceChanged, load]);
 
   const resetAll = useCallback(async () => {
     const msg = t('reset_all_confirm') || 'Reset all modified prices?';
     // eslint-disable-next-line no-alert
     if (!window.confirm(msg)) return;
     try {
-      const result = await constructionService.resetAllResourcePrices(project.id);
+      const result = await constructionService.resetAllResourcePrices(project.id, {
+        estimateId: estimateId || undefined,
+      });
       const tmpl = t('reset_all_done') || 'Reset {count} resource(s) across {lines} line(s)';
       toast.success(tmpl
         .replace('{count}', String(result?.resources_affected || 0))
@@ -239,7 +248,7 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
     } catch (e) {
       toast.error(formatApiError(e, t, 'Xatolik'));
     }
-  }, [project?.id, t, onResourceChanged, load]);
+  }, [project?.id, estimateId, t, onResourceChanged, load]);
 
   const openHistory = useCallback(async (row) => {
     setHistoryResource(row);

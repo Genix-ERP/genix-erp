@@ -920,11 +920,12 @@ export default function SmetaManagementTab({ project }) {
         <div className="px-8 pt-6 pb-12">
           <ResourcesPanel
             project={project}
-            // Intentionally NOT scoped to a single estimate — resources are
-            // project-wide (one cement price for the project regardless of
-            // which estimate uses it). User wants to see every resource in
-            // the project, including those that only appear in Ресурс-type
-            // estimates with a flat line structure.
+            // Scope to the estimate selected at the top of the page so each
+            // block carries its own resource list AND its own prices. User
+            // explicitly asked: changing Block 1's price must not touch
+            // Block 2 — that's enforced both by filtering the catalog
+            // (here) and by passing estimate_id to the bulk-update calls.
+            estimateId={estimateId ? Number(estimateId) : undefined}
             onResourceChanged={() => loadLines(estimateId)}
           />
         </div>

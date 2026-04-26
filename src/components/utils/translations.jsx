@@ -626,6 +626,8 @@ export const translations = {
     "subscription_tier": "Subscription Tier",
     "business_details": "Business Details",
     "address": "Address",
+    "project_address": "Address",
+    "street_house_number": "Street and house number",
     "street_address": "Street Address",
     "state": "State",
     "zip_code": "ZIP Code",
@@ -7114,6 +7116,9 @@ export const translations = {
 
     // Construction - auto-creation messages
     "products_auto_created": "products auto-created in inventory",
+    "products_auto_created_desc": "You can find them in the Products section",
+    "products_auto_create_zero": "No new products were added",
+    "products_auto_create_zero_desc": "The materials in this estimate may already exist in your Products list.",
     "products_created_success": "products created",
     "all_products_already_exist": "All products already exist",
     "forma2_auto_created": "Forma 2 auto-created",
@@ -8386,6 +8391,8 @@ export const translations = {
     "subscription_tier": "Obuna darajasi",
     "business_details": "Biznes ma'lumotlari",
     "address": "Manzil",
+    "project_address": "Manzil",
+    "street_house_number": "Ko'cha va uy raqami",
     "street_address": "Ko'cha manzili",
     "state": "Viloyat",
     "zip_code": "Pochta indeksi",
@@ -15076,6 +15083,9 @@ export const translations = {
 
     // Construction - auto-creation messages
     "products_auto_created": "ta mahsulot avtomatik yaratildi",
+    "products_auto_created_desc": "Mahsulotlar bo'limida ko'rishingiz mumkin",
+    "products_auto_create_zero": "Yangi mahsulot qo'shilmadi",
+    "products_auto_create_zero_desc": "Smetadagi materiallar Mahsulotlar ro'yxatida allaqachon mavjud bo'lishi mumkin.",
     "products_created_success": "ta mahsulot yaratildi",
     "all_products_already_exist": "Barcha mahsulotlar allaqachon mavjud",
     "forma2_auto_created": "Forma 2 avtomatik yaratildi",
@@ -16387,6 +16397,8 @@ export const translations = {
     "subscription_tier": "Уровень подписки",
     "business_details": "Детали бизнеса",
     "address": "Адрес",
+    "project_address": "Адрес",
+    "street_house_number": "Улица и номер дома",
     "street_address": "Адрес улицы",
     "state": "Область",
     "zip_code": "Почтовый индекс",
@@ -23120,6 +23132,9 @@ export const translations = {
 
     // Строительство - сообщения автосоздания
     "products_auto_created": "товаров автоматически создано на складе",
+    "products_auto_created_desc": "Их можно найти в разделе Товары",
+    "products_auto_create_zero": "Новые товары не добавлены",
+    "products_auto_create_zero_desc": "Материалы из этой сметы, возможно, уже существуют в списке Товары.",
     "products_created_success": "товаров создано",
     "all_products_already_exist": "Все товары уже существуют",
     "forma2_auto_created": "Форма 2 автоматически создана",
