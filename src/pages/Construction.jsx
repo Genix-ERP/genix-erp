@@ -1284,7 +1284,9 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                 constructionService.listBuildings(project.id),
                 constructionService.getWBSTree(project.id)
               ]);
-              setBuildings(buildingsData || []);
+              setBuildings((buildingsData || []).slice().sort((a, b) =>
+                (a.name || '').localeCompare(b.name || '', undefined, { numeric: true, sensitivity: 'base' })
+              ));
               setWbsTree(wbsData || []);
             } catch (e) { setBuildings([]); setWbsTree([]); }
             break;

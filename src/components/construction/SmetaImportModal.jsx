@@ -371,20 +371,33 @@ function parseEdinich(workbook) {
       continue;
     }
 
-    // Child/resource rows: empty A and B, follow a parent row
-    if (!colA && !colB && lastParentNumber) {
+    // Child/resource rows — TWO shapes seen in real estimates:
+    //
+    //   shape A: empty A AND empty B (older Block 1-style files).
+    //   shape B: dotted item-number like "1.1", "1.2", "2.1" in colA
+    //            with the resource's normative code (numeric) in colB
+    //            (Block 3 / Saatepo Avenyu-style files).
+    //
+    // Without shape B we silently dropped ~1400 resource rows per
+    // estimate, which made every work display "0 resurs" in the Smeta
+    // boshqaruvi tab and broke the auto-reservation pipeline. Shape B
+    // is now treated identically to shape A: norm_rate goes in colE,
+    // total quantity in colF, parent is the part before the dot.
+    const dottedMatch = colA && /^(\d+)\.\d+$/.exec(colA);
+    if ((!colA && !colB && lastParentNumber) || dottedMatch) {
       const resourceType = detectResourceType(colD);
+      const parentNum = dottedMatch ? dottedMatch[1] : lastParentNumber;
 
       currentSection.items.push({
-        item_number: '',
-        code: '',
+        item_number: dottedMatch ? colA : '', // keep "1.1" so it round-trips
+        code: dottedMatch ? colB : '',         // resource normative code
         name: colC,
         uom: colD,
         quantity: isNaN(colF) ? 0 : colF,
         quantity_per_unit: isNaN(colE) ? 0 : colE,
         is_parent: false,
         resource_type: resourceType,
-        parent_item_number: lastParentNumber,
+        parent_item_number: parentNum,
       });
       continue;
     }
@@ -1107,7 +1120,70 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
 
     try {
       const data = await selectedFile.arrayBuffer();
-      const wb = XLSX.read(data, { type: 'array' });
+      const bytes = new Uint8Array(data);
+
+      const decodeQuotedPrintable = (s) =>
+        s.replace(/=\r?\n/g, '').replace(/=([0-9A-Fa-f]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
+
+      const tryParseString = (text) => {
+        if (!text || text.length < 10) return null;
+        try {
+          const w = XLSX.read(text, { type: 'string' });
+          if (w && w.SheetNames && w.SheetNames.length > 0) return w;
+        } catch { /* try next */ }
+        return null;
+      };
+
+      let wb = null;
+
+      // 1) Native binary (xlsx/xls/binary csv/etc.)
+      try { wb = XLSX.read(data, { type: 'array' }); } catch { /* fall through */ }
+
+      // 2) Text with multiple encodings (HTML, SpreadsheetML XML, CSV)
+      if (!wb) {
+        const candidates = [];
+        if (bytes[0] === 0xFF && bytes[1] === 0xFE) candidates.push(['utf-16le', 2]);
+        else if (bytes[0] === 0xFE && bytes[1] === 0xFF) candidates.push(['utf-16be', 2]);
+        else if (bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) candidates.push(['utf-8', 3]);
+        else candidates.push(['utf-8', 0], ['utf-16le', 0], ['windows-1251', 0]);
+
+        for (const [enc, offset] of candidates) {
+          let text;
+          try { text = new TextDecoder(enc, { fatal: false }).decode(bytes.slice(offset)); }
+          catch { continue; }
+          wb = tryParseString(text);
+          if (wb) break;
+
+          // MHTML — extract embedded HTML and decode quoted-printable if needed
+          if (/MIME-Version\s*:|Content-Type\s*:\s*multipart/i.test(text.slice(0, 2000))) {
+            const start = text.search(/<html[\s>]/i);
+            const endIdx = text.toLowerCase().lastIndexOf('</html>');
+            if (start >= 0 && endIdx > start) {
+              let html = text.slice(start, endIdx + 7);
+              if (/=\r?\n|=[0-9A-Fa-f]{2}/.test(html)) html = decodeQuotedPrintable(html);
+              wb = tryParseString(html);
+              if (wb) break;
+            }
+          }
+
+          // Plain HTML where there IS a <table> — try parsing even if SheetJS picked another path
+          if (/<table/i.test(text)) {
+            wb = tryParseString(text);
+            if (wb) break;
+          }
+        }
+      }
+
+      if (!wb) {
+        const head = new TextDecoder('utf-8', { fatal: false }).decode(bytes.slice(0, 80))
+          .replace(/[\x00-\x1F]/g, '·');
+        setErrors([
+          "Faylni o'qib bo'lmadi — bu Excel (.xlsx/.xls), HTML jadval yoki MHTML emas.",
+          `Hajmi: ${(selectedFile.size / 1024).toFixed(1)} KB · boshlanishi: "${head.slice(0, 60)}"`,
+          "Excel'da oching va File → Save As → Excel Workbook (.xlsx) qilib qayta saqlang.",
+        ]);
+        return;
+      }
       setWorkbook(wb);
 
       const sheets = detectSheets(wb);
@@ -1127,7 +1203,14 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
         setStep(2);
       }
     } catch (error) {
-      setErrors(["Faylni o'qishda xatolik: " + error.message]);
+      const msg = String(error?.message || error);
+      if (msg.includes('Invalid HTML') || msg.includes('could not find <table>')) {
+        setErrors([
+          "Fayl Excel emas (HTML ko'rinishida saqlangan, lekin jadval yo'q). Excel'da oching va File → Save As → Excel Workbook (.xlsx) qilib qayta saqlang.",
+        ]);
+      } else {
+        setErrors(["Faylni o'qishda xatolik: " + msg]);
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -1264,13 +1347,25 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
         allLines.push({
           name: item.name,
           uom: item.uom || 'шт',
-          quantity: item.quantity || 0,
+          // TEMPLATE MODE — every imported line lands with quantity = 0.
+          // The smeta is treated as a structure-only template: work types
+          // and resource norms are imported but the actual project volume
+          // is 0 until the foreman types BAJARILDI on each work. From
+          // there, live consumption = bajarildi × subline.norm_rate.
+          // This matches the "ish hajmi 0 bo'lib yaralish kerak" workflow
+          // — REJA and BAJARILDI both start at 0 across all rows.
+          quantity: 0,
           material_rate: rt === 'material' ? unitPrice : 0,
           labor_rate: rt === 'labor' ? unitPrice : 0,
           equipment_rate: rt === 'equipment' ? unitPrice : 0,
           code: item.code || '',
           item_number: item.item_number || '',
           resource_type: rt,
+          // norm_rate (per parent unit) — the единич parser sets this in
+          // `quantity_per_unit` for child resource rows. We carry it
+          // through so the Bosqichlar tab can compute live consumption
+          // as `parent.done_quantity × norm_rate` when the foreman types.
+          norm_rate: item.quantity_per_unit || 0,
           // Material sub-bucket — defaults to 'standard' on the backend
           // when omitted; the РЕСУРС parser fills this in based on the
           // section header (КАБЕЛЬНАЯ ПРОДУКЦИЯ → 'cable', ОБОРУДОВАНИЕ
@@ -1684,7 +1779,7 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
                   <option value="project">Butun loyiha</option>
                   {buildings.map((b) => (
                     <option key={b.id} value={b.id}>
-                      {b.code ? `${b.code} - ${b.name}` : b.name}
+                      {b.name}
                     </option>
                   ))}
                 </select>
