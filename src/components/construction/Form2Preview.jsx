@@ -2,6 +2,10 @@ import React, { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Printer, FileDown, X, Save, Calendar } from 'lucide-react';
+import { useLanguage } from '@/components/contexts/LanguageContext';
+import { useTranslation } from '@/components/utils/translations';
+import { useCompany } from '@/components/contexts/CompanyContext';
+import * as XLSX from 'xlsx';
 
 // Form2Preview — print-ready ФОРМА № 2 (KS-2 / ВОР) document.
 //
@@ -9,12 +13,11 @@ import { Printer, FileDown, X, Save, Calendar } from 'lucide-react';
 // matches the current Госкомархитектстрой Письмо № 352/11-05 (31.01.2011)
 // and ШНК 4.01.16-09 interpretation:
 //
-//   1. Direct costs       = Σ labor + Σ machines + Σ materials_by_type (5)
+//   1. Direct costs       = Σ labor + Σ machines + Σ materials_by_type (3)
 //   2. Combined overhead  = Σ matByType × combined_rate per material type
-//                           (standard 7%, equipment 3.2%, cable 3.5%,
-//                            metal 0%, import 0%) — replaces the old
-//                           split transport+storage breakdown for the
-//                           summary roll-up.
+//                           (standard 7%, equipment 3.2%, cable 3.5%) —
+//                           replaces the old split transport+storage
+//                           breakdown for the summary roll-up.
 //   3. Прочие base        = (direct − equipment) + (combined − combined.equipment)
 //                           — i.e. everything that belongs to "stroyka"
 //                           (construction), excluding the equipment slice
@@ -64,9 +67,13 @@ const OVERHEAD_RATES = {
   // `combined` = transport + storage and is what the v23 mockup's summary
   // roll-up uses; `transport`/`storage` remain for the per-bucket
   // ("5% + 2%") breakdown shown next to each line in the document body.
-  transport: { standard: 5.0, equipment: 2.0, cable: 1.5, metal: 5.0,  import: 2.0 },
-  storage:   { standard: 2.0, equipment: 1.2, cable: 2.0, metal: 0.75, import: 2.0 },
-  combined:  { standard: 7.0, equipment: 3.2, cable: 3.5, metal: 5.75, import: 4.0 },
+  // Metal-constructions and imported-material buckets were dropped at user
+  // request — the document only carries the three regulated buckets that
+  // every project actually uses. Lines arriving with material_type='metal'
+  // or 'import' are folded into the standard bucket by getMaterialType().
+  transport: { standard: 5.0, equipment: 2.0, cable: 1.5 },
+  storage:   { standard: 2.0, equipment: 1.2, cable: 2.0 },
+  combined:  { standard: 7.0, equipment: 3.2, cable: 3.5 },
 };
 const VAT_PCT = 12;
 
@@ -82,8 +89,6 @@ const CAT_COLORS = {
 
 const MAT_TYPE_SHORT = {
   standard: 'oddiy',
-  metal: 'metall',
-  import: 'import',
   equipment: 'uskuna',
   cable: 'kabel',
 };
@@ -112,7 +117,10 @@ function fmtRu(n) {
 
 function getMaterialType(line) {
   const mt = String(line?.material_type || 'standard').toLowerCase();
-  if (['standard', 'equipment', 'cable', 'metal', 'import'].includes(mt)) return mt;
+  // metal/import buckets were retired — fold those rows into the standard
+  // bucket so their costs still appear in the document, just without their
+  // own итого line and накрутка row.
+  if (['equipment', 'cable'].includes(mt)) return mt;
   return 'standard';
 }
 
@@ -120,7 +128,7 @@ function getOverheadRate(line) {
   if (classifyResource(line) !== 'material') return 0;
   const t = getMaterialType(line);
   // v23 uses the combined transport+storage rate per material type
-  // (standard 7%, equipment 3.2%, cable 3.5%, metal 0%, import 0%).
+  // (standard 7%, equipment 3.2%, cable 3.5%).
   return OVERHEAD_RATES.combined[t] / 100;
 }
 
@@ -153,7 +161,7 @@ function calcWorkBrutto(work, subLines) {
 
 function buildSummary(lines, otherCostsPct, useVat) {
   let labor = 0, machines = 0;
-  const matByType = { standard: 0, equipment: 0, cable: 0, metal: 0, import: 0 };
+  const matByType = { standard: 0, equipment: 0, cable: 0 };
 
   for (const ln of lines) {
     const isSub = ln.parent_line_id != null && Number(ln.parent_line_id) > 0;
@@ -177,19 +185,16 @@ function buildSummary(lines, otherCostsPct, useVat) {
   const matTotal = Object.values(matByType).reduce((a, b) => a + b, 0);
   const direct = labor + machines + matTotal;
 
-  // Combined transport+storage overhead per material type — full set of
-  // five buckets per Госкомархитектстрой 352/12-05. Earlier versions
-  // zeroed metal/import; the regulatory letter actually defines them as
-  // 5.75% (5% + 0.75%) and 4% (2% + 2%) respectively.
+  // Combined transport+storage overhead per material type. Only the three
+  // regulated buckets the project actually uses — стройматериалы 7%,
+  // оборудование 3.2%, кабель 3.5%. Metal-constructions and imported
+  // materials buckets were retired at user request.
   const combined = {
     standard:  matByType.standard  * OVERHEAD_RATES.combined.standard  / 100,
     equipment: matByType.equipment * OVERHEAD_RATES.combined.equipment / 100,
     cable:     matByType.cable     * OVERHEAD_RATES.combined.cable     / 100,
-    metal:     matByType.metal     * OVERHEAD_RATES.combined.metal     / 100,
-    import:    matByType.import    * OVERHEAD_RATES.combined.import    / 100,
   };
-  combined.total = combined.standard + combined.equipment + combined.cable
-                 + combined.metal + combined.import;
+  combined.total = combined.standard + combined.equipment + combined.cable;
 
   // "Stroyka" base for прочие = everything that isn't equipment.
   // Equipment (the construction-machinery material bucket, e.g. lifts,
@@ -245,6 +250,17 @@ function buildSections(lines) {
 }
 
 export default function Form2Preview({ estimate, lines, project, onClose, onSaveSnapshot }) {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
+  // Active company → Заказчик. CompanyContext exposes the user's currently
+  // selected organization; we surface its name on the Form 2 header so the
+  // printed AKT carries the right contractor.
+  const { activeCompany } = useCompany();
+  const customerName = activeCompany?.company_name
+    || activeCompany?.name
+    || project?.tenant_name
+    || project?.organization_name
+    || '';
   const [otherCostsPct, setOtherCostsPct] = useState(0);
   // VAT is now a boolean toggle (matches v23 mockup) — when on, the fixed
   // 12% rate is added to the subtotal; when off, the grand total stops at
@@ -256,6 +272,12 @@ export default function Form2Preview({ estimate, lines, project, onClose, onSave
   const [periodFrom, setPeriodFrom] = useState('');
   const [periodTo, setPeriodTo] = useState('');
   const [savingSnapshot, setSavingSnapshot] = useState(false);
+
+  // Akt № modal state. The browser's window.prompt() is jarring on a
+  // custom-styled page (it pops the OS-default dialog mid-document), so
+  // the Saqlash button now opens an in-app modal with the same purpose.
+  const [aktModalOpen, setAktModalOpen] = useState(false);
+  const [aktNumber, setAktNumber] = useState('');
 
   const sections = useMemo(() => buildSections(lines || []), [lines]);
   const summary = useMemo(() => buildSummary(lines || [], otherCostsPct, useVat), [lines, otherCostsPct, useVat]);
@@ -312,6 +334,124 @@ export default function Form2Preview({ estimate, lines, project, onClose, onSave
     URL.revokeObjectURL(url);
   };
 
+  // Excel export — same row structure as the CSV path but emitted as an
+  // .xlsx workbook. Adds light styling: bold header rows, merged title
+  // cells, column widths sized for Russian Cyrillic content, right-align
+  // for the numeric columns. Mirrors the visual layout of the on-screen
+  // document so the file opens with the same shape as the Print preview.
+  const exportXlsx = () => {
+    const rows = [];
+    rows.push(['ФОРМА № 2 — АКТ ВЫПОЛНЕННЫХ РАБОТ']);
+    rows.push(['ЛОКАЛЬНЫЙ РЕСУРСНЫЙ СМЕТНЫЙ РАСЧЁТ']);
+    if (project?.name) rows.push([project.name]);
+    if (project?.building_name) rows.push(['Объект:', project.building_name]);
+    rows.push(['Отчётный период:', periodLabel || '—']);
+    if (customerName) rows.push(['Заказчик:', customerName]);
+    rows.push([]);
+    const header = ['№', 'Шифр / Тип', 'Наименование работ, затрат и ресурсов', 'Раздел', 'Ед.изм.', 'Кол-во', 'Цена, сум', 'Сумма, сум'];
+    rows.push(header);
+    let num = 0;
+    for (const sec of sections) {
+      let secTotal = 0;
+      for (const it of sec.items) {
+        num++;
+        const { work, qty, subs, brutto } = it;
+        const pricePerUnit = qty > 0 ? brutto.total / qty : 0;
+        rows.push([num, work.code || '', work.name || '', sec.name, work.uom || '',
+          Number(qty), Math.round(pricePerUnit * 100) / 100, Math.round(brutto.total * 100) / 100]);
+        for (const r of subs) {
+          if (isSubStage(r)) {
+            const stageTotal = Number(r.total_amount || 0);
+            if (stageTotal <= 0) continue;
+            rows.push(['', 'ДОП.', '    ДОП. ' + (r.name || ''), '', r.uom || '',
+              Number(r.quantity || 0), Number(r.unit_rate || 0), Math.round(stageTotal * 100) / 100]);
+            continue;
+          }
+          const cost = Number(r.unit_rate || 0) * Number(r.quantity || 0);
+          if (cost <= 0) continue;
+          rows.push(['', CAT_COLORS[classifyResource(r)]?.name || '', '    ' + (r.name || ''), '', r.uom || '',
+            Number(r.quantity || 0), Number(r.unit_rate || 0), Math.round(cost * 100) / 100]);
+        }
+        secTotal += brutto.total;
+      }
+      rows.push(['', '', `ИТОГО по разделу "${sec.name}":`, '', '', '', '', Math.round(secTotal * 100) / 100]);
+    }
+    rows.push([]);
+    rows.push(['', '', `ВСЕГО ПО СМЕТЕ (${summary.useVat ? 'с НДС' : 'без НДС'}):`, '', '', '', '', Math.round(summary.grand * 100) / 100]);
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+
+    // Column widths sized for the Russian regulatory header text — №, Шифр,
+    // long resource names, section path, etc. Keeps the file readable when
+    // Excel opens it without further fiddling.
+    ws['!cols'] = [
+      { wch: 6 },   // №
+      { wch: 18 },  // Шифр / Тип
+      { wch: 70 },  // Наименование (long Cyrillic strings)
+      { wch: 30 },  // Раздел
+      { wch: 12 },  // Ед.изм.
+      { wch: 12 },  // Кол-во
+      { wch: 16 },  // Цена
+      { wch: 18 },  // Сумма
+    ];
+
+    // Merge the three title rows across all 8 columns so they read as a
+    // banner instead of being squished into the first column.
+    ws['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 7 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 7 } },
+      ...(project?.name ? [{ s: { r: 2, c: 0 }, e: { r: 2, c: 7 } }] : []),
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Форма 2');
+    XLSX.writeFile(wb, `Forma2_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
+  // Actually fire the snapshot save once the Akt № modal collected its
+  // number. Extracted from the inline onClick so both the OK button and
+  // the Enter key can trigger it without code duplication.
+  const submitSnapshot = async (actNumberRaw) => {
+    if (!onSaveSnapshot) return;
+    const actNumber = String(actNumberRaw || '').trim();
+    setAktModalOpen(false);
+    setSavingSnapshot(true);
+    try {
+      await onSaveSnapshot({
+        period_from: periodFrom || null,
+        period_to: periodTo || null,
+        other_costs_pct: otherCostsPct,
+        use_vat: useVat,
+        total_with_vat: useVat ? summary.grand : summary.subtotal + summary.subtotal * VAT_PCT / 100,
+        total_without_vat: summary.subtotal,
+        construction_total: summary.constructionTotal,
+        equipment_total: summary.equipmentTotal,
+        act_number: actNumber,
+        // Full immutable capture of what the user is looking at.
+        // Re-opening the snapshot from the Tarix tab restores
+        // exactly this — even if the underlying estimate changes.
+        snapshot_data: {
+          saved_at:    new Date().toISOString(),
+          estimate_id: estimate?.id || null,
+          project_id:  project?.id  || null,
+          period: { from: periodFrom || null, to: periodTo || null },
+          other_costs_pct: otherCostsPct,
+          use_vat: useVat,
+          summary,
+          lines: (lines || []).map((l) => ({
+            id: l.id, name: l.name, uom: l.uom,
+            quantity: l.quantity, unit_rate: l.unit_rate, total_amount: l.total_amount,
+            material_rate: l.material_rate, labor_rate: l.labor_rate, equipment_rate: l.equipment_rate,
+            material_type: l.material_type, resource_type: l.resource_type,
+            parent_line_id: l.parent_line_id, item_number: l.item_number, code: l.code,
+          })),
+        },
+      });
+    } finally {
+      setSavingSnapshot(false);
+    }
+  };
+
   return (
     <div className="form2-preview-wrap">
       {/* Toolbar (hidden in print). Wraps onto two rows on narrower screens
@@ -320,7 +460,7 @@ export default function Form2Preview({ estimate, lines, project, onClose, onSave
       <div className="flex items-center gap-2 px-4 py-3 border-b bg-white sticky top-0 z-10 print:hidden flex-wrap">
         {onClose && (
           <Button variant="ghost" size="sm" onClick={onClose}>
-            <X className="w-4 h-4 mr-1" /> Yopish
+            <X className="w-4 h-4 mr-1" /> {t('close') || 'Yopish'}
           </Button>
         )}
         <div className="flex-1" />
@@ -328,7 +468,7 @@ export default function Form2Preview({ estimate, lines, project, onClose, onSave
            and travels with any saved snapshot. Both bounds optional. */}
         <div className="flex items-center gap-1.5">
           <Calendar className="w-3.5 h-3.5 text-slate-500" />
-          <label className="text-xs text-slate-500">Давр:</label>
+          <label className="text-xs text-slate-500">{t('period_label') || 'Давр'}:</label>
           <Input
             type="date"
             value={periodFrom}
@@ -345,7 +485,7 @@ export default function Form2Preview({ estimate, lines, project, onClose, onSave
           />
         </div>
         <div className="flex items-center gap-3">
-          <label className="text-xs text-slate-500">Прочие %</label>
+          <label className="text-xs text-slate-500">{t('other_costs_pct') || 'Прочие %'}</label>
           <Input
             value={otherCostsPct}
             onChange={(e) => {
@@ -363,11 +503,14 @@ export default function Form2Preview({ estimate, lines, project, onClose, onSave
               onChange={(e) => setUseVat(e.target.checked)}
               className="w-4 h-4 cursor-pointer accent-amber-700"
             />
-            НДС {VAT_PCT}%
+            {t('vat_short') || 'НДС'} {VAT_PCT}%
           </label>
         </div>
         <Button variant="outline" size="sm" onClick={() => window.print()}>
-          <Printer className="w-4 h-4 mr-1" /> Chop etish
+          <Printer className="w-4 h-4 mr-1" /> {t('print') || 'Chop etish'}
+        </Button>
+        <Button variant="outline" size="sm" onClick={exportXlsx}>
+          <FileDown className="w-4 h-4 mr-1" /> Excel
         </Button>
         <Button variant="outline" size="sm" onClick={exportCsv}>
           <FileDown className="w-4 h-4 mr-1" /> CSV
@@ -380,75 +523,82 @@ export default function Form2Preview({ estimate, lines, project, onClose, onSave
           <Button
             size="sm"
             disabled={savingSnapshot}
-            onClick={async () => {
-              // Optional Akt number — Foreman may type "12-2026" / "001/2026"
-              // / etc. Empty string = no act assigned.
-              const actNumber = (window.prompt('Akt № (ixtiyoriy):', '') || '').trim();
-              setSavingSnapshot(true);
-              try {
-                await onSaveSnapshot({
-                  period_from: periodFrom || null,
-                  period_to: periodTo || null,
-                  other_costs_pct: otherCostsPct,
-                  use_vat: useVat,
-                  total_with_vat: useVat ? summary.grand : summary.subtotal + summary.subtotal * VAT_PCT / 100,
-                  total_without_vat: summary.subtotal,
-                  construction_total: summary.constructionTotal,
-                  equipment_total: summary.equipmentTotal,
-                  act_number: actNumber,
-                  // Full immutable capture of what the user is looking at.
-                  // Re-opening the snapshot from the Tarix tab restores
-                  // exactly this — even if the underlying estimate changes.
-                  snapshot_data: {
-                    saved_at:    new Date().toISOString(),
-                    estimate_id: estimate?.id || null,
-                    project_id:  project?.id  || null,
-                    period: { from: periodFrom || null, to: periodTo || null },
-                    other_costs_pct: otherCostsPct,
-                    use_vat: useVat,
-                    summary,
-                    lines: (lines || []).map((l) => ({
-                      id: l.id, name: l.name, uom: l.uom,
-                      quantity: l.quantity, unit_rate: l.unit_rate, total_amount: l.total_amount,
-                      material_rate: l.material_rate, labor_rate: l.labor_rate, equipment_rate: l.equipment_rate,
-                      material_type: l.material_type, resource_type: l.resource_type,
-                      parent_line_id: l.parent_line_id, item_number: l.item_number, code: l.code,
-                    })),
-                  },
-                });
-              } finally {
-                setSavingSnapshot(false);
-              }
-            }}
+            onClick={() => { setAktNumber(''); setAktModalOpen(true); }}
             className="bg-emerald-600 hover:bg-emerald-700"
           >
-            <Save className="w-4 h-4 mr-1" /> Saqlash
+            <Save className="w-4 h-4 mr-1" /> {t('save') || 'Saqlash'}
           </Button>
         )}
       </div>
 
-      {/* Document body — light theme to match a printed page */}
+      {/* Document body — light theme to match a printed page.
+         Layout mirrors the v23 mockup (Form2_Works_v23_prochie_breakdown.html):
+         left-aligned "ФОРМА № 2" stamp box next to a centered title block,
+         a meta row underneath (Объект / Отчётный период / Дата составления),
+         and a Заказчик line aligned to the right. */}
       <div className="form2-doc max-w-[1100px] mx-auto my-6 p-10 bg-white text-slate-900 shadow-lg rounded">
-        <div className="text-center mb-6 pb-4 border-b-2 border-slate-900">
-          <div className="text-[11px] uppercase tracking-widest text-slate-500 mb-2">Локальный ресурсный сметный расчёт</div>
-          <div className="text-[22px] font-bold text-slate-900">ФОРМА № 2</div>
-          {project?.name && <div className="text-sm text-slate-700 mt-2">{project.name}</div>}
-          <div className="flex justify-between mt-3 text-xs text-slate-600 flex-wrap gap-2">
-            {project?.building_name && (
-              <div><span className="text-slate-400">Объект:</span> <strong className="text-slate-800">{project.building_name}</strong></div>
-            )}
-            <div><span className="text-slate-400">Дата составления:</span> <strong className="text-slate-800">{today}</strong></div>
-            {periodLabel && (
-              <div><span className="text-slate-400">Период:</span> <strong className="text-slate-800">{periodLabel}</strong></div>
-            )}
-            <div><span className="text-slate-400">Версия сметы:</span> <strong className="text-slate-800">v{estimate?.version || 1}</strong></div>
+        <div className="mb-6 pb-4 border-b-2 border-slate-900">
+          <div className="flex items-start gap-6">
+            {/* ФОРМА № 2 stamp — left-aligned styled box. */}
+            <div
+              className="shrink-0 border-2 border-slate-900 rounded px-3 py-2 text-center leading-tight"
+              style={{ minWidth: 84 }}
+            >
+              <div className="text-[10px] uppercase tracking-widest text-slate-500">ФОРМА</div>
+              <div className="text-[22px] font-bold text-slate-900">№ 2</div>
+            </div>
+
+            {/* Centered title block — recibo header. */}
+            <div className="flex-1 text-center">
+              <div className="text-[11px] uppercase tracking-widest text-slate-500 mb-1">
+                Локальный ресурсный сметный расчёт
+              </div>
+              <div className="text-[26px] font-extrabold text-slate-900 tracking-wide">
+                АКТ ВЫПОЛНЕННЫХ РАБОТ
+              </div>
+              {project?.name && (
+                <div className="text-[13px] text-slate-700 mt-2 max-w-[640px] mx-auto">
+                  {project.name}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Meta row — Объект (left) | Отчётный период (center) | Заказчик
+             (right). Дата составления + Версия сметы were removed per
+             product feedback ("period itself enough" + the act is dated by
+             when it's signed, not by today's render time). The customer
+             name comes from the user's active company in CompanyContext. */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4 text-xs text-slate-600">
+            <div>
+              {project?.building_name && (
+                <>
+                  <span className="text-slate-400">Объект:</span>{' '}
+                  <strong className="text-slate-800">{project.building_name}</strong>
+                </>
+              )}
+            </div>
+            <div className="md:text-center">
+              <span className="text-slate-400">Отчётный период:</span>{' '}
+              <strong className="text-slate-800">{periodLabel || '—'}</strong>
+            </div>
+            <div className="md:text-right">
+              {customerName && (
+                <>
+                  <span className="text-slate-400">Заказчик:</span>{' '}
+                  <strong className="text-slate-800 uppercase tracking-wide">
+                    {customerName}
+                  </strong>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
         {sections.length === 0 ? (
           <div className="text-center py-16 text-slate-500">
-            <div className="text-lg mb-2">📋 Форма 2 пустая</div>
-            <div className="text-xs">Введите объёмы работ и Форма 2 заполнится автоматически</div>
+            <div className="text-lg mb-2">📋 {t('form2_empty_title') || 'Форма 2 пустая'}</div>
+            <div className="text-xs">{t('form2_empty_hint') || 'Введите объёмы работ и Форма 2 заполнится автоматически'}</div>
           </div>
         ) : (
           (() => {
@@ -462,12 +612,12 @@ export default function Form2Preview({ estimate, lines, project, onClose, onSave
                   <thead>
                     <tr>
                       <th className="bg-amber-100 border border-amber-400 px-1.5 py-2 text-[10px] font-semibold text-slate-700 w-[50px]">№</th>
-                      <th className="bg-amber-100 border border-amber-400 px-1.5 py-2 text-[10px] font-semibold text-slate-700 w-[100px]">Шифр</th>
-                      <th className="bg-amber-100 border border-amber-400 px-1.5 py-2 text-[10px] font-semibold text-slate-700">Наименование</th>
+                      <th className="bg-amber-100 border border-amber-400 px-1.5 py-2 text-[10px] font-semibold text-slate-700 w-[110px]">Шифр / Тип</th>
+                      <th className="bg-amber-100 border border-amber-400 px-1.5 py-2 text-[10px] font-semibold text-slate-700">Наименование работ, затрат и ресурсов</th>
                       <th className="bg-amber-100 border border-amber-400 px-1.5 py-2 text-[10px] font-semibold text-slate-700 w-[75px]">Ед.изм.</th>
                       <th className="bg-amber-100 border border-amber-400 px-1.5 py-2 text-[10px] font-semibold text-slate-700 w-[85px]">Кол-во</th>
                       <th className="bg-amber-100 border border-amber-400 px-1.5 py-2 text-[10px] font-semibold text-slate-700 w-[105px]">Цена, сум</th>
-                      <th className="bg-amber-100 border border-amber-400 px-1.5 py-2 text-[10px] font-semibold text-slate-700 w-[135px]">Сумма с накр.</th>
+                      <th className="bg-amber-100 border border-amber-400 px-1.5 py-2 text-[10px] font-semibold text-slate-700 w-[135px]">Сумма, сум</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -604,14 +754,6 @@ export default function Form2Preview({ estimate, lines, project, onClose, onSave
                   <td className="px-2 py-1.5">ИТОГО ПО КАБЕЛЬНО-ПРОВОДНИКОВОЙ ПРОДУКЦИИ:</td><td />
                   <td className="text-right font-mono text-orange-700">{fmtRu(Math.round(summary.matByType.cable * 100) / 100)}</td>
                 </tr>
-                <tr className="font-semibold">
-                  <td className="px-2 py-1.5">ИТОГО ПО МЕТАЛЛОКОНСТРУКЦИЯМ:</td><td />
-                  <td className="text-right font-mono text-orange-700">{fmtRu(Math.round(summary.matByType.metal * 100) / 100)}</td>
-                </tr>
-                <tr className="font-semibold">
-                  <td className="px-2 py-1.5">ИТОГО ПО ИМПОРТНЫМ МАТЕРИАЛАМ:</td><td />
-                  <td className="text-right font-mono text-orange-700">{fmtRu(Math.round(summary.matByType.import * 100) / 100)}</td>
-                </tr>
                 <tr className="font-bold border-t border-amber-400 bg-amber-50">
                   <td className="px-2 py-2">ИТОГО ПРЯМЫЕ ЗАТРАТЫ:</td><td />
                   <td className="text-right font-mono text-orange-700">{fmtRu(Math.round(summary.direct * 100) / 100)}</td>
@@ -622,9 +764,10 @@ export default function Form2Preview({ estimate, lines, project, onClose, onSave
                      • ИТОГО ПО {bucket}:                        <base>
                      •    Транспорт и складское хранение (X+Y%)  <overhead>
                      • ИТОГО ПО {bucket} С НАКРУТКАМИ:           <base + overhead>
-                   Always rendered for all five regulated buckets so the
-                   document carries the regulatory structure intact even when
-                   a particular bucket has no resources. */}
+                   Three buckets: standard, equipment, cable. Metal-
+                   constructions and imported-materials накрутки were
+                   retired at user request — those lines flow into the
+                   standard bucket and inherit its 7% rate. */}
                 <tr className="font-bold bg-amber-100">
                   <td colSpan={3} className="px-2 py-2.5">ТРАНСПОРТ И СКЛАДСКОЕ ХРАНЕНИЕ</td>
                 </tr>
@@ -632,8 +775,6 @@ export default function Form2Preview({ estimate, lines, project, onClose, onSave
                   { key: 'standard',  base: 'ИТОГО ПО СТРОИТЕЛЬНЫМ МАТЕРИАЛАМ:',                with: 'ИТОГО ПО СТРОИТЕЛЬНЫМ МАТЕРИАЛАМ С НАКРУТКАМИ:',                split: '(5% + 2%)' },
                   { key: 'equipment', base: 'ИТОГО ПО ОБОРУДОВАНИЮ:',                            with: 'ИТОГО ПО ОБОРУДОВАНИЮ С НАКРУТКАМИ:',                            split: '(2% + 1,2%)' },
                   { key: 'cable',     base: 'ИТОГО ПО КАБЕЛЬНО-ПРОВОДНИКОВОЙ ПРОДУКЦИИ:',        with: 'ИТОГО ПО КАБЕЛЬНОЙ ПРОДУКЦИИ С НАКРУТКАМИ:',                     split: '(1,5% + 2%)' },
-                  { key: 'metal',     base: 'ИТОГО ПО МЕТАЛЛОКОНСТРУКЦИЯМ:',                     with: 'ИТОГО ПО МЕТАЛЛОКОНСТРУКЦИЯМ С НАКРУТКАМИ:',                    split: '(5% + 0,75%)' },
-                  { key: 'import',    base: 'ИТОГО ПО ИМПОРТНЫМ МАТЕРИАЛАМ:',                    with: 'ИТОГО ПО ИМПОРТНЫМ МАТЕРИАЛАМ С НАКРУТКАМИ:',                   split: '(2% + 2%)' },
                 ].map(({ key, base, with: withMarkup, split }) => (
                   <React.Fragment key={key}>
                     <tr className="font-semibold">
@@ -683,12 +824,6 @@ export default function Form2Preview({ estimate, lines, project, onClose, onSave
                 )}
                 {summary.matByType.cable > 0 && (
                   <tr><td className="pl-8 py-1 text-slate-600">└ Кабельная продукция (чистая сумма)</td><td /><td className="text-right font-mono text-slate-600">{fmtRu(Math.round(summary.matByType.cable * 100) / 100)}</td></tr>
-                )}
-                {summary.matByType.metal > 0 && (
-                  <tr><td className="pl-8 py-1 text-slate-600">└ Металлоконструкции</td><td /><td className="text-right font-mono text-slate-600">{fmtRu(Math.round(summary.matByType.metal * 100) / 100)}</td></tr>
-                )}
-                {summary.matByType.import > 0 && (
-                  <tr><td className="pl-8 py-1 text-slate-600">└ Импортные материалы</td><td /><td className="text-right font-mono text-slate-600">{fmtRu(Math.round(summary.matByType.import * 100) / 100)}</td></tr>
                 )}
                 {summary.combined.standard > 0 && (
                   <tr><td className="pl-8 py-1 text-teal-700">└ Накрутка стройматериалов (транспорт+склад, {OVERHEAD_RATES.combined.standard}%)</td><td /><td className="text-right font-mono text-teal-700">{fmtRu(Math.round(summary.combined.standard * 100) / 100)}</td></tr>
@@ -780,7 +915,7 @@ export default function Form2Preview({ estimate, lines, project, onClose, onSave
         {/* Footnote citing the regulatory basis (mockup-faithful) */}
         {sections.length > 0 && (
           <div className="mt-6 p-4 border-l-4 border-orange-700 bg-stone-50 text-[10px] text-slate-600 leading-relaxed">
-            <strong className="text-orange-700">Основание для накруток:</strong> Письмо Госкомархитектстроя РУз № 352/11-05 от 31.01.2011 г. · Правила ШНК 4.01.16-09 (п. 4.6 и п. 5.6). Накрутка «Транспорт и складское хранение» объединяет транспортные и заготовительно-складские расходы: для обычных стройматериалов 7% (5%+2%), для оборудования 3,2% (2%+1,2%), для кабельной продукции 3,5% (1,5%+2%). На металлоконструкции и импортные материалы — по согласованию с заказчиком.
+            <strong className="text-orange-700">Основание для накруток:</strong> Письмо Госкомархитектстроя РУз № 352/11-05 от 31.01.2011 г. · Правила ШНК 4.01.16-09 (п. 4.6 и п. 5.6). Накрутка «Транспорт и складское хранение» объединяет транспортные и заготовительно-складские расходы: для обычных стройматериалов 7% (5%+2%), для оборудования 3,2% (2%+1,2%), для кабельной продукции 3,5% (1,5%+2%).
           </div>
         )}
 
@@ -805,10 +940,72 @@ export default function Form2Preview({ estimate, lines, project, onClose, onSave
           <div className="mt-6 p-3 bg-amber-50 border-l-2 border-orange-700 text-[10px] text-slate-600 leading-relaxed">
             <strong className="text-orange-800">Основание для накруток:</strong> Письмо Госкомархитектстроя РУз № 352/11-05 от 31.01.2011 г. · Правила ШНК 4.01.16-09 (п. 4.6 и п. 5.6).
             Транспортные и заготовительно-складские расходы применяются только к обычным стройматериалам, оборудованию и кабельной продукции.
-            На металлоконструкции и импортные материалы — по согласованию с заказчиком.
           </div>
         )}
       </div>
+
+      {/* Akt № modal — replaces window.prompt() with an in-app dialog so
+         the styled Form 2 preview isn't interrupted by the OS-default
+         alert. Submitting (OK / Enter) triggers submitSnapshot with the
+         entered number; Cancel / Esc closes without saving. */}
+      {aktModalOpen && (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center"
+          style={{ background: 'rgba(15,23,42,0.45)' }}
+          onClick={() => setAktModalOpen(false)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl w-full max-w-[440px] mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-4 border-b border-slate-200">
+              <div className="text-[15px] font-semibold text-slate-900">
+                {t('save_form2_snapshot') || 'Forma 2 ni saqlash'}
+              </div>
+              <div className="text-xs text-slate-500 mt-1">
+                {t('act_number_optional_hint')
+                  || "Akt raqamini kiriting (ixtiyoriy). Bo'sh qoldirsa raqam tayinlanmaydi."}
+              </div>
+            </div>
+            <div className="px-5 py-4">
+              <label className="text-[11px] uppercase tracking-wider text-slate-500 block mb-1.5">
+                {t('act_number_optional_prompt') || 'Akt № (ixtiyoriy):'}
+              </label>
+              <input
+                type="text"
+                value={aktNumber}
+                onChange={(e) => setAktNumber(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { e.preventDefault(); submitSnapshot(aktNumber); }
+                  if (e.key === 'Escape') { setAktModalOpen(false); }
+                }}
+                placeholder="12-2026"
+                autoFocus
+                className="w-full px-3 py-2.5 rounded-md text-[13px] outline-none border border-slate-300 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
+              />
+            </div>
+            <div className="px-5 py-3 border-t border-slate-200 flex justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setAktModalOpen(false)}
+                disabled={savingSnapshot}
+              >
+                {t('cancel') || 'Bekor qilish'}
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => submitSnapshot(aktNumber)}
+                disabled={savingSnapshot}
+                className="bg-emerald-600 hover:bg-emerald-700"
+              >
+                <Save className="w-3.5 h-3.5 mr-1" />
+                {t('save') || 'Saqlash'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

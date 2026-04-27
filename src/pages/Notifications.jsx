@@ -247,7 +247,7 @@ export default function Notifications() {
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-slate-500">{t('read')}</p>
+                  <p className="text-xs text-slate-500">{t('notif_read_filter') || 'Read'}</p>
                   <p className="text-2xl font-bold text-green-600">
                     {notifications.length - unreadCount}
                   </p>
@@ -272,7 +272,7 @@ export default function Notifications() {
                   <TabsList className="w-full bg-white/80 backdrop-blur-sm p-1.5 rounded-xl border border-slate-200/60 shadow-sm flex flex-wrap justify-start gap-1 h-auto">
                     <TabsTrigger value="all" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">{t('all') || 'All'} ({notifications.length})</TabsTrigger>
                     <TabsTrigger value="unread" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">{t('unread') || 'Unread'} ({unreadCount})</TabsTrigger>
-                    <TabsTrigger value="read" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">{t('read') || 'Read'} ({notifications.length - unreadCount})</TabsTrigger>
+                    <TabsTrigger value="read" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">{t('notif_read_filter') || 'Read'} ({notifications.length - unreadCount})</TabsTrigger>
                   </TabsList>
                 </Tabs>
               </div>

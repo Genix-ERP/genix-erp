@@ -4,6 +4,7 @@ import { Loader2, Search, Users, Wrench, Package, Grid3x3, RotateCcw, Clock, X }
 import { toast } from 'sonner';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { useAuth } from '@/components/contexts/AuthContext';
 import { constructionService } from '@/api/services/construction';
 import { formatApiError } from '@/utils/apiErrors';
 
@@ -17,10 +18,13 @@ import { formatApiError } from '@/utils/apiErrors';
 //   №  ·  Kat. tag  ·  Name  ·  Unit  ·  Material type  ·  Current price
 //   ·  Original price  ·  Diff %  ·  History (count badge)
 
+// Up to 6 fractional digits with trailing zeros dropped, so per-unit
+// prices and small overhead amounts (e.g. 0.758) don't get silently
+// truncated. Whole-soum and kopek-precision values render unchanged.
 const fmt = (n) => {
   const v = Number(n);
   if (!Number.isFinite(v)) return '—';
-  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 })
+  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 6 })
     .format(v).replace(/\u00A0/g, ' ');
 };
 
@@ -73,6 +77,12 @@ const CAT_TAG = {
 export default function ResourcesPanel({ project, estimateId, onResourceChanged }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  // Bulk reset is destructive (rolls every resource price in the project
+  // back to its original) so it's gated to system admin + tenant owner.
+  // Foremen / engineers see the panel but the orange Reset-all button
+  // simply doesn't render for them.
+  const { isSiteAdmin, isOwner } = useAuth();
+  const canResetAll = (isSiteAdmin?.() || isOwner?.()) === true;
 
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -231,10 +241,12 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
     }
   }, [project?.id, estimateId, t, onResourceChanged, load]);
 
-  const resetAll = useCallback(async () => {
-    const msg = t('reset_all_confirm') || 'Reset all modified prices?';
-    // eslint-disable-next-line no-alert
-    if (!window.confirm(msg)) return;
+  // Confirm modal state — replaces window.confirm() for the reset-all
+  // bulk action so the prompt matches the rest of the app's styling and
+  // can be translated. Shape: { onConfirm } or null when closed.
+  const [resetAllConfirm, setResetAllConfirm] = useState(false);
+
+  const performResetAll = useCallback(async () => {
     try {
       const result = await constructionService.resetAllResourcePrices(project.id, {
         estimateId: estimateId || undefined,
@@ -249,6 +261,10 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
       toast.error(formatApiError(e, t, 'Xatolik'));
     }
   }, [project?.id, estimateId, t, onResourceChanged, load]);
+
+  const resetAll = useCallback(() => {
+    setResetAllConfirm(true);
+  }, []);
 
   const openHistory = useCallback(async (row) => {
     setHistoryResource(row);
@@ -270,14 +286,15 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
   return (
     <div>
       {/* Toolbar — category pills + material-type chips + search.
-         Layout matches the v23 mockup: chips on the left, search on the
-         right; the reset-all button gets its own row underneath. */}
+         Light theme matches the rest of the Smeta boshqaruvi tab:
+         white card with slate-200 border, slate-50 inset for the pill
+         track, white pill background when active. */}
       <div
         className="rounded-[10px] p-4 flex items-center gap-3 flex-wrap"
-        style={{ background: '#1E293B', border: '1px solid #1E293B' }}
+        style={{ background: '#FFFFFF', border: '1px solid #E2E8F0' }}
       >
         {/* Category pills */}
-        <div className="flex gap-1 p-1 rounded-lg" style={{ background: '#0B1220' }}>
+        <div className="flex gap-1 p-1 rounded-lg" style={{ background: '#F1F5F9' }}>
           {CATEGORIES.map((c) => {
             const Icon = c.icon;
             const active = cat === c.key;
@@ -287,11 +304,13 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
                 onClick={() => { setCat(c.key); if (c.key !== 'material') setMatFilter(''); }}
                 className="px-3.5 py-2 rounded-[5px] text-xs flex items-center gap-1.5 transition"
                 style={{
-                  background: active ? '#1E293B' : 'transparent',
-                  color: active ? '#14B8A6' : '#CBD5E1',
+                  background: active ? '#FFFFFF' : 'transparent',
+                  color: active ? '#0D9488' : '#475569',
                   fontFamily: 'inherit',
                   border: 'none',
                   cursor: 'pointer',
+                  boxShadow: active ? '0 1px 2px rgba(15,23,42,0.06)' : 'none',
+                  fontWeight: active ? 600 : 500,
                 }}
               >
                 <Icon className="w-3.5 h-3.5" />
@@ -317,10 +336,11 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
               }}
               className="px-3 py-2 rounded-md text-[12px] flex items-center gap-1.5 transition"
               style={{
-                background: active ? `${meta.color}22` : 'transparent',
+                background: active ? `${meta.color}1a` : '#FFFFFF',
                 color: meta.color,
-                border: `1px solid ${active ? meta.color : 'rgba(148,163,184,0.25)'}`,
+                border: `1px solid ${active ? meta.color : '#E2E8F0'}`,
                 cursor: 'pointer',
+                fontWeight: active ? 600 : 500,
               }}
             >
               <span className="inline-block w-2 h-2 rounded-full" style={{ background: meta.color }} />
@@ -331,35 +351,39 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
 
         {/* Search */}
         <div className="relative" style={{ minWidth: 240, flex: 1 }}>
-          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#94A3B8' }} />
+          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#64748B' }} />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={t('search_resource') || 'Resurs qidirish...'}
             className="w-full pl-9 pr-3 py-2.5 rounded-md text-[13px] outline-none"
-            style={{ background: '#0B1220', color: '#F1F5F9', border: '1px solid #334155', fontFamily: 'inherit' }}
+            style={{ background: '#FFFFFF', color: '#0F172A', border: '1px solid #E2E8F0', fontFamily: 'inherit' }}
           />
         </div>
       </div>
 
-      {/* Reset-all on its own row (mockup layout). */}
-      <div className="mt-3">
-        <button
-          onClick={resetAll}
-          disabled={!anyModified || loading}
-          className="px-3.5 py-2 rounded-md text-xs flex items-center gap-1.5 transition disabled:opacity-40"
-          style={{
-            background: 'transparent',
-            color: anyModified ? '#F59E0B' : '#CBD5E1',
-            border: `1px solid ${anyModified ? 'rgba(245,158,11,0.3)' : '#334155'}`,
-            cursor: anyModified ? 'pointer' : 'not-allowed',
-          }}
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-          {t('reset_all_prices') || 'Barcha narxlarni tiklash'}
-        </button>
-      </div>
+      {/* Reset-all on its own row (mockup layout). Visible only to
+         system admin / tenant owner — wiping every price back to its
+         original isn't something a foreman should be able to do. */}
+      {canResetAll && (
+        <div className="mt-3">
+          <button
+            onClick={resetAll}
+            disabled={!anyModified || loading}
+            className="px-3.5 py-2 rounded-md text-xs flex items-center gap-1.5 transition disabled:opacity-40"
+            style={{
+              background: '#FFFFFF',
+              color: anyModified ? '#D97706' : '#94A3B8',
+              border: `1px solid ${anyModified ? 'rgba(217,119,6,0.4)' : '#E2E8F0'}`,
+              cursor: anyModified ? 'pointer' : 'not-allowed',
+            }}
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            {t('reset_all_prices') || 'Barcha narxlarni tiklash'}
+          </button>
+        </div>
+      )}
 
       {/* AVTO-ANIQLASH — live count of material rows tagged into each
          bucket. Mirrors the v23 mockup's auto-detection summary so the
@@ -367,8 +391,8 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
          regulated transport+storage category. */}
       {(matCounts.standard + matCounts.equipment + matCounts.cable + matCounts.metal + matCounts.import) > 0 && (
         <div className="mt-3 rounded-[10px] px-4 py-3 flex items-center gap-3 flex-wrap"
-             style={{ background: '#1E293B', border: '1px solid #1E293B' }}>
-          <span className="text-[10px] uppercase tracking-[0.1em] font-semibold" style={{ color: '#94A3B8' }}>
+             style={{ background: '#FFFFFF', border: '1px solid #E2E8F0' }}>
+          <span className="text-[10px] uppercase tracking-[0.1em] font-semibold" style={{ color: '#64748B' }}>
             {t('auto_detection') || 'AVTO-ANIQLASH'}:
           </span>
           {[
@@ -392,36 +416,36 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
       )}
 
       {/* Table — section-grouped per the v23 mockup layout. Each section
-         carries a coloured header bar with a row count, and rows inside
-         carry the new NAKRUTKA / NARX+NAKRUTKA columns so the foreman can
-         see what each resource will contribute to the Form 2 totals
-         after the regulated transport+storage uplift is applied. */}
+         carries a coloured header bar with a row count. Rows show Joriy
+         narx and Nakrutka as separate columns so the user sees the raw
+         resource price next to the regulated transport+storage накрутка
+         without them being baked together. */}
       <div className="mt-5">
         {loading && items.length === 0 ? (
-          <div className="text-center py-12" style={{ color: '#94A3B8' }}>
+          <div className="text-center py-12" style={{ color: '#64748B' }}>
             <Loader2 className="w-6 h-6 mx-auto mb-2 animate-spin" />
             {t('loading') || 'Yuklanmoqda…'}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="text-center py-12" style={{ color: '#94A3B8' }}>
+          <div className="text-center py-12" style={{ color: '#64748B' }}>
             {t('no_resources_found') || 'Hech narsa topilmadi'}
           </div>
         ) : (
           sections.map((sec) => (
             <div key={sec.key} className="mb-5 rounded-[10px] overflow-hidden"
-                 style={{ background: '#1E293B', border: '1px solid #1E293B' }}>
+                 style={{ background: '#FFFFFF', border: '1px solid #E2E8F0' }}>
               {/* Section header */}
               <div className="px-4 py-2.5 flex items-center gap-2"
                    style={{
-                     background: `${sec.color}14`,
+                     background: `${sec.color}10`,
                      borderLeft: `3px solid ${sec.color}`,
-                     borderBottom: '1px solid #334155',
+                     borderBottom: '1px solid #E2E8F0',
                    }}>
                 <span className="inline-block w-2 h-2 rounded-full" style={{ background: sec.color }} />
                 <span className="text-[12px] uppercase tracking-[0.08em] font-bold" style={{ color: sec.color }}>
                   {sec.label}
                 </span>
-                <span className="text-[11px]" style={{ color: '#94A3B8' }}>
+                <span className="text-[11px]" style={{ color: '#64748B' }}>
                   — {sec.rows.length} {t('resources_count_suffix') || 'ресурсов'}
                 </span>
               </div>
@@ -432,7 +456,7 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
                  can still scroll horizontally to reach the rightmost
                  columns instead of squashing the price input. */}
               <div className="overflow-x-auto">
-              <table className="border-collapse text-[13px]" style={{ tableLayout: 'fixed', width: '100%', minWidth: 1380 }}>
+              <table className="border-collapse text-[13px]" style={{ tableLayout: 'fixed', width: '100%', minWidth: 1220 }}>
                 <colgroup>
                   <col style={{ width: 50  }} />
                   <col style={{ width: 90  }} />
@@ -441,7 +465,6 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
                   <col style={{ width: 180 }} />
                   <col style={{ width: 200 }} />{/* Joriy narx */}
                   <col style={{ width: 130 }} />{/* Nakrutka */}
-                  <col style={{ width: 160 }} />{/* Narx + Nakrutka */}
                   <col style={{ width: 130 }} />{/* Asl narx */}
                   <col style={{ width: 80  }} />
                   <col style={{ width: 80  }} />
@@ -457,7 +480,6 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
                       { l: 'Material turi',    align: 'left' },
                       { l: 'Joriy narx',       align: 'right' },
                       { l: 'Nakrutka',         align: 'right' },
-                      { l: 'Narx + Nakrutka',  align: 'right' },
                       { l: 'Asl narx',         align: 'right' },
                       { l: 'Farq',             align: 'right' },
                       { l: 'Tarix',            align: 'left' },
@@ -467,10 +489,10 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
                         key={i}
                         className="text-[10px] uppercase tracking-[0.1em] font-semibold py-3 px-3.5"
                         style={{
-                          background: '#1E293B',
-                          color: '#94A3B8',
+                          background: '#F8FAFC',
+                          color: '#64748B',
                           textAlign: h.align,
-                          borderBottom: '1px solid #334155',
+                          borderBottom: '1px solid #E2E8F0',
                           whiteSpace: 'nowrap',
                         }}
                       >
@@ -499,17 +521,20 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
                     const matTypeColor = MATERIAL_TYPES.find((m) => m.value === matType)?.color || '#CBD5E1';
 
                     // Per-line transport+storage uplift. Only material rows
-                    // attract overhead; labor/machine rows show a dash.
+                    // attract overhead; labor/machine rows show a dash. The
+                    // amount + percent surface in their own column without
+                    // being folded back into the price — users need the raw
+                    // price and the накрутка as separate figures, not a
+                    // single combined total.
                     const overheadPct = isMaterial ? (OVERHEAD_PCT[matType] || 0) : 0;
                     const overheadAmt = curPrice * overheadPct / 100;
-                    const totalWithOverhead = curPrice + overheadAmt;
 
                     return (
                       <tr
                         key={k}
                         style={{
-                          background: isModified ? 'rgba(20,184,166,0.04)' : 'transparent',
-                          borderTop: '1px solid #1E293B',
+                          background: isModified ? 'rgba(13,148,136,0.04)' : 'transparent',
+                          borderTop: '1px solid #F1F5F9',
                         }}
                       >
                         <td className="px-3.5 py-2.5 font-mono" style={{ color: '#94A3B8' }}>{i + 1}</td>
@@ -521,10 +546,10 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
                             {tag.label}
                           </span>
                         </td>
-                        <td className="px-3.5 py-2.5 text-[12px]" style={{ color: '#F1F5F9' }}>
+                        <td className="px-3.5 py-2.5 text-[12px]" style={{ color: '#0F172A' }}>
                           {row.name}
                         </td>
-                        <td className="px-3.5 py-2.5 text-center" style={{ color: '#CBD5E1' }}>
+                        <td className="px-3.5 py-2.5 text-center" style={{ color: '#475569' }}>
                           {row.uom || ''}
                         </td>
                         <td className="px-3.5 py-2.5">
@@ -534,14 +559,14 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
                               onChange={(e) => updateMatType(row, e.target.value)}
                               className="px-2 py-1.5 rounded text-[11px] outline-none cursor-pointer w-full"
                               style={{
-                                background: '#0B1220',
+                                background: '#FFFFFF',
                                 color: matTypeColor,
-                                border: '1px solid #334155',
+                                border: '1px solid #E2E8F0',
                                 fontFamily: 'inherit',
                               }}
                             >
                               {MATERIAL_TYPES.map((mt) => (
-                                <option key={mt.value} value={mt.value} style={{ background: '#1E293B', color: '#F1F5F9' }}>
+                                <option key={mt.value} value={mt.value} style={{ background: '#FFFFFF', color: '#0F172A' }}>
                                   {t(MAT_LABEL_KEY[mt.value]) || mt.fallback}
                                 </option>
                               ))}
@@ -563,9 +588,9 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
                             onFocus={(e) => e.target.select()}
                             className="px-2.5 py-2 rounded-[5px] text-[13px] font-mono text-right outline-none transition w-full"
                             style={{
-                              background: '#0B1220',
-                              color: draftDirty ? '#14B8A6' : (isModified ? '#F59E0B' : '#F1F5F9'),
-                              border: '1px solid #334155',
+                              background: '#FFFFFF',
+                              color: draftDirty ? '#0D9488' : (isModified ? '#D97706' : '#0F172A'),
+                              border: `1px solid ${draftDirty ? '#0D9488' : (isModified ? '#FCD34D' : '#E2E8F0')}`,
                               fontWeight: draftDirty || isModified ? 600 : 500,
                             }}
                           />
@@ -573,25 +598,22 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
                         <td className="px-3.5 py-2.5 text-right font-mono tabular-nums">
                           {isMaterial && curPrice > 0 ? (
                             <span style={{ color: matTypeColor, fontWeight: 500 }}>
-                              {fmt(overheadAmt)} <span className="text-[10px]" style={{ color: '#64748B' }}>({overheadPct}%)</span>
+                              {fmt(overheadAmt)} <span className="text-[10px]" style={{ color: '#94A3B8' }}>({overheadPct}%)</span>
                             </span>
                           ) : (
-                            <span style={{ color: '#64748B' }}>—</span>
+                            <span style={{ color: '#CBD5E1' }}>—</span>
                           )}
                         </td>
-                        <td className="px-3.5 py-2.5 text-right font-mono tabular-nums" style={{ color: isMaterial ? '#F59E0B' : '#94A3B8', fontWeight: isMaterial ? 600 : 400 }}>
-                          {isMaterial && curPrice > 0 ? fmt(totalWithOverhead) : '—'}
-                        </td>
-                        <td className="px-3.5 py-2.5 text-right font-mono tabular-nums" style={{ color: '#94A3B8' }}>
+                        <td className="px-3.5 py-2.5 text-right font-mono tabular-nums" style={{ color: '#64748B' }}>
                           {origPrice > 0 ? fmt(origPrice) : '—'}
                         </td>
                         <td className="px-3.5 py-2.5 text-right">
                           {isModified ? (
-                            <span style={{ color: diff >= 0 ? '#F87171' : '#4ADE80', fontWeight: 600 }}>
+                            <span style={{ color: diff >= 0 ? '#DC2626' : '#16A34A', fontWeight: 600 }}>
                               {diff >= 0 ? '+' : ''}{diffPct.toFixed(1)}%
                             </span>
                           ) : (
-                            <span style={{ color: '#94A3B8' }}>—</span>
+                            <span style={{ color: '#CBD5E1' }}>—</span>
                           )}
                         </td>
                         <td className="px-3.5 py-2.5">
@@ -599,9 +621,9 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
                             onClick={() => openHistory(row)}
                             className="px-2 py-1 rounded text-[10px] flex items-center gap-1 transition"
                             style={{
-                              background: 'rgba(20,184,166,0.08)',
-                              color: '#14B8A6',
-                              border: '1px solid rgba(20,184,166,0.2)',
+                              background: 'rgba(13,148,136,0.08)',
+                              color: '#0D9488',
+                              border: '1px solid rgba(13,148,136,0.25)',
                             }}
                           >
                             <Clock className="w-3 h-3" />
@@ -614,7 +636,7 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
                               onClick={() => resetPrice(row)}
                               title={t('reset_to_original') || 'Asl qiymatga qaytarish'}
                               className="w-7 h-7 rounded-[5px] flex items-center justify-center transition mx-auto"
-                              style={{ background: '#1E293B', border: '1px solid #334155', color: '#F59E0B' }}
+                              style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', color: '#D97706' }}
                             >
                               <RotateCcw className="w-3.5 h-3.5" />
                             </button>
@@ -651,9 +673,9 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
               maxWidth: 540,
               maxHeight: 'calc(100vh - 64px)',
               zIndex: 101,
-              background: '#1E293B',
-              color: '#F1F5F9',
-              border: '1px solid #334155',
+              background: '#FFFFFF',
+              color: '#0F172A',
+              border: '1px solid #E2E8F0',
               borderRadius: 12,
               fontFamily: "'Inter', system-ui, sans-serif",
               display: 'flex',
@@ -662,30 +684,30 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
               boxShadow: "0 10px 40px rgba(15,23,42,0.15)",
             }}
           >
-          <div style={{ borderBottom: '1px solid #1E293B' }} className="px-6 py-5 flex justify-between items-start gap-4">
+          <div style={{ borderBottom: '1px solid #E2E8F0' }} className="px-6 py-5 flex justify-between items-start gap-4">
             <div className="min-w-0 flex-1">
-              <div className="text-[11px] uppercase tracking-[0.1em]" style={{ color: '#94A3B8' }}>
+              <div className="text-[11px] uppercase tracking-[0.1em]" style={{ color: '#64748B' }}>
                 {t('price_history') || 'Narx tarixi'}
               </div>
-              <DialogPrimitive.Title className="text-base font-semibold mt-1 truncate" style={{ color: '#F1F5F9' }}>
+              <DialogPrimitive.Title className="text-base font-semibold mt-1 truncate" style={{ color: '#0F172A' }}>
                 {historyResource?.name}
               </DialogPrimitive.Title>
             </div>
             <DialogPrimitive.Close
               className="w-8 h-8 rounded-md flex items-center justify-center shrink-0"
-              style={{ background: '#1E293B', border: '1px solid #334155', color: '#CBD5E1' }}
+              style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', color: '#64748B' }}
             >
               <X className="w-4 h-4" />
             </DialogPrimitive.Close>
           </div>
           <div className="px-6 py-5">
             {historyLoading ? (
-              <div className="py-8 text-center" style={{ color: '#94A3B8' }}>
+              <div className="py-8 text-center" style={{ color: '#64748B' }}>
                 <Loader2 className="w-5 h-5 mx-auto mb-2 animate-spin" />
                 {t('loading') || 'Yuklanmoqda…'}
               </div>
             ) : historyRows.length === 0 ? (
-              <div className="py-8 text-center text-sm" style={{ color: '#94A3B8' }}>
+              <div className="py-8 text-center text-sm" style={{ color: '#64748B' }}>
                 {t('no_price_history') || "Tarix bo'sh"}
               </div>
             ) : (
@@ -698,12 +720,12 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
                       key={h.id}
                       className="px-3 py-2.5 rounded-md flex justify-between items-center text-xs"
                       style={{
-                        background: '#0B1220',
-                        border: i === 0 ? '1px solid #14B8A6' : '1px solid #334155',
+                        background: '#F8FAFC',
+                        border: i === 0 ? '1px solid #0D9488' : '1px solid #E2E8F0',
                       }}
                     >
                       <div>
-                        <div className="font-mono" style={{ color: '#CBD5E1' }}>
+                        <div className="font-mono" style={{ color: '#475569' }}>
                           {new Date(h.changed_at).toLocaleString()}
                         </div>
                         <div className="text-[10px] mt-0.5" style={{ color: '#94A3B8' }}>
@@ -715,12 +737,12 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
                         <div className="font-mono">
                           <span style={{ color: '#94A3B8' }}>{fmt(h.old_price)}</span>
                           <span className="mx-1" style={{ color: '#94A3B8' }}>→</span>
-                          <span className="font-semibold" style={{ color: '#F59E0B' }}>{fmt(h.new_price)}</span>
+                          <span className="font-semibold" style={{ color: '#D97706' }}>{fmt(h.new_price)}</span>
                         </div>
                         {h.old_price > 0 && (
                           <div
                             className="text-[10px] mt-0.5"
-                            style={{ color: diff >= 0 ? '#F87171' : '#4ADE80' }}
+                            style={{ color: diff >= 0 ? '#DC2626' : '#16A34A' }}
                           >
                             {diff >= 0 ? '+' : ''}{pct.toFixed(1)}%
                           </div>
@@ -735,6 +757,64 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
           </DialogPrimitive.Content>
         </DialogPrimitive.Portal>
       </DialogPrimitive.Root>
+
+      {/* Reset-all confirm modal — replaces window.confirm() so the
+         prompt is themed and translated like the rest of the app. */}
+      {resetAllConfirm && (
+        <ResetAllConfirmModal
+          t={t}
+          onCancel={() => setResetAllConfirm(false)}
+          onConfirm={() => { setResetAllConfirm(false); performResetAll(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// =====================================================================
+// ResetAllConfirmModal — styled confirm dialog used for the
+// "Barcha narxlarni qaytarish" bulk action. Click outside / Esc cancels.
+// =====================================================================
+function ResetAllConfirmModal({ t, onConfirm, onCancel }) {
+  React.useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onCancel?.(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onCancel]);
+  return (
+    <div
+      className="fixed inset-0 z-[120] flex items-center justify-center"
+      style={{ background: 'rgba(15,23,42,0.55)' }}
+      onClick={onCancel}
+    >
+      <div
+        className="bg-white rounded-2xl p-6 max-w-[520px] w-[90%] shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="text-base font-bold text-slate-900 mb-3">
+          {t('reset_all_prices') || 'Barcha narxlarni qaytarish'}
+        </h3>
+        <p className="text-sm text-slate-600 leading-relaxed mb-5 whitespace-pre-line">
+          {t('reset_all_confirm') || 'O\'zgartirilgan barcha narxlar asl qiymatlariga qaytariladi. Davom etamizmi?'}
+        </p>
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-4 py-2 rounded-lg text-xs font-semibold bg-white border border-slate-300 text-slate-600 hover:bg-slate-50"
+          >
+            {t('cancel') || 'Bekor qilish'}
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="px-4 py-2 rounded-lg text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white inline-flex items-center gap-1.5"
+          >
+            <span className="text-[14px] leading-none">↻</span>
+            {t('reset_all_prices') || 'Barcha narxlarni qaytarish'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

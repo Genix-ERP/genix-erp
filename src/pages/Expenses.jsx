@@ -12,13 +12,36 @@ import { Plus, Search, Receipt, Upload, CheckCircle, XCircle, Clock, DollarSign,
 import { format } from 'date-fns';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { analyzeExpenses } from '@/api/services/aiAnalytics';
+import { financeService } from '@/api/services/finance';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { usePermissions } from "@/hooks/usePermissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { Link } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 
 const COLORS = ['#0ea5e9', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444'];
+
+// Money input helpers — keep the underlying state as a raw numeric string
+// (no separators) so parseFloat() at submit time stays correct, but
+// render the input with thin-space thousands grouping so a user typing
+// 120000 sees "120 000" while typing. Decimal point/comma both accepted.
+const formatAmountForInput = (val) => {
+  if (val === '' || val === null || val === undefined) return '';
+  const cleaned = String(val).replace(/\s/g, '').replace(',', '.');
+  const [intPart, decPart] = cleaned.split('.');
+  const grouped = (intPart || '').replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return decPart !== undefined ? `${grouped}.${decPart}` : grouped;
+};
+const stripAmountInput = (val) => {
+  if (val === '' || val === null || val === undefined) return '';
+  // Strip everything that isn't a digit or a single decimal point.
+  const cleaned = String(val).replace(/\s/g, '').replace(',', '.').replace(/[^\d.]/g, '');
+  // Keep only the first dot — collapse anything after it.
+  const firstDot = cleaned.indexOf('.');
+  if (firstDot === -1) return cleaned;
+  return cleaned.slice(0, firstDot + 1) + cleaned.slice(firstDot + 1).replace(/\./g, '');
+};
 
 export default function Expenses() {
   const { language } = useLanguage();
@@ -48,10 +71,33 @@ export default function Expenses() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [claimToDelete, setClaimToDelete] = useState(null);
 
+  // Categories are now driven by the `expense_categories` table —
+  // managed in Settings → Expenses. The page loads them on mount and
+  // both the create and edit modals render their dropdowns from this
+  // list. `category_id` (UUID) is the canonical reference to the
+  // selected row; we still pass `category` (the name) for the legacy
+  // text column the backend keeps for backwards-compatibility.
+  const [categories, setCategories] = useState([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setCategoriesLoading(true);
+    financeService.listExpenseCategories()
+      .then((rows) => {
+        if (cancelled) return;
+        setCategories(Array.isArray(rows) ? rows : []);
+      })
+      .catch(() => { /* silent — empty state already covers this */ })
+      .finally(() => { if (!cancelled) setCategoriesLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
   const [newClaim, setNewClaim] = useState({
     employee_name: '',
     expense_date: new Date().toISOString().split('T')[0],
-    category: 'travel',
+    category_id: '',
+    category: '',
     amount: 0,
     // Matches the DB default from migration 336. Accountants flip this
     // to false for fines, undocumented costs, personal items, etc. —
@@ -97,7 +143,8 @@ export default function Expenses() {
       setNewClaim({
         employee_name: '',
         expense_date: new Date().toISOString().split('T')[0],
-        category: 'travel',
+        category_id: '',
+        category: '',
         amount: 0,
         description: '',
         is_recognized: true,
@@ -110,9 +157,21 @@ export default function Expenses() {
   };
 
   const handleEditClaim = (claim) => {
+    // Legacy rows may carry only the text `category` column without a
+    // category_id. Resolve it by name from the loaded list so the edit
+    // dropdown opens with the right row pre-selected.
+    let categoryId = claim.category_id || '';
+    if (!categoryId && claim.category && categories.length > 0) {
+      const match = categories.find(
+        (c) => String(c.name).toLowerCase() === String(claim.category).toLowerCase()
+            || String(c.code).toLowerCase() === String(claim.category).toLowerCase(),
+      );
+      if (match) categoryId = match.id;
+    }
     setEditClaim({
       ...claim,
-      amount: claim.amount || 0
+      category_id: categoryId,
+      amount: claim.amount || 0,
     });
     setShowEditModal(true);
   };
@@ -125,6 +184,10 @@ export default function Expenses() {
       updateExpense(editClaim.id, {
         employee_name: editClaim.employee_name,
         expense_date: editClaim.expense_date,
+        // Send the canonical category_id (UUID) so the backend can join
+        // through to expense_categories; `category` keeps the legacy
+        // text column populated for backwards-compatibility.
+        category_id: editClaim.category_id,
         category: editClaim.category,
         amount: parseFloat(editClaim.amount) || 0,
         description: editClaim.description,
@@ -645,28 +708,66 @@ export default function Expenses() {
                 </div>
                 <div>
                   <label className="text-sm font-medium mb-1 block">{t('category')} *</label>
-                  <Select value={newClaim.category} onValueChange={(value) => setNewClaim({...newClaim, category: value})}>
+                  <Select
+                    value={newClaim.category_id || ''}
+                    onValueChange={(value) => {
+                      const picked = categories.find((c) => c.id === value);
+                      setNewClaim({
+                        ...newClaim,
+                        category_id: value,
+                        // Keep the name in sync so the legacy `category`
+                        // text column still gets a sensible value on
+                        // backends that haven't migrated to category_id.
+                        category: picked?.name || '',
+                      });
+                    }}
+                    disabled={categoriesLoading || categories.length === 0}
+                  >
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue
+                        placeholder={
+                          categoriesLoading
+                            ? (t('loading') || 'Loading…')
+                            : categories.length === 0
+                              ? (t('no_categories_yet') || 'No categories yet')
+                              : (t('select_category') || 'Select category')
+                        }
+                      />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="travel">{t('travel')}</SelectItem>
-                      <SelectItem value="meals">{t('meals')}</SelectItem>
-                      <SelectItem value="accommodation">{t('accommodation')}</SelectItem>
-                      <SelectItem value="transportation">{t('transportation')}</SelectItem>
-                      <SelectItem value="office_supplies">{t('office_supplies')}</SelectItem>
-                      <SelectItem value="training">{t('training')}</SelectItem>
-                      <SelectItem value="other">{t('other')}</SelectItem>
+                      {categories.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name}
+                          {c.account_code && (
+                            <span className="ml-2 text-[10px] font-mono text-slate-400">
+                              {c.account_code}
+                            </span>
+                          )}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
+                  {!categoriesLoading && categories.length === 0 && (
+                    <p className="text-[11px] text-amber-700 mt-1">
+                      {t('no_categories_create_first')
+                        || 'No categories yet — '}
+                      <Link
+                        to="/settings?tab=expenses"
+                        className="underline font-medium"
+                      >
+                        {t('create_in_settings') || 'create one in Settings'}
+                      </Link>
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="text-sm font-medium mb-1 block">{t('amount')} *</label>
                   <Input
-                    type="number"
-                    placeholder="0.00"
-                    value={newClaim.amount}
-                    onChange={(e) => setNewClaim({...newClaim, amount: e.target.value})}
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0"
+                    value={formatAmountForInput(newClaim.amount)}
+                    onChange={(e) => setNewClaim({ ...newClaim, amount: stripAmountInput(e.target.value) })}
                     required
                   />
                 </div>
@@ -714,7 +815,7 @@ export default function Expenses() {
                 <Button
                   onClick={handleCreateClaim}
                   className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-                  disabled={!newClaim.amount || !newClaim.employee_name || isSubmitting}
+                  disabled={!newClaim.amount || !newClaim.employee_name || !newClaim.category_id || isSubmitting}
                 >
                   {isSubmitting ? t('submitting') : t('submit_claim')}
                 </Button>
@@ -781,27 +882,48 @@ export default function Expenses() {
                   </div>
                   <div>
                     <label className="text-sm font-medium mb-1 block">{t('category')}</label>
-                    <Select value={editClaim.category || 'travel'} onValueChange={(value) => setEditClaim({...editClaim, category: value})}>
+                    <Select
+                      value={editClaim.category_id || ''}
+                      onValueChange={(value) => {
+                        const picked = categories.find((c) => c.id === value);
+                        setEditClaim({
+                          ...editClaim,
+                          category_id: value,
+                          category: picked?.name || editClaim.category || '',
+                        });
+                      }}
+                      disabled={categoriesLoading || categories.length === 0}
+                    >
                       <SelectTrigger>
-                        <SelectValue />
+                        <SelectValue
+                          placeholder={
+                            categories.length === 0
+                              ? (t('no_categories_yet') || 'No categories yet')
+                              : (t('select_category') || 'Select category')
+                          }
+                        />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="travel">{t('travel')}</SelectItem>
-                        <SelectItem value="meals">{t('meals')}</SelectItem>
-                        <SelectItem value="accommodation">{t('accommodation')}</SelectItem>
-                        <SelectItem value="transportation">{t('transportation')}</SelectItem>
-                        <SelectItem value="office_supplies">{t('office_supplies')}</SelectItem>
-                        <SelectItem value="training">{t('training')}</SelectItem>
-                        <SelectItem value="other">{t('other')}</SelectItem>
+                        {categories.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.name}
+                            {c.account_code && (
+                              <span className="ml-2 text-[10px] font-mono text-slate-400">
+                                {c.account_code}
+                              </span>
+                            )}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
                   <div>
                     <label className="text-sm font-medium mb-1 block">{t('amount')} *</label>
                     <Input
-                      type="number"
-                      value={editClaim.amount}
-                      onChange={(e) => setEditClaim({...editClaim, amount: e.target.value})}
+                      type="text"
+                      inputMode="decimal"
+                      value={formatAmountForInput(editClaim.amount)}
+                      onChange={(e) => setEditClaim({ ...editClaim, amount: stripAmountInput(e.target.value) })}
                     />
                   </div>
                 </div>

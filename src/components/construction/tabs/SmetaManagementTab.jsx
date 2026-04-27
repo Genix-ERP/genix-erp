@@ -79,10 +79,17 @@ const SMETA_STYLE = `
 .smeta-scroll::-webkit-scrollbar-thumb:hover { background: ${C.fade}; }
 `;
 
+// Up to 6 fractional digits with trailing zeros dropped. Imports often
+// carry small per-unit norms like 0.758 or quantities like 0.0125, and
+// truncating them to 2 decimals (the old behaviour) silently widened
+// estimates by tens of thousands of soums on multi-million-row totals.
+// Monetary values that already sit on integer or kopek precision look
+// identical (1 234 567,89 stays as 1 234 567,89) — only sub-kopek detail
+// becomes visible.
 const fmt = (n) => {
   const v = Number(n);
   if (!Number.isFinite(v)) return '—';
-  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 })
+  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 6 })
     .format(v).replace(/\u00A0/g, ' ');
 };
 const fmtShort = (n) => {
@@ -128,12 +135,31 @@ export default function SmetaManagementTab({ project }) {
   // foreman can see at a glance whose account is making edits (every
   // mutation is also persisted into construction_smeta_audit with this
   // user's id + name on the server side).
-  const { user } = useAuth();
+  const { user, isSiteAdmin, isOwner } = useAuth();
   const userDisplay = user
     ? [user.first_name, user.last_name].filter(Boolean).join(' ').trim() || user.email || ''
     : '';
+  // Bulk toolbar buttons that can wipe a lot of state with one click
+  // ("Yopish" = close all sections, "Hammasini o'chirish" = collapse all
+  // work cards, "Hajmlarni tushirish" = zero every quantity in the
+  // smeta) are gated to system admins / tenant owners. Regular users
+  // can still open / close individual sections + cards by clicking
+  // their headers — only the bulk shortcuts go away.
+  const canBulkAdmin = isSiteAdmin?.() || isOwner?.();
 
   const [estimates, setEstimates] = useState([]);
+  // Block-level selector. Each option in the dropdown represents a building
+  // ("blok"). Behind the scenes we resolve the block to ALL of its Единич
+  // estimates and load their lines concatenated — so when a block has
+  // several Единич smetas (re-imports / period-based smetas) the user sees
+  // the works back-to-back in one list. We only consider Единич here and
+  // skip ВОР entirely (per product feedback "we don't need BOP").
+  //
+  // estimateId is the PRIMARY edinich estimate of the selected block —
+  // used for things that need a single concrete id (Form 2 generation,
+  // snapshots, audit log filter, "+resurs" modal). It's whichever Единич
+  // for the block has the highest id (latest import).
+  const [buildingId, setBuildingId] = useState(''); // '' / '0' / numeric
   const [estimateId, setEstimateId] = useState('');
   const [lines, setLines] = useState([]);
   const [loadingEstimates, setLoadingEstimates] = useState(false);
@@ -169,6 +195,13 @@ export default function SmetaManagementTab({ project }) {
   const [loadingAudit, setLoadingAudit] = useState(false);
   const [auditFilter, setAuditFilter] = useState('');
 
+  // Generic confirmation modal — replaces window.confirm() calls for
+  // destructive bulk actions (Hammasini yoqish / Hammasini o'chirish /
+  // Hajmlarni tushirish / line-delete) so the prompt matches the rest of
+  // the app's styling and runs through translations. Shape:
+  //   { title, body, confirmLabel, tone: 'amber'|'red'|'teal', onConfirm }
+  const [confirmModal, setConfirmModal] = useState(null);
+
   // ── Load estimates ─────────────────────────────────────────────────
   useEffect(() => {
     if (!project?.id) return;
@@ -179,7 +212,6 @@ export default function SmetaManagementTab({ project }) {
         if (cancelled) return;
         const list = Array.isArray(rows) ? rows : [];
         setEstimates(list);
-        if (list.length > 0 && !estimateId) setEstimateId(String(list[0].id));
       })
       .catch((e) => { if (!cancelled) toast.error(formatApiError(e, t, 'Xatolik')); })
       .finally(() => { if (!cancelled) setLoadingEstimates(false); });
@@ -187,13 +219,83 @@ export default function SmetaManagementTab({ project }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project?.id]);
 
-  // ── Load lines ────────────────────────────────────────────────────
-  const loadLines = useCallback(async (id) => {
-    if (!id) { setLines([]); return; }
+  // ── Block options (one option per building, Единич only) ──────────
+  // Group estimates by building_id. Within each block, keep only Единич
+  // smetas — that's what this tab is built around. ВОР is excluded
+  // entirely; Ресурс still feeds prices via the backend propagation step
+  // but doesn't show in the block selector.
+  //
+  // IMPORTANT: this useMemo MUST NOT depend on `t` — useTranslation
+  // returns a fresh `t` function reference on every render, so including
+  // it in the deps list would re-create blockOptions on every render,
+  // which cascades through activeBlock → activeEstimateIds → the
+  // loadLines useEffect → an infinite request loop. We use a static
+  // English fallback name here; the dropdown re-resolves the localized
+  // label at render time below if needed.
+  const blockOptions = useMemo(() => {
+    const buckets = new Map(); // key = building_id (or '0'), value = { name, edinich: [] }
+    for (const e of estimates) {
+      const st = String(e.source_type || '').toLowerCase();
+      if (st !== 'edinich') continue;
+      const bid = e.building_id ? String(e.building_id) : '0';
+      const bname = e.building_name || (bid === '0' ? 'Butun loyiha' : `#${bid}`);
+      if (!buckets.has(bid)) buckets.set(bid, { id: bid, name: bname, edinich: [] });
+      buckets.get(bid).edinich.push(e);
+    }
+    // Sort each block's edinich estimates by id DESC so [0] is the latest.
+    const opts = Array.from(buckets.values()).map((b) => ({
+      ...b,
+      edinich: [...b.edinich].sort((a, c) => Number(c.id) - Number(a.id)),
+    }));
+    // Sort blocks by name for stable display order.
+    opts.sort((a, c) => String(a.name).localeCompare(String(c.name)));
+    return opts;
+  }, [estimates]);
+
+  // Pick a default block when the list first loads.
+  useEffect(() => {
+    if (!buildingId && blockOptions.length > 0) {
+      setBuildingId(blockOptions[0].id);
+    }
+  }, [blockOptions, buildingId]);
+
+  // Resolve buildingId → primary estimateId (latest едиinич of that block)
+  // + the full id-list to load lines from.
+  const activeBlock = useMemo(
+    () => blockOptions.find((b) => String(b.id) === String(buildingId)) || null,
+    [blockOptions, buildingId],
+  );
+  const activeEstimateIds = useMemo(
+    () => (activeBlock ? activeBlock.edinich.map((e) => Number(e.id)) : []),
+    [activeBlock],
+  );
+  // Sync estimateId to the latest едиinич of the selected block. This is
+  // what the mutation handlers / Form 2 / audit / "+resurs" modal use as
+  // a concrete single-estimate target.
+  useEffect(() => {
+    if (activeEstimateIds.length > 0) {
+      setEstimateId(String(activeEstimateIds[0]));
+    } else {
+      setEstimateId('');
+    }
+  }, [activeEstimateIds]);
+
+  // ── Load lines (concatenated across all едиinich smetas of block) ──
+  // The list endpoint is per-estimate, so we fan out and concat. Each
+  // line carries its own .estimate_id which mutations key off, so we
+  // don't lose track of where any individual row belongs.
+  const loadLines = useCallback(async (ids) => {
+    const idList = Array.isArray(ids) ? ids : (ids ? [ids] : []);
+    if (idList.length === 0) { setLines([]); return; }
     setLoadingLines(true);
     try {
-      const rows = await constructionService.listEstimateLines(id, { page_size: 5000 });
-      setLines(Array.isArray(rows) ? rows : (rows?.data || rows?.items || []));
+      const all = [];
+      for (const id of idList) {
+        const rows = await constructionService.listEstimateLines(id, { page_size: 5000 });
+        const arr = Array.isArray(rows) ? rows : (rows?.data || rows?.items || []);
+        all.push(...arr);
+      }
+      setLines(all);
       setQtyDraft({});
     } catch (e) {
       toast.error(formatApiError(e, t, 'Xatolik'));
@@ -203,7 +305,7 @@ export default function SmetaManagementTab({ project }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  useEffect(() => { loadLines(estimateId); }, [estimateId, loadLines]);
+  useEffect(() => { loadLines(activeEstimateIds); }, [activeEstimateIds, loadLines]);
 
   // ── Changed-prices badge ──────────────────────────────────────────
   // Refreshed any time the underlying lines change (we don't poll — the
@@ -445,11 +547,18 @@ export default function SmetaManagementTab({ project }) {
   }, [lines, search, sectionFilter, t]);
 
   // ── Mutations ─────────────────────────────────────────────────────
+  // Each line carries its own line.estimate_id, so we route mutations
+  // there rather than to the state's `estimateId`. That way edits work
+  // even when a block has multiple Единич smetas and the user is editing
+  // a row that belongs to one of the older versions in the concatenated
+  // list. We fall back to estimateId when line.estimate_id is missing.
+  const lineEst = (line) => Number(line.estimate_id || estimateId || 0);
+
   const commitQty = useCallback(async (line, raw) => {
     const newQty = parseNum(raw);
     if (Math.abs(newQty - Number(line.quantity || 0)) < 0.0001) return;
     try {
-      await constructionService.updateEstimateLine(estimateId, line.id, { quantity: newQty });
+      await constructionService.updateEstimateLine(lineEst(line), line.id, { quantity: newQty });
       // Optimistic local patch — the backend cascades non-override
       // sub-line quantities, but a refetch is the only authoritative way
       // to mirror that. Patch here just for snappier perceived UX.
@@ -458,52 +567,64 @@ export default function SmetaManagementTab({ project }) {
         : r));
       toast.success(t('saved') || 'Saqlandi');
       // Pull authoritative state for cascading qty changes.
-      loadLines(estimateId);
+      loadLines(activeEstimateIds);
     } catch (e) {
       toast.error(formatApiError(e, t, 'Xatolik'));
-      loadLines(estimateId);
+      loadLines(activeEstimateIds);
     }
-  }, [estimateId, loadLines, t]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [estimateId, activeEstimateIds, loadLines, t]);
 
   const resetQty = useCallback(async (line) => {
     try {
-      await constructionService.resetLineQuantity(estimateId, line.id);
+      await constructionService.resetLineQuantity(lineEst(line), line.id);
       toast.success(t('reset_qty_done') || "Hajm asl qiymatga qaytarildi");
-      loadLines(estimateId);
+      loadLines(activeEstimateIds);
     } catch (e) {
       toast.error(formatApiError(e, t, 'Xatolik'));
     }
-  }, [estimateId, loadLines, t]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [estimateId, activeEstimateIds, loadLines, t]);
 
   const removeLine = useCallback(async (line) => {
     if (!window.confirm(t('confirm_delete_subline') || "O'chirishni tasdiqlaysizmi?")) return;
     try {
-      await constructionService.deleteEstimateLine(estimateId, line.id);
+      await constructionService.deleteEstimateLine(lineEst(line), line.id);
       setLines((rows) => rows.filter((r) => r.id !== line.id && Number(r.parent_line_id) !== Number(line.id)));
       toast.success(t('deleted') || "O'chirildi");
     } catch (e) {
       toast.error(formatApiError(e, t, 'Xatolik'));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [estimateId, t]);
 
-  // Bulk-zero every work qty in the selected estimate. Confirmation
-  // required because this is destructive (the only way back is per-line
-  // reset-to-original or re-import). Cascades to non-override sub-lines
-  // server-side; we just refetch when it returns.
-  const resetAllQuantities = useCallback(async () => {
-    if (!estimateId) return;
-    const msg = t('reset_all_qty_confirm')
-      || "Bu smetadagi barcha ish hajmlari 0 ga tushiriladi. Davom etamizmi?";
-    // eslint-disable-next-line no-alert
-    if (!window.confirm(msg)) return;
-    try {
-      const result = await constructionService.resetAllEstimateQuantities(estimateId);
-      toast.success(`${t('reset_all_qty_done') || 'Hajmlar tushirildi'} · ${result?.works_zeroed || 0}`);
-      loadLines(estimateId);
-    } catch (e) {
-      toast.error(formatApiError(e, t, 'Xatolik'));
-    }
-  }, [estimateId, loadLines, t]);
+  // Bulk-zero every work qty across every Единич smeta of the selected
+  // block. Confirmation required because this is destructive. Cascades
+  // to non-override sub-lines server-side; we refetch when it returns.
+  const resetAllQuantities = useCallback(() => {
+    if (activeEstimateIds.length === 0) return;
+    setConfirmModal({
+      tone: 'amber',
+      title: t('reset_all_qty') || "Hajmlarni tushirish",
+      body: t('reset_all_qty_confirm')
+        || "Bu smetadagi barcha ish hajmlari 0 ga tushiriladi. Davom etamizmi?",
+      confirmLabel: t('reset_all_qty') || "Hajmlarni tushirish",
+      onConfirm: async () => {
+        try {
+          let totalZeroed = 0;
+          for (const id of activeEstimateIds) {
+            const result = await constructionService.resetAllEstimateQuantities(id);
+            totalZeroed += Number(result?.works_zeroed || 0);
+          }
+          toast.success(`${t('reset_all_qty_done') || 'Hajmlar tushirildi'} · ${totalZeroed}`);
+          loadLines(activeEstimateIds);
+        } catch (e) {
+          toast.error(formatApiError(e, t, 'Xatolik'));
+        }
+      },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeEstimateIds, loadLines, t]);
 
   // ── Add-flow handlers — open the right modal with the right parent ─
   const openAddStage = (work) => { setAddTarget(work); setAddStageOpen(true); };
@@ -532,8 +653,11 @@ export default function SmetaManagementTab({ project }) {
   };
   // Work-card bulk-toggle ("Hammasini yoqish" / "Hammasini o'chirish"
   // in the mockup). Opens / closes every individual work card AND its
-  // sub-stages so the user can see the whole tree at once.
-  const expandAll = () => {
+  // sub-stages so the user can see the whole tree at once. Wrapped in
+  // confirm modals so the user doesn't accidentally fan out / fold up
+  // a long estimate after a stray click — same UX pattern as the other
+  // bulk actions on this toolbar.
+  const doExpandAll = () => {
     const all = new Set();
     for (const sec of sections) {
       for (const ln of sec.lines) {
@@ -543,7 +667,29 @@ export default function SmetaManagementTab({ project }) {
     }
     setOpenWorks(all);
   };
-  const collapseAll = () => setOpenWorks(new Set());
+  const doCollapseAll = () => setOpenWorks(new Set());
+  const expandAll = () => {
+    if (sections.length === 0) return;
+    setConfirmModal({
+      tone: 'teal',
+      title: t('expand_all_works') || "Hammasini yoqish",
+      body: t('expand_all_works_confirm')
+        || "Barcha ish kartalari va kichik etaplari ochiladi. Davom etamizmi?",
+      confirmLabel: t('expand_all_works') || "Hammasini yoqish",
+      onConfirm: doExpandAll,
+    });
+  };
+  const collapseAll = () => {
+    if (sections.length === 0) return;
+    setConfirmModal({
+      tone: 'red',
+      title: t('collapse_all_works') || "Hammasini o'chirish",
+      body: t('collapse_all_works_confirm')
+        || "Barcha ish kartalari yopiladi. Davom etamizmi?",
+      confirmLabel: t('collapse_all_works') || "Hammasini o'chirish",
+      onConfirm: doCollapseAll,
+    });
+  };
 
   const selectedEstimate = estimates.find((e) => String(e.id) === String(estimateId));
 
@@ -572,7 +718,7 @@ export default function SmetaManagementTab({ project }) {
       >
         <div>
           <div className="text-[11px] uppercase tracking-[0.1em]" style={{ color: C.muted }}>
-            Ishlab chiqarish · Форма 2 · ВОР
+            {t('production') || 'Ishlab chiqarish'} · {t('form2_breadcrumb') || 'Форма 2'} · {t('source_type_vor') || 'ВОР'}
           </div>
           <h1 className="text-[22px] font-semibold mt-1" style={{ color: C.text }}>
             {t('lokal_resurs_smeta') || 'Lokal resurs smeta'}
@@ -622,37 +768,32 @@ export default function SmetaManagementTab({ project }) {
               {userDisplay || (t('user_not_signed_in') || '— kiriting —')}
             </span>
           </div>
+          {/* Block selector — one option per building. Each option resolves
+             to all Единич smetas of that block; their lines are loaded
+             concatenated so when a block has several Единич imports the
+             user sees the works back-to-back. ВОР is excluded entirely
+             ("we don't need BOP" per product feedback); Ресурс stays in
+             the database as the source of resource prices but doesn't
+             show up in the selector. */}
           <select
-            value={estimateId}
-            onChange={(e) => setEstimateId(e.target.value)}
-            disabled={loadingEstimates || estimates.length === 0}
+            value={buildingId}
+            onChange={(e) => setBuildingId(e.target.value)}
+            disabled={loadingEstimates || blockOptions.length === 0}
             className="px-3 py-2 rounded-md text-xs outline-none cursor-pointer"
             style={{ background: C.inset, color: C.text, border: `1px solid ${C.border2}`, fontFamily: 'inherit', minWidth: 200 }}
           >
             {loadingEstimates && <option value="">{t('loading') || 'Yuklanmoqda…'}</option>}
-            {!loadingEstimates && estimates.length === 0 && <option value="">{t('no_estimates') || "Smeta yo'q"}</option>}
-            {estimates.map((est) => {
-              // Source type label — show the actual smeta flavour next to
-              // the version + name + state so the user can tell at a
-              // glance whether they're picking a ВОР, Единич, or Ресурс
-              // estimate (the building can have all three).
-              const stRaw = String(est.source_type || '').toLowerCase();
-              const stLabel = stRaw === 'vor' ? 'ВОР'
-                : stRaw === 'edinich' ? 'Единич'
-                : stRaw === 'resurs'  ? 'Ресурс'
-                : stRaw === 'svod'    ? 'Свод'
-                : '';
-              const baseName = est.name || `#${est.id}`;
-              return (
-                <option key={est.id} value={String(est.id)} style={{ background: C.card, color: C.text }}>
-                  v{est.version || 1} · {baseName}{stLabel ? ` · ${stLabel}` : ''} · {est.state || 'draft'}
-                </option>
-              );
-            })}
+            {!loadingEstimates && blockOptions.length === 0 && <option value="">{t('no_estimates') || "Smeta yo'q"}</option>}
+            {blockOptions.map((b) => (
+              <option key={b.id} value={b.id} style={{ background: C.card, color: C.text }}>
+                {b.name}
+                {b.edinich.length > 1 ? ` · ${b.edinich.length} ${t('estimates_count') || 'smeta'}` : ''}
+              </option>
+            ))}
           </select>
           <button
-            onClick={() => loadLines(estimateId)}
-            disabled={!estimateId || loadingLines}
+            onClick={() => loadLines(activeEstimateIds)}
+            disabled={activeEstimateIds.length === 0 || loadingLines}
             className="px-3 py-2 rounded-md text-xs flex items-center gap-1.5 transition disabled:opacity-50"
             style={{ background: 'transparent', color: C.dim, border: `1px solid ${C.border2}` }}
           >
@@ -777,14 +918,16 @@ export default function SmetaManagementTab({ project }) {
               >
                 {t('expand_all') || 'Ochish'}
               </button>
-              <button
-                onClick={collapseSections}
-                disabled={sections.length === 0}
-                className="px-3.5 py-2 rounded-md text-xs transition disabled:opacity-50"
-                style={{ background: 'transparent', color: C.dim, border: `1px solid ${C.border2}` }}
-              >
-                {t('collapse_all') || 'Yopish'}
-              </button>
+              {canBulkAdmin && (
+                <button
+                  onClick={collapseSections}
+                  disabled={sections.length === 0}
+                  className="px-3.5 py-2 rounded-md text-xs transition disabled:opacity-50"
+                  style={{ background: 'transparent', color: C.dim, border: `1px solid ${C.border2}` }}
+                >
+                  {t('collapse_all') || 'Yopish'}
+                </button>
+              )}
               {/* Bulk-toggle every work card (and every sub-stage card) at
                  once. Mockup colours: green for "all on", red for "all off". */}
               <button
@@ -800,31 +943,36 @@ export default function SmetaManagementTab({ project }) {
                 <span>✓</span>
                 {t('expand_all_works') || "Hammasini yoqish"}
               </button>
-              <button
-                onClick={collapseAll}
-                disabled={sections.length === 0}
-                className="px-3.5 py-2 rounded-md text-xs flex items-center gap-1.5 transition disabled:opacity-50"
-                style={{
-                  background: 'rgba(220,38,38,0.08)', color: C.red,
-                  border: '1px solid rgba(220,38,38,0.3)',
-                }}
-                title={t('collapse_all_works_hint') || 'Barcha ish kartalarini yopish'}
-              >
-                <span>×</span>
-                {t('collapse_all_works') || "Hammasini o'chirish"}
-              </button>
+              {canBulkAdmin && (
+                <button
+                  onClick={collapseAll}
+                  disabled={sections.length === 0}
+                  className="px-3.5 py-2 rounded-md text-xs flex items-center gap-1.5 transition disabled:opacity-50"
+                  style={{
+                    background: 'rgba(220,38,38,0.08)', color: C.red,
+                    border: '1px solid rgba(220,38,38,0.3)',
+                  }}
+                  title={t('collapse_all_works_hint') || 'Barcha ish kartalarini yopish'}
+                >
+                  <span>×</span>
+                  {t('collapse_all_works') || "Hammasini o'chirish"}
+                </button>
+              )}
               {/* Reset all qty — destructive, hence the amber-tinted style.
-                 Disabled when no estimate is selected. Confirms before firing. */}
-              <button
-                onClick={resetAllQuantities}
-                disabled={!estimateId || loadingLines}
-                className="px-3.5 py-2 rounded-md text-xs flex items-center gap-1.5 transition disabled:opacity-50"
-                style={{ background: 'transparent', color: C.amber, border: `1px solid ${C.amber}` }}
-                title={t('reset_all_qty') || "Barcha hajmlarni tushirish"}
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                {t('reset_all_qty') || "Hajmlarni tushirish"}
-              </button>
+                 Disabled when no estimate is selected. Confirms before firing.
+                 Admin/owner only — regular users mustn't wipe quantities. */}
+              {canBulkAdmin && (
+                <button
+                  onClick={resetAllQuantities}
+                  disabled={activeEstimateIds.length === 0 || loadingLines}
+                  className="px-3.5 py-2 rounded-md text-xs flex items-center gap-1.5 transition disabled:opacity-50"
+                  style={{ background: 'transparent', color: C.amber, border: `1px solid ${C.amber}` }}
+                  title={t('reset_all_qty') || "Barcha hajmlarni tushirish"}
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  {t('reset_all_qty') || "Hajmlarni tushirish"}
+                </button>
+              )}
             </div>
           </div>
 
@@ -835,7 +983,7 @@ export default function SmetaManagementTab({ project }) {
                 <Loader2 className="w-6 h-6 mx-auto mb-2 animate-spin" />
                 {t('loading') || 'Yuklanmoqda…'}
               </div>
-            ) : !estimateId ? (
+            ) : activeEstimateIds.length === 0 ? (
               <div className="text-center py-12" style={{ color: C.fade }}>
                 {t('select_estimate_to_continue') || 'Davom etish uchun smetani tanlang'}
               </div>
@@ -981,7 +1129,7 @@ export default function SmetaManagementTab({ project }) {
         estimateId={Number(estimateId)}
         parent={addTarget}
         nextSeq={addTarget ? nextSeqFor(addTarget.id) : 1}
-        onSaved={() => loadLines(estimateId)}
+        onSaved={() => loadLines(activeEstimateIds)}
       />
       <AddSubWorkModal
         open={addStageOpen}
@@ -990,7 +1138,7 @@ export default function SmetaManagementTab({ project }) {
         estimateId={Number(estimateId)}
         parent={addTarget}
         nextSeq={addTarget ? nextSeqFor(addTarget.id) : 1}
-        onSaved={() => loadLines(estimateId)}
+        onSaved={() => loadLines(activeEstimateIds)}
       />
 
       <Dialog open={form2Open} onOpenChange={setForm2Open}>
@@ -1032,6 +1180,79 @@ export default function SmetaManagementTab({ project }) {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Generic confirm modal — fires for the bulk toolbar actions
+          (Hammasini yoqish / Hammasini o'chirish / Hajmlarni tushirish)
+          so the prompt matches the rest of the UI instead of using the
+          OS-default window.confirm() dialog. The owner of `confirmModal`
+          state handles closing it after the action runs. */}
+      {confirmModal && (
+        <SmetaConfirmModal
+          tone={confirmModal.tone}
+          title={confirmModal.title}
+          body={confirmModal.body}
+          confirmLabel={confirmModal.confirmLabel}
+          onConfirm={() => {
+            const cb = confirmModal.onConfirm;
+            setConfirmModal(null);
+            if (cb) cb();
+          }}
+          onCancel={() => setConfirmModal(null)}
+          t={t}
+        />
+      )}
+    </div>
+  );
+}
+
+// =====================================================================
+// SmetaConfirmModal — styled confirm dialog used by the bulk toolbar
+// actions on this tab. Tone picks the accent colour on the confirm
+// button: amber for "destructive but reversible" (qty reset), red for
+// "collapse all", teal for "expand all". Click outside / Esc cancels.
+// =====================================================================
+function SmetaConfirmModal({ tone = 'amber', title, body, confirmLabel, onConfirm, onCancel, t }) {
+  const palette = {
+    amber: { bg: 'bg-amber-600 hover:bg-amber-700' },
+    red:   { bg: 'bg-rose-600 hover:bg-rose-700' },
+    teal:  { bg: 'bg-emerald-700 hover:bg-emerald-800' },
+  }[tone] || { bg: 'bg-emerald-700 hover:bg-emerald-800' };
+  // Esc to dismiss without confirming.
+  React.useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onCancel?.(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onCancel]);
+  return (
+    <div
+      className="fixed inset-0 z-[120] flex items-center justify-center"
+      style={{ background: 'rgba(15,23,42,0.5)' }}
+      onClick={onCancel}
+    >
+      <div
+        className="bg-white rounded-2xl p-6 max-w-[520px] w-[90%] shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="text-base font-bold text-slate-900 mb-3">{title}</h3>
+        <p className="text-sm text-slate-600 leading-relaxed mb-5 whitespace-pre-line">{body}</p>
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-4 py-2 rounded-lg text-xs font-semibold bg-white border border-slate-300 text-slate-600 hover:bg-slate-50"
+          >
+            {t('cancel') || 'Bekor qilish'}
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className={`px-4 py-2 rounded-lg text-xs font-semibold text-white inline-flex items-center gap-1.5 ${palette.bg}`}
+          >
+            <span className="text-[14px] leading-none">✓</span>
+            {confirmLabel || (t('confirm') || 'Tasdiqlash')}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
