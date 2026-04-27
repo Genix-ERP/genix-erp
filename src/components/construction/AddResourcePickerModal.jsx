@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
-import { Loader2, Search, X } from 'lucide-react';
+import { Loader2, Plus, Search, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -13,11 +13,33 @@ import { constructionService } from '@/api/services/construction';
 // own every CSS rule on the dialog content — no `w-full max-w-lg`
 // defaults to fight, full pixel control via inline style.
 
+// Up to 6 fractional digits with trailing zeros dropped — keeps
+// imported per-unit prices and small norm rates from being silently
+// truncated to 2 decimals.
 const fmt = (n) => {
   const v = Number(n);
   if (!Number.isFinite(v)) return '—';
-  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 })
+  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 6 })
     .format(v).replace(/\u00A0/g, ' ');
+};
+
+// Money input helpers — render the raw numeric string with thin-space
+// thousand grouping while keeping the underlying state digits-only so
+// parseNum() at submit stays correct. Both decimal point and comma are
+// accepted; only the first decimal is kept.
+const formatAmountForInput = (val) => {
+  if (val === '' || val === null || val === undefined) return '';
+  const cleaned = String(val).replace(/\s/g, '').replace(',', '.');
+  const [intPart, decPart] = cleaned.split('.');
+  const grouped = (intPart || '').replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return decPart !== undefined ? `${grouped}.${decPart}` : grouped;
+};
+const stripAmountInput = (val) => {
+  if (val === '' || val === null || val === undefined) return '';
+  const cleaned = String(val).replace(/\s/g, '').replace(',', '.').replace(/[^\d.]/g, '');
+  const firstDot = cleaned.indexOf('.');
+  if (firstDot === -1) return cleaned;
+  return cleaned.slice(0, firstDot + 1) + cleaned.slice(firstDot + 1).replace(/\./g, '');
 };
 const parseNum = (s) => Number(String(s ?? '').replace(/\s/g, '').replace(',', '.').replace(/[^\d.\-]/g, '')) || 0;
 
@@ -46,8 +68,27 @@ export default function AddResourcePickerModal({ open, onClose, projectId, estim
   const [totalQty, setTotalQty] = useState('0');
   const [saving, setSaving] = useState(false);
 
+  // ── Inline "create new resource" form ─────────────────────────────
+  // Toggled by the "+" button next to the search input. Lets the user
+  // define a new resource (labour/machine/material) when the smeta
+  // didn't include it. Material types also auto-create an inventory
+  // product on the backend so the warehouse reservation flow has
+  // something to bind to.
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    name: '',
+    uom: '',
+    resource_type: 'material',
+    unit_price: '',
+  });
+  const [creating, setCreating] = useState(false);
+
   useEffect(() => {
-    if (open) { setSearch(''); setSelected(null); setRate('1'); setTotalQty('0'); }
+    if (open) {
+      setSearch(''); setSelected(null); setRate('1'); setTotalQty('0');
+      setCreateOpen(false);
+      setCreateForm({ name: '', uom: '', resource_type: 'material', unit_price: '' });
+    }
   }, [open]);
 
   useEffect(() => {
@@ -84,6 +125,43 @@ export default function AddResourcePickerModal({ open, onClose, projectId, estim
   }, [selected]);
 
   const summa = useMemo(() => pickedPrice * parseNum(totalQty), [pickedPrice, totalQty]);
+
+  // Submit the inline "create new resource" form. On success the modal
+  // refetches its resource list and auto-selects the new entry so the
+  // user can proceed straight to entering norm + qty without scrolling.
+  const handleCreate = useCallback(async () => {
+    const name = String(createForm.name || '').trim();
+    if (!name) {
+      toast.error(t('name_required') || "Nomini kiriting");
+      return;
+    }
+    setCreating(true);
+    try {
+      const created = await constructionService.createProjectResource(projectId, {
+        name,
+        uom: String(createForm.uom || '').trim(),
+        resource_type: createForm.resource_type || 'material',
+        unit_price: parseNum(createForm.unit_price),
+      });
+      // Refresh the catalog so the new row appears.
+      const data = await constructionService.listEstimateResources(projectId);
+      const list = Array.isArray(data) ? data : [];
+      setResources(list);
+      // Auto-select the new resource (match by name + uom since the
+      // create endpoint may have deduped against an existing entry).
+      const match = list.find((r) =>
+        String(r.name || '').toUpperCase() === name.toUpperCase() &&
+        String(r.uom || '') === String(created?.uom || '')
+      );
+      if (match) setSelected(match);
+      setCreateOpen(false);
+      toast.success(t('resource_created') || "Resurs qo'shildi");
+    } catch (e) {
+      toast.error(e?.response?.data?.message || t('error_occurred') || 'Xatolik');
+    } finally {
+      setCreating(false);
+    }
+  }, [projectId, createForm, t]);
 
   const handleConfirm = useCallback(async () => {
     if (!selected || !parent) return;
@@ -178,19 +256,130 @@ export default function AddResourcePickerModal({ open, onClose, projectId, estim
               <label className="text-[11px] block mb-1.5" style={{ color: '#94A3B8' }}>
                 {t('pick_resource') || 'Resursni tanlang'}
               </label>
-              <div className="relative">
-                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#94A3B8' }} />
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder={t('search_resource_by_name') || "Resurs nomi bo'yicha qidirish..."}
-                  className="w-full pl-9 pr-3 py-2.5 rounded-md text-[13px] outline-none"
-                  style={{ background: '#0B1220', color: '#F1F5F9', border: '1px solid #334155', fontFamily: 'inherit' }}
-                  autoFocus
-                />
+              <div className="flex items-stretch gap-2">
+                <div className="relative flex-1">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#94A3B8' }} />
+                  <input
+                    type="text"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder={t('search_resource_by_name') || "Resurs nomi bo'yicha qidirish..."}
+                    className="w-full pl-9 pr-3 py-2.5 rounded-md text-[13px] outline-none"
+                    style={{ background: '#0B1220', color: '#F1F5F9', border: '1px solid #334155', fontFamily: 'inherit' }}
+                    autoFocus
+                  />
+                </div>
+                {/* New-resource toggle. Opens an inline form so the foreman
+                   can define a resource that's missing from the smeta —
+                   labour entry, machine, or material. Material types also
+                   auto-create an inventory product on the backend. */}
+                <button
+                  type="button"
+                  onClick={() => setCreateOpen((v) => !v)}
+                  title={t('create_new_resource') || "Yangi resurs yaratish"}
+                  className="px-3 rounded-md flex items-center justify-center"
+                  style={{
+                    background: createOpen ? '#14B8A6' : '#0B1220',
+                    color: createOpen ? '#0B1220' : '#14B8A6',
+                    border: '1px solid #14B8A6',
+                  }}
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
               </div>
             </div>
+
+            {/* Inline create form. */}
+            {createOpen && (
+              <div
+                className="mb-4 p-3 rounded-lg"
+                style={{ background: '#0B1220', border: '1px solid #334155' }}
+              >
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  <div className="col-span-2">
+                    <label className="text-[10.5px] block mb-1" style={{ color: '#94A3B8' }}>
+                      {t('resource_name') || 'Resurs nomi'}
+                    </label>
+                    <input
+                      type="text"
+                      value={createForm.name}
+                      onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))}
+                      placeholder={t('resource_name_placeholder') || "Masalan: AVTOBETONONASOSY 65 М3/Ч"}
+                      className="w-full px-3 py-2 rounded text-[12.5px] outline-none"
+                      style={{ background: '#1E293B', color: '#F1F5F9', border: '1px solid #334155', fontFamily: 'inherit' }}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10.5px] block mb-1" style={{ color: '#94A3B8' }}>
+                      {t('unit') || "O'lchov"}
+                    </label>
+                    <input
+                      type="text"
+                      value={createForm.uom}
+                      onChange={(e) => setCreateForm((f) => ({ ...f, uom: e.target.value }))}
+                      placeholder={t('unit_placeholder') || "м3, шт, ЧЕЛ.-Ч…"}
+                      className="w-full px-3 py-2 rounded text-[12.5px] outline-none"
+                      style={{ background: '#1E293B', color: '#F1F5F9', border: '1px solid #334155', fontFamily: 'inherit' }}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10.5px] block mb-1" style={{ color: '#94A3B8' }}>
+                      {t('type') || 'Tur'}
+                    </label>
+                    <select
+                      value={createForm.resource_type}
+                      onChange={(e) => setCreateForm((f) => ({ ...f, resource_type: e.target.value }))}
+                      className="w-full px-3 py-2 rounded text-[12.5px] outline-none cursor-pointer"
+                      style={{ background: '#1E293B', color: '#F1F5F9', border: '1px solid #334155', fontFamily: 'inherit' }}
+                    >
+                      <option value="material">{t('mat_type_material') || 'Material'}</option>
+                      <option value="equipment">{t('mat_type_equipment') || 'Mashina'}</option>
+                      <option value="labor">{t('mat_type_labor') || 'Mehnat'}</option>
+                    </select>
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-[10.5px] block mb-1" style={{ color: '#94A3B8' }}>
+                      {t('unit_price') || 'Birlik narxi'}
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={formatAmountForInput(createForm.unit_price)}
+                      onChange={(e) => setCreateForm((f) => ({ ...f, unit_price: stripAmountInput(e.target.value) }))}
+                      placeholder="0"
+                      className="w-full px-3 py-2 rounded text-[12.5px] font-mono outline-none"
+                      style={{ background: '#1E293B', color: '#F1F5F9', border: '1px solid #334155' }}
+                    />
+                  </div>
+                </div>
+                {createForm.resource_type === 'material' && (
+                  <div className="text-[10.5px] mb-2" style={{ color: '#FBBF24' }}>
+                    📦 {t('material_inventory_note') || "Material turidagi resurs Mahsulotlar (Inventar) ro'yxatiga ham qo'shiladi"}
+                  </div>
+                )}
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCreateOpen(false)}
+                    disabled={creating}
+                    className="px-3 py-1.5 rounded text-[11.5px] disabled:opacity-50"
+                    style={{ background: 'transparent', color: '#CBD5E1', border: '1px solid #334155' }}
+                  >
+                    {t('cancel') || 'Bekor qilish'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCreate}
+                    disabled={creating || !String(createForm.name || '').trim()}
+                    className="px-3 py-1.5 rounded text-[11.5px] font-medium flex items-center gap-1.5 disabled:opacity-50"
+                    style={{ background: '#14B8A6', color: '#1E293B', border: 'none' }}
+                  >
+                    {creating && <Loader2 className="w-3 h-3 animate-spin" />}
+                    {t('create') || 'Yaratish'}
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="mb-4" style={{ maxHeight: 300, overflowY: 'auto' }}>
               {loading ? (

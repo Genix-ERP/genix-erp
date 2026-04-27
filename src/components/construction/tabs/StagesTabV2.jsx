@@ -97,10 +97,13 @@ const STATUS_META = {
   confirmed_engineer:   { shortKey: 'work_status_confirmed_engineer',   longKey: 'work_status_confirmed_engineer_long',   bg: '#D1FAE5', fg: '#065F46', dot: '#10B981', border: '#10B981' },
 };
 
+// Up to 6 fractional digits with trailing zeros dropped, so imported
+// per-unit norms (e.g. 0.758) and partial-unit quantities don't get
+// truncated to 2 decimals. Soum-rounded monetary values render unchanged.
 const fmt = (n) => {
   const v = Number(n);
   if (!Number.isFinite(v)) return '—';
-  return v.toLocaleString('ru-RU', { maximumFractionDigits: 2 }).replace(/\u00A0/g, ' ');
+  return v.toLocaleString('ru-RU', { maximumFractionDigits: 6 }).replace(/\u00A0/g, ' ');
 };
 
 // Estimate codes in the source files often look like:

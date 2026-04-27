@@ -1445,7 +1445,6 @@ export default function Products() {
                 <TableHeader>
                   <TableRow className="bg-slate-50 hover:bg-slate-50">
                     <TableHead className="font-semibold text-slate-700 min-w-[200px]">{t('product')}</TableHead>
-                    <TableHead className="hidden sm:table-cell font-semibold text-slate-700 min-w-[100px] whitespace-nowrap">{t('tags')}</TableHead>
                     <TableHead className="hidden lg:table-cell font-semibold text-slate-700 min-w-[100px] whitespace-nowrap">{t('category')}</TableHead>
                     <TableHead className="hidden md:table-cell font-semibold text-slate-700 text-right min-w-[80px] whitespace-nowrap">{t('cost')}</TableHead>
                     <TableHead className="font-semibold text-slate-700 text-right min-w-[80px] whitespace-nowrap">{t('price')}</TableHead>
@@ -1481,24 +1480,6 @@ export default function Products() {
                                 </p>
                               )}
                             </div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="hidden sm:table-cell">
-                          <div className="flex flex-wrap gap-1">
-                            {product.tags && product.tags.length > 0 ? (
-                              product.tags.slice(0, 2).map((tag, idx) => (
-                                <Badge key={idx} variant="secondary" className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5">
-                                  {tag}
-                                </Badge>
-                              ))
-                            ) : (
-                              <span className="text-slate-400">-</span>
-                            )}
-                            {product.tags && product.tags.length > 2 && (
-                              <Badge variant="secondary" className="bg-slate-100 text-slate-600 text-xs px-2 py-0.5">
-                                +{product.tags.length - 2}
-                              </Badge>
-                            )}
                           </div>
                         </TableCell>
                         <TableCell className="hidden lg:table-cell text-slate-600">

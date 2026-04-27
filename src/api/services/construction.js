@@ -284,6 +284,15 @@ export const constructionService = {
     return response.data.data;
   },
 
+  // Create a brand-new project resource — lands in a sentinel "catalog"
+  // estimate and shows up in subsequent listEstimateResources searches.
+  // For resource_type='material' the backend also creates an inventory
+  // product so warehouse reservations work the same as imported materials.
+  async createProjectResource(projectId, payload) {
+    const response = await apiClient.post(`/construction/projects/${projectId}/resources`, payload);
+    return response.data.data;
+  },
+
   // Resource prices — backs the Smeta boshqaruvi → Resurslar tab.
   // Wraps the bulk-edit + history endpoints introduced by migration 348.
   // `estimateId` is optional. When supplied, the catalog is scoped to the

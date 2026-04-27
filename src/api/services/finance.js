@@ -470,10 +470,28 @@ export const financeService = {
     return response.data.data;
   },
 
-  // Expense Categories
+  // Expense Categories — CRUD. The list endpoint surfaces account_id +
+  // account_code + account_name + usage_count so the Settings UI can show
+  // "Travel → 9410 Operating Expense (5 expenses)" without a second
+  // roundtrip. Mutations return the same enriched shape so the local list
+  // can splice in updates without a refetch.
   async listExpenseCategories(params = {}) {
     const response = await apiClient.get('/expense-categories', { params });
     return response.data.data;
+  },
+
+  async createExpenseCategory(data) {
+    const response = await apiClient.post('/expense-categories', data);
+    return response.data.data;
+  },
+
+  async updateExpenseCategory(id, data) {
+    const response = await apiClient.put(`/expense-categories/${id}`, data);
+    return response.data.data;
+  },
+
+  async deleteExpenseCategory(id) {
+    await apiClient.delete(`/expense-categories/${id}`);
   },
 
   // Expenses
