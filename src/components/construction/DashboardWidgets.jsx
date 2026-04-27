@@ -181,7 +181,11 @@ export function ProgressWidget({ project, onStatusChange }) {
         </div>
       </div>
 
-      <dl className="grid grid-cols-3 gap-4 pt-4 border-t border-slate-100">
+      {/* Sections column was removed at user request — the breakdown
+         lives in the dedicated tabs and didn't earn its slot here.
+         "Jamoa" was relabeled to "Ishchi soni" so the metric reads as a
+         headcount rather than a generic team-name. */}
+      <dl className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-100">
         <div>
           <dt className="text-xs font-medium text-slate-500 mb-1.5">
             {t('buildings') || 'Binolar'}
@@ -192,15 +196,7 @@ export function ProgressWidget({ project, onStatusChange }) {
         </div>
         <div>
           <dt className="text-xs font-medium text-slate-500 mb-1.5">
-            {t('sections') || "Bo'limlar"}
-          </dt>
-          <dd className="text-xl font-semibold text-slate-900 tabular-nums leading-none">
-            {project.sections_count || 0}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs font-medium text-slate-500 mb-1.5">
-            {t('team') || 'Jamoa'}
+            {t('worker_count') || 'Ishchi soni'}
           </dt>
           <dd className="text-xl font-semibold text-slate-900 tabular-nums leading-none">
             {project.team_count || 0}

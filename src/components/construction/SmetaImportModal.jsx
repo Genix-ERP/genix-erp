@@ -357,12 +357,18 @@ function parseEdinich(workbook) {
       const hasCode = colB && colB !== 'С';
       lastParentNumber = colA;
 
+      // TEMPLATE MODE: parent works always start at quantity = 0 — the
+      // user fills it in manually via the Bajarildi field. We don't pull
+      // anything from the file's "по проектным данным" / "на. ед.
+      // измерения" columns for the parent. Children's per-unit norm is
+      // captured below in `quantity_per_unit`; child.quantity stays 0
+      // so the cascade `parent.qty × norm` resolves to 0 too.
       currentSection.items.push({
         item_number: colA,
         code: colB,
         name: colC,
         uom: colD,
-        quantity: isNaN(colE) ? 0 : colE,
+        quantity: 0,
         quantity_per_unit: 0,
         is_parent: hasCode,
         resource_type: '',
@@ -388,12 +394,21 @@ function parseEdinich(workbook) {
       const resourceType = detectResourceType(colD);
       const parentNum = dottedMatch ? dottedMatch[1] : lastParentNumber;
 
+      // TEMPLATE MODE for child resources: only the per-unit norm
+      // (column E "на. ед. измерения") is captured. Column F's "по
+      // проектным данным" — the file's pre-computed total for THIS
+      // particular project — is intentionally discarded; the project
+      // total in this system is derived live from
+      //   child.quantity = parent.quantity × norm
+      // so child.quantity starts at 0 and the user types parent qty
+      // (Bajarildi) to drive the consumption math. Storing the file
+      // value would mean a stale, parallel total alongside the cascade.
       currentSection.items.push({
         item_number: dottedMatch ? colA : '', // keep "1.1" so it round-trips
         code: dottedMatch ? colB : '',         // resource normative code
         name: colC,
         uom: colD,
-        quantity: isNaN(colF) ? 0 : colF,
+        quantity: 0,
         quantity_per_unit: isNaN(colE) ? 0 : colE,
         is_parent: false,
         resource_type: resourceType,

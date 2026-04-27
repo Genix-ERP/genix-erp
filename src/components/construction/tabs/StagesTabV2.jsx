@@ -1622,6 +1622,14 @@ function SubResourcesTable({ subs, doneQty, planQty, canSeeCost, workStatus, t }
             const tag = RES_TAG[rt] || RES_TAG.material;
             const norm = Number(s.norm_rate || 0);
             const planSubQty = Number(s.quantity || 0);
+            // REJA SARF — planned consumption visible to the foreman.
+            // We display the per-unit norm directly (column E "на. ед.
+            // измерения" from the imported smeta) so the user sees the
+            // resource's consumption rate even before any work has been
+            // declared. If for some reason a row doesn't have a norm
+            // (legacy / hand-added rows), fall back to its stored
+            // quantity so the column still carries useful info.
+            const rejaSarfDisplay = norm > 0 ? norm : planSubQty;
             // Live fact = parent's done × this sub's norm_rate. Recomputed
             // on every render so typing in BAJARILDI flows through here.
             const factSubQty = norm > 0 ? doneQty * norm : (planQty > 0 ? (doneQty / planQty) * planSubQty : 0);
@@ -1639,7 +1647,9 @@ function SubResourcesTable({ subs, doneQty, planQty, canSeeCost, workStatus, t }
                 </td>
                 <td className="py-1.5 px-3 text-slate-800">{s.name}</td>
                 <td className="text-center py-1.5 px-2 text-slate-500">{s.uom || '—'}</td>
-                <td className="text-right py-1.5 px-2 font-mono text-slate-600">{fmt(planSubQty)}</td>
+                <td className="text-right py-1.5 px-2 font-mono text-slate-600">
+                  {rejaSarfDisplay > 0 ? fmt(rejaSarfDisplay) : '—'}
+                </td>
                 <td className="text-right py-1.5 px-2 font-mono font-semibold text-emerald-700">
                   {factSubQty > 0 ? fmt(factSubQty) : '—'}
                 </td>
