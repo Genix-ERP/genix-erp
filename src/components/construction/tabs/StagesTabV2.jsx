@@ -106,6 +106,14 @@ const fmt = (n) => {
   return v.toLocaleString('ru-RU', { maximumFractionDigits: 6 }).replace(/\u00A0/g, ' ');
 };
 
+// Aggressive name-key for cross-sheet lookups. Excel imports of the
+// Единич and ВОР sheets disagree on whitespace around punctuation
+// ("В7,5 / М-100/" vs "В7,5 /М-100/") often enough that a plain
+// trim+lowercase missed real matches. Strip all whitespace (regular
+// + non-breaking) and lowercase so the key reflects only the meaningful
+// characters of the work name.
+const normName = (s) => String(s || '').toLowerCase().replace(/[\s\u00A0]+/g, '');
+
 // Estimate codes in the source files often look like:
 //   "Е0101-197-14 ДОП. 11 ГОСАРХИТЕКТСТРОЙ РУЗ ПР. № 429 ОТ 15.12.17 Г."
 //   "Е0102-057-02 . ТЧ П.3.187 КЗТР=1,2"
@@ -578,18 +586,21 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
           ]);
           if (cancelled) return;
           setLines(Array.isArray(lineRows) ? lineRows : (lineRows?.data || lineRows?.items || []));
-          // Build the name → qty map. We index by lowercase-trimmed
-          // name because Excel files often have stray whitespace and
-          // mixed casing between the единич and ВОР sheets. A work
-          // missing from the ВОР map will silently fall back to its
-          // own (zero) planQty — same as before this lookup existed.
+          // Build the name → qty map. Excel files often disagree on
+          // whitespace between the Единич and ВОР sheets — e.g.
+          // "В7,5 / М-100/" vs "В7,5 /М-100/" — so we normalise by
+          // stripping ALL whitespace (regular + non-breaking) and
+          // lowercasing. Plain lowercase-trim wasn't aggressive enough
+          // and was missing matches where a single stray space lived
+          // between a digit and a slash. A work missing from the map
+          // still silently falls back to its own (zero) planQty.
           const vorList = Array.isArray(vorRows) ? vorRows : (vorRows?.data || vorRows?.items || []);
           const map = new Map();
           for (const r of vorList) {
             // Skip sub-lines (resource breakdown) — only top-level work
             // rows carry a planned project quantity.
             if (r.parent_line_id) continue;
-            const n = String(r.name || '').trim().toLowerCase();
+            const n = normName(r.name);
             if (!n) continue;
             const q = Number(r.quantity || 0);
             if (q > 0) map.set(n, q);
@@ -654,8 +665,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
   // work that isn't in the ВОР map (custom-added rows, or projects
   // without a ВОР sheet). Stable identity is fine across renders.
   const resolveWorkQty = useCallback((w) => {
-    const n = String(w?.name || '').trim().toLowerCase();
-    const v = vorPlanByName?.get(n) || 0;
+    const v = vorPlanByName?.get(normName(w?.name)) || 0;
     return v > 0 ? v : Number(w?.quantity || 0);
   }, [vorPlanByName]);
   const blockProg = useMemo(() => blockProgress(stages, resolveWorkQty), [stages, resolveWorkQty]);
@@ -1458,9 +1468,12 @@ function WorksTable({
             // matching ВОР smeta's Miqdor (built into the
             // `vorPlanByName` map upstream); falls back to the единич
             // line's own quantity when there's no ВОР match — same
-            // value it always had pre-template-mode.
+            // value it always had pre-template-mode. The lookup uses
+            // the whitespace-stripped key so subtle Excel formatting
+            // differences ("В7,5 / М-100/" vs "В7,5 /М-100/") still
+            // resolve to the same row.
             const vorQty = vorPlanByName
-              ? Number(vorPlanByName.get(String(w.name || '').trim().toLowerCase()) || 0)
+              ? Number(vorPlanByName.get(normName(w.name)) || 0)
               : 0;
             const ownQty = Number(w.quantity || 0);
             const planQty = vorQty > 0 ? vorQty : ownQty;

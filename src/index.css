@@ -240,3 +240,74 @@ button:focus-visible {
 .smeta-history-modal > button.absolute:hover {
   color: #ffffff !important;
 }
+
+/* =====================================================================
+   FORM 2 PRINT — fallback only
+   ---------------------------------------------------------------------
+   The primary print path opens a popup window with a clean copy of the
+   .form2-doc subtree (see Form2Preview.handlePrint). The rules below
+   only fire if the popup is blocked and we fall back to window.print()
+   on the main page — the document still survives in that case, just
+   without the popup's clean isolation. We strip the Radix Dialog
+   overlay + fixed positioning + max-height cage and let the form
+   render in normal flow.
+   ===================================================================== */
+@media print {
+  /* Default: hide everything. The Print button on Form2Preview adds
+     the transient class `.form2-printing` to its own root div before
+     calling window.print(), and removes it after. So if both the live
+     Form 2 dialog AND a saved-snapshot dialog happen to be open, only
+     the one the user clicked Print on gets unhidden. */
+  body * { visibility: hidden; }
+  .form2-printing, .form2-printing * { visibility: visible; }
+  .form2-printing {
+    position: absolute !important;
+    inset: 0 auto auto 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 16px !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+  /* Drop the dim backdrop. Without this Chrome darkens every page. */
+  [data-radix-dialog-overlay],
+  [class*="DialogOverlay"] {
+    display: none !important;
+  }
+  /* Free the Dialog content from its h-95vh / overflow:auto cage so the
+     form body renders in document flow and Chrome paginates linearly. */
+  [data-radix-dialog-content],
+  [class*="DialogContent"] {
+    position: static !important;
+    width: auto !important;
+    height: auto !important;
+    max-height: none !important;
+    max-width: none !important;
+    transform: none !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: transparent !important;
+  }
+  [data-radix-dialog-content] > div,
+  [class*="DialogContent"] > div {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+  /* Force a clean single-column layout for the meta row (Объект /
+     Период / Заказчик) so it doesn't break funny across page edges. */
+  .form2-printing .grid {
+    display: block !important;
+  }
+  .form2-printing .grid > * {
+    display: block !important;
+    margin-bottom: 4px;
+  }
+  /* Avoid awkward page-breaks splitting a parent work and its first
+     resource child — keeps the row group together when possible. */
+  .form2-printing tr { break-inside: avoid; page-break-inside: avoid; }
+  .form2-printing table { break-inside: auto; }
+  .form2-printing thead { display: table-header-group; }
+}
