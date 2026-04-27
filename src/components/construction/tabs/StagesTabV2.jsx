@@ -299,13 +299,17 @@ function allStageWorks(stage) {
 // mockup's progress stays at 0% on a freshly-imported BOP file even
 // after the foreman fills in done quantities — the original mockup
 // hardcoded `unitPrice` per row, so it never hit this case.
-function progressFromWorks(works) {
+// resolveQty(work) — caller-supplied lookup so the same helpers can use
+// either the work's own qty (legacy / non-template estimates) or the
+// matching ВОР Miqdor (template mode, where w.quantity is 0). Defaults
+// to the legacy behaviour when no resolver is given.
+function progressFromWorks(works, resolveQty) {
   if (!works || works.length === 0) return 0;
   let costPlan = 0, costDone = 0;
   let qtyRatioSum = 0, qtyRatioCount = 0;
   for (const w of works) {
     const cost  = Number(w.total_amount || 0);
-    const qty   = Number(w.quantity || 0);
+    const qty   = resolveQty ? Number(resolveQty(w) || 0) : Number(w.quantity || 0);
     const doneQ = Number(w.done_quantity || 0);
     const ratio = qty > 0 ? Math.min(doneQ / qty, 1) : 0;
     costPlan += cost;
@@ -318,17 +322,17 @@ function progressFromWorks(works) {
   return 0;
 }
 
-function stageProgress(stage) {
-  return progressFromWorks(allStageWorks(stage));
+function stageProgress(stage, resolveQty) {
+  return progressFromWorks(allStageWorks(stage), resolveQty);
 }
 
-function blockProgress(stages) {
+function blockProgress(stages, resolveQty) {
   let plan = 0, done = 0;
   let qtyRatioSum = 0, qtyRatioCount = 0;
   for (const s of stages) {
     for (const w of allStageWorks(s)) {
       const cost  = Number(w.total_amount || 0);
-      const qty   = Number(w.quantity || 0);
+      const qty   = resolveQty ? Number(resolveQty(w) || 0) : Number(w.quantity || 0);
       const doneQ = Number(w.done_quantity || 0);
       const ratio = qty > 0 ? Math.min(doneQ / qty, 1) : 0;
       plan += cost;
@@ -428,6 +432,14 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
   const [loading, setLoading] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0); // bump to force a reload
   const [buildingStageCounts, setBuildingStageCounts] = useState({}); // buildingId → stage count
+  // ВОР Miqdor lookup for the active building. Bosqichlar drives its
+  // works off the Единич estimate (which is now imported in template
+  // mode with quantity=0), but the user-visible REJA column wants the
+  // planned project quantity that lives in the ВОР smeta. We build a
+  // name-keyed map of ВОР qty for the same building so each work row
+  // can override its planQty without losing the cascade math elsewhere.
+  // Map<lowercase-trimmed-name, number>
+  const [vorPlanByName, setVorPlanByName] = useState(() => new Map());
 
   // ── Add-resource modal ────────────────────────────────────────────
   // Foreman clicks "+" on a work row → modal lets them pick a resource
@@ -542,17 +554,47 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
         let matchedEst = sameBuilding.find(
           (e) => String(e.source_type || '').toLowerCase() === 'edinich'
         ) || null;
+        // ВОР side-fetch — same building. Used only to source the user-
+        // facing REJA quantity for each work; the actual stage tree
+        // still comes from единич. Done in parallel with the единич
+        // line fetch below to avoid a serial round-trip.
+        const vorEst = sameBuilding.find(
+          (e) => String(e.source_type || '').toLowerCase() === 'vor'
+        ) || null;
         if (!matchedEst) {
           setLines([]);
           setActiveEstimateId(null);
+          setVorPlanByName(new Map());
           setLoading(false);
           return;
         }
         setActiveEstimateId(matchedEst.id);
         try {
-          const lineRows = await constructionService.listEstimateLines(matchedEst.id, { page_size: 5000 });
+          const [lineRows, vorRows] = await Promise.all([
+            constructionService.listEstimateLines(matchedEst.id, { page_size: 5000 }),
+            vorEst
+              ? constructionService.listEstimateLines(vorEst.id, { page_size: 5000 }).catch(() => [])
+              : Promise.resolve([]),
+          ]);
           if (cancelled) return;
           setLines(Array.isArray(lineRows) ? lineRows : (lineRows?.data || lineRows?.items || []));
+          // Build the name → qty map. We index by lowercase-trimmed
+          // name because Excel files often have stray whitespace and
+          // mixed casing between the единич and ВОР sheets. A work
+          // missing from the ВОР map will silently fall back to its
+          // own (zero) planQty — same as before this lookup existed.
+          const vorList = Array.isArray(vorRows) ? vorRows : (vorRows?.data || vorRows?.items || []);
+          const map = new Map();
+          for (const r of vorList) {
+            // Skip sub-lines (resource breakdown) — only top-level work
+            // rows carry a planned project quantity.
+            if (r.parent_line_id) continue;
+            const n = String(r.name || '').trim().toLowerCase();
+            if (!n) continue;
+            const q = Number(r.quantity || 0);
+            if (q > 0) map.set(n, q);
+          }
+          setVorPlanByName(map);
         } catch (e) {
           if (!cancelled) toast.error(formatApiError(e, t, 'Xatolik'));
         }
@@ -607,7 +649,16 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
 
   // ── Derived data ─────────────────────────────────────────────────
   const stages = useMemo(() => deriveStages(lines), [lines]);
-  const blockProg = useMemo(() => blockProgress(stages), [stages]);
+  // Plan-quantity resolver for progress aggregations: prefer the ВОР
+  // Miqdor for the work's name; fall back to its own quantity for any
+  // work that isn't in the ВОР map (custom-added rows, or projects
+  // without a ВОР sheet). Stable identity is fine across renders.
+  const resolveWorkQty = useCallback((w) => {
+    const n = String(w?.name || '').trim().toLowerCase();
+    const v = vorPlanByName?.get(n) || 0;
+    return v > 0 ? v : Number(w?.quantity || 0);
+  }, [vorPlanByName]);
+  const blockProg = useMemo(() => blockProgress(stages, resolveWorkQty), [stages, resolveWorkQty]);
   // Total works in the active block — direct works of every stage PLUS
   // the works inside every sub-stage. Pre-fix this only counted
   // stage.works, so a block that was 100% sub-stages reported 0 works.
@@ -710,10 +761,32 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
     if (Math.abs(newQty - Number(work.done_quantity || 0)) < 0.0001) return;
     try {
       await constructionService.updateWorkDoneQuantity(work.id, newQty);
-      // Optimistic patch — server will confirm on next reload.
-      setLines((rows) => rows.map((r) => r.id === work.id
-        ? { ...r, done_quantity: newQty, approval_status: newQty > 0 ? 'in_progress' : 'pending' }
-        : r));
+      // Optimistic patch — the backend now mirrors done_quantity →
+      // quantity (so Smeta boshqaruvi's ISH HAJMI matches Bosqichlar's
+      // BAJARILDI) and cascades non-override children. Patch all of
+      // those locally so the UI doesn't flash a stale value.
+      const childParentId = Number(work.id);
+      setLines((rows) => rows.map((r) => {
+        if (r.id === work.id) {
+          return {
+            ...r,
+            done_quantity: newQty,
+            quantity: newQty,
+            total_amount: newQty * Number(r.unit_rate || 0),
+            approval_status: newQty > 0 ? 'in_progress' : 'pending',
+          };
+        }
+        if (Number(r.parent_line_id) === childParentId && !r.quantity_override) {
+          const norm = Number(r.norm_rate || 0);
+          const childQty = newQty * norm;
+          return {
+            ...r,
+            quantity: childQty,
+            total_amount: childQty * Number(r.unit_rate || 0),
+          };
+        }
+        return r;
+      }));
       toast.success(t('saved'));
     } catch (e) {
       toast.error(formatApiError(e, t, 'Xatolik'));
@@ -956,7 +1029,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
             const expanded = expandedStages.has(stKey);
             const status = stageStatus(stage);
             const stMeta = STATUS_META[status] || STATUS_META.pending;
-            const pct = stageProgress(stage);
+            const pct = stageProgress(stage, resolveWorkQty);
             const cost = stage.works.reduce((m, w) => m + Number(w.total_amount || 0), 0);
             const isLocked = status === 'confirmed_engineer';
             const hasSubmitted = stage.works.some((w) => w.approval_status === 'submitted');
@@ -1063,6 +1136,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
                       onConfirmEngineer={confirmAsEngineer}
                       onRejectEngineer={rejectAsEngineer}
                       viewRole={viewRole}
+                      vorPlanByName={vorPlanByName}
                       expandedWorks={expandedWorks}
                       toggleWork={toggleWork}
                       subResourcesByWork={subResourcesByWork}
@@ -1343,6 +1417,7 @@ function WorksTable({
   onConfirmSupervisor, onRejectSupervisor,
   onConfirmEngineer, onRejectEngineer,
   viewRole,
+  vorPlanByName,
   expandedWorks,
   toggleWork,
   subResourcesByWork,
@@ -1379,7 +1454,16 @@ function WorksTable({
             const isLocked = w.approval_status === 'confirmed_engineer';
             const isSupConfirmed = w.approval_status === 'confirmed_supervisor';
             const rowBg = isLocked ? '#F0FDF4' : (isSupConfirmed ? '#FEF7E0' : 'transparent');
-            const planQty = Number(w.quantity || 0);
+            // REJA = the planned project quantity. Sourced from the
+            // matching ВОР smeta's Miqdor (built into the
+            // `vorPlanByName` map upstream); falls back to the единич
+            // line's own quantity when there's no ВОР match — same
+            // value it always had pre-template-mode.
+            const vorQty = vorPlanByName
+              ? Number(vorPlanByName.get(String(w.name || '').trim().toLowerCase()) || 0)
+              : 0;
+            const ownQty = Number(w.quantity || 0);
+            const planQty = vorQty > 0 ? vorQty : ownQty;
             const doneQty = Number(w.done_quantity || 0);
             const pct = planQty > 0 ? Math.min((doneQty / planQty) * 100, 100) : 0;
             const stMeta = STATUS_META[w.approval_status] || STATUS_META.pending;

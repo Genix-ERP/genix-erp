@@ -1352,6 +1352,13 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
     const allLines = [];
     let sortIdx = 0;
     let importedCount = 0;
+    // TEMPLATE MODE applies only to Единич (and the resource catalog).
+    // ВОР is the source of the planned project Miqdor — those values
+    // need to be preserved verbatim because the Bosqichlar tab now
+    // sources its REJA column from the ВОР row matched by name. If we
+    // strip ВОР quantities to 0 too, REJA stays at 0 across the
+    // workflow.
+    const templateMode = String(type || '').toLowerCase() !== 'vor';
     for (const section of result.sections || []) {
       if (!section.items || section.items.length === 0) continue;
       const sectionPath = section.name || '';
@@ -1362,14 +1369,10 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
         allLines.push({
           name: item.name,
           uom: item.uom || 'шт',
-          // TEMPLATE MODE — every imported line lands with quantity = 0.
-          // The smeta is treated as a structure-only template: work types
-          // and resource norms are imported but the actual project volume
-          // is 0 until the foreman types BAJARILDI on each work. From
-          // there, live consumption = bajarildi × subline.norm_rate.
-          // This matches the "ish hajmi 0 bo'lib yaralish kerak" workflow
-          // — REJA and BAJARILDI both start at 0 across all rows.
-          quantity: 0,
+          // Единич / Ресурс → 0 (the foreman's Bajarildi field drives
+          // the cascade). ВОР → keep the file's Miqdor so the planned
+          // project volume survives the round-trip.
+          quantity: templateMode ? 0 : Number(item.quantity || 0),
           material_rate: rt === 'material' ? unitPrice : 0,
           labor_rate: rt === 'labor' ? unitPrice : 0,
           equipment_rate: rt === 'equipment' ? unitPrice : 0,

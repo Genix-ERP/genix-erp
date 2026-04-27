@@ -45,7 +45,6 @@ const CATEGORIES = [
 //   • cable       = 1.5%  + 2%    = 3.5%
 //   • metal       = 5%    + 0.75% = 5.75%
 //   • import      = 2%    + 2%    = 4%
-const OVERHEAD_PCT = { standard: 7, equipment: 3.2, cable: 3.5, metal: 5.75, import: 4 };
 const MATERIAL_TYPES = [
   { value: 'standard',  fallback: 'Oddiy material (7%)',             chip: 'Stroyamaterial 7%',   color: '#14B8A6' },
   { value: 'equipment', fallback: 'Uskuna (3,2%)',                   chip: 'Uskuna 3,2%',         color: '#A78BFA' },
@@ -327,6 +326,12 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
         {[ 'standard', 'equipment', 'cable' ].map((mt) => {
           const meta = MATERIAL_TYPES.find((m) => m.value === mt);
           const active = matFilter === mt;
+          const count = matCounts[mt] || 0;
+          // Strip the trailing "%" rate from the chip label so the count
+          // reads as the headline metric (the % is repeated everywhere
+          // else — material-turi dropdown, Form 2 footnote, etc.).
+          // Examples: "Stroyamaterial 7%" → "Stroyamaterial · 12".
+          const baseLabel = meta.chip.replace(/\s*\d+([.,]\d+)?\s*%\s*$/, '').trim();
           return (
             <button
               key={mt}
@@ -344,7 +349,16 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
               }}
             >
               <span className="inline-block w-2 h-2 rounded-full" style={{ background: meta.color }} />
-              {meta.chip}
+              {baseLabel}
+              <span
+                className="ml-1 px-1.5 py-0.5 rounded text-[10.5px] font-semibold tabular-nums"
+                style={{
+                  background: active ? `${meta.color}26` : '#F1F5F9',
+                  color: meta.color,
+                }}
+              >
+                {count}
+              </span>
             </button>
           );
         })}
@@ -456,7 +470,7 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
                  can still scroll horizontally to reach the rightmost
                  columns instead of squashing the price input. */}
               <div className="overflow-x-auto">
-              <table className="border-collapse text-[13px]" style={{ tableLayout: 'fixed', width: '100%', minWidth: 1220 }}>
+              <table className="border-collapse text-[13px]" style={{ tableLayout: 'fixed', width: '100%', minWidth: 960 }}>
                 <colgroup>
                   <col style={{ width: 50  }} />
                   <col style={{ width: 90  }} />
@@ -464,8 +478,6 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
                   <col style={{ width: 80  }} />
                   <col style={{ width: 180 }} />
                   <col style={{ width: 200 }} />{/* Joriy narx */}
-                  <col style={{ width: 130 }} />{/* Nakrutka */}
-                  <col style={{ width: 130 }} />{/* Asl narx */}
                   <col style={{ width: 80  }} />
                   <col style={{ width: 80  }} />
                   <col style={{ width: 50  }} />
@@ -479,8 +491,6 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
                       { l: "O'lchov",          align: 'center' },
                       { l: 'Material turi',    align: 'left' },
                       { l: 'Joriy narx',       align: 'right' },
-                      { l: 'Nakrutka',         align: 'right' },
-                      { l: 'Asl narx',         align: 'right' },
                       { l: 'Farq',             align: 'right' },
                       { l: 'Tarix',            align: 'left' },
                       { l: '',                 align: 'center' },
@@ -519,15 +529,6 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
 
                     const matType = String(row.material_type || 'standard').toLowerCase();
                     const matTypeColor = MATERIAL_TYPES.find((m) => m.value === matType)?.color || '#CBD5E1';
-
-                    // Per-line transport+storage uplift. Only material rows
-                    // attract overhead; labor/machine rows show a dash. The
-                    // amount + percent surface in their own column without
-                    // being folded back into the price — users need the raw
-                    // price and the накрутка as separate figures, not a
-                    // single combined total.
-                    const overheadPct = isMaterial ? (OVERHEAD_PCT[matType] || 0) : 0;
-                    const overheadAmt = curPrice * overheadPct / 100;
 
                     return (
                       <tr
@@ -572,7 +573,24 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
                               ))}
                             </select>
                           ) : (
-                            <span className="text-[11px]" style={{ color: '#94A3B8' }}>—</span>
+                            // Labor / mashina rows don't have a material
+                            // sub-bucket, but the user wants the column
+                            // to always read meaningfully (a column full
+                            // of dashes was unsettling in the Barchasi
+                            // view). Show a tinted tag matching the
+                            // resource category so the column still
+                            // tells you what kind of resource the row is.
+                            <span
+                              className="inline-block px-2 py-1 rounded text-[10.5px] font-semibold"
+                              style={{
+                                background: c === 'labor' ? 'rgba(245,158,11,0.1)' : 'rgba(167,139,250,0.1)',
+                                color: c === 'labor' ? '#D97706' : '#7C3AED',
+                              }}
+                            >
+                              {c === 'labor'
+                                ? (t('mat_type_labor') || 'Mehnat')
+                                : (t('res_cat_equipment') || 'Mashina')}
+                            </span>
                           )}
                         </td>
                         <td className="px-3.5 py-2.5 text-right">
@@ -594,18 +612,6 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
                               fontWeight: draftDirty || isModified ? 600 : 500,
                             }}
                           />
-                        </td>
-                        <td className="px-3.5 py-2.5 text-right font-mono tabular-nums">
-                          {isMaterial && curPrice > 0 ? (
-                            <span style={{ color: matTypeColor, fontWeight: 500 }}>
-                              {fmt(overheadAmt)} <span className="text-[10px]" style={{ color: '#94A3B8' }}>({overheadPct}%)</span>
-                            </span>
-                          ) : (
-                            <span style={{ color: '#CBD5E1' }}>—</span>
-                          )}
-                        </td>
-                        <td className="px-3.5 py-2.5 text-right font-mono tabular-nums" style={{ color: '#64748B' }}>
-                          {origPrice > 0 ? fmt(origPrice) : '—'}
                         </td>
                         <td className="px-3.5 py-2.5 text-right">
                           {isModified ? (
