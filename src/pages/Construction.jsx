@@ -969,7 +969,9 @@ const OverviewTabContent = React.memo(function OverviewTabContent({
       value: project.total_area ? `${project.total_area} m²` : EMPTY,
     },
     {
-      label: t('team') || 'Jamoa',
+      // "Jamoa" → "Ishchi soni" — the metric is a headcount, not a
+      // generic team-name, so the label reads more accurately.
+      label: t('worker_count') || 'Ishchi soni',
       value: team.length > 0 ? `${team.length} ${t('members') || "a'zo"}` : EMPTY,
     },
   ];
@@ -1127,6 +1129,15 @@ const ProjectDetailView = ({
   };
 
   const currentGroup = NAV_GROUPS.find(g => g.key === activeGroup) || NAV_GROUPS[0];
+  // Locale-aware natural sort for building names so "Blok 2" comes before
+  // "Blok 10". Also keeps the order stable after a create/import — the
+  // backend `listBuildings` endpoint doesn't guarantee a specific order,
+  // and without sorting on every load the freshly inserted block jumps
+  // to the end of the list (Blok 2, Blok 1, Blok 3, Blok 4 in the
+  // user's report) until a manual refresh.
+  const sortBuildings = (rows) => (rows || []).slice().sort((a, b) =>
+    (a.name || '').localeCompare(b.name || '', undefined, { numeric: true, sensitivity: 'base' })
+  );
   const [buildings, setBuildings] = useState([]);
   const [selectedBuilding, setSelectedBuilding] = useState(null);
   const [sections, setSections] = useState([]);
@@ -1246,7 +1257,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
       }
       // Reload buildings
       const buildingsData = await constructionService.listBuildings(project.id);
-      setBuildings(buildingsData || []);
+      setBuildings(sortBuildings(buildingsData));
       setShowBuildingImportModal(false);
     } catch (error) {
       console.error('Error importing buildings:', error);
@@ -1270,7 +1281,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                 constructionService.listTeamMembers(project.id),
                 constructionService.listProjectVendors(project.id)
               ]);
-              setBuildings(buildingsData || []);
+              setBuildings(sortBuildings(buildingsData));
               setSections(overviewSectionsData || []);
               setTeam(overviewTeamData || []);
               setVendors(overviewVendorsData || []);
@@ -1284,9 +1295,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                 constructionService.listBuildings(project.id),
                 constructionService.getWBSTree(project.id)
               ]);
-              setBuildings((buildingsData || []).slice().sort((a, b) =>
-                (a.name || '').localeCompare(b.name || '', undefined, { numeric: true, sensitivity: 'base' })
-              ));
+              setBuildings(sortBuildings(buildingsData));
               setWbsTree(wbsData || []);
             } catch (e) { setBuildings([]); setWbsTree([]); }
             break;
@@ -1339,7 +1348,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                 constructionService.getWBSTree(project.id),
                 constructionService.listSubcontracts(project.id),
               ]);
-              setBuildings(estBuildings || []);
+              setBuildings(sortBuildings(estBuildings));
               setWbsTree(estWbs || []);
               setProjectSubcontracts(estSubcontracts || []);
             } catch (e) { setWbsTree([]); }
@@ -1416,7 +1425,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
       }
 
       const buildingsData = await constructionService.listBuildings(project.id);
-      setBuildings(buildingsData || []);
+      setBuildings(sortBuildings(buildingsData));
       setShowBuildingModal(false);
       setBuildingForm({
         name: '', code: '', description: '', building_type: '', building_purpose: '',
@@ -2405,7 +2414,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                                         try {
                                           await constructionService.deleteBuilding(project.id, building.id);
                                           const buildingsData = await constructionService.listBuildings(project.id);
-                                          setBuildings(buildingsData || []);
+                                          setBuildings(sortBuildings(buildingsData));
                                           toast.success(t('building_deleted') || "Bino o'chirildi");
                                         } catch (error) {
                                           console.error('Error deleting building:', error);
