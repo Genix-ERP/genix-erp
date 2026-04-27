@@ -559,12 +559,40 @@ export default function SmetaManagementTab({ project }) {
     if (Math.abs(newQty - Number(line.quantity || 0)) < 0.0001) return;
     try {
       await constructionService.updateEstimateLine(lineEst(line), line.id, { quantity: newQty });
-      // Optimistic local patch — the backend cascades non-override
-      // sub-line quantities, but a refetch is the only authoritative way
-      // to mirror that. Patch here just for snappier perceived UX.
-      setLines((rows) => rows.map((r) => r.id === line.id
-        ? { ...r, quantity: newQty, total_amount: Number(r.unit_rate || 0) * newQty }
-        : r));
+      // Optimistic local patch — the backend now also mirrors
+      // quantity → done_quantity for parent works (so Bosqichlar's
+      // BAJARILDI matches what the user just typed here) and cascades
+      // non-override sub-line quantities to parent.qty × norm_rate.
+      // Patch all three locally for snappier UX; loadLines below
+      // pulls the authoritative state.
+      const isParent = !line.parent_line_id;
+      const parentId = Number(line.id);
+      setLines((rows) => rows.map((r) => {
+        if (r.id === line.id) {
+          return {
+            ...r,
+            quantity: newQty,
+            total_amount: Number(r.unit_rate || 0) * newQty,
+            ...(isParent ? {
+              done_quantity: newQty,
+              approval_status:
+                ['confirmed_supervisor', 'confirmed_engineer', 'submitted'].includes(r.approval_status)
+                  ? r.approval_status
+                  : (newQty > 0 ? 'in_progress' : 'pending'),
+            } : {}),
+          };
+        }
+        if (isParent && Number(r.parent_line_id) === parentId && !r.quantity_override) {
+          const norm = Number(r.norm_rate || 0);
+          const childQty = newQty * norm;
+          return {
+            ...r,
+            quantity: childQty,
+            total_amount: childQty * Number(r.unit_rate || 0),
+          };
+        }
+        return r;
+      }));
       toast.success(t('saved') || 'Saqlandi');
       // Pull authoritative state for cascading qty changes.
       loadLines(activeEstimateIds);
