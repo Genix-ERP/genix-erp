@@ -66,6 +66,14 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
   const [loading, setLoading] = useState(true);
   const [linesLoading, setLinesLoading] = useState(null); // estimate id being loaded
   const [products, setProducts] = useState([]);
+  // Client-side "projected" cost per estimate. Populated when the user
+  // selects a building: we join the ВОР Miqdor (by parent-work name) with
+  // each non-ВОР estimate's unit_rate × norm_rate to get a meaningful
+  // total even when the Единич was imported in template mode (every
+  // quantity = 0 → DB-side amount_total = 0). Backend persisted total
+  // wins when it's already > 0 — this map only fills in the holes.
+  // Shape: { [estimateId]: number }
+  const [projectedAmounts, setProjectedAmounts] = useState({});
 
   // Modals
   const [showEstimateModal, setShowEstimateModal] = useState(false);
@@ -278,6 +286,134 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
   useEffect(() => {
     setCurrentPage(1);
   }, [sourceTypeFilter]);
+
+  // ── Projected totals per building ─────────────────────────────────
+  // Triggered when the user selects a building (or the estimates list
+  // changes). For every non-ВОР estimate whose backend amount_total is
+  // 0, we fetch its lines and compute:
+  //
+  //   projected = Σ (vorQty(parent.name) × sub.norm_rate × sub.unit_rate)
+  //
+  // over every sub-line (parent_line_id != null) in the estimate. The
+  // ВОР's Miqdor is keyed by lowercase-trimmed name, scoped to the
+  // same building, so two blocks with identically-named works don't
+  // contaminate each other. If the building has no ВОР, projection is
+  // skipped (we honour the backend's 0 in that case).
+  //
+  // Estimates whose amount_total is already > 0 (e.g. Blok 1/2 imported
+  // before template mode) are left alone — no extra fetch, no overlay.
+  useEffect(() => {
+    if (!selectedBuilding) return;
+    let cancelled = false;
+    const buildingId = selectedBuilding === 'project' ? 0 : selectedBuilding.id;
+    const here = estimates.filter((e) =>
+      buildingId === 0 ? !e.building_id : Number(e.building_id) === Number(buildingId)
+    );
+    if (here.length === 0) return;
+    const vorEst = here.find((e) => String(e.source_type || '').toLowerCase() === 'vor');
+    // Targets = estimates with a backend total of 0 that aren't ВОР
+    // (ВОР itself naturally has 0 cost since it carries no prices, and
+    // we don't want to overlay the source-of-truth there).
+    const targets = here.filter((e) =>
+      !(Number(e.amount_total || 0) > 0)
+      && String(e.source_type || '').toLowerCase() !== 'vor',
+    );
+    if (!vorEst || targets.length === 0) {
+      // Clear any stale projections from a previous building.
+      setProjectedAmounts((prev) => {
+        const next = { ...prev };
+        for (const e of targets) delete next[e.id];
+        return next;
+      });
+      return;
+    }
+
+    (async () => {
+      try {
+        // Fetch ВОР once, then every target estimate in parallel. Lines
+        // are pulled with a high page_size since the cap on listEstimateLines
+        // is 5000 and even the fattest blocks rarely cross that.
+        const [vorRowsRaw, ...targetRowsRaw] = await Promise.all([
+          constructionService.listEstimateLines(vorEst.id, { page_size: 5000 }),
+          ...targets.map((e) =>
+            constructionService.listEstimateLines(e.id, { page_size: 5000 })
+              .catch(() => []),
+          ),
+        ]);
+        if (cancelled) return;
+
+        // ВОР map: parent-work name → planned project quantity. Only
+        // top-level rows (no parent_line_id) carry a real Miqdor. The
+        // key strips all whitespace so subtle Excel formatting
+        // differences (e.g. "В7,5 / М-100/" vs "В7,5 /М-100/") between
+        // the Единич and ВОР sheets don't break the match — a plain
+        // trim+lowercase was missing real rows.
+        const normKey = (s) => String(s || '').toLowerCase().replace(/[\s\u00A0]+/g, '');
+        const vorList = Array.isArray(vorRowsRaw)
+          ? vorRowsRaw
+          : (vorRowsRaw?.data || vorRowsRaw?.items || []);
+        const vorMap = new Map();
+        for (const r of vorList) {
+          if (r.parent_line_id) continue;
+          const n = normKey(r.name);
+          if (!n) continue;
+          const q = Number(r.quantity || 0);
+          if (q > 0) vorMap.set(n, q);
+        }
+
+        const updates = {};
+        for (let i = 0; i < targets.length; i++) {
+          const est = targets[i];
+          const rowsRaw = targetRowsRaw[i];
+          const lines = Array.isArray(rowsRaw)
+            ? rowsRaw
+            : (rowsRaw?.data || rowsRaw?.items || []);
+          if (!lines.length) {
+            updates[est.id] = 0;
+            continue;
+          }
+          // Index parents by id so each sub-line can resolve its parent's name.
+          const parentById = new Map();
+          for (const l of lines) {
+            if (!l.parent_line_id) parentById.set(Number(l.id), l);
+          }
+          let total = 0;
+          for (const l of lines) {
+            const pid = Number(l.parent_line_id || 0);
+            if (!pid) continue; // skip parents (their cost is the sum of children)
+            const parent = parentById.get(pid);
+            if (!parent) continue;
+            const vorQty = vorMap.get(normKey(parent.name)) || 0;
+            if (vorQty <= 0) continue;
+            const norm = Number(l.norm_rate || 0);
+            const rate = Number(l.unit_rate || 0);
+            total += vorQty * norm * rate;
+          }
+          updates[est.id] = total;
+        }
+        if (cancelled) return;
+        setProjectedAmounts((prev) => ({ ...prev, ...updates }));
+      } catch (e) {
+        // Non-fatal — the smeta will keep showing the backend total
+        // (likely 0) and the user can still navigate. Logging only
+        // surfaces in the console for debugging.
+        console.error('Failed to compute projected smeta totals:', e);
+      }
+    })();
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBuilding, estimates]);
+
+  // Helper: pick the cost a smeta card / building list should display.
+  // Backend total wins when present; otherwise fall back to the ВОР
+  // projection computed above.
+  const displayAmount = useCallback((est) => {
+    const persisted = Number(est?.amount_total || 0);
+    if (persisted > 0) return persisted;
+    const projected = projectedAmounts[est?.id];
+    return Number.isFinite(projected) ? projected : 0;
+  }, [projectedAmounts]);
 
   // Load lines for an estimate
   const loadEstimateLines = async (estimateId) => {
@@ -553,7 +689,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
               <div className="divide-y">
                 {buildings.map((building) => {
                   const buildingEstimates = estimates.filter(e => e.building_id === building.id);
-                  const totalAmount = buildingEstimates.reduce((sum, e) => sum + (e.amount_total || 0), 0);
+                  const totalAmount = buildingEstimates.reduce((sum, e) => sum + displayAmount(e), 0);
                   const isSelected = selectedBuilding?.id === building.id;
                   // Get unique subcontractor names for this building (subcontract mode)
                   // Show subcontractors linked to building via junction table + from estimates
@@ -610,7 +746,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                     <div className="flex items-center justify-between mt-1 ml-6">
                       <span className="text-xs text-slate-400">{unassignedCount} {t('estimates_count') || 'smeta'}</span>
                       <span className="text-xs font-medium text-slate-600">
-                        {formatCurrency(estimates.filter(e => !e.building_id).reduce((s, e) => s + (e.amount_total || 0), 0))}
+                        {formatCurrency(estimates.filter(e => !e.building_id).reduce((s, e) => s + displayAmount(e), 0))}
                       </span>
                     </div>
                   </div>
@@ -754,7 +890,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                         </div>
                         <div className="flex items-center justify-between ml-6">
                           <span className="text-sm text-slate-500">{est.lines_count || 0} {t('lines') || 'qator'}</span>
-                          <span className="text-base font-semibold">{formatCurrency(est.amount_total || 0)}</span>
+                          <span className="text-base font-semibold">{formatCurrency(displayAmount(est))}</span>
                         </div>
                       </div>
 

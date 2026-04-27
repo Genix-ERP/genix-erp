@@ -1,11 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Printer, FileDown, X, Save, Calendar } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useCompany } from '@/components/contexts/CompanyContext';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 
 // Form2Preview — print-ready ФОРМА № 2 (KS-2 / ВОР) document.
 //
@@ -241,9 +241,16 @@ function buildSections(lines) {
     const wb = calcWorkBrutto(ln, subs);
     if (wb.total <= 0) continue;
     const key = ln.parent_item_number || 'Boshqalar';
-    const cur = bySection.get(key) || { name: key, items: [], total: 0 };
+    // Section accumulators carry both the pre-overhead `base` (used in
+    // the per-row Сумма column of this section table — which the
+    // regulation expects to be tax-free; transport+storage накрутки
+    // appear separately in the СВОДНЫЕ ИТОГИ block below) and the
+    // brutto `total` (kept for legacy callers like the CSV exporter
+    // that historically summed the with-overhead figure).
+    const cur = bySection.get(key) || { name: key, items: [], total: 0, base: 0 };
     cur.items.push({ work: ln, qty, subs, brutto: wb });
     cur.total += wb.total;
+    cur.base  += wb.base;
     bySection.set(key, cur);
   }
   return Array.from(bySection.values());
@@ -279,6 +286,125 @@ export default function Form2Preview({ estimate, lines, project, onClose, onSave
   const [aktModalOpen, setAktModalOpen] = useState(false);
   const [aktNumber, setAktNumber] = useState('');
 
+  // Print plumbing — clone the form into an isolated popup window so
+  // Chrome paginates a clean linear document. Printing inside the
+  // Radix Dialog tree was producing duplicated headers and broken
+  // pagination because the dialog's overlay + `position: fixed` +
+  // `overflow: hidden` + `h-[95vh]` cage forced Chrome to repeatedly
+  // restart the layout per page. The popup approach has no overlay,
+  // no scroll container, no parent height ceiling — just the document.
+  const docRef = useRef(null);
+  const handlePrint = () => {
+    const node = docRef.current;
+    if (!node) { window.print(); return; }
+
+    // Snapshot the form HTML.
+    const html = node.outerHTML;
+
+    // Pull every stylesheet on the live page into the popup. We try
+    // direct rule cloning first (works for same-origin sheets) and
+    // fall back to a `<link>` import for CORS-restricted ones (Vite's
+    // dev-mode hot-reload sheets, third-party fonts, etc.).
+    const styleParts = [];
+    const linkParts = [];
+    for (const sheet of Array.from(document.styleSheets)) {
+      try {
+        if (sheet.cssRules) {
+          const rules = Array.from(sheet.cssRules).map((r) => r.cssText).join('\n');
+          if (rules) styleParts.push(rules);
+        }
+      } catch (e) {
+        // SecurityError — CORS-blocked. Reference by URL instead.
+        if (sheet.href) linkParts.push(`<link rel="stylesheet" href="${sheet.href}">`);
+      }
+    }
+
+    // Open the popup. Browsers may block this if the click handler
+    // isn't on the synchronous call stack — but we're firing it
+    // straight from a button onClick so the user gesture is preserved.
+    // We do NOT pass `noopener` because we need to write into the
+    // popup's document.
+    const w = window.open('', '_blank', 'width=1100,height=900');
+    if (!w) {
+      // Popup blocked — fall back to in-page print so something works.
+      window.print();
+      return;
+    }
+
+    w.document.open();
+    w.document.write(`<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<title>Форма 2 — Акт выполненных работ</title>
+${linkParts.join('\n')}
+<style>${styleParts.join('\n')}</style>
+<style>
+  /* Reset the popup body so the form renders without page chrome
+     or modal positioning artefacts from the parent app. */
+  html, body { margin: 0; padding: 0; background: #ffffff; }
+  body { padding: 16px; }
+  .form2-doc {
+    max-width: none !important;
+    margin: 0 auto !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+  /* Repeat table column headers on each printed page. */
+  thead { display: table-header-group; }
+  tr { break-inside: avoid; page-break-inside: avoid; }
+  table { break-inside: auto; }
+  /* Hide any leftover modal-style buttons that snuck in via outerHTML. */
+  .print\\:hidden, [class*="print:hidden"] { display: none !important; }
+  /* Override the parent app's @media print rules that got cloned in
+     via document.styleSheets — those rules hide everything except
+     elements with the .form2-printing class, which only exists in
+     the parent DOM. In this popup we WANT everything visible. */
+  @media print {
+    body, body * {
+      visibility: visible !important;
+    }
+    body { padding: 0 !important; }
+    /* Re-assert form positioning since the parent app's print rules
+       force .form2-printing { position: absolute; inset: 0 ... } and
+       that rule may have leaked through cloned sheets. */
+    .form2-doc {
+      position: static !important;
+      inset: auto !important;
+      width: auto !important;
+      padding: 0 !important;
+    }
+  }
+</style>
+</head>
+<body>${html}</body>
+</html>`);
+    w.document.close();
+
+    // Wait for the popup's stylesheets to apply, then trigger print.
+    // `onload` is the right hook, but if the stylesheets are inlined
+    // it can fire before they parse — a small timeout covers both
+    // cases reliably.
+    const fire = () => {
+      try {
+        w.focus();
+        w.print();
+      } finally {
+        // Close after print returns. Some browsers fire `afterprint`
+        // synchronously; others don't fire it at all. Either way the
+        // popup is dismissable by the user too.
+        setTimeout(() => { try { w.close(); } catch (_) { /* ignore */ } }, 500);
+      }
+    };
+    if (w.document.readyState === 'complete') {
+      setTimeout(fire, 200);
+    } else {
+      w.addEventListener('load', () => setTimeout(fire, 200));
+      // Hard fallback — if `load` never fires within 2s, print anyway.
+      setTimeout(fire, 2000);
+    }
+  };
+
   const sections = useMemo(() => buildSections(lines || []), [lines]);
   const summary = useMemo(() => buildSummary(lines || [], otherCostsPct, useVat), [lines, otherCostsPct, useVat]);
   const today = new Date().toLocaleDateString('ru-RU');
@@ -290,22 +416,91 @@ export default function Form2Preview({ estimate, lines, project, onClose, onSave
     return `${fmtD(periodFrom)} — ${fmtD(periodTo)}`;
   })();
 
+  // Build the СВОДНЫЕ ИТОГИ rollup as a list of 8-wide rows ready to
+  // splice into either CSV or XLSX. Mirrors what the on-screen modal
+  // renders below the section table (СВОДНЫЕ ИТОГИ ПО ПРЯМЫМ ЗАТРАТАМ
+  // + ТРАНСПОРТ И СКЛАДСКОЕ ХРАНЕНИЕ + 3. ПРОЧИЕ ЗАТРАТЫ + 4.
+  // ОБОРУДОВАНИЕ + 5. ИТОГО И НАЛОГИ) so the file's last section
+  // matches the printed document instead of cutting off after the
+  // section subtotals.
+  const buildRollupRows = () => {
+    const out = [];
+    // r2 keeps `null` / `undefined` / empty-string as empty cells (used
+    // for rollup section banner rows like "СВОДНЫЕ ИТОГИ ПО ПРЯМЫМ
+    // ЗАТРАТАМ" that have no monetary value attached). Real numbers
+    // get rounded to 2 decimals.
+    const r2 = (n) => {
+      if (n == null || n === '') return '';
+      const v = Number(n);
+      return Number.isFinite(v) ? Math.round(v * 100) / 100 : '';
+    };
+    const blank = ['', '', '', '', '', '', '', ''];
+    const labelRow = (label, amount) => ['', '', label, '', '', '', '', r2(amount)];
+    const sumByType = summary.matByType || { standard: 0, equipment: 0, cable: 0 };
+    const combined = summary.combined || { standard: 0, equipment: 0, cable: 0, total: 0 };
+
+    out.push(blank);
+    out.push(labelRow('СВОДНЫЕ ИТОГИ ПО ПРЯМЫМ ЗАТРАТАМ', '')); // header strip
+    out.push(labelRow('Затраты труда рабочих-строителей', summary.labor));
+    out.push(labelRow('Эксплуатация машин и механизмов', summary.machines));
+    out.push(labelRow('ИТОГО ПО СТРОИТЕЛЬНЫМ МАТЕРИАЛАМ И КОНСТРУКЦИИ:', sumByType.standard));
+    out.push(labelRow('ИТОГО ПО ОБОРУДОВАНИЮ:', sumByType.equipment));
+    out.push(labelRow('ИТОГО ПО КАБЕЛЬНО-ПРОВОДНИКОВОЙ ПРОДУКЦИИ:', sumByType.cable));
+    out.push(labelRow('ИТОГО ПРЯМЫЕ ЗАТРАТЫ:', summary.direct));
+
+    out.push(labelRow('ТРАНСПОРТ И СКЛАДСКОЕ ХРАНЕНИЕ', ''));
+    const buckets = [
+      { key: 'standard',  base: 'ИТОГО ПО СТРОИТЕЛЬНЫМ МАТЕРИАЛАМ:',         with: 'ИТОГО ПО СТРОИТЕЛЬНЫМ МАТЕРИАЛАМ С НАКРУТКАМИ:',     split: '(5% + 2%)' },
+      { key: 'equipment', base: 'ИТОГО ПО ОБОРУДОВАНИЮ:',                     with: 'ИТОГО ПО ОБОРУДОВАНИЮ С НАКРУТКАМИ:',                 split: '(2% + 1,2%)' },
+      { key: 'cable',     base: 'ИТОГО ПО КАБЕЛЬНО-ПРОВОДНИКОВОЙ ПРОДУКЦИИ:', with: 'ИТОГО ПО КАБЕЛЬНОЙ ПРОДУКЦИИ С НАКРУТКАМИ:',          split: '(1,5% + 2%)' },
+    ];
+    for (const b of buckets) {
+      out.push(labelRow(b.base, sumByType[b.key]));
+      out.push(labelRow(`    Транспорт и складское хранение ${b.split}`, combined[b.key]));
+      out.push(labelRow(b.with, (sumByType[b.key] || 0) + (combined[b.key] || 0)));
+    }
+    out.push(labelRow('Итого транспорт и складское хранение:', combined.total));
+
+    out.push(labelRow('3. ПРОЧИЕ ЗАТРАТЫ ПО СТРОИТЕЛЬСТВУ', ''));
+    out.push(labelRow('ИТОГО БАЗА ДЛЯ ПРОЧИХ:', summary.otherBase));
+    out.push(labelRow(`+ Прочие затраты производственного характера (${otherCostsPct || 0}%)`, summary.other));
+    out.push(labelRow('ИТОГО ПО СТРОИТЕЛЬСТВУ (база + прочие):', summary.constructionTotal));
+
+    if ((summary.equipmentTotal || 0) > 0) {
+      out.push(labelRow('4. ОБОРУДОВАНИЕ (отдельно, с накрутками, без прочих):', summary.equipmentTotal));
+    }
+
+    out.push(labelRow('ИТОГО (стройка + оборудование, до НДС):', summary.subtotal));
+    if (summary.useVat) {
+      out.push(labelRow(`Налог на добавленную стоимость (НДС ${VAT_PCT}%):`, summary.vat));
+    }
+    out.push(labelRow(
+      `ВСЕГО ПО СМЕТЕ (${summary.useVat ? 'с НДС' : 'без НДС'}):`,
+      summary.grand,
+    ));
+    return out;
+  };
+
   const exportCsv = () => {
     const rows = [];
     rows.push(['ФОРМА № 2 — ЛОКАЛЬНЫЙ РЕСУРСНЫЙ СМЕТНЫЙ РАСЧЁТ']);
     if (project?.name) rows.push([project.name]);
     rows.push(['Дата составления:', today]);
     if (periodLabel) rows.push(['Период:', periodLabel]);
+    if (customerName) rows.push(['Заказчик:', customerName]);
     rows.push([]);
-    rows.push(['№', 'Шифр', 'Наименование', 'Раздел', 'Ед.изм.', 'Кол-во', 'Цена', 'Сумма с накр.']);
+    // Сумма column is the pre-overhead base — matches what the user
+    // sees on the Form 2 preview's section table; накрутки are
+    // accumulated separately in the СВОДНЫЕ ИТОГИ block.
+    rows.push(['№', 'Шифр', 'Наименование', 'Раздел', 'Ед.изм.', 'Кол-во', 'Цена', 'Сумма']);
     let num = 0;
     for (const sec of sections) {
-      let secTotal = 0;
+      let secBase = 0;
       for (const it of sec.items) {
         num++;
         const { work, qty, subs, brutto } = it;
-        const pricePerUnit = qty > 0 ? brutto.total / qty : 0;
-        rows.push([num, work.code || '', work.name || '', sec.name, work.uom || '', qty, Math.round(pricePerUnit * 100) / 100, Math.round(brutto.total * 100) / 100]);
+        const pricePerUnit = qty > 0 ? brutto.base / qty : 0;
+        rows.push([num, work.code || '', work.name || '', sec.name, work.uom || '', qty, Math.round(pricePerUnit * 100) / 100, Math.round(brutto.base * 100) / 100]);
         for (const r of subs) {
           if (isSubStage(r)) {
             const stageTotal = Number(r.total_amount || 0);
@@ -317,12 +512,17 @@ export default function Form2Preview({ estimate, lines, project, onClose, onSave
           if (cost <= 0) continue;
           rows.push(['', CAT_COLORS[classifyResource(r)]?.name || '', '    ' + (r.name || ''), '', r.uom || '', r.quantity || 0, r.unit_rate || 0, Math.round(cost * 100) / 100]);
         }
-        secTotal += brutto.total;
+        secBase += brutto.base;
       }
-      rows.push(['', '', `ИТОГО по разделу "${sec.name}":`, '', '', '', '', Math.round(secTotal * 100) / 100]);
+      rows.push(['', '', `ИТОГО по разделу "${sec.name}":`, '', '', '', '', Math.round(secBase * 100) / 100]);
     }
-    rows.push([]);
-    rows.push(['', '', `ВСЕГО ПО СМЕТЕ (${summary.useVat ? 'с НДС' : 'без НДС'}):`, '', '', '', '', Math.round(summary.grand * 100) / 100]);
+    // Append the full СВОДНЫЕ ИТОГИ rollup so the file ends with the
+    // same accounting structure the on-screen modal renders — direct
+    // costs, transport+storage накрутки per bucket, прочие, equipment
+    // line, НДС, grand total. Previously the CSV cut off after the
+    // section subtotals, which made the file useless for handing off
+    // to an accountant.
+    for (const r of buildRollupRows()) rows.push(r);
 
     const csv = rows.map((r) => r.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
@@ -334,78 +534,375 @@ export default function Form2Preview({ estimate, lines, project, onClose, onSave
     URL.revokeObjectURL(url);
   };
 
-  // Excel export — same row structure as the CSV path but emitted as an
-  // .xlsx workbook. Adds light styling: bold header rows, merged title
-  // cells, column widths sized for Russian Cyrillic content, right-align
-  // for the numeric columns. Mirrors the visual layout of the on-screen
-  // document so the file opens with the same shape as the Print preview.
-  const exportXlsx = () => {
-    const rows = [];
-    rows.push(['ФОРМА № 2 — АКТ ВЫПОЛНЕННЫХ РАБОТ']);
-    rows.push(['ЛОКАЛЬНЫЙ РЕСУРСНЫЙ СМЕТНЫЙ РАСЧЁТ']);
-    if (project?.name) rows.push([project.name]);
-    if (project?.building_name) rows.push(['Объект:', project.building_name]);
-    rows.push(['Отчётный период:', periodLabel || '—']);
-    if (customerName) rows.push(['Заказчик:', customerName]);
-    rows.push([]);
-    const header = ['№', 'Шифр / Тип', 'Наименование работ, затрат и ресурсов', 'Раздел', 'Ед.изм.', 'Кол-во', 'Цена, сум', 'Сумма, сум'];
-    rows.push(header);
-    let num = 0;
-    for (const sec of sections) {
-      let secTotal = 0;
+  // Excel export — uses ExcelJS so the file actually carries the
+  // same visual structure the modal renders: bold/centered title
+  // banner, amber-50 section bands with an orange left rule, distinct
+  // styling for parent works vs resource sub-rows, ИТОГО rows tinted
+  // amber, and a properly merged + accent-colored СВОДНЫЕ ИТОГИ
+  // rollup. The previous sheetjs-only path emitted a flat AOA grid
+  // with no styling at all, which the user (correctly) refused to
+  // hand to an accountant.
+  const exportXlsx = async () => {
+    // Palette — keyed off the Tailwind classes the modal uses.
+    const C = {
+      slate900:  '0F172A',
+      slate700:  '334155',
+      slate500:  '64748B',
+      slate300:  'CBD5E1',
+      slate100:  'F1F5F9',
+      orange700: 'C2410C',
+      amber50:   'FAF6EC',
+      amber100:  'FEF3C7',
+      amber400:  'FBBF24',
+      stone200:  'E7E5E4',
+      stone50:   'FAFAF9',
+      workBg:    'F8F4E8',
+      subBg:     'FDFBF5',
+      headerBg:  '1E3A5F',
+      headerFg:  'FFFFFF',
+    };
+    const thin = (clr) => ({ style: 'thin', color: { argb: clr || C.stone200 } });
+    const border = {
+      top: thin(C.stone200),
+      bottom: thin(C.stone200),
+      left: thin(C.stone200),
+      right: thin(C.stone200),
+    };
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'GenixERP';
+    wb.created = new Date();
+
+    const ws = wb.addWorksheet('Форма 2', {
+      pageSetup: {
+        paperSize: 9, // A4
+        orientation: 'portrait',
+        fitToPage: true,
+        fitToWidth: 1,
+        fitToHeight: 0,
+        margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 },
+      },
+    });
+
+    // 7 columns: №, Шифр / Тип, Наименование, Ед.изм., Кол-во, Цена, Сумма.
+    // (The "Раздел" column from the legacy AOA grid was redundant once
+    // each section gets its own banner row — dropping it gives column C
+    // way more room for long Cyrillic names.)
+    ws.columns = [
+      { width: 6 },   // A — №
+      { width: 22 },  // B — Шифр / Тип
+      { width: 80 },  // C — Наименование
+      { width: 14 },  // D — Ед.изм.
+      { width: 14 },  // E — Кол-во
+      { width: 20 },  // F — Цена
+      { width: 22 },  // G — Сумма
+    ];
+    const LAST_COL = 7;
+    const lastColLetter = (n) => String.fromCharCode('A'.charCodeAt(0) + n - 1);
+
+    let r = 1;
+
+    // ── Title block ──
+    const titleCell = ws.getCell(`A${r}`);
+    ws.mergeCells(`A${r}:${lastColLetter(LAST_COL)}${r}`);
+    titleCell.value = 'ФОРМА № 2 — АКТ ВЫПОЛНЕННЫХ РАБОТ';
+    titleCell.font = { bold: true, size: 18, color: { argb: C.slate900 } };
+    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    ws.getRow(r).height = 32;
+    r++;
+
+    const subCell = ws.getCell(`A${r}`);
+    ws.mergeCells(`A${r}:${lastColLetter(LAST_COL)}${r}`);
+    subCell.value = 'Локальный ресурсный сметный расчёт';
+    subCell.font = { italic: true, size: 11, color: { argb: C.slate500 } };
+    subCell.alignment = { horizontal: 'center' };
+    r++;
+
+    if (project?.name) {
+      ws.mergeCells(`A${r}:${lastColLetter(LAST_COL)}${r}`);
+      const projCell = ws.getCell(`A${r}`);
+      projCell.value = project.name;
+      projCell.font = { size: 11, color: { argb: C.slate700 } };
+      projCell.alignment = { horizontal: 'center' };
+      r++;
+    }
+
+    r++; // blank spacer
+
+    // ── Meta rows ──
+    const metaRow = (label, value) => {
+      ws.getCell(`A${r}`).value = label;
+      ws.getCell(`A${r}`).font = { color: { argb: C.slate500 }, size: 10 };
+      ws.mergeCells(`B${r}:${lastColLetter(LAST_COL)}${r}`);
+      const v = ws.getCell(`B${r}`);
+      v.value = value;
+      v.font = { bold: true, color: { argb: C.slate900 }, size: 10 };
+      r++;
+    };
+    if (project?.building_name) metaRow('Объект:', project.building_name);
+    metaRow('Отчётный период:', periodLabel || '—');
+    if (customerName) metaRow('Заказчик:', customerName);
+
+    r++; // blank spacer
+
+    // Helper for styling number cells.
+    const styleNumber = (cell, fmt = '#,##0.00') => {
+      cell.numFmt = fmt;
+      cell.alignment = { horizontal: 'right', vertical: 'middle' };
+    };
+
+    // ── Sections ──
+    let globalNum = 0;
+    for (const [secIdx, sec] of sections.entries()) {
+      // Section banner — amber tint with thick orange left border.
+      ws.mergeCells(`A${r}:${lastColLetter(LAST_COL)}${r}`);
+      const banner = ws.getCell(`A${r}`);
+      banner.value = `Раздел ${ROMAN[secIdx] || (secIdx + 1)}. ${sec.name}`;
+      banner.font = { bold: true, size: 11, color: { argb: C.slate900 } };
+      banner.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.amber50 } };
+      banner.alignment = { vertical: 'middle' };
+      banner.border = {
+        ...border,
+        left: { style: 'thick', color: { argb: C.orange700 } },
+      };
+      ws.getRow(r).height = 22;
+      r++;
+
+      // Column headers for this section.
+      const headers = ['№', 'Шифр / Тип', 'Наименование работ, затрат и ресурсов', 'Ед.изм.', 'Кол-во', 'Цена, сум', 'Сумма, сум'];
+      for (let c = 1; c <= LAST_COL; c++) {
+        const cell = ws.getCell(r, c);
+        cell.value = headers[c - 1];
+        cell.font = { bold: true, size: 9, color: { argb: C.slate700 } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.amber100 } };
+        cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+        cell.border = {
+          ...border,
+          top: { style: 'medium', color: { argb: C.amber400 } },
+          bottom: { style: 'medium', color: { argb: C.amber400 } },
+        };
+      }
+      ws.getRow(r).height = 30;
+      r++;
+
+      // Data rows.
+      let secBase = 0;
       for (const it of sec.items) {
-        num++;
+        globalNum++;
         const { work, qty, subs, brutto } = it;
-        const pricePerUnit = qty > 0 ? brutto.total / qty : 0;
-        rows.push([num, work.code || '', work.name || '', sec.name, work.uom || '',
-          Number(qty), Math.round(pricePerUnit * 100) / 100, Math.round(brutto.total * 100) / 100]);
-        for (const r of subs) {
-          if (isSubStage(r)) {
-            const stageTotal = Number(r.total_amount || 0);
+        const pricePerUnit = qty > 0 ? brutto.base / qty : 0;
+
+        // Parent work row — dark amber background, bold name, orange total.
+        const wRow = r;
+        ws.getCell(wRow, 1).value = globalNum;
+        ws.getCell(wRow, 2).value = work.code || '';
+        ws.getCell(wRow, 3).value = work.name || '';
+        ws.getCell(wRow, 4).value = work.uom || '';
+        ws.getCell(wRow, 5).value = Number(qty);
+        ws.getCell(wRow, 6).value = Math.round(pricePerUnit * 100) / 100;
+        ws.getCell(wRow, 7).value = Math.round(brutto.base * 100) / 100;
+        for (let c = 1; c <= LAST_COL; c++) {
+          const cell = ws.getCell(wRow, c);
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.workBg } };
+          cell.border = border;
+          cell.font = { bold: true, size: 10, color: { argb: C.slate900 } };
+          cell.alignment = { vertical: 'middle', wrapText: c === 3 };
+        }
+        ws.getCell(wRow, 1).alignment = { horizontal: 'center', vertical: 'middle' };
+        ws.getCell(wRow, 2).font = { bold: false, size: 9, color: { argb: C.slate700 }, name: 'Consolas' };
+        ws.getCell(wRow, 4).alignment = { horizontal: 'center', vertical: 'middle' };
+        styleNumber(ws.getCell(wRow, 5), '#,##0.######');
+        styleNumber(ws.getCell(wRow, 6));
+        styleNumber(ws.getCell(wRow, 7));
+        ws.getCell(wRow, 7).font = { bold: true, size: 10, color: { argb: C.orange700 } };
+        r++;
+
+        // Resource sub-rows.
+        for (const res of subs) {
+          if (isSubStage(res)) {
+            const stageTotal = Number(res.total_amount || 0);
             if (stageTotal <= 0) continue;
-            rows.push(['', 'ДОП.', '    ДОП. ' + (r.name || ''), '', r.uom || '',
-              Number(r.quantity || 0), Number(r.unit_rate || 0), Math.round(stageTotal * 100) / 100]);
+            ws.getCell(r, 1).value = '';
+            ws.getCell(r, 2).value = 'ДОП.';
+            ws.getCell(r, 3).value = '    ДОП. ' + (res.name || '');
+            ws.getCell(r, 4).value = res.uom || '';
+            ws.getCell(r, 5).value = Number(res.quantity || 0);
+            ws.getCell(r, 6).value = Number(res.unit_rate || 0);
+            ws.getCell(r, 7).value = Math.round(stageTotal * 100) / 100;
+            for (let c = 1; c <= LAST_COL; c++) {
+              const cell = ws.getCell(r, c);
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'ECFDF5' } };
+              cell.border = border;
+              cell.font = { size: 9, color: { argb: '047857' } };
+            }
+            ws.getCell(r, 4).alignment = { horizontal: 'center' };
+            styleNumber(ws.getCell(r, 5), '#,##0.######');
+            styleNumber(ws.getCell(r, 6));
+            styleNumber(ws.getCell(r, 7));
+            r++;
             continue;
           }
-          const cost = Number(r.unit_rate || 0) * Number(r.quantity || 0);
+          const cost = Number(res.unit_rate || 0) * Number(res.quantity || 0);
           if (cost <= 0) continue;
-          rows.push(['', CAT_COLORS[classifyResource(r)]?.name || '', '    ' + (r.name || ''), '', r.uom || '',
-            Number(r.quantity || 0), Number(r.unit_rate || 0), Math.round(cost * 100) / 100]);
+          ws.getCell(r, 1).value = '';
+          ws.getCell(r, 2).value = CAT_COLORS[classifyResource(res)]?.name || '';
+          ws.getCell(r, 3).value = '    ' + (res.name || '');
+          ws.getCell(r, 4).value = res.uom || '';
+          ws.getCell(r, 5).value = Number(res.quantity || 0);
+          ws.getCell(r, 6).value = Number(res.unit_rate || 0);
+          ws.getCell(r, 7).value = Math.round(cost * 100) / 100;
+          for (let c = 1; c <= LAST_COL; c++) {
+            const cell = ws.getCell(r, c);
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.subBg } };
+            cell.border = border;
+            cell.font = { size: 9, color: { argb: C.slate700 } };
+          }
+          ws.getCell(r, 4).alignment = { horizontal: 'center' };
+          styleNumber(ws.getCell(r, 5), '#,##0.######');
+          styleNumber(ws.getCell(r, 6));
+          styleNumber(ws.getCell(r, 7));
+          r++;
         }
-        secTotal += brutto.total;
+        secBase += brutto.base;
       }
-      rows.push(['', '', `ИТОГО по разделу "${sec.name}":`, '', '', '', '', Math.round(secTotal * 100) / 100]);
+
+      // Section ИТОГО.
+      ws.mergeCells(`A${r}:F${r}`);
+      const itogoLabel = ws.getCell(`A${r}`);
+      itogoLabel.value = `ИТОГО по разделу ${ROMAN[secIdx] || (secIdx + 1)} (без транспорта и склада):`;
+      itogoLabel.font = { bold: true, color: { argb: C.slate900 } };
+      itogoLabel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.amber50 } };
+      itogoLabel.alignment = { horizontal: 'right', vertical: 'middle' };
+      itogoLabel.border = { ...border, top: { style: 'medium', color: { argb: C.amber400 } } };
+
+      const itogoVal = ws.getCell(r, 7);
+      itogoVal.value = Math.round(secBase * 100) / 100;
+      itogoVal.numFmt = '#,##0.00';
+      itogoVal.font = { bold: true, color: { argb: C.orange700 } };
+      itogoVal.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.amber50 } };
+      itogoVal.alignment = { horizontal: 'right', vertical: 'middle' };
+      itogoVal.border = { ...border, top: { style: 'medium', color: { argb: C.amber400 } } };
+      ws.getRow(r).height = 22;
+      r++;
+      r++; // spacer between sections
     }
-    rows.push([]);
-    rows.push(['', '', `ВСЕГО ПО СМЕТЕ (${summary.useVat ? 'с НДС' : 'без НДС'}):`, '', '', '', '', Math.round(summary.grand * 100) / 100]);
 
-    const ws = XLSX.utils.aoa_to_sheet(rows);
+    // ── СВОДНЫЕ ИТОГИ rollup ──
+    // Each row is either a banner (amber-100, bold, merged A:G) or
+    // an aggregator row (label in A:F, value in G).
+    const sumByType = summary.matByType || { standard: 0, equipment: 0, cable: 0 };
+    const combined = summary.combined || { standard: 0, equipment: 0, cable: 0, total: 0 };
 
-    // Column widths sized for the Russian regulatory header text — №, Шифр,
-    // long resource names, section path, etc. Keeps the file readable when
-    // Excel opens it without further fiddling.
-    ws['!cols'] = [
-      { wch: 6 },   // №
-      { wch: 18 },  // Шифр / Тип
-      { wch: 70 },  // Наименование (long Cyrillic strings)
-      { wch: 30 },  // Раздел
-      { wch: 12 },  // Ед.изм.
-      { wch: 12 },  // Кол-во
-      { wch: 16 },  // Цена
-      { wch: 18 },  // Сумма
+    const banner = (text, color = C.amber100) => {
+      ws.mergeCells(`A${r}:${lastColLetter(LAST_COL)}${r}`);
+      const cell = ws.getCell(`A${r}`);
+      cell.value = text;
+      cell.font = { bold: true, size: 11, color: { argb: C.slate900 } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: color } };
+      cell.alignment = { vertical: 'middle' };
+      cell.border = border;
+      ws.getRow(r).height = 22;
+      r++;
+    };
+    const lineRow = (label, amount, opts = {}) => {
+      ws.mergeCells(`A${r}:F${r}`);
+      const lab = ws.getCell(`A${r}`);
+      lab.value = label;
+      lab.alignment = { horizontal: 'right', vertical: 'middle', indent: opts.indent || 0 };
+      lab.font = {
+        bold: !!opts.bold,
+        size: opts.size || 10,
+        color: { argb: opts.labelColor || C.slate700 },
+        italic: !!opts.italic,
+      };
+      lab.border = border;
+      if (opts.fill) lab.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: opts.fill } };
+
+      const val = ws.getCell(r, 7);
+      val.value = (amount == null || amount === '') ? '' : Math.round(Number(amount) * 100) / 100;
+      val.numFmt = '#,##0.00';
+      val.font = {
+        bold: !!opts.bold,
+        size: opts.size || 10,
+        color: { argb: opts.valueColor || opts.labelColor || C.slate900 },
+      };
+      val.alignment = { horizontal: 'right', vertical: 'middle' };
+      val.border = border;
+      if (opts.fill) val.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: opts.fill } };
+      r++;
+    };
+
+    banner('СВОДНЫЕ ИТОГИ ПО ПРЯМЫМ ЗАТРАТАМ');
+    lineRow('Затраты труда рабочих-строителей', summary.labor);
+    lineRow('Эксплуатация машин и механизмов', summary.machines);
+    lineRow('ИТОГО ПО СТРОИТЕЛЬНЫМ МАТЕРИАЛАМ И КОНСТРУКЦИИ:', sumByType.standard, { bold: true });
+    lineRow('ИТОГО ПО ОБОРУДОВАНИЮ:', sumByType.equipment, { bold: true });
+    lineRow('ИТОГО ПО КАБЕЛЬНО-ПРОВОДНИКОВОЙ ПРОДУКЦИИ:', sumByType.cable, { bold: true });
+    lineRow('ИТОГО ПРЯМЫЕ ЗАТРАТЫ:', summary.direct, {
+      bold: true, size: 11, fill: C.amber50, valueColor: C.orange700,
+    });
+
+    banner('ТРАНСПОРТ И СКЛАДСКОЕ ХРАНЕНИЕ');
+    const buckets = [
+      { key: 'standard',  base: 'ИТОГО ПО СТРОИТЕЛЬНЫМ МАТЕРИАЛАМ:',         with: 'ИТОГО ПО СТРОИТЕЛЬНЫМ МАТЕРИАЛАМ С НАКРУТКАМИ:',     split: '(5% + 2%)' },
+      { key: 'equipment', base: 'ИТОГО ПО ОБОРУДОВАНИЮ:',                     with: 'ИТОГО ПО ОБОРУДОВАНИЮ С НАКРУТКАМИ:',                 split: '(2% + 1,2%)' },
+      { key: 'cable',     base: 'ИТОГО ПО КАБЕЛЬНО-ПРОВОДНИКОВОЙ ПРОДУКЦИИ:', with: 'ИТОГО ПО КАБЕЛЬНОЙ ПРОДУКЦИИ С НАКРУТКАМИ:',          split: '(1,5% + 2%)' },
     ];
+    for (const b of buckets) {
+      lineRow(b.base, sumByType[b.key], { bold: true });
+      lineRow(`Транспорт и складское хранение ${b.split}`, combined[b.key], {
+        size: 9, italic: true, labelColor: C.slate500,
+      });
+      lineRow(b.with, (sumByType[b.key] || 0) + (combined[b.key] || 0), {
+        bold: true, valueColor: C.orange700,
+      });
+    }
+    lineRow('Итого транспорт и складское хранение:', combined.total, {
+      bold: true, fill: C.amber50, valueColor: C.orange700,
+    });
 
-    // Merge the three title rows across all 8 columns so they read as a
-    // banner instead of being squished into the first column.
-    ws['!merges'] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: 7 } },
-      { s: { r: 1, c: 0 }, e: { r: 1, c: 7 } },
-      ...(project?.name ? [{ s: { r: 2, c: 0 }, e: { r: 2, c: 7 } }] : []),
-    ];
+    banner('3. ПРОЧИЕ ЗАТРАТЫ ПО СТРОИТЕЛЬСТВУ');
+    lineRow('ИТОГО БАЗА ДЛЯ ПРОЧИХ:', summary.otherBase, { bold: true });
+    lineRow(
+      `+ Прочие затраты производственного характера (${otherCostsPct || 0}%)`,
+      summary.other,
+      { italic: true },
+    );
+    lineRow('ИТОГО ПО СТРОИТЕЛЬСТВУ (база + прочие):', summary.constructionTotal, {
+      bold: true, size: 11, fill: C.amber50, valueColor: C.orange700,
+    });
 
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Форма 2');
-    XLSX.writeFile(wb, `Forma2_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    if ((summary.equipmentTotal || 0) > 0) {
+      banner('4. ОБОРУДОВАНИЕ (отдельно)');
+      lineRow('ИТОГО ПО ОБОРУДОВАНИЮ (с накрутками, без прочих):', summary.equipmentTotal, {
+        bold: true, fill: C.amber50, valueColor: C.orange700,
+      });
+    }
+
+    banner('5. ИТОГО И НАЛОГИ');
+    lineRow('ИТОГО (стройка + оборудование, до НДС):', summary.subtotal, {
+      bold: true, size: 11, fill: '111111', labelColor: 'FFFFFF', valueColor: 'FFFFFF',
+    });
+    if (summary.useVat) {
+      lineRow(`Налог на добавленную стоимость (НДС ${VAT_PCT}%)`, summary.vat, {
+        italic: true, labelColor: C.slate700,
+      });
+    }
+    lineRow(
+      `ВСЕГО ПО СМЕТЕ (${summary.useVat ? 'с НДС' : 'без НДС'}):`,
+      summary.grand,
+      { bold: true, size: 13, fill: C.orange700, labelColor: 'FFFFFF', valueColor: 'FFFFFF' },
+    );
+
+    // ── Save ──
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Forma2_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   // Actually fire the snapshot save once the Akt № modal collected its
@@ -506,7 +1003,7 @@ export default function Form2Preview({ estimate, lines, project, onClose, onSave
             {t('vat_short') || 'НДС'} {VAT_PCT}%
           </label>
         </div>
-        <Button variant="outline" size="sm" onClick={() => window.print()}>
+        <Button variant="outline" size="sm" onClick={handlePrint}>
           <Printer className="w-4 h-4 mr-1" /> {t('print') || 'Chop etish'}
         </Button>
         <Button variant="outline" size="sm" onClick={exportXlsx}>
@@ -536,7 +1033,7 @@ export default function Form2Preview({ estimate, lines, project, onClose, onSave
          left-aligned "ФОРМА № 2" stamp box next to a centered title block,
          a meta row underneath (Объект / Отчётный период / Дата составления),
          and a Заказчик line aligned to the right. */}
-      <div className="form2-doc max-w-[1100px] mx-auto my-6 p-10 bg-white text-slate-900 shadow-lg rounded">
+      <div ref={docRef} className="form2-doc max-w-[1100px] mx-auto my-6 p-10 bg-white text-slate-900 shadow-lg rounded">
         <div className="mb-6 pb-4 border-b-2 border-slate-900">
           <div className="flex items-start gap-6">
             {/* ФОРМА № 2 stamp — left-aligned styled box. */}
@@ -623,7 +1120,13 @@ export default function Form2Preview({ estimate, lines, project, onClose, onSave
                   <tbody>
                     {sec.items.map(({ work, qty, subs, brutto }) => {
                       globalNum++;
-                      const pricePerUnit = qty > 0 ? brutto.total / qty : 0;
+                      // Per-row Цена / Сумма are deliberately
+                      // pre-overhead (base only). The transport+storage
+                      // накрутки are accumulated separately in the
+                      // СВОДНЫЕ ИТОГИ block below; folding them into
+                      // the per-row Сумма too would double-count them
+                      // visually and inflate the section subtotal.
+                      const pricePerUnit = qty > 0 ? brutto.base / qty : 0;
                       return (
                         <React.Fragment key={work.id}>
                           <tr style={{ background: '#F8F4E8', borderTop: '2px solid #999' }}>
@@ -633,7 +1136,7 @@ export default function Form2Preview({ estimate, lines, project, onClose, onSave
                             <td className="border border-stone-300 px-1.5 py-1.5 text-center font-semibold">{work.uom || ''}</td>
                             <td className="border border-stone-300 px-1.5 py-1.5 text-right font-mono font-semibold">{fmtRu(qty)}</td>
                             <td className="border border-stone-300 px-1.5 py-1.5 text-right font-mono font-semibold">{fmtRu(Math.round(pricePerUnit * 100) / 100)}</td>
-                            <td className="border border-stone-300 px-1.5 py-1.5 text-right font-mono font-bold text-orange-700">{fmtRu(Math.round(brutto.total * 100) / 100)}</td>
+                            <td className="border border-stone-300 px-1.5 py-1.5 text-right font-mono font-bold text-orange-700">{fmtRu(Math.round(brutto.base * 100) / 100)}</td>
                           </tr>
                           {subs.map((r) => {
                             // ДОП. sub-stage row: green background, dedicated
@@ -664,12 +1167,14 @@ export default function Form2Preview({ estimate, lines, project, onClose, onSave
                             const totQ = Number(r.quantity || 0);
                             const base = price * totQ;
                             if (base <= 0) return null;
-                            const rate = getOverheadRate(r);
-                            const overhead = base * rate;
-                            const total = base + overhead;
                             const cat = classifyResource(r);
                             const cfg = CAT_COLORS[cat];
                             const mt = cat === 'material' ? getMaterialType(r) : null;
+                            // Sub-row Сумма is the bare base — no
+                            // transport+storage накрутка folded in.
+                            // The full накрутка breakdown lives in the
+                            // СВОДНЫЕ ИТОГИ block below, applied once
+                            // against the section subtotals.
                             return (
                               <tr key={r.id} style={{ background: '#FDFBF5' }}>
                                 <td className="border border-stone-200 px-1.5 py-1.5 text-center text-[10px] text-slate-400 font-mono">{r.item_number || ''}</td>
@@ -684,14 +1189,7 @@ export default function Form2Preview({ estimate, lines, project, onClose, onSave
                                 <td className="border border-stone-200 px-1.5 py-1.5 text-right font-mono text-slate-600">{fmtRu(totQ)}</td>
                                 <td className="border border-stone-200 px-1.5 py-1.5 text-right font-mono text-slate-600">{fmtRu(price)}</td>
                                 <td className="border border-stone-200 px-1.5 py-1.5 text-right font-mono">
-                                  {rate > 0 ? (
-                                    <>
-                                      <div className="font-semibold">{fmtRu(Math.round(total * 100) / 100)}</div>
-                                      <div className="text-[9px] text-slate-400">{fmtRu(Math.round(base * 100) / 100)} + {(rate * 100).toFixed(1)}%</div>
-                                    </>
-                                  ) : (
-                                    <span>{fmtRu(Math.round(base * 100) / 100)}</span>
-                                  )}
+                                  {fmtRu(Math.round(base * 100) / 100)}
                                 </td>
                               </tr>
                             );
@@ -701,10 +1199,10 @@ export default function Form2Preview({ estimate, lines, project, onClose, onSave
                     })}
                     <tr style={{ background: '#FAF6EC', fontWeight: 700 }}>
                       <td className="border border-amber-300 px-2 py-2" colSpan={6} style={{ textAlign: 'right' }}>
-                        ИТОГО по разделу {ROMAN[i] || (i + 1)} (с транспортом и складом):
+                        ИТОГО по разделу {ROMAN[i] || (i + 1)} (без транспорта и склада):
                       </td>
                       <td className="border border-amber-300 px-2 py-2 text-right font-mono text-orange-700">
-                        {fmtRu(Math.round(sec.total * 100) / 100)}
+                        {fmtRu(Math.round((sec.base ?? sec.total) * 100) / 100)}
                       </td>
                     </tr>
                   </tbody>
