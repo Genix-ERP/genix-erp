@@ -177,6 +177,13 @@ export default function SmetaManagementTab({ project }) {
   const [addStageOpen, setAddStageOpen] = useState(false);
   const [addTarget, setAddTarget] = useState(null);
 
+  // Resource top-up modal (migration 358). Foreman ordered MORE of a
+  // resource than the smeta planned, often at a different price. The
+  // shortfall + new price is recorded as a separate row so the
+  // original smeta plan stays immutable for audit.
+  const [topupOpen, setTopupOpen] = useState(false);
+  const [topupTarget, setTopupTarget] = useState(null);
+
   const [form2Open, setForm2Open] = useState(false);
   const [qtyDraft, setQtyDraft] = useState({});
 
@@ -527,6 +534,21 @@ export default function SmetaManagementTab({ project }) {
   }, [lines]);
 
   const sections = useMemo(() => {
+    // First pass: bucket every sub-line's topup spend under its parent
+    // line id so the section subtotals fold in real spend (not just plan).
+    const topupByParent = new Map();
+    for (const ln of lines) {
+      const pid = Number(ln.parent_line_id || 0);
+      if (!pid) continue;
+      const list = Array.isArray(ln.topups) ? ln.topups : [];
+      if (list.length === 0) continue;
+      const sum = list.reduce(
+        (m, tp) => m + (Number(tp.extra_quantity) || 0) * (Number(tp.new_price) || 0),
+        0,
+      );
+      topupByParent.set(pid, (topupByParent.get(pid) || 0) + sum);
+    }
+
     const sectionMap = new Map();
     for (const ln of lines) {
       const isSub = ln.parent_line_id != null && Number(ln.parent_line_id) > 0;
@@ -540,7 +562,7 @@ export default function SmetaManagementTab({ project }) {
       }
       const cur = sectionMap.get(secKey) || { name: secKey, lines: [], total: 0 };
       cur.lines.push(ln);
-      cur.total += Number(ln.total_amount) || 0;
+      cur.total += (Number(ln.total_amount) || 0) + (topupByParent.get(Number(ln.id)) || 0);
       sectionMap.set(secKey, cur);
     }
     return Array.from(sectionMap.values());
@@ -657,6 +679,62 @@ export default function SmetaManagementTab({ project }) {
   // ── Add-flow handlers — open the right modal with the right parent ─
   const openAddStage = (work) => { setAddTarget(work); setAddStageOpen(true); };
   const openAddResource = (parentRow) => { setAddTarget(parentRow); setAddResOpen(true); };
+
+  // Resource top-up (migration 358). The "+" button next to delete on
+  // each resource sub-row opens this modal so the foreman can record
+  // an additional purchase at a (possibly different) price without
+  // touching the original smeta plan.
+  const openTopup = (resourceLine) => {
+    setTopupTarget(resourceLine);
+    setTopupOpen(true);
+  };
+  const submitTopup = useCallback(async (payload) => {
+    if (!topupTarget) return;
+    const eid = lineEst(topupTarget);
+    if (!eid) {
+      toast.error(t('error') || 'Xatolik');
+      return;
+    }
+    try {
+      const created = await constructionService.createResourceTopup(
+        eid, topupTarget.id, payload,
+      );
+      // Append the new top-up to the in-memory line so the UI updates
+      // without a full reload.
+      setLines((rows) => rows.map((r) => {
+        if (r.id !== topupTarget.id) return r;
+        const list = Array.isArray(r.topups) ? r.topups.slice() : [];
+        list.push(created);
+        return { ...r, topups: list };
+      }));
+      setTopupOpen(false);
+      setTopupTarget(null);
+      toast.success(t('saved') || 'Saqlandi');
+      // Refresh totals so the section subtotal + estimate amount_total
+      // reflect the new top-up immediately.
+      loadLines(activeEstimateIds);
+    } catch (e) {
+      toast.error(formatApiError(e, t, 'Xatolik'));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [topupTarget, activeEstimateIds, loadLines, t]);
+  const removeTopup = useCallback(async (resourceLine, topup) => {
+    const eid = lineEst(resourceLine);
+    if (!eid) return;
+    try {
+      await constructionService.deleteResourceTopup(eid, resourceLine.id, topup.id);
+      setLines((rows) => rows.map((r) => {
+        if (r.id !== resourceLine.id) return r;
+        const list = (r.topups || []).filter((tp) => tp.id !== topup.id);
+        return { ...r, topups: list };
+      }));
+      toast.success(t('deleted') || "O'chirildi");
+      loadLines(activeEstimateIds);
+    } catch (e) {
+      toast.error(formatApiError(e, t, 'Xatolik'));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeEstimateIds, loadLines, t]);
   const nextSeqFor = (parentId) => {
     if (!parentId) return 1;
     const subs = lines.filter((r) => Number(r.parent_line_id) === Number(parentId));
@@ -1067,6 +1145,8 @@ export default function SmetaManagementTab({ project }) {
                             removeLine={removeLine}
                             openAddResource={openAddResource}
                             openAddStage={openAddStage}
+                            openTopup={openTopup}
+                            removeTopup={removeTopup}
                             t={t}
                             isSubStage={false}
                           />
@@ -1089,6 +1169,8 @@ export default function SmetaManagementTab({ project }) {
                               removeLine={removeLine}
                               openAddResource={openAddResource}
                               openAddStage={openAddStage}
+                              openTopup={openTopup}
+                              removeTopup={removeTopup}
                               t={t}
                               isSubStage
                             />
@@ -1209,6 +1291,19 @@ export default function SmetaManagementTab({ project }) {
         </DialogContent>
       </Dialog>
 
+      {/* Resource top-up modal — opens from the "+" button next to
+          delete on each resource sub-row. Records an additional
+          purchase quantity at the (possibly different) new price, on
+          a date the foreman can specify, with an optional note. */}
+      {topupOpen && topupTarget && (
+        <ResourceTopupModal
+          resource={topupTarget}
+          onSubmit={submitTopup}
+          onCancel={() => { setTopupOpen(false); setTopupTarget(null); }}
+          t={t}
+        />
+      )}
+
       {/* Generic confirm modal — fires for the bulk toolbar actions
           (Hammasini yoqish / Hammasini o'chirish / Hajmlarni tushirish)
           so the prompt matches the rest of the UI instead of using the
@@ -1229,6 +1324,194 @@ export default function SmetaManagementTab({ project }) {
           t={t}
         />
       )}
+    </div>
+  );
+}
+
+// =====================================================================
+// ResourceTopupModal — entry form for an additional purchase against
+// a smeta resource sub-line (migration 358). The original plan stays
+// untouched; we capture extra_quantity at a new_price so the cost
+// rollup can show real spend without losing the audit trail.
+// =====================================================================
+function ResourceTopupModal({ resource, onSubmit, onCancel, t }) {
+  const [extra, setExtra] = React.useState('');
+  const [price, setPrice] = React.useState(
+    resource?.unit_rate != null ? String(resource.unit_rate) : '',
+  );
+  const [orderedAt, setOrderedAt] = React.useState(() => {
+    const d = new Date();
+    return d.toISOString().slice(0, 10);
+  });
+  const [note, setNote] = React.useState('');
+  const [submitting, setSubmitting] = React.useState(false);
+
+  React.useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape' && !submitting) onCancel?.(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onCancel, submitting]);
+
+  // Live preview — same rule the section subtotal will use.
+  const num = (v) => {
+    const n = Number(String(v).replace(/\s+/g, '').replace(',', '.'));
+    return Number.isFinite(n) ? n : 0;
+  };
+  const extraN = num(extra);
+  const priceN = num(price);
+  const subtotal = extraN * priceN;
+  const valid = extraN > 0 && priceN >= 0;
+
+  const handleSubmit = async () => {
+    if (!valid || submitting) return;
+    setSubmitting(true);
+    try {
+      await onSubmit({
+        extra_quantity: extraN,
+        new_price: priceN,
+        ordered_at: orderedAt || undefined,
+        note: note.trim() || undefined,
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[120] flex items-center justify-center"
+      style={{ background: 'rgba(15,23,42,0.5)' }}
+      onClick={() => { if (!submitting) onCancel?.(); }}
+    >
+      <div
+        className="bg-white rounded-2xl p-6 max-w-[560px] w-[92%] shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between mb-3">
+          <div>
+            <h3 className="text-base font-bold text-slate-900">
+              {t('topup_modal_title') || "Qo'shimcha buyurtma qo'shish"}
+            </h3>
+            <p className="text-[12px] text-slate-500 mt-1">
+              {t('topup_modal_subtitle')
+                || "Asl smeta saqlanib qoladi — qo'shimcha buyurtma alohida yoziladi."}
+            </p>
+          </div>
+        </div>
+
+        {/* Resource being topped up */}
+        <div className="rounded-lg p-3 mb-4 text-[12px]" style={{ background: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+          <div className="text-[11px] uppercase font-semibold tracking-[0.06em] text-slate-500 mb-1">
+            {t('resource') || 'Resurs'}
+          </div>
+          <div className="font-medium text-slate-800">{resource?.name || '—'}</div>
+          <div className="flex flex-wrap gap-3 mt-1 text-[11px] text-slate-500">
+            <span>
+              {t('uom') || "O'lchov"}: <span className="text-slate-700">{resource?.uom || '—'}</span>
+            </span>
+            <span>
+              {t('original_quantity') || 'Reja miqdor'}:{' '}
+              <span className="text-slate-700 font-mono">{fmt(Number(resource?.quantity || 0))}</span>
+            </span>
+            <span>
+              {t('original_price') || 'Reja narx'}:{' '}
+              <span className="text-slate-700 font-mono">{fmt(Number(resource?.unit_rate || 0))}</span>
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          <div>
+            <label className="block text-[11px] uppercase font-semibold tracking-[0.06em] text-slate-500 mb-1">
+              {t('topup_extra_qty') || "Qo'shimcha miqdor"} *
+            </label>
+            <input
+              type="text"
+              inputMode="decimal"
+              autoFocus
+              value={extra}
+              onChange={(e) => setExtra(e.target.value)}
+              placeholder="0"
+              className="w-full px-3 py-2 rounded-md border text-sm font-mono tabular-nums"
+              style={{ borderColor: '#CBD5E1' }}
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] uppercase font-semibold tracking-[0.06em] text-slate-500 mb-1">
+              {t('topup_new_price') || 'Yangi narx'} *
+            </label>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              placeholder="0"
+              className="w-full px-3 py-2 rounded-md border text-sm font-mono tabular-nums"
+              style={{ borderColor: '#CBD5E1' }}
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          <div>
+            <label className="block text-[11px] uppercase font-semibold tracking-[0.06em] text-slate-500 mb-1">
+              {t('topup_ordered_at') || 'Buyurtma sanasi'}
+            </label>
+            <input
+              type="date"
+              value={orderedAt}
+              onChange={(e) => setOrderedAt(e.target.value)}
+              className="w-full px-3 py-2 rounded-md border text-sm"
+              style={{ borderColor: '#CBD5E1' }}
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] uppercase font-semibold tracking-[0.06em] text-slate-500 mb-1">
+              {t('topup_subtotal') || 'Summa'}
+            </label>
+            <div
+              className="px-3 py-2 rounded-md text-sm font-mono tabular-nums"
+              style={{ background: 'rgba(13,148,136,0.08)', color: '#0D9488', fontWeight: 600 }}
+            >
+              {fmt(subtotal)} so'm
+            </div>
+          </div>
+        </div>
+
+        <div className="mb-4">
+          <label className="block text-[11px] uppercase font-semibold tracking-[0.06em] text-slate-500 mb-1">
+            {t('topup_note') || 'Izoh (ixtiyoriy)'}
+          </label>
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            rows={2}
+            placeholder={t('topup_note_placeholder') || "Yetkazib beruvchi, sabab, va h.k."}
+            className="w-full px-3 py-2 rounded-md border text-sm"
+            style={{ borderColor: '#CBD5E1' }}
+          />
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={submitting}
+            className="px-4 py-2 rounded-lg text-xs font-semibold bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+          >
+            {t('cancel') || 'Bekor qilish'}
+          </button>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={!valid || submitting}
+            className="px-4 py-2 rounded-lg text-xs font-semibold text-white inline-flex items-center gap-1.5 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            {submitting ? (t('saving') || 'Saqlanmoqda...') : (t('add') || "Qo'shish")}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1351,7 +1634,7 @@ function StatCard({ icon: Icon, variant, label, value, meta }) {
 function WorkCard({
   line, subs, isOpen, onToggle,
   qtyDraft, setQtyDraft, clearQtyDraft, commitQty, resetQty, removeLine,
-  openAddResource, openAddStage, t, isSubStage,
+  openAddResource, openAddStage, openTopup, removeTopup, t, isSubStage,
 }) {
   const qty = Number(line.quantity) || 0;
   const isEmpty = qty <= 0;
@@ -1365,10 +1648,14 @@ function WorkCard({
   // nesting), so all subs of a sub-stage are resources.
   const subResources = (subs || []).filter((s) => !isSubStageRow(s));
 
-  // Per-work category breakdown.
+  // Per-work category breakdown. Includes any resource top-ups (extra
+  // purchases at a different price recorded against the sub-line) so
+  // the work footer + section subtotal track real spend, not just plan.
+  const sumTopups = (s) => (Array.isArray(s.topups) ? s.topups : [])
+    .reduce((m, tp) => m + (Number(tp.extra_quantity) || 0) * (Number(tp.new_price) || 0), 0);
   const breakdown = subResources.reduce(
     (acc, s) => {
-      const c = Number(s.unit_rate || 0) * Number(s.quantity || 0);
+      const c = Number(s.unit_rate || 0) * Number(s.quantity || 0) + sumTopups(s);
       const cat = classifyResource(s.resource_type);
       if (cat === 'labor') acc.labor += c;
       else if (cat === 'machines') acc.machines += c;
@@ -1583,7 +1870,7 @@ function WorkCard({
                       { l: 'Jami',        w: 100, align: 'right' },
                       { l: 'Narx',        w: 130, align: 'right', lock: true },
                       { l: 'Summa',       w: 130, align: 'right' },
-                      { l: '',            w: 32,  align: 'left' },
+                      { l: '',            w: 70,  align: 'left' },
                     ].map((h, i) => (
                       <th
                         key={i}
@@ -1608,53 +1895,150 @@ function WorkCard({
                     const tag = CAT_COLOR[cat];
                     const price = Number(sub.unit_rate || 0);
                     const sq = Number(sub.quantity || 0);
-                    const cost = price * sq;
+                    const baseCost = price * sq;
+                    const topups = Array.isArray(sub.topups) ? sub.topups : [];
+                    const topupTotal = topups.reduce(
+                      (m, tp) => m + (Number(tp.extra_quantity) || 0) * (Number(tp.new_price) || 0),
+                      0,
+                    );
+                    const cost = baseCost + topupTotal;
+                    const isResourceLike = ['material', 'labor', 'equipment', 'machine', 'machines'].includes(
+                      String(sub.resource_type || '').toLowerCase(),
+                    );
                     return (
-                      <tr key={sub.id} style={{ borderTop: `1px solid ${C.border}` }}>
-                        <td className="px-2.5 py-2">
-                          <span
-                            className="px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-[0.05em]"
-                            style={{ background: tag.tagBg, color: tag.tagText }}
+                      <React.Fragment key={sub.id}>
+                        <tr style={{ borderTop: `1px solid ${C.border}` }}>
+                          <td className="px-2.5 py-2">
+                            <span
+                              className="px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-[0.05em]"
+                              style={{ background: tag.tagBg, color: tag.tagText }}
+                            >
+                              {CAT_LABEL[cat]}
+                            </span>
+                          </td>
+                          <td className="px-2.5 py-2" style={{ color: C.text }}>
+                            {sub.name}
+                          </td>
+                          <td className="px-2.5 py-2 text-center" style={{ color: C.dim }}>
+                            {sub.uom || ''}
+                          </td>
+                          <td className="px-2.5 py-2 text-right font-mono tabular-nums" style={{ color: C.text }}>
+                            {fmt(Number(sub.norm_rate || 0))}
+                          </td>
+                          <td className="px-2.5 py-2 text-right font-mono tabular-nums" style={{ color: C.dim }}>
+                            {fmt(sq)}
+                          </td>
+                          <td
+                            className="px-2.5 py-2 text-right font-mono tabular-nums"
+                            style={{ color: C.text, fontWeight: 500 }}
                           >
-                            {CAT_LABEL[cat]}
-                          </span>
-                        </td>
-                        <td className="px-2.5 py-2" style={{ color: C.text }}>
-                          {sub.name}
-                        </td>
-                        <td className="px-2.5 py-2 text-center" style={{ color: C.dim }}>
-                          {sub.uom || ''}
-                        </td>
-                        <td className="px-2.5 py-2 text-right font-mono tabular-nums" style={{ color: C.text }}>
-                          {fmt(Number(sub.norm_rate || 0))}
-                        </td>
-                        <td className="px-2.5 py-2 text-right font-mono tabular-nums" style={{ color: C.dim }}>
-                          {fmt(sq)}
-                        </td>
-                        <td
-                          className="px-2.5 py-2 text-right font-mono tabular-nums"
-                          style={{ color: C.text, fontWeight: 500 }}
-                        >
-                          {fmt(price)}
-                        </td>
-                        <td
-                          className="px-2.5 py-2 text-right font-mono tabular-nums"
-                          style={{ color: C.amber, fontWeight: 600 }}
-                        >
-                          {fmt(cost)}
-                        </td>
-                        <td className="px-2.5 py-2">
-                          <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); removeLine(sub); }}
-                            title={t('delete') || "O'chirish"}
-                            className="w-7 h-7 rounded-[5px] flex items-center justify-center transition"
-                            style={{ background: C.hover, border: `1px solid ${C.border2}`, color: C.red }}
+                            {fmt(price)}
+                          </td>
+                          <td
+                            className="px-2.5 py-2 text-right font-mono tabular-nums"
+                            style={{ color: C.amber, fontWeight: 600 }}
                           >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </td>
-                      </tr>
+                            {fmt(cost)}
+                          </td>
+                          <td className="px-2.5 py-2">
+                            <div className="flex items-center gap-1">
+                              {/* "+" — record an additional purchase
+                                 (top-up) at a possibly-different price
+                                 without touching the original smeta plan.
+                                 Hidden for non-resource rows just in case. */}
+                              {isResourceLike && openTopup && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); openTopup(sub); }}
+                                  title={t('topup_add') || "Qo'shimcha buyurtma"}
+                                  className="w-7 h-7 rounded-[5px] flex items-center justify-center transition"
+                                  style={{ background: C.tealSoft, border: `1px solid ${C.border2}`, color: C.teal }}
+                                >
+                                  <Plus className="w-3 h-3" />
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); removeLine(sub); }}
+                                title={t('delete') || "O'chirish"}
+                                className="w-7 h-7 rounded-[5px] flex items-center justify-center transition"
+                                style={{ background: C.hover, border: `1px solid ${C.border2}`, color: C.red }}
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                        {/* Top-up rows — indented child rows that appear
+                           directly under their parent resource. Each row
+                           shows extra_quantity × new_price + a delete
+                           button. They never move with sort order; they
+                           always stick to their parent. */}
+                        {topups.map((tp) => {
+                          const tpQty = Number(tp.extra_quantity) || 0;
+                          const tpPrice = Number(tp.new_price) || 0;
+                          const tpCost = tpQty * tpPrice;
+                          return (
+                            <tr key={`tp-${tp.id}`} style={{
+                              background: 'rgba(13,148,136,0.04)',
+                              borderTop: `1px dashed ${C.border}`,
+                            }}>
+                              <td className="px-2.5 py-1.5">
+                                <span
+                                  className="px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-[0.05em]"
+                                  style={{ background: 'rgba(13,148,136,0.15)', color: C.teal }}
+                                  title={tp.note || ''}
+                                >
+                                  +ДОП
+                                </span>
+                              </td>
+                              <td className="px-2.5 py-1.5 pl-7 text-[11px]" style={{ color: C.dim }}>
+                                <span style={{ color: C.muted }}>↳ </span>
+                                {t('topup_label') || "Qo'shimcha buyurtma"}
+                                {tp.ordered_at ? (
+                                  <span className="ml-2 text-[10px]" style={{ color: C.fade }}>
+                                    {tp.ordered_at}
+                                  </span>
+                                ) : null}
+                                {tp.note ? (
+                                  <span className="ml-2 text-[10px] italic" style={{ color: C.fade }}>
+                                    — {tp.note}
+                                  </span>
+                                ) : null}
+                              </td>
+                              <td className="px-2.5 py-1.5 text-center text-[11px]" style={{ color: C.fade }}>
+                                {sub.uom || ''}
+                              </td>
+                              <td className="px-2.5 py-1.5"></td>
+                              <td className="px-2.5 py-1.5 text-right font-mono tabular-nums text-[11px]"
+                                  style={{ color: C.dim }}>
+                                {fmt(tpQty)}
+                              </td>
+                              <td className="px-2.5 py-1.5 text-right font-mono tabular-nums text-[11px]"
+                                  style={{ color: C.text }}>
+                                {fmt(tpPrice)}
+                              </td>
+                              <td className="px-2.5 py-1.5 text-right font-mono tabular-nums text-[11px]"
+                                  style={{ color: C.teal, fontWeight: 600 }}>
+                                {fmt(tpCost)}
+                              </td>
+                              <td className="px-2.5 py-1.5">
+                                {removeTopup && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); removeTopup(sub, tp); }}
+                                    title={t('delete') || "O'chirish"}
+                                    className="w-6 h-6 rounded-[5px] flex items-center justify-center transition"
+                                    style={{ background: C.hover, border: `1px solid ${C.border2}`, color: C.red }}
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </React.Fragment>
                     );
                   })}
                 </tbody>
