@@ -174,10 +174,20 @@ const fmtShort = (n, t) => {
 //              page must skip them so the resource categories don't
 //              show up as fake stages.
 function isWorkRow(line) {
-  const pid = line?.parent_line_id;
-  if (pid != null && Number(pid) !== 0) return false; // sub-line / resource child
   const rt = String(line?.resource_type || '').trim().toLowerCase();
-  return rt === '';
+  if (rt !== '') return false; // anything with a resource_type is labour/machine/material — never a work
+  const pid = line?.parent_line_id;
+  if (pid != null && Number(pid) !== 0) {
+    // It's attached to a parent. A sub-stage created via "Yangi etap" in
+    // Smeta boshqaruvi has parent_line_id set + resource_type='' +
+    // norm_rate=0; we want those to surface as their own work rows in
+    // Bosqichlar (alongside the parent work, in the same section). A
+    // sub-line with norm_rate>0 is a quantity-driven derivation row that
+    // doesn't belong as its own work.
+    const norm = Number(line?.norm_rate || 0);
+    return norm === 0;
+  }
+  return true; // top-level work
 }
 
 // A stage in the v2 sense = the unique parent_item_number value across
@@ -236,11 +246,31 @@ function dropSectionPrefix(parts) {
 //                     so they fall into UNCATEGORISED for safety.
 function deriveStages(lines) {
   const works = (lines || []).filter(isWorkRow);
+  // For sub-stages we want to use the PARENT WORK'S parent_item_number
+  // (the section path) as the bucket — not the sub-stage's own stored
+  // parent_item_number, which is just the parent's item_number ("13") on
+  // older data. Building a quick lookup so the bucketing pass below can
+  // resolve a sub-stage's effective section in O(1).
+  const linesById = new Map();
+  for (const l of lines || []) {
+    linesById.set(Number(l.id), l);
+  }
   // First pass: bucket works by their full path string (so identical
   // paths land in the same bucket).
   const byPath = new Map();
   for (const w of works) {
-    const path = w.parent_item_number ? String(w.parent_item_number) : UNCATEGORISED_KEY;
+    let path;
+    const pid = Number(w.parent_line_id || 0);
+    if (pid > 0) {
+      // Sub-stage — inherit the parent work's section (parent_item_number
+      // on the parent row). Fall back to the sub-stage's own field, then
+      // UNCATEGORISED, in case the parent has been deleted.
+      const parent = linesById.get(pid);
+      const parentSection = parent?.parent_item_number ? String(parent.parent_item_number) : '';
+      path = parentSection || (w.parent_item_number ? String(w.parent_item_number) : UNCATEGORISED_KEY);
+    } else {
+      path = w.parent_item_number ? String(w.parent_item_number) : UNCATEGORISED_KEY;
+    }
     if (!byPath.has(path)) byPath.set(path, []);
     byPath.get(path).push(w);
   }
@@ -730,15 +760,6 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
     () => stages.reduce((n, s) => n + allStageWorks(s).length, 0),
     [stages],
   );
-  // Block budget = sum of every work's total_amount across direct + sub.
-  // Will be 0 for a ВОР-only import (no unit_rate); the stat-card falls
-  // back to '—' in that case.
-  const blockBudget = useMemo(
-    () => stages.reduce((n, s) => n + allStageWorks(s).reduce(
-      (m, w) => m + Number(w.total_amount || 0), 0), 0),
-    [stages],
-  );
-
   // ── Sub-resources index ─────────────────────────────────────────
   // Map from work-id → its resource sub-lines (labor, machine, material).
   //
@@ -796,6 +817,35 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
     }
     return m;
   }, [lines]);
+
+  // Block budget = sum of every work's total_amount across direct + sub.
+  // Falls back to a cost derived from sub-resources for works whose own
+  // total_amount is zero (e.g. ВОР-only imports where the parent line is
+  // just a header, all pricing lives on labour/machine/material sub-rows
+  // — bug "tex nadzorda summa korinmayapti"). The fallback uses
+  //   resolveQty(w) × Σ(sub.unit_rate × sub.norm_rate)
+  // which mirrors the per-row computation used by the WorksTable so the
+  // dashboard total and the row totals stay in sync.
+  const blockBudget = useMemo(() => {
+    let total = 0;
+    for (const s of stages) {
+      for (const w of allStageWorks(s)) {
+        const stored = Number(w.total_amount || 0);
+        if (stored > 0) {
+          total += stored;
+          continue;
+        }
+        const subs = subResourcesByWork?.get(Number(w.id)) || [];
+        const derivedUnitRate = subs.reduce(
+          (sum, sub) => sum + Number(sub.unit_rate || 0) * Number(sub.norm_rate || 0),
+          0,
+        );
+        const planQty = Number(resolveWorkQty(w) || 0);
+        total += derivedUnitRate * planQty;
+      }
+    }
+    return total;
+  }, [stages, subResourcesByWork, resolveWorkQty]);
 
   // Permission helpers — based on viewRole (what the user is currently
   // simulating) for UI gating; the server independently enforces using
@@ -1620,13 +1670,35 @@ function WorksTable({
                     </div>
                   </div>
                 </td>
-                {canSeeCost && (<>
-                  <td className="text-right py-2.5 px-3 font-mono">{fmt(Number(w.unit_rate || 0))}</td>
-                  <td className="text-right py-2.5 px-3 font-mono font-semibold">{fmt(Math.round(Number(w.total_amount || 0)))}</td>
-                  <td className="text-right py-2.5 px-3 font-mono text-emerald-700">
-                    {fmt(Math.round(Math.min(doneQty, planQty) * Number(w.unit_rate || 0)))}
-                  </td>
-                </>)}
+                {canSeeCost && (() => {
+                  // Derive unit_rate from sub-resources when the parent work
+                  // row was imported without one (a common case for some ВОР
+                  // imports — the work line is just a header, all the actual
+                  // pricing is on its labour/machine/material sub-rows).
+                  // Per-unit cost of the work = Σ(sub.unit_rate × sub.norm_rate).
+                  // Bug report: "tex nadzorda summa korinmayapti" — texnadzor
+                  // sees BIRLIK NARXI / REJA JAMI / FAKT JAMI as zero even
+                  // though the sub-rows clearly carry prices.
+                  const storedUnitRate = Number(w.unit_rate || 0);
+                  const derivedUnitRate = storedUnitRate > 0
+                    ? storedUnitRate
+                    : subs.reduce(
+                        (sum, s) => sum + Number(s.unit_rate || 0) * Number(s.norm_rate || 0),
+                        0,
+                      );
+                  const storedTotal = Number(w.total_amount || 0);
+                  const planTotal = storedTotal > 0
+                    ? storedTotal
+                    : derivedUnitRate * planQty;
+                  const factTotal = Math.min(doneQty, planQty) * derivedUnitRate;
+                  return (<>
+                    <td className="text-right py-2.5 px-3 font-mono">{fmt(derivedUnitRate)}</td>
+                    <td className="text-right py-2.5 px-3 font-mono font-semibold">{fmt(Math.round(planTotal))}</td>
+                    <td className="text-right py-2.5 px-3 font-mono text-emerald-700">
+                      {fmt(Math.round(factTotal))}
+                    </td>
+                  </>);
+                })()}
                 <td className="text-center py-2.5 px-3">
                   <span
                     className="text-[10px] uppercase font-bold tracking-wider px-2 py-1 rounded-full inline-flex items-center gap-1"

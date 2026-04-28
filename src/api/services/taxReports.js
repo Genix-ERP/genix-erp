@@ -42,6 +42,24 @@ export const taxReportsService = {
     return { filename };
   },
 
+  // Record a payment against an accrued employee-tax liability. The
+  // backend (migration 360) inserts a row in employee_tax_payments and
+  // posts a Dr-liability / Cr-cash journal entry. After this returns,
+  // re-fetch getEmployeeTaxReport — the row's `pending` value drops
+  // by the paid amount.
+  recordEmployeeTaxPayment: async ({ taxCode, periodStart, periodEnd, amount, paymentMethod, bankAccountId, note }) => {
+    const response = await apiClient.post('/employee-taxes/payments', {
+      tax_code: taxCode,
+      period_start: periodStart,
+      period_end: periodEnd,
+      amount: Number(amount),
+      payment_method: paymentMethod || undefined,
+      bank_account_id: bankAccountId || undefined,
+      note: note || undefined,
+    });
+    return response.data.data;
+  },
+
   // Transactions
   getTransactions: async (startDate, endDate, type = null) => {
     const params = {};

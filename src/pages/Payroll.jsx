@@ -10,14 +10,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Search, DollarSign, Users, Calculator, TrendingUp, Brain, Download, AlertTriangle, CheckCircle, Target, Lightbulb, Edit2, Trash2, CreditCard, UserCircle, Printer, Settings as SettingsIcon, History, FileDown, Loader2, X, RotateCcw, Percent } from 'lucide-react';
+import { Plus, Search, DollarSign, Users, Calculator, TrendingUp, Brain, Download, AlertTriangle, CheckCircle, Target, Lightbulb, Edit2, Trash2, CreditCard, UserCircle, Printer, Settings as SettingsIcon, History, FileDown, Loader2, X, RotateCcw, Percent, ChevronRight, ChevronDown, Wallet, FileMinus } from 'lucide-react';
 import { hrService } from '@/api/services/hr';
 import { employeeTaxesService } from '@/api/services/employeeTaxes';
 import { toast } from 'sonner';
 import EmployeeLoans from '@/components/payroll/EmployeeLoans';
 import EmployeePortal from '@/components/payroll/EmployeePortal';
 import { format } from 'date-fns';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { analyzePayroll } from '@/api/services/aiAnalytics';
 import apiClient from '@/api/client';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -61,6 +61,51 @@ export default function Payroll() {
   const [deductionPercent, setDeductionPercent] = useState(0);
   const [activeLoans, setActiveLoans] = useState([]);
   const [loanDeductions, setLoanDeductions] = useState({}); // { [loanId]: amount }
+
+  // Per-row expand state for the Payroll Records table. When a user
+  // clicks the chevron on a payroll row, we fetch that employee's
+  // outstanding debts (active loans + pending shortage deductions —
+  // the same two sources the Process Payroll modal pulls from) and
+  // render them inline beneath the row. Cached per-payroll-id so
+  // re-opening doesn't re-fetch.
+  const [expandedPayrollId, setExpandedPayrollId] = useState(null);
+  const [debtsByPayroll, setDebtsByPayroll] = useState({});
+  const [debtsLoadingId, setDebtsLoadingId] = useState(null);
+  const togglePayrollExpand = async (payroll) => {
+    if (expandedPayrollId === payroll.id) {
+      setExpandedPayrollId(null);
+      return;
+    }
+    setExpandedPayrollId(payroll.id);
+    if (debtsByPayroll[payroll.id] !== undefined) return;
+    const empId = payroll.employee_id;
+    if (!empId) {
+      setDebtsByPayroll((m) => ({ ...m, [payroll.id]: { loans: [], deductions: [] } }));
+      return;
+    }
+    setDebtsLoadingId(payroll.id);
+    try {
+      const [loansRes, dedsRes] = await Promise.allSettled([
+        apiClient.get('/employee-loans', { params: { employee_id: empId, status: 'active', limit: 100 } }),
+        apiClient.get(`/employees/${empId}/deductions`, { params: { status: 'pending' } }),
+      ]);
+      const rawLoans = loansRes.status === 'fulfilled'
+        ? (loansRes.value?.data?.data ?? loansRes.value?.data ?? [])
+        : [];
+      const loans = Array.isArray(rawLoans) ? rawLoans : (rawLoans.items || []);
+      const deds  = dedsRes.status === 'fulfilled'
+        ? (dedsRes.value?.data?.data ?? dedsRes.value?.data ?? [])
+        : [];
+      setDebtsByPayroll((m) => ({
+        ...m,
+        [payroll.id]: { loans, deductions: Array.isArray(deds) ? deds : [] },
+      }));
+    } catch {
+      setDebtsByPayroll((m) => ({ ...m, [payroll.id]: { loans: [], deductions: [] } }));
+    } finally {
+      setDebtsLoadingId(null);
+    }
+  };
 
   // Employee-tax catalog (migration 330). Loaded when the payroll-create modal
   // opens. `excludedTaxIds` is the set the user has X-ed out for this entry.
@@ -1128,12 +1173,26 @@ export default function Payroll() {
     pendingPayments: payrolls.filter(p => p.status === 'approved').length
   };
 
+  // Group payrolls into a calendar-month bucket and stash the original
+  // Date so we can sort chronologically. The old slice(-6) picked the
+  // last six entries by insertion order — that reflected fetch order
+  // (newest payroll first), not the actual month axis, so the bars
+  // jumped around. Sorting by date guarantees the chart reads
+  // left-to-right oldest → newest.
   const monthlyData = {};
   payrolls.forEach(p => {
-    const month = p.pay_period_end ? format(new Date(p.pay_period_end), 'MM.yy') : t('unknown');
-    monthlyData[month] = (monthlyData[month] || 0) + (p.net_pay || 0);
+    if (!p.pay_period_end) return;
+    const d = new Date(p.pay_period_end);
+    const key = format(d, 'MM.yy');
+    if (!monthlyData[key]) {
+      monthlyData[key] = { month: key, amount: 0, _ts: new Date(d.getFullYear(), d.getMonth(), 1).getTime() };
+    }
+    monthlyData[key].amount += (p.net_pay || 0);
   });
-  const chartData = Object.entries(monthlyData).slice(-6).map(([month, amount]) => ({ month, amount }));
+  const chartData = Object.values(monthlyData)
+    .sort((a, b) => a._ts - b._ts)
+    .slice(-12)
+    .map(({ month, amount }) => ({ month, amount }));
 
   return (
     <div className="p-4 md:p-6 lg:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
@@ -1164,11 +1223,9 @@ export default function Payroll() {
               <History className="w-4 h-4" />
               {t('history') || 'Tarix'}
             </TabsTrigger>
-            {/* TT §2.2: Sozlamalar (settings) */}
-            <TabsTrigger value="settings" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
-              <SettingsIcon className="w-4 h-4" />
-              {t('settings') || 'Sozlamalar'}
-            </TabsTrigger>
+            {/* Sozlamalar tab removed at user request — payroll
+                settings (advance %, currency, company name on print
+                header) live in the global Settings module instead. */}
           </TabsList>
 
           <TabsContent value="payroll" className="mt-4 space-y-6">
@@ -1232,76 +1289,136 @@ export default function Payroll() {
           </Card>
         </div>
 
-        {/* AI Insights Panel */}
-        {(payrollAnalysis.insights.length > 0 || payrollAnalysis.recommendations.length > 0) && (
-          <Card className="bg-gradient-to-r from-purple-50 to-indigo-50 border-purple-200/50">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Brain className="w-5 h-5 text-purple-600" />
-                {t('ai_payroll_insights')}
-                <Badge className="bg-purple-100 text-purple-700 text-xs">{t('live')}</Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {payrollAnalysis.insights.slice(0, 3).map((insight, index) => (
-                  <div key={index} className="bg-white rounded-lg p-4 shadow-sm border border-purple-100">
-                    <div className="flex items-start gap-3">
-                      {insight.type === 'positive' ? (
-                        <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
-                      ) : insight.type === 'warning' ? (
-                        <AlertTriangle className="w-5 h-5 text-orange-500 mt-0.5" />
-                      ) : (
-                        <Target className="w-5 h-5 text-blue-500 mt-0.5" />
-                      )}
-                      <div>
-                        <h4 className="font-medium text-slate-900 text-sm">{insight.title}</h4>
-                        <p className="text-xs text-slate-600 mt-0.5">{insight.description}</p>
-                        {insight.metric && (
-                          <p className="text-lg font-bold text-purple-600 mt-1">{insight.metric}</p>
-                        )}
+        {/* AI Insights + Monthly Payroll — side-by-side layout so the
+           insights panel and the trend chart share the same horizontal
+           band. Collapses to a single column on tablets/phones. */}
+        {((payrollAnalysis.insights.length > 0 || payrollAnalysis.recommendations.length > 0) || chartData.length > 0) && (
+          <div className={`grid grid-cols-1 ${
+            (payrollAnalysis.insights.length > 0 || payrollAnalysis.recommendations.length > 0) && chartData.length > 0
+              ? 'lg:grid-cols-2'
+              : ''
+          } gap-4`}>
+            {(payrollAnalysis.insights.length > 0 || payrollAnalysis.recommendations.length > 0) && (
+              <Card className="bg-gradient-to-r from-purple-50 to-indigo-50 border-purple-200/50">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Brain className="w-5 h-5 text-purple-600" />
+                    {t('ai_payroll_insights')}
+                    <Badge className="bg-purple-100 text-purple-700 text-xs">{t('live')}</Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {payrollAnalysis.insights.slice(0, 4).map((insight, index) => (
+                      <div key={index} className="bg-white rounded-lg p-3 shadow-sm border border-purple-100">
+                        <div className="flex items-start gap-2.5">
+                          {insight.type === 'positive' ? (
+                            <CheckCircle className="w-5 h-5 text-green-500 mt-0.5 shrink-0" />
+                          ) : insight.type === 'warning' ? (
+                            <AlertTriangle className="w-5 h-5 text-orange-500 mt-0.5 shrink-0" />
+                          ) : (
+                            <Target className="w-5 h-5 text-blue-500 mt-0.5 shrink-0" />
+                          )}
+                          <div className="min-w-0">
+                            <h4 className="font-medium text-slate-900 text-sm">{insight.title}</h4>
+                            <p className="text-xs text-slate-600 mt-0.5">{insight.description}</p>
+                            {insight.metric && (
+                              <p className="text-base font-bold text-purple-600 mt-1">{insight.metric}</p>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-              {payrollAnalysis.recommendations.length > 0 && (
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {payrollAnalysis.recommendations.map((rec, index) => (
-                    <button
-                      key={index}
-                      onClick={() => handleRecommendationClick(rec)}
-                      className="flex items-center gap-2 text-xs bg-white rounded-full px-3 py-1.5 border border-purple-100 hover:bg-purple-50 hover:border-purple-300 transition-colors cursor-pointer"
-                      title={t('ask_ai_about_this')}
-                    >
-                      <Lightbulb className="w-3 h-3 text-yellow-500" />
-                      <span className="text-slate-700">{rec.action}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
+                  {payrollAnalysis.recommendations.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {payrollAnalysis.recommendations.map((rec, index) => (
+                        <button
+                          key={index}
+                          onClick={() => handleRecommendationClick(rec)}
+                          className="flex items-center gap-2 text-xs bg-white rounded-full px-3 py-1.5 border border-purple-100 hover:bg-purple-50 hover:border-purple-300 transition-colors cursor-pointer"
+                          title={t('ask_ai_about_this')}
+                        >
+                          <Lightbulb className="w-3 h-3 text-yellow-500" />
+                          <span className="text-slate-700">{rec.action}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
-        {/* Payroll Trend */}
-        {chartData.length > 0 && (
-          <Card className="bg-white/80 backdrop-blur-sm">
-            <CardHeader>
-              <CardTitle>{t('monthly_payroll')}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" fontSize={12} />
-                  <YAxis fontSize={12} />
-                  <Tooltip formatter={(value) => [formatCurrency(value), t('amount')]} />
-                  <Bar dataKey="amount" name={t('amount')} fill="#8b5cf6" radius={[8, 8, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
+            {/* Monthly Payroll — smooth gradient area chart matching the
+               main Dashboard's revenue chart. Full-month axis, soft
+               grid, and a custom tooltip card with the formatted
+               amount. Up to 12 trailing months for a proper
+               year-over-year read. */}
+            {chartData.length > 0 && (
+              <Card className="bg-white/80 backdrop-blur-sm">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <TrendingUp className="w-5 h-5 text-violet-600" />
+                    {t('monthly_payroll')}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={260}>
+                    <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="payrollGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.3} />
+                          <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                      <XAxis
+                        dataKey="month"
+                        stroke="#94a3b8"
+                        fontSize={11}
+                        tickLine={false}
+                        axisLine={false}
+                      />
+                      <YAxis
+                        stroke="#94a3b8"
+                        fontSize={11}
+                        tickLine={false}
+                        axisLine={false}
+                        width={55}
+                        tickFormatter={(v) => {
+                          const n = Number(v) || 0;
+                          if (Math.abs(n) >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+                          if (Math.abs(n) >= 1_000) return (n / 1_000).toFixed(0) + 'K';
+                          return String(n);
+                        }}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          background: '#fff',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: 10,
+                          boxShadow: '0 10px 24px rgba(15,23,42,0.08)',
+                          fontSize: 12,
+                        }}
+                        labelStyle={{ color: '#475569', fontWeight: 600, marginBottom: 4 }}
+                        formatter={(value) => [formatCurrency(value), t('amount')]}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="amount"
+                        name={t('amount')}
+                        stroke="#8b5cf6"
+                        strokeWidth={2.5}
+                        fill="url(#payrollGrad)"
+                        dot={false}
+                        activeDot={{ r: 5, stroke: '#8b5cf6', strokeWidth: 2, fill: '#fff' }}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            )}
+          </div>
         )}
 
         {/* Payroll Table */}
@@ -1310,27 +1427,37 @@ export default function Payroll() {
               <div className="flex items-center justify-between">
                 <CardTitle>{t('payroll_records')}</CardTitle>
                 <div className="flex gap-2">
+                  {/* Toolbar buttons collapsed to icon-only at user
+                      request (DOCX export removed entirely — Vedomost
+                      Excel covers the same accounting handoff). Each
+                      icon button keeps a `title` tooltip so the
+                      original label is still discoverable on hover. */}
                   {filteredPayrolls.length > 0 && (
                     <>
-                      <Button variant="outline" onClick={handlePrintQaydnoma}>
-                        <Printer className="w-4 h-4 mr-2" /> {t('print_qaydnoma')}
-                      </Button>
-                      <Button variant="outline" onClick={handleDownloadQaydnomaDocx}>
-                        <Download className="w-4 h-4 mr-2" /> DOCX
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={handlePrintQaydnoma}
+                        title={t('print_qaydnoma') || 'Print salary record'}
+                        aria-label={t('print_qaydnoma') || 'Print salary record'}
+                      >
+                        <Printer className="w-4 h-4" />
                       </Button>
                       {/* Vedomost Excel — one sheet per payroll period with
                           every tax pivoted into its own column. */}
                       <Button
                         variant="outline"
+                        size="icon"
                         onClick={handleExportVedomostXlsx}
                         disabled={exportingVedomost}
+                        title={t('vedomost_excel') || 'Vedomost (Excel)'}
+                        aria-label={t('vedomost_excel') || 'Vedomost (Excel)'}
                       >
                         {exportingVedomost ? (
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          <Loader2 className="w-4 h-4 animate-spin" />
                         ) : (
-                          <FileDown className="w-4 h-4 mr-2" />
+                          <FileDown className="w-4 h-4" />
                         )}
-                        {t('vedomost_excel') || 'Vedomost (Excel)'}
                       </Button>
                     </>
                   )}
@@ -1339,12 +1466,13 @@ export default function Payroll() {
                       {/* TT §2.3: one-click auto-create of current month payroll */}
                       <Button
                         variant="outline"
+                        size="icon"
                         onClick={handleAutoCreateCurrentMonth}
                         disabled={autoCreating}
                         title={t('auto_create_payroll_hint') || "Joriy oy uchun barcha xodimlarga qaydnoma avtomatik yaratiladi"}
+                        aria-label={t('auto_create_current_month') || 'Joriy oyga yaratish'}
                       >
-                        {autoCreating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Calculator className="w-4 h-4 mr-2" />}
-                        {t('auto_create_current_month') || "Joriy oyga yaratish"}
+                        {autoCreating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Calculator className="w-4 h-4" />}
                       </Button>
                       <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]">
                         <Plus className="w-4 h-4 mr-2" /> {t('process_payroll')}
@@ -1397,6 +1525,7 @@ export default function Payroll() {
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-slate-50">
+                        <TableHead style={{ width: 36 }} />
                         <TableHead>{t('payroll_number')}</TableHead>
                         <TableHead>{t('employee')}</TableHead>
                         <TableHead>{t('period')}</TableHead>
@@ -1407,8 +1536,26 @@ export default function Payroll() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredPayrolls.map((payroll) => (
-                        <TableRow key={payroll.id} className="hover:bg-slate-50">
+                      {filteredPayrolls.map((payroll) => {
+                        const isExpanded = expandedPayrollId === payroll.id;
+                        const debts      = debtsByPayroll[payroll.id];
+                        const isLoading  = debtsLoadingId === payroll.id;
+                        return (
+                      <React.Fragment key={payroll.id}>
+                        <TableRow className="hover:bg-slate-50">
+                          <TableCell className="px-2">
+                            <button
+                              type="button"
+                              onClick={() => togglePayrollExpand(payroll)}
+                              className="w-7 h-7 rounded-md inline-flex items-center justify-center text-slate-500 hover:bg-slate-100 transition"
+                              title={isExpanded ? (t('hide_debts') || 'Yopish') : (t('show_debts') || "Qarzlarni ko'rish")}
+                              aria-label={t('show_debts') || "Show debts"}
+                            >
+                              {isExpanded
+                                ? <ChevronDown className="w-4 h-4" />
+                                : <ChevronRight className="w-4 h-4" />}
+                            </button>
+                          </TableCell>
                           <TableCell className="font-mono text-sm">{payroll.payroll_number}</TableCell>
                           <TableCell className="font-medium">{payroll.employee_name || payroll.period_name}</TableCell>
                           <TableCell className="text-sm">
@@ -1478,7 +1625,133 @@ export default function Payroll() {
                             </div>
                           </TableCell>
                         </TableRow>
-                      ))}
+                        {/* Expanded debts sub-row — Active loans + pending
+                            shortage deductions, mirrored from the same
+                            sources the Process Payroll modal pulls from
+                            (`/employee-loans?status=active` and
+                            `/employees/:id/deductions?status=pending`). */}
+                        {isExpanded && (
+                          <TableRow key={`debts-${payroll.id}`} className="bg-slate-50/50">
+                            <TableCell colSpan={8} className="p-0">
+                              <div className="px-6 py-4">
+                                {isLoading ? (
+                                  <div className="flex items-center gap-2 text-sm text-slate-500">
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                    {t('loading') || 'Yuklanmoqda...'}
+                                  </div>
+                                ) : !debts ? null : (
+                                  (() => {
+                                    const loans = debts.loans || [];
+                                    const dedns = debts.deductions || [];
+                                    const loanTotal = loans.reduce((s, l) => s + (Number(l.remaining_amount) || 0), 0);
+                                    const dedTotal  = dedns.reduce((s, d) => s + (Number(d.amount) || 0), 0);
+                                    if (loans.length === 0 && dedns.length === 0) {
+                                      return (
+                                        <div className="text-sm text-slate-500 italic">
+                                          {t('no_debts') || "Qarzlar yo'q"}
+                                        </div>
+                                      );
+                                    }
+                                    return (
+                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {/* Active loans */}
+                                        <div className="bg-white rounded-lg border border-slate-200 p-3">
+                                          <div className="flex items-center justify-between mb-2">
+                                            <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                                              <Wallet className="w-4 h-4 text-blue-600" />
+                                              {t('active_loans') || 'Faol qarzlar'}
+                                              <span className="text-[11px] font-normal text-slate-500">({loans.length})</span>
+                                            </div>
+                                            <div className="text-sm font-mono text-slate-900">
+                                              {formatCurrency(loanTotal)}
+                                            </div>
+                                          </div>
+                                          {loans.length === 0 ? (
+                                            <div className="text-xs text-slate-400 italic">
+                                              {t('no_active_loans') || "Faol qarz yo'q"}
+                                            </div>
+                                          ) : (
+                                            <div className="space-y-1.5">
+                                              {loans.map((l) => (
+                                                <div
+                                                  key={l.id}
+                                                  className="flex items-center justify-between gap-3 text-xs py-1.5 px-2 rounded bg-slate-50"
+                                                >
+                                                  <div className="min-w-0">
+                                                    <div className="font-medium text-slate-800 truncate">
+                                                      {l.purpose || l.loan_type || (t('loan') || 'Qarz')}
+                                                    </div>
+                                                    <div className="text-[11px] text-slate-500">
+                                                      {(t('monthly_payment') || 'Oylik to\'lov')}: <span className="font-mono">{formatCurrency(l.monthly_payment || 0)}</span>
+                                                      {l.start_date ? ` · ${format(new Date(l.start_date), 'dd.MM.yyyy')}` : ''}
+                                                    </div>
+                                                  </div>
+                                                  <div className="text-right shrink-0">
+                                                    <div className="font-mono font-semibold text-slate-900">
+                                                      {formatCurrency(l.remaining_amount || 0)}
+                                                    </div>
+                                                    <div className="text-[10px] text-slate-400">
+                                                      {(t('remaining') || 'Qoldiq')}
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
+
+                                        {/* Pending shortage deductions */}
+                                        <div className="bg-white rounded-lg border border-slate-200 p-3">
+                                          <div className="flex items-center justify-between mb-2">
+                                            <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                                              <FileMinus className="w-4 h-4 text-orange-600" />
+                                              {t('pending_deductions') || 'Kutayotgan ushlanmalar'}
+                                              <span className="text-[11px] font-normal text-slate-500">({dedns.length})</span>
+                                            </div>
+                                            <div className="text-sm font-mono text-slate-900">
+                                              {formatCurrency(dedTotal)}
+                                            </div>
+                                          </div>
+                                          {dedns.length === 0 ? (
+                                            <div className="text-xs text-slate-400 italic">
+                                              {t('no_pending_deductions') || "Ushlanma yo'q"}
+                                            </div>
+                                          ) : (
+                                            <div className="space-y-1.5">
+                                              {dedns.map((d) => (
+                                                <div
+                                                  key={d.id}
+                                                  className="flex items-center justify-between gap-3 text-xs py-1.5 px-2 rounded bg-slate-50"
+                                                >
+                                                  <div className="min-w-0">
+                                                    <div className="font-medium text-slate-800 truncate">
+                                                      {d.description || d.reason || d.note || (t('shortage') || 'Kamomad')}
+                                                    </div>
+                                                    <div className="text-[11px] text-slate-500">
+                                                      {d.created_at
+                                                        ? format(new Date(d.created_at), 'dd.MM.yyyy')
+                                                        : (t('pending') || 'Kutilmoqda')}
+                                                    </div>
+                                                  </div>
+                                                  <div className="font-mono font-semibold text-slate-900 shrink-0">
+                                                    {formatCurrency(d.amount || 0)}
+                                                  </div>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })()
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </React.Fragment>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>
@@ -1886,7 +2159,16 @@ export default function Payroll() {
                     )}
                   </div>
                   <div className="space-y-1.5 text-sm">
-                    {taxCatalog.map((tax) => {
+                    {taxCatalog
+                      // Only show employee-side taxes here per user
+                      // request — employer taxes (Ijtimoiy soliq /
+                      // ish beruvchi) are a company expense that
+                      // doesn't belong on the employee's payroll modal.
+                      // The catalog still tracks them for reporting,
+                      // but they're hidden from this UI and excluded
+                      // from the deductions summary below.
+                      .filter((tax) => tax.payer !== 'employer')
+                      .map((tax) => {
                       const excluded = excludedTaxIds.includes(tax.id);
                       const applied = taxPreview.applied?.find((a) => a.tax_id === tax.id);
                       const amount = applied ? applied.amount : 0;
@@ -1940,12 +2222,11 @@ export default function Payroll() {
                       <span className="text-slate-600">{t('employee_tax_total') || "Xodimdan ushlanadi"}:</span>
                       <span className="font-semibold text-red-600">-{formatCurrency(taxPreview.total_employee || 0)}</span>
                     </div>
-                    {taxPreview.total_employer > 0 && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-slate-600">{t('employer_tax_total') || "Ish beruvchi xarajati"}:</span>
-                        <span className="font-semibold text-amber-700">{formatCurrency(taxPreview.total_employer || 0)}</span>
-                      </div>
-                    )}
+                    {/* "Employer expense" line removed at user request —
+                        it's company-side overhead, not part of the
+                        employee's payroll math. The total still flows
+                        through `taxPreview.total_employer` for reports
+                        / accounting backend, just not displayed here. */}
                   </div>
                 </div>
               )}
@@ -2412,6 +2693,38 @@ function PayrollEmployeesTab({ t, formatCurrency }) {
   const [editValue, setEditValue] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // Per-row expand state — same pattern as the Payroll Records table:
+  // chevron toggles a sub-row that lists the employee's outstanding
+  // debts (active loans + pending shortage deductions). Cached per
+  // employee id so re-opening doesn't re-fetch.
+  const [expandedId, setExpandedId] = useState(null);
+  const [debtsByEmp, setDebtsByEmp] = useState({});
+  const [debtsLoadingId, setDebtsLoadingId] = useState(null);
+  const toggleExpand = async (emp) => {
+    if (expandedId === emp.id) { setExpandedId(null); return; }
+    setExpandedId(emp.id);
+    if (debtsByEmp[emp.id] !== undefined) return;
+    setDebtsLoadingId(emp.id);
+    try {
+      const [loansRes, dedsRes] = await Promise.allSettled([
+        apiClient.get('/employee-loans', { params: { employee_id: emp.id, status: 'active', limit: 100 } }),
+        apiClient.get(`/employees/${emp.id}/deductions`, { params: { status: 'pending' } }),
+      ]);
+      const rawLoans = loansRes.status === 'fulfilled'
+        ? (loansRes.value?.data?.data ?? loansRes.value?.data ?? [])
+        : [];
+      const loans = Array.isArray(rawLoans) ? rawLoans : (rawLoans.items || []);
+      const deds  = dedsRes.status === 'fulfilled'
+        ? (dedsRes.value?.data?.data ?? dedsRes.value?.data ?? [])
+        : [];
+      setDebtsByEmp((m) => ({ ...m, [emp.id]: { loans, deductions: Array.isArray(deds) ? deds : [] } }));
+    } catch {
+      setDebtsByEmp((m) => ({ ...m, [emp.id]: { loans: [], deductions: [] } }));
+    } finally {
+      setDebtsLoadingId(null);
+    }
+  };
+
   const load = async () => {
     setLoading(true);
     try {
@@ -2474,6 +2787,7 @@ function PayrollEmployeesTab({ t, formatCurrency }) {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead style={{ width: 36 }} />
                 <TableHead className="w-10">#</TableHead>
                 <TableHead>{t('full_name') || "F.I.O."}</TableHead>
                 <TableHead>{t('position') || 'Lavozim'}</TableHead>
@@ -2485,8 +2799,25 @@ function PayrollEmployeesTab({ t, formatCurrency }) {
               {employees.map((e, i) => {
                 const fullName = `${e.first_name || ''} ${e.last_name || ''}`.trim() || e.full_name || '—';
                 const position = e.job_title || e.position || e.job_position_name || '—';
+                const isExpanded = expandedId === e.id;
+                const debts      = debtsByEmp[e.id];
+                const isLoading  = debtsLoadingId === e.id;
                 return (
-                  <TableRow key={e.id}>
+                  <React.Fragment key={e.id}>
+                  <TableRow>
+                    <TableCell className="px-2">
+                      <button
+                        type="button"
+                        onClick={() => toggleExpand(e)}
+                        className="w-7 h-7 rounded-md inline-flex items-center justify-center text-slate-500 hover:bg-slate-100 transition"
+                        title={isExpanded ? (t('hide_debts') || 'Yopish') : (t('show_debts') || "Qarzlarni ko'rish")}
+                        aria-label={t('show_debts') || 'Show debts'}
+                      >
+                        {isExpanded
+                          ? <ChevronDown className="w-4 h-4" />
+                          : <ChevronRight className="w-4 h-4" />}
+                      </button>
+                    </TableCell>
                     <TableCell>{i + 1}</TableCell>
                     <TableCell className="font-medium">{fullName}</TableCell>
                     <TableCell className="text-slate-600">{position}</TableCell>
@@ -2518,6 +2849,129 @@ function PayrollEmployeesTab({ t, formatCurrency }) {
                       )}
                     </TableCell>
                   </TableRow>
+                  {/* Debts sub-row — same shape as the Payroll Records
+                      table: active loans + pending shortage deductions
+                      pulled from /employee-loans + /employees/:id/deductions. */}
+                  {isExpanded && (
+                    <TableRow className="bg-slate-50/50">
+                      <TableCell colSpan={6} className="p-0">
+                        <div className="px-6 py-4">
+                          {isLoading ? (
+                            <div className="flex items-center gap-2 text-sm text-slate-500">
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              {t('loading') || 'Yuklanmoqda...'}
+                            </div>
+                          ) : !debts ? null : (
+                            (() => {
+                              const loans = debts.loans || [];
+                              const dedns = debts.deductions || [];
+                              const loanTotal = loans.reduce((s, l) => s + (Number(l.remaining_amount) || 0), 0);
+                              const dedTotal  = dedns.reduce((s, d) => s + (Number(d.amount) || 0), 0);
+                              if (loans.length === 0 && dedns.length === 0) {
+                                return (
+                                  <div className="text-sm text-slate-500 italic">
+                                    {t('no_debts') || "Qarzlar yo'q"}
+                                  </div>
+                                );
+                              }
+                              return (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  {/* Active loans */}
+                                  <div className="bg-white rounded-lg border border-slate-200 p-3">
+                                    <div className="flex items-center justify-between mb-2">
+                                      <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                                        <Wallet className="w-4 h-4 text-blue-600" />
+                                        {t('active_loans') || 'Faol qarzlar'}
+                                        <span className="text-[11px] font-normal text-slate-500">({loans.length})</span>
+                                      </div>
+                                      <div className="text-sm font-mono text-slate-900">
+                                        {formatCurrency(loanTotal)}
+                                      </div>
+                                    </div>
+                                    {loans.length === 0 ? (
+                                      <div className="text-xs text-slate-400 italic">
+                                        {t('no_active_loans') || "Faol qarz yo'q"}
+                                      </div>
+                                    ) : (
+                                      <div className="space-y-1.5">
+                                        {loans.map((l) => (
+                                          <div
+                                            key={l.id}
+                                            className="flex items-center justify-between gap-3 text-xs py-1.5 px-2 rounded bg-slate-50"
+                                          >
+                                            <div className="min-w-0">
+                                              <div className="font-medium text-slate-800 truncate">
+                                                {l.purpose || l.loan_type || (t('loan') || 'Qarz')}
+                                              </div>
+                                              <div className="text-[11px] text-slate-500">
+                                                {(t('monthly_payment') || "Oylik to'lov")}: <span className="font-mono">{formatCurrency(l.monthly_payment || 0)}</span>
+                                                {l.start_date ? ` · ${format(new Date(l.start_date), 'dd.MM.yyyy')}` : ''}
+                                              </div>
+                                            </div>
+                                            <div className="text-right shrink-0">
+                                              <div className="font-mono font-semibold text-slate-900">
+                                                {formatCurrency(l.remaining_amount || 0)}
+                                              </div>
+                                              <div className="text-[10px] text-slate-400">
+                                                {t('remaining') || 'Qoldiq'}
+                                              </div>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Pending shortage deductions */}
+                                  <div className="bg-white rounded-lg border border-slate-200 p-3">
+                                    <div className="flex items-center justify-between mb-2">
+                                      <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                                        <FileMinus className="w-4 h-4 text-orange-600" />
+                                        {t('pending_deductions') || 'Kutayotgan ushlanmalar'}
+                                        <span className="text-[11px] font-normal text-slate-500">({dedns.length})</span>
+                                      </div>
+                                      <div className="text-sm font-mono text-slate-900">
+                                        {formatCurrency(dedTotal)}
+                                      </div>
+                                    </div>
+                                    {dedns.length === 0 ? (
+                                      <div className="text-xs text-slate-400 italic">
+                                        {t('no_pending_deductions') || "Ushlanma yo'q"}
+                                      </div>
+                                    ) : (
+                                      <div className="space-y-1.5">
+                                        {dedns.map((d) => (
+                                          <div
+                                            key={d.id}
+                                            className="flex items-center justify-between gap-3 text-xs py-1.5 px-2 rounded bg-slate-50"
+                                          >
+                                            <div className="min-w-0">
+                                              <div className="font-medium text-slate-800 truncate">
+                                                {d.description || d.reason || d.note || (t('shortage') || 'Kamomad')}
+                                              </div>
+                                              <div className="text-[11px] text-slate-500">
+                                                {d.created_at
+                                                  ? format(new Date(d.created_at), 'dd.MM.yyyy')
+                                                  : (t('pending') || 'Kutilmoqda')}
+                                              </div>
+                                            </div>
+                                            <div className="font-mono font-semibold text-slate-900 shrink-0">
+                                              {formatCurrency(d.amount || 0)}
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })()
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  </React.Fragment>
                 );
               })}
             </TableBody>

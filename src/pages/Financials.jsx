@@ -131,22 +131,15 @@ export default function Financials() {
               <span className="hidden sm:inline">{t('recurring') || 'Qaytariladigan'}</span>
             </TabsTrigger>
 
-            {/* 13. Soliq hisobotlari */}
+            {/* 13. Soliq hisobotlari — Profit tax (§8.1) and Tax
+                summary (§10) used to live as their own top-level
+                tabs but now nest inside Tax Reports as sub-tabs
+                (Overview / Report Periods / Transactions /
+                Employee taxes / Profit tax / Tax summary). One
+                place for all tax data. */}
             <TabsTrigger value="tax-reports" className={tabTriggerClass}>
               <Percent className="w-4 h-4" />
               <span className="hidden sm:inline">{t('tax_reports') || 'Soliq hisobotlari'}</span>
-            </TabsTrigger>
-
-            {/* 14. Foyda solig'i (§8.1 of ТЗ_Ish_Haqi_Soliq_Tolik.docx) */}
-            <TabsTrigger value="profit-tax" className={tabTriggerClass}>
-              <Calculator className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('profit_tax') || "Foyda solig'i"}</span>
-            </TabsTrigger>
-
-            {/* 14b. Umumiy soliq jamlanmasi (§10 of TZ_Ish_Haqi_Soliq_Tolik.docx) */}
-            <TabsTrigger value="tax-summary" className={tabTriggerClass}>
-              <Percent className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('tax_summary') || 'Umumiy soliq jamlanmasi'}</span>
             </TabsTrigger>
 
             {/* 15. Hisobotlar */}
@@ -186,12 +179,10 @@ export default function Financials() {
           <TabsContent value="tax-reports" className="mt-6">
             <TaxReports />
           </TabsContent>
-          <TabsContent value="profit-tax" className="mt-6">
-            <ProfitTax />
-          </TabsContent>
-          <TabsContent value="tax-summary" className="mt-6">
-            <TaxSummary />
-          </TabsContent>
+          {/* "profit-tax" and "tax-summary" tabs were merged into the
+              Tax Reports component (rendered as sub-tabs there). The
+              standalone TabsContent slots are kept commented out for
+              reference only — not mounted anywhere now. */}
           <TabsContent value="reports" className="mt-6">
             <Tabs defaultValue="financial-reports" className="w-full">
               <TabsList className="bg-white/60 p-1 rounded-lg border border-slate-200/60 shadow-sm mb-4">
