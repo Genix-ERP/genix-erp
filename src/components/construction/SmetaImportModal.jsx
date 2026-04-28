@@ -355,7 +355,6 @@ function parseEdinich(workbook) {
     // Rows with item number in A — parent work items or standalone materials
     if (colA && /^\d+$/.test(colA)) {
       const hasCode = colB && colB !== 'С';
-      const isCDirect = colB === 'С';
       lastParentNumber = colA;
 
       // TEMPLATE MODE: parent works always start at quantity = 0 — the
@@ -364,14 +363,6 @@ function parseEdinich(workbook) {
       // измерения" columns for the parent. Children's per-unit norm is
       // captured below in `quantity_per_unit`; child.quantity stays 0
       // so the cascade `parent.qty × norm` resolves to 0 too.
-      //
-      // Exception for С-shifr direct-material rows: the work IS the
-      // material with no labor/machine breakdown, so column E carries
-      // the project qty for that single material. Capture it on
-      // `c_direct_qty` so the auto-attach in buildImportPayloadFor
-      // can use it as the norm_rate of the synthetic child resource
-      // (instead of falling back to a hardcoded 1).
-      const cQty = isCDirect && !isNaN(Number(colE)) ? Number(colE) : 0;
       currentSection.items.push({
         item_number: colA,
         code: colB,
@@ -382,7 +373,6 @@ function parseEdinich(workbook) {
         is_parent: hasCode,
         resource_type: '',
         parent_item_number: '',
-        c_direct_qty: cQty,
       });
       continue;
     }
@@ -1428,13 +1418,11 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
           && !item.parent_item_number  // skip if it's already a child
         ) {
           sortIdx++;
-          // norm_rate comes straight from the file's qty column for
-          // this С-shifr row (parser stashed it on `c_direct_qty`).
-          // Falls back to 1 if the parser couldn't parse a number,
-          // so a 1:1 cascade still works in the worst case.
-          const childNorm = Number(item.c_direct_qty) > 0
-            ? Number(item.c_direct_qty)
-            : 1;
+          // norm_rate = 1 because the work IS the material (1:1 ratio).
+          // The user enters the work qty as the total project amount
+          // (e.g. 6.316 T of armatura), and the cascade gives
+          // child.qty = work.qty × 1 = 6.316 T — which matches both
+          // the source file's project qty and the ВОР's REJA.
           allLines.push({
             name: item.name,
             uom: item.uom || 'шт',
@@ -1445,7 +1433,7 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
             code: '',
             item_number: '',
             resource_type: 'material',
-            norm_rate: childNorm,
+            norm_rate: 1,
             material_type: item.material_type || undefined,
             parent_item_number: item.item_number,
             sort_order: sortIdx,

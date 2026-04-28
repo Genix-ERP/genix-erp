@@ -916,6 +916,16 @@ const OverviewTabContent = React.memo(function OverviewTabContent({
       go: () => { setActiveGroup('materiallar'); setActiveTab('forms'); },
     },
     {
+      // Forma 3 (KS-3) lives in the same forms tab alongside Forma 2 /
+      // Forma 19 — the user reaches the Create Forma 3 dialog from
+      // the toolbar there. Quick action just lands them on the page.
+      id: 'forma3',
+      label: 'Forma 3',
+      icon: FileSpreadsheet,
+      hint: t('forma_3_hint') || "Bajarilgan ish qiymati to'g'risidagi ma'lumotnoma",
+      go: () => { setActiveGroup('materiallar'); setActiveTab('forms'); },
+    },
+    {
       // Foto hisobot replaces the old Material shortcut — the
       // Materiallar group is hidden in the nav anyway, so the Material
       // tile led nowhere visible. Photo reports live under
