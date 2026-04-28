@@ -361,6 +361,30 @@ export const constructionService = {
   },
 
   // =====================================================
+  // RESOURCE TOP-UPS  (migration 358)
+  // =====================================================
+  // When a foreman runs short on a smeta resource and re-orders MORE
+  // (often at a different price), each extra purchase is recorded as
+  // a top-up against the original sub-line. The smeta plan stays
+  // immutable; total cost = plan + Σ (extra_qty × new_price).
+
+  async createResourceTopup(estimateId, lineId, payload) {
+    // payload: { extra_quantity, new_price, ordered_at?, note? }
+    const response = await apiClient.post(
+      `/construction/estimates/${estimateId}/lines/${lineId}/topups`,
+      payload,
+    );
+    return response.data.data;
+  },
+
+  async deleteResourceTopup(estimateId, lineId, topupId) {
+    const response = await apiClient.delete(
+      `/construction/estimates/${estimateId}/lines/${lineId}/topups/${topupId}`,
+    );
+    return response.data.data;
+  },
+
+  // =====================================================
   // FORMA 2 SNAPSHOTS  (Smeta boshqaruvi → Tarix tab)
   // =====================================================
   // Saved versions of a Form 2 (KS-2) document for an estimate. The list

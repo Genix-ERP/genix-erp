@@ -148,9 +148,23 @@ function calcWorkBrutto(work, subLines) {
     const price = Number(r.unit_rate || 0);
     const qty = Number(r.quantity || 0);
     const b = price * qty;
-    if (b <= 0) continue;
-    base += b;
-    overhead += b * getOverheadRate(r);
+    if (b > 0) {
+      base += b;
+      overhead += b * getOverheadRate(r);
+    }
+    // Resource top-ups (migration 358) — extra purchases at a possibly
+    // different price. They contribute to base + the same transport/
+    // storage overhead bucket as the parent resource.
+    if (Array.isArray(r.topups) && r.topups.length > 0) {
+      const tpSum = r.topups.reduce(
+        (m, tp) => m + (Number(tp.extra_quantity) || 0) * (Number(tp.new_price) || 0),
+        0,
+      );
+      if (tpSum > 0) {
+        base += tpSum;
+        overhead += tpSum * getOverheadRate(r);
+      }
+    }
   }
   // If a work has NO sub-lines, its own total_amount IS the base.
   if (subLines.length === 0 && work) {
@@ -174,7 +188,17 @@ function buildSummary(lines, otherCostsPct, useVat) {
     // already included in the parent's `total_amount`. Skip here so they
     // don't double-count.
     if (isSubStage(ln)) continue;
-    const cost = Number(ln.unit_rate || 0) * Number(ln.quantity || 0);
+    let cost = Number(ln.unit_rate || 0) * Number(ln.quantity || 0);
+    // Top-ups (migration 358) — extra purchases at a possibly different
+    // price. They fold into the same cost bucket as the parent resource
+    // (a top-up against a cable line stays in the cable bucket; against
+    // labor stays in labor; etc).
+    if (Array.isArray(ln.topups) && ln.topups.length > 0) {
+      cost += ln.topups.reduce(
+        (m, tp) => m + (Number(tp.extra_quantity) || 0) * (Number(tp.new_price) || 0),
+        0,
+      );
+    }
     if (cost <= 0) continue;
     const cat = classifyResource(ln);
     if (cat === 'labor') labor += cost;
@@ -508,9 +532,25 @@ ${linkParts.join('\n')}
             rows.push(['', 'ДОП.', '    ДОП. ' + (r.name || ''), '', r.uom || '', r.quantity || 0, r.unit_rate || 0, Math.round(stageTotal * 100) / 100]);
             continue;
           }
-          const cost = Number(r.unit_rate || 0) * Number(r.quantity || 0);
-          if (cost <= 0) continue;
-          rows.push(['', CAT_COLORS[classifyResource(r)]?.name || '', '    ' + (r.name || ''), '', r.uom || '', r.quantity || 0, r.unit_rate || 0, Math.round(cost * 100) / 100]);
+          const baseCost = Number(r.unit_rate || 0) * Number(r.quantity || 0);
+          const tps = Array.isArray(r.topups) ? r.topups : [];
+          const tpSum = tps.reduce(
+            (m, tp) => m + (Number(tp.extra_quantity) || 0) * (Number(tp.new_price) || 0),
+            0,
+          );
+          if (baseCost <= 0 && tpSum <= 0) continue;
+          if (baseCost > 0) {
+            rows.push(['', CAT_COLORS[classifyResource(r)]?.name || '', '    ' + (r.name || ''), '', r.uom || '', r.quantity || 0, r.unit_rate || 0, Math.round(baseCost * 100) / 100]);
+          }
+          for (const tp of tps) {
+            const tpQty = Number(tp.extra_quantity) || 0;
+            const tpPrice = Number(tp.new_price) || 0;
+            const tpTotal = tpQty * tpPrice;
+            if (tpTotal <= 0) continue;
+            const note = tp.note ? `  — ${tp.note}` : '';
+            const dateStr = tp.ordered_at ? ` (${tp.ordered_at})` : '';
+            rows.push(['', '+ДОП', `        ↳ Қўшимча буюртма${dateStr}${note}`, '', r.uom || '', tpQty, tpPrice, Math.round(tpTotal * 100) / 100]);
+          }
         }
         secBase += brutto.base;
       }
@@ -742,26 +782,62 @@ ${linkParts.join('\n')}
             r++;
             continue;
           }
-          const cost = Number(res.unit_rate || 0) * Number(res.quantity || 0);
-          if (cost <= 0) continue;
-          ws.getCell(r, 1).value = '';
-          ws.getCell(r, 2).value = CAT_COLORS[classifyResource(res)]?.name || '';
-          ws.getCell(r, 3).value = '    ' + (res.name || '');
-          ws.getCell(r, 4).value = res.uom || '';
-          ws.getCell(r, 5).value = Number(res.quantity || 0);
-          ws.getCell(r, 6).value = Number(res.unit_rate || 0);
-          ws.getCell(r, 7).value = Math.round(cost * 100) / 100;
-          for (let c = 1; c <= LAST_COL; c++) {
-            const cell = ws.getCell(r, c);
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.subBg } };
-            cell.border = border;
-            cell.font = { size: 9, color: { argb: C.slate700 } };
+          const baseCost = Number(res.unit_rate || 0) * Number(res.quantity || 0);
+          const tps = Array.isArray(res.topups) ? res.topups : [];
+          const tpSum = tps.reduce(
+            (m, tp) => m + (Number(tp.extra_quantity) || 0) * (Number(tp.new_price) || 0),
+            0,
+          );
+          if (baseCost <= 0 && tpSum <= 0) continue;
+          if (baseCost > 0) {
+            ws.getCell(r, 1).value = '';
+            ws.getCell(r, 2).value = CAT_COLORS[classifyResource(res)]?.name || '';
+            ws.getCell(r, 3).value = '    ' + (res.name || '');
+            ws.getCell(r, 4).value = res.uom || '';
+            ws.getCell(r, 5).value = Number(res.quantity || 0);
+            ws.getCell(r, 6).value = Number(res.unit_rate || 0);
+            ws.getCell(r, 7).value = Math.round(baseCost * 100) / 100;
+            for (let c = 1; c <= LAST_COL; c++) {
+              const cell = ws.getCell(r, c);
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.subBg } };
+              cell.border = border;
+              cell.font = { size: 9, color: { argb: C.slate700 } };
+            }
+            ws.getCell(r, 4).alignment = { horizontal: 'center' };
+            styleNumber(ws.getCell(r, 5), '#,##0.######');
+            styleNumber(ws.getCell(r, 6));
+            styleNumber(ws.getCell(r, 7));
+            r++;
           }
-          ws.getCell(r, 4).alignment = { horizontal: 'center' };
-          styleNumber(ws.getCell(r, 5), '#,##0.######');
-          styleNumber(ws.getCell(r, 6));
-          styleNumber(ws.getCell(r, 7));
-          r++;
+          // Top-up rows (migration 358) — extra purchases at new prices.
+          // Render as indented sub-rows with a teal tint so they're
+          // visually distinct from both works and base resources.
+          for (const tp of tps) {
+            const tpQty = Number(tp.extra_quantity) || 0;
+            const tpPrice = Number(tp.new_price) || 0;
+            const tpTotal = tpQty * tpPrice;
+            if (tpTotal <= 0) continue;
+            const note = tp.note ? `  — ${tp.note}` : '';
+            const dateStr = tp.ordered_at ? ` (${tp.ordered_at})` : '';
+            ws.getCell(r, 1).value = '';
+            ws.getCell(r, 2).value = '+ДОП';
+            ws.getCell(r, 3).value = `        ↳ Қўшимча буюртма${dateStr}${note}`;
+            ws.getCell(r, 4).value = res.uom || '';
+            ws.getCell(r, 5).value = tpQty;
+            ws.getCell(r, 6).value = tpPrice;
+            ws.getCell(r, 7).value = Math.round(tpTotal * 100) / 100;
+            for (let c = 1; c <= LAST_COL; c++) {
+              const cell = ws.getCell(r, c);
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F0FDFA' } };
+              cell.border = border;
+              cell.font = { size: 9, color: { argb: '0F766E' }, italic: true };
+            }
+            ws.getCell(r, 4).alignment = { horizontal: 'center' };
+            styleNumber(ws.getCell(r, 5), '#,##0.######');
+            styleNumber(ws.getCell(r, 6));
+            styleNumber(ws.getCell(r, 7));
+            r++;
+          }
         }
         secBase += brutto.base;
       }
@@ -941,6 +1017,13 @@ ${linkParts.join('\n')}
             material_rate: l.material_rate, labor_rate: l.labor_rate, equipment_rate: l.equipment_rate,
             material_type: l.material_type, resource_type: l.resource_type,
             parent_line_id: l.parent_line_id, item_number: l.item_number, code: l.code,
+            // Persist top-ups so re-opening a saved Forma 2 shows the
+            // exact spend that was approved at save time, even if the
+            // live estimate has since been edited.
+            topups: Array.isArray(l.topups) ? l.topups.map((tp) => ({
+              id: tp.id, extra_quantity: tp.extra_quantity, new_price: tp.new_price,
+              ordered_at: tp.ordered_at, note: tp.note,
+            })) : undefined,
           })),
         },
       });
@@ -1166,7 +1249,17 @@ ${linkParts.join('\n')}
                             const price = Number(r.unit_rate || 0);
                             const totQ = Number(r.quantity || 0);
                             const base = price * totQ;
-                            if (base <= 0) return null;
+                            // Resource top-ups (migration 358) — extra
+                            // purchases at a possibly different price.
+                            // Render as indented child rows beneath the
+                            // resource so the audit trail is visible in
+                            // the printed document.
+                            const topups = Array.isArray(r.topups) ? r.topups : [];
+                            const topupSum = topups.reduce(
+                              (m, tp) => m + (Number(tp.extra_quantity) || 0) * (Number(tp.new_price) || 0),
+                              0,
+                            );
+                            if (base <= 0 && topupSum <= 0) return null;
                             const cat = classifyResource(r);
                             const cfg = CAT_COLORS[cat];
                             const mt = cat === 'material' ? getMaterialType(r) : null;
@@ -1176,22 +1269,52 @@ ${linkParts.join('\n')}
                             // СВОДНЫЕ ИТОГИ block below, applied once
                             // against the section subtotals.
                             return (
-                              <tr key={r.id} style={{ background: '#FDFBF5' }}>
-                                <td className="border border-stone-200 px-1.5 py-1.5 text-center text-[10px] text-slate-400 font-mono">{r.item_number || ''}</td>
-                                <td className="border border-stone-200 px-1.5 py-1.5 font-mono text-[10px] font-semibold" style={{ color: cfg?.hex }}>{cfg?.name}</td>
-                                <td className="border border-stone-200 px-2 py-1.5 pl-5 text-slate-700">
-                                  {r.name}
-                                  {mt && (
-                                    <span className="ml-2 text-[9px] px-1.5 py-0.5 rounded bg-stone-200 text-slate-600 tracking-wider">{MAT_TYPE_SHORT[mt]}</span>
-                                  )}
-                                </td>
-                                <td className="border border-stone-200 px-1.5 py-1.5 text-center text-slate-600">{r.uom || ''}</td>
-                                <td className="border border-stone-200 px-1.5 py-1.5 text-right font-mono text-slate-600">{fmtRu(totQ)}</td>
-                                <td className="border border-stone-200 px-1.5 py-1.5 text-right font-mono text-slate-600">{fmtRu(price)}</td>
-                                <td className="border border-stone-200 px-1.5 py-1.5 text-right font-mono">
-                                  {fmtRu(Math.round(base * 100) / 100)}
-                                </td>
-                              </tr>
+                              <React.Fragment key={r.id}>
+                                <tr style={{ background: '#FDFBF5' }}>
+                                  <td className="border border-stone-200 px-1.5 py-1.5 text-center text-[10px] text-slate-400 font-mono">{r.item_number || ''}</td>
+                                  <td className="border border-stone-200 px-1.5 py-1.5 font-mono text-[10px] font-semibold" style={{ color: cfg?.hex }}>{cfg?.name}</td>
+                                  <td className="border border-stone-200 px-2 py-1.5 pl-5 text-slate-700">
+                                    {r.name}
+                                    {mt && (
+                                      <span className="ml-2 text-[9px] px-1.5 py-0.5 rounded bg-stone-200 text-slate-600 tracking-wider">{MAT_TYPE_SHORT[mt]}</span>
+                                    )}
+                                  </td>
+                                  <td className="border border-stone-200 px-1.5 py-1.5 text-center text-slate-600">{r.uom || ''}</td>
+                                  <td className="border border-stone-200 px-1.5 py-1.5 text-right font-mono text-slate-600">{fmtRu(totQ)}</td>
+                                  <td className="border border-stone-200 px-1.5 py-1.5 text-right font-mono text-slate-600">{fmtRu(price)}</td>
+                                  <td className="border border-stone-200 px-1.5 py-1.5 text-right font-mono">
+                                    {fmtRu(Math.round(base * 100) / 100)}
+                                  </td>
+                                </tr>
+                                {topups.map((tp) => {
+                                  const tpQty = Number(tp.extra_quantity) || 0;
+                                  const tpPrice = Number(tp.new_price) || 0;
+                                  const tpTotal = tpQty * tpPrice;
+                                  if (tpTotal <= 0) return null;
+                                  return (
+                                    <tr key={`r${r.id}-tp${tp.id}`} style={{ background: '#F0FDFA' }}>
+                                      <td className="border border-teal-200 px-1.5 py-1 text-center text-[9px] text-teal-700 font-mono">+ДОП</td>
+                                      <td className="border border-teal-200 px-1.5 py-1 font-mono text-[10px] font-semibold text-teal-700">ЗАКАЗ</td>
+                                      <td className="border border-teal-200 px-2 py-1 pl-9 text-teal-900 text-[11px]">
+                                        <span className="text-teal-500 mr-1">↳</span>
+                                        Қўшимча буюртма
+                                        {tp.ordered_at ? (
+                                          <span className="ml-2 text-[9px] text-slate-500">({tp.ordered_at})</span>
+                                        ) : null}
+                                        {tp.note ? (
+                                          <span className="ml-2 text-[9px] italic text-slate-500">— {tp.note}</span>
+                                        ) : null}
+                                      </td>
+                                      <td className="border border-teal-200 px-1.5 py-1 text-center text-[10px] text-teal-700">{r.uom || ''}</td>
+                                      <td className="border border-teal-200 px-1.5 py-1 text-right font-mono text-[10px] text-teal-700">{fmtRu(tpQty)}</td>
+                                      <td className="border border-teal-200 px-1.5 py-1 text-right font-mono text-[10px] text-teal-700">{fmtRu(tpPrice)}</td>
+                                      <td className="border border-teal-200 px-1.5 py-1 text-right font-mono text-[10px] font-semibold text-teal-800">
+                                        {fmtRu(Math.round(tpTotal * 100) / 100)}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </React.Fragment>
                             );
                           })}
                         </React.Fragment>
