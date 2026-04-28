@@ -114,6 +114,19 @@ const fmt = (n) => {
 // characters of the work name.
 const normName = (s) => String(s || '').toLowerCase().replace(/[\s\u00A0]+/g, '');
 
+// Composite key for ВОР → Единич cross-sheet lookups. Some Excel files
+// pack multiple sub-blocks into one ВОР sheet (e.g. the "Жавохир Авеню
+// Блок 2 Угловой" file has TWO typologies under "Блок №2" with
+// IDENTICAL work names — "УСТРОЙСТВО БЕТОННОЙ ПОДГОТОВКИ ..." appears
+// twice, once with qty 0.598 and once with qty 0.2013). Keying the
+// lookup map by name alone made the second occurrence overwrite the
+// first, so Bosqichlar's REJA picked up 0.2013 instead of the matching
+// 0.598. Folding section (parent_item_number) + uom into the key keeps
+// duplicates separate; we still build a name-only fallback map for
+// files where Единич and ВОР disagree on section labels.
+const compoundKey = (section, name, uom) =>
+  `${normName(section)}|${normName(name)}|${normName(uom)}`;
+
 // Estimate codes in the source files often look like:
 //   "Е0101-197-14 ДОП. 11 ГОСАРХИТЕКТСТРОЙ РУЗ ПР. № 429 ОТ 15.12.17 Г."
 //   "Е0102-057-02 . ТЧ П.3.187 КЗТР=1,2"
@@ -447,7 +460,15 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
   // name-keyed map of ВОР qty for the same building so each work row
   // can override its planQty without losing the cascade math elsewhere.
   // Map<lowercase-trimmed-name, number>
-  const [vorPlanByName, setVorPlanByName] = useState(() => new Map());
+  // ВОР plan-quantity lookups. Holds two maps so duplicates in one
+  // file (same work name in different sub-blocks of one ВОР sheet)
+  // resolve correctly: `strict` keys by section + name + uom, `loose`
+  // keys by name only. resolveWorkQty + the WorkTable JSX try strict
+  // first, then fall back to loose.
+  const [vorPlanByName, setVorPlanByName] = useState(() => ({
+    strict: new Map(),
+    loose: new Map(),
+  }));
 
   // ── Add-resource modal ────────────────────────────────────────────
   // Foreman clicks "+" on a work row → modal lets them pick a resource
@@ -572,7 +593,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
         if (!matchedEst) {
           setLines([]);
           setActiveEstimateId(null);
-          setVorPlanByName(new Map());
+          setVorPlanByName({ strict: new Map(), loose: new Map() });
           setLoading(false);
           return;
         }
@@ -595,7 +616,16 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
           // between a digit and a slash. A work missing from the map
           // still silently falls back to its own (zero) planQty.
           const vorList = Array.isArray(vorRows) ? vorRows : (vorRows?.data || vorRows?.items || []);
-          const map = new Map();
+          // Build TWO maps: a strict (section + name + uom) one and a
+          // loose (name only) fallback. resolveWorkQty below tries
+          // strict first; this matters for files that pack multiple
+          // sub-blocks into one ВОР sheet, where the same work name
+          // appears with different quantities (e.g. "Жилдом Жавохир
+          // Авеню Блок 2 Угловой" — see compoundKey doc above). For
+          // files where Единич and ВОР disagree on section labels,
+          // the loose map still rescues the lookup.
+          const strict = new Map();
+          const loose = new Map();
           for (const r of vorList) {
             // Skip sub-lines (resource breakdown) — only top-level work
             // rows carry a planned project quantity.
@@ -603,9 +633,19 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
             const n = normName(r.name);
             if (!n) continue;
             const q = Number(r.quantity || 0);
-            if (q > 0) map.set(n, q);
+            if (!(q > 0)) continue;
+            const key = compoundKey(r.parent_item_number, r.name, r.uom);
+            // First-write-wins for strict so the original section's qty
+            // sticks; later duplicates land under their own section
+            // anyway (different parent_item_number = different key).
+            if (!strict.has(key)) strict.set(key, q);
+            // For the loose map we ALSO want first-write-wins. Without
+            // this guard the second occurrence of a duplicated name
+            // (e.g. the second sub-typology in the same Excel) would
+            // overwrite the first and reintroduce the original bug.
+            if (!loose.has(n)) loose.set(n, q);
           }
-          setVorPlanByName(map);
+          setVorPlanByName({ strict, loose });
         } catch (e) {
           if (!cancelled) toast.error(formatApiError(e, t, 'Xatolik'));
         }
@@ -665,8 +705,22 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
   // work that isn't in the ВОР map (custom-added rows, or projects
   // without a ВОР sheet). Stable identity is fine across renders.
   const resolveWorkQty = useCallback((w) => {
-    const v = vorPlanByName?.get(normName(w?.name)) || 0;
-    return v > 0 ? v : Number(w?.quantity || 0);
+    if (!w) return 0;
+    // vorPlanByName is now { strict, loose } — try strict (section +
+    // name + uom) first so duplicates in different sections of the
+    // same ВОР sheet stay separated, then fall back to name-only.
+    const strict = vorPlanByName?.strict;
+    const loose = vorPlanByName?.loose;
+    if (strict) {
+      const sk = compoundKey(w.parent_item_number, w.name, w.uom);
+      const v = strict.get(sk) || 0;
+      if (v > 0) return v;
+    }
+    if (loose) {
+      const v = loose.get(normName(w.name)) || 0;
+      if (v > 0) return v;
+    }
+    return Number(w.quantity || 0);
   }, [vorPlanByName]);
   const blockProg = useMemo(() => blockProgress(stages, resolveWorkQty), [stages, resolveWorkQty]);
   // Total works in the active block — direct works of every stage PLUS
@@ -1465,16 +1519,24 @@ function WorksTable({
             const isSupConfirmed = w.approval_status === 'confirmed_supervisor';
             const rowBg = isLocked ? '#F0FDF4' : (isSupConfirmed ? '#FEF7E0' : 'transparent');
             // REJA = the planned project quantity. Sourced from the
-            // matching ВОР smeta's Miqdor (built into the
-            // `vorPlanByName` map upstream); falls back to the единич
-            // line's own quantity when there's no ВОР match — same
-            // value it always had pre-template-mode. The lookup uses
-            // the whitespace-stripped key so subtle Excel formatting
-            // differences ("В7,5 / М-100/" vs "В7,5 /М-100/") still
-            // resolve to the same row.
-            const vorQty = vorPlanByName
-              ? Number(vorPlanByName.get(normName(w.name)) || 0)
-              : 0;
+            // matching ВОР smeta's Miqdor (built into `vorPlanByName`
+            // upstream); falls back to the единич line's own quantity
+            // when there's no ВОР match. The lookup tries the strict
+            // (section + name + uom) key first to disambiguate Excel
+            // files where the same work name appears in multiple
+            // sub-blocks with different qtys (e.g. "Жилдом Жавохир
+            // Авеню Блок 2 Угловой"), then falls back to a name-only
+            // map for files where Единич and ВОР disagree on section
+            // labels.
+            let vorQty = 0;
+            if (vorPlanByName?.strict) {
+              vorQty = Number(vorPlanByName.strict.get(
+                compoundKey(w.parent_item_number, w.name, w.uom),
+              ) || 0);
+            }
+            if (vorQty <= 0 && vorPlanByName?.loose) {
+              vorQty = Number(vorPlanByName.loose.get(normName(w.name)) || 0);
+            }
             const ownQty = Number(w.quantity || 0);
             const planQty = vorQty > 0 ? vorQty : ownQty;
             const doneQty = Number(w.done_quantity || 0);
