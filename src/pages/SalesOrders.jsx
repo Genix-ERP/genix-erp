@@ -201,10 +201,15 @@ export default function SalesOrders() {
     const lines = order.lines || [];
     const tableData = lines.length > 0
       ? lines.map((line, idx) => {
-          const primary = line.description || line.product_name || '-';
-          // Append counterparty's name (via search_key match) on a
-          // second line so both the seller and the buyer see a
-          // product name they recognise on the printed document.
+          // Prefer the product's canonical name (from the products
+          // JOIN in the backend) as the primary label — this is
+          // *this* company's name for the product. Fall back to the
+          // line description for legacy lines without product_id.
+          // alt_name is the matching product in the *other* company
+          // (via search_key), so it carries the counterparty's name
+          // for the same item. Printing both lets each side recognise
+          // what was sold/bought on intercompany documents.
+          const primary = line.product_name || line.description || '-';
           const description = line.alt_name && line.alt_name !== primary
             ? `${primary}\n(${line.alt_name})`
             : primary;
