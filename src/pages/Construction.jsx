@@ -970,9 +970,11 @@ const OverviewTabContent = React.memo(function OverviewTabContent({
     },
     {
       // "Jamoa" → "Ishchi soni" — the metric is a headcount, not a
-      // generic team-name, so the label reads more accurately.
+      // generic team-name, so the label reads more accurately. We
+      // render just the bare count (no "a'zo" / "members" suffix)
+      // because the label already names the unit.
       label: t('worker_count') || 'Ishchi soni',
-      value: team.length > 0 ? `${team.length} ${t('members') || "a'zo"}` : EMPTY,
+      value: team.length > 0 ? String(team.length) : EMPTY,
     },
   ];
 

@@ -145,25 +145,25 @@ function calcWorkBrutto(work, subLines) {
       base += Number(r.total_amount || 0);
       continue;
     }
-    const price = Number(r.unit_rate || 0);
-    const qty = Number(r.quantity || 0);
-    const b = price * qty;
-    if (b > 0) {
-      base += b;
-      overhead += b * getOverheadRate(r);
-    }
-    // Resource top-ups (migration 358) — extra purchases at a possibly
-    // different price. They contribute to base + the same transport/
-    // storage overhead bucket as the parent resource.
-    if (Array.isArray(r.topups) && r.topups.length > 0) {
-      const tpSum = r.topups.reduce(
+    // Resource top-ups (migration 358) REPLACE the planned qty × unit_rate
+    // when present — each top-up captures a slice of the same physical
+    // purchase at the price actually paid, so adding the planned cost
+    // back in would double-count. When no top-ups exist, fall back to
+    // the planned cost. Overhead (transport+storage накрутка) follows
+    // the same effective base.
+    const tps = Array.isArray(r.topups) ? r.topups : [];
+    let effective;
+    if (tps.length > 0) {
+      effective = tps.reduce(
         (m, tp) => m + (Number(tp.extra_quantity) || 0) * (Number(tp.new_price) || 0),
         0,
       );
-      if (tpSum > 0) {
-        base += tpSum;
-        overhead += tpSum * getOverheadRate(r);
-      }
+    } else {
+      effective = Number(r.unit_rate || 0) * Number(r.quantity || 0);
+    }
+    if (effective > 0) {
+      base += effective;
+      overhead += effective * getOverheadRate(r);
     }
   }
   // If a work has NO sub-lines, its own total_amount IS the base.
@@ -188,16 +188,19 @@ function buildSummary(lines, otherCostsPct, useVat) {
     // already included in the parent's `total_amount`. Skip here so they
     // don't double-count.
     if (isSubStage(ln)) continue;
-    let cost = Number(ln.unit_rate || 0) * Number(ln.quantity || 0);
-    // Top-ups (migration 358) — extra purchases at a possibly different
-    // price. They fold into the same cost bucket as the parent resource
-    // (a top-up against a cable line stays in the cable bucket; against
-    // labor stays in labor; etc).
-    if (Array.isArray(ln.topups) && ln.topups.length > 0) {
-      cost += ln.topups.reduce(
+    // Top-ups (migration 358), when present, REPLACE the planned cost
+    // — each top-up records a piece of the actual purchase at its real
+    // price. The aggregate stays in the same bucket as the parent
+    // resource (cable top-ups stay cable, labor stays labor, etc).
+    const tps = Array.isArray(ln.topups) ? ln.topups : [];
+    let cost;
+    if (tps.length > 0) {
+      cost = tps.reduce(
         (m, tp) => m + (Number(tp.extra_quantity) || 0) * (Number(tp.new_price) || 0),
         0,
       );
+    } else {
+      cost = Number(ln.unit_rate || 0) * Number(ln.quantity || 0);
     }
     if (cost <= 0) continue;
     const cat = classifyResource(ln);
@@ -539,9 +542,13 @@ ${linkParts.join('\n')}
             0,
           );
           if (baseCost <= 0 && tpSum <= 0) continue;
-          if (baseCost > 0) {
-            rows.push(['', CAT_COLORS[classifyResource(r)]?.name || '', '    ' + (r.name || ''), '', r.uom || '', r.quantity || 0, r.unit_rate || 0, Math.round(baseCost * 100) / 100]);
-          }
+          // Same rule as the modal: when top-ups exist, the parent
+          // resource's Сумма is the top-up sum (not the planned base
+          // — those are the same physical purchase). Listed top-ups
+          // follow as indented child rows for traceability.
+          const hasTps = tps.length > 0;
+          const summaForRow = hasTps ? tpSum : baseCost;
+          rows.push(['', CAT_COLORS[classifyResource(r)]?.name || '', '    ' + (r.name || ''), '', r.uom || '', r.quantity || 0, r.unit_rate || 0, Math.round(summaForRow * 100) / 100]);
           for (const tp of tps) {
             const tpQty = Number(tp.extra_quantity) || 0;
             const tpPrice = Number(tp.new_price) || 0;
@@ -789,14 +796,19 @@ ${linkParts.join('\n')}
             0,
           );
           if (baseCost <= 0 && tpSum <= 0) continue;
-          if (baseCost > 0) {
+          // Same rule as the modal/CSV: when top-ups exist the
+          // resource Сумма is the top-up total — they replace the
+          // planned base, not augment it.
+          const hasTps = tps.length > 0;
+          const summaForRow = hasTps ? tpSum : baseCost;
+          {
             ws.getCell(r, 1).value = '';
             ws.getCell(r, 2).value = CAT_COLORS[classifyResource(res)]?.name || '';
             ws.getCell(r, 3).value = '    ' + (res.name || '');
             ws.getCell(r, 4).value = res.uom || '';
             ws.getCell(r, 5).value = Number(res.quantity || 0);
             ws.getCell(r, 6).value = Number(res.unit_rate || 0);
-            ws.getCell(r, 7).value = Math.round(baseCost * 100) / 100;
+            ws.getCell(r, 7).value = Math.round(summaForRow * 100) / 100;
             for (let c = 1; c <= LAST_COL; c++) {
               const cell = ws.getCell(r, c);
               cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.subBg } };
@@ -1268,6 +1280,12 @@ ${linkParts.join('\n')}
                             // The full накрутка breakdown lives in the
                             // СВОДНЫЕ ИТОГИ block below, applied once
                             // against the section subtotals.
+                            // When the resource carries top-ups the
+                            // displayed Сумма becomes the topup-sum
+                            // (the planned base is replaced, not
+                            // augmented — same rule as Smeta tab).
+                            const hasTopups = topups.length > 0;
+                            const summaForRow = hasTopups ? topupSum : base;
                             return (
                               <React.Fragment key={r.id}>
                                 <tr style={{ background: '#FDFBF5' }}>
@@ -1283,7 +1301,7 @@ ${linkParts.join('\n')}
                                   <td className="border border-stone-200 px-1.5 py-1.5 text-right font-mono text-slate-600">{fmtRu(totQ)}</td>
                                   <td className="border border-stone-200 px-1.5 py-1.5 text-right font-mono text-slate-600">{fmtRu(price)}</td>
                                   <td className="border border-stone-200 px-1.5 py-1.5 text-right font-mono">
-                                    {fmtRu(Math.round(base * 100) / 100)}
+                                    {fmtRu(Math.round(summaForRow * 100) / 100)}
                                   </td>
                                 </tr>
                                 {topups.map((tp) => {

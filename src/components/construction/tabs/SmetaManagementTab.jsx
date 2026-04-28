@@ -534,19 +534,27 @@ export default function SmetaManagementTab({ project }) {
   }, [lines]);
 
   const sections = useMemo(() => {
-    // First pass: bucket every sub-line's topup spend under its parent
-    // line id so the section subtotals fold in real spend (not just plan).
-    const topupByParent = new Map();
+    // Per-parent effective cost = Σ resource cost across its sub-lines,
+    // where each sub-line's cost follows the same plan-vs-topup rule
+    // used in WorkCard (top-ups, when present, REPLACE the planned
+    // qty × unit_rate — see WorkCard.resourceCost). When a parent has
+    // no resource breakdown at all, fall back to its own total_amount.
+    const effByParent = new Map();
     for (const ln of lines) {
       const pid = Number(ln.parent_line_id || 0);
       if (!pid) continue;
-      const list = Array.isArray(ln.topups) ? ln.topups : [];
-      if (list.length === 0) continue;
-      const sum = list.reduce(
-        (m, tp) => m + (Number(tp.extra_quantity) || 0) * (Number(tp.new_price) || 0),
-        0,
-      );
-      topupByParent.set(pid, (topupByParent.get(pid) || 0) + sum);
+      const tps = Array.isArray(ln.topups) ? ln.topups : [];
+      let c;
+      if (tps.length > 0) {
+        c = tps.reduce(
+          (m, tp) => m + (Number(tp.extra_quantity) || 0) * (Number(tp.new_price) || 0),
+          0,
+        );
+      } else {
+        c = Number(ln.unit_rate || 0) * Number(ln.quantity || 0);
+      }
+      if (!c) continue;
+      effByParent.set(pid, (effByParent.get(pid) || 0) + c);
     }
 
     const sectionMap = new Map();
@@ -562,7 +570,8 @@ export default function SmetaManagementTab({ project }) {
       }
       const cur = sectionMap.get(secKey) || { name: secKey, lines: [], total: 0 };
       cur.lines.push(ln);
-      cur.total += (Number(ln.total_amount) || 0) + (topupByParent.get(Number(ln.id)) || 0);
+      const eff = effByParent.get(Number(ln.id));
+      cur.total += eff != null ? eff : (Number(ln.total_amount) || 0);
       sectionMap.set(secKey, cur);
     }
     return Array.from(sectionMap.values());
@@ -1636,6 +1645,17 @@ function WorkCard({
   qtyDraft, setQtyDraft, clearQtyDraft, commitQty, resetQty, removeLine,
   openAddResource, openAddStage, openTopup, removeTopup, t, isSubStage,
 }) {
+  // Resource-level top-up expansion. Collapsed by default so a row
+  // with several top-ups doesn't blow up the card height; the user
+  // sees a "+N" badge on the resource row and clicks the chevron to
+  // unfold the indented top-up child rows.
+  const [expandedTopups, setExpandedTopups] = React.useState(() => new Set());
+  const toggleTopups = (subId) => setExpandedTopups((s) => {
+    const n = new Set(s);
+    if (n.has(subId)) n.delete(subId); else n.add(subId);
+    return n;
+  });
+
   const qty = Number(line.quantity) || 0;
   const isEmpty = qty <= 0;
   const draft = qtyDraft;
@@ -1648,14 +1668,27 @@ function WorkCard({
   // nesting), so all subs of a sub-stage are resources.
   const subResources = (subs || []).filter((s) => !isSubStageRow(s));
 
-  // Per-work category breakdown. Includes any resource top-ups (extra
-  // purchases at a different price recorded against the sub-line) so
-  // the work footer + section subtotal track real spend, not just plan.
-  const sumTopups = (s) => (Array.isArray(s.topups) ? s.topups : [])
-    .reduce((m, tp) => m + (Number(tp.extra_quantity) || 0) * (Number(tp.new_price) || 0), 0);
+  // Per-resource effective cost. Two regimes:
+  //   - No top-ups → qty × unit_rate (planned, original behavior).
+  //   - With top-ups (migration 358) → sum of top-up costs ONLY. The
+  //     foreman has now recorded what was ACTUALLY purchased (with the
+  //     real quantities and the prices that applied at order time), so
+  //     the planned qty × unit_rate is replaced — not augmented. Adding
+  //     both would double-count: each top-up represents a slice of the
+  //     same physical material, not extra units on top of the plan.
+  const resourceCost = (s) => {
+    const tps = Array.isArray(s.topups) ? s.topups : [];
+    if (tps.length > 0) {
+      return tps.reduce(
+        (m, tp) => m + (Number(tp.extra_quantity) || 0) * (Number(tp.new_price) || 0),
+        0,
+      );
+    }
+    return Number(s.unit_rate || 0) * Number(s.quantity || 0);
+  };
   const breakdown = subResources.reduce(
     (acc, s) => {
-      const c = Number(s.unit_rate || 0) * Number(s.quantity || 0) + sumTopups(s);
+      const c = resourceCost(s);
       const cat = classifyResource(s.resource_type);
       if (cat === 'labor') acc.labor += c;
       else if (cat === 'machines') acc.machines += c;
@@ -1901,13 +1934,28 @@ function WorkCard({
                       (m, tp) => m + (Number(tp.extra_quantity) || 0) * (Number(tp.new_price) || 0),
                       0,
                     );
-                    const cost = baseCost + topupTotal;
+                    // When the resource carries top-ups, its Summa
+                    // becomes the sum of those top-ups (real spend,
+                    // broken down by price tier). The planned qty ×
+                    // unit_rate is dropped to avoid double-counting —
+                    // the top-ups together cover the same physical
+                    // material at the prices that were actually paid.
+                    const cost = topups.length > 0 ? topupTotal : baseCost;
                     const isResourceLike = ['material', 'labor', 'equipment', 'machine', 'machines'].includes(
                       String(sub.resource_type || '').toLowerCase(),
                     );
+                    const hasTopups = topups.length > 0;
+                    const topupsOpen = hasTopups && expandedTopups.has(sub.id);
                     return (
                       <React.Fragment key={sub.id}>
-                        <tr style={{ borderTop: `1px solid ${C.border}` }}>
+                        <tr
+                          style={{
+                            borderTop: `1px solid ${C.border}`,
+                            cursor: hasTopups ? 'pointer' : 'default',
+                            background: topupsOpen ? 'rgba(13,148,136,0.03)' : 'transparent',
+                          }}
+                          onClick={hasTopups ? () => toggleTopups(sub.id) : undefined}
+                        >
                           <td className="px-2.5 py-2">
                             <span
                               className="px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-[0.05em]"
@@ -1917,7 +1965,46 @@ function WorkCard({
                             </span>
                           </td>
                           <td className="px-2.5 py-2" style={{ color: C.text }}>
-                            {sub.name}
+                            <div className="flex items-center gap-2">
+                              {hasTopups && (
+                                <span
+                                  className="inline-flex items-center justify-center rounded-md flex-shrink-0 transition"
+                                  style={{
+                                    width: 22,
+                                    height: 22,
+                                    background: topupsOpen ? C.teal : 'rgba(13,148,136,0.18)',
+                                    color: topupsOpen ? '#FFFFFF' : C.teal,
+                                    border: `1px solid ${topupsOpen ? C.teal : 'rgba(13,148,136,0.45)'}`,
+                                    boxShadow: topupsOpen ? '0 1px 3px rgba(13,148,136,0.35)' : 'none',
+                                  }}
+                                  title={topupsOpen
+                                    ? (t('collapse') || 'Yopish')
+                                    : `${t('expand') || 'Ochish'}: ${topups.length} ${t('topup_label') || "qo'shimcha"}`}
+                                >
+                                  <ChevronDown
+                                    className="w-4 h-4 transition"
+                                    strokeWidth={2.75}
+                                    style={{
+                                      transform: topupsOpen ? 'rotate(0deg)' : 'rotate(-90deg)',
+                                    }}
+                                  />
+                                </span>
+                              )}
+                              <span>{sub.name}</span>
+                              {hasTopups && (
+                                <span
+                                  className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-[0.06em] flex-shrink-0 inline-flex items-center gap-1"
+                                  style={{
+                                    background: C.teal,
+                                    color: '#FFFFFF',
+                                    boxShadow: '0 1px 2px rgba(13,148,136,0.35)',
+                                  }}
+                                  title={`${topups.length} ${t('topup_label') || "qo'shimcha buyurtma"}`}
+                                >
+                                  +{topups.length} ДОП
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="px-2.5 py-2 text-center" style={{ color: C.dim }}>
                             {sub.uom || ''}
@@ -1970,11 +2057,14 @@ function WorkCard({
                           </td>
                         </tr>
                         {/* Top-up rows — indented child rows that appear
-                           directly under their parent resource. Each row
-                           shows extra_quantity × new_price + a delete
-                           button. They never move with sort order; they
-                           always stick to their parent. */}
-                        {topups.map((tp) => {
+                           directly under their parent resource, but
+                           only when the parent has been expanded
+                           (collapsed by default to keep card height
+                           sane when there are several top-ups). Each
+                           row shows extra_quantity × new_price + a
+                           delete button. They never move with sort
+                           order; they always stick to their parent. */}
+                        {topupsOpen && topups.map((tp) => {
                           const tpQty = Number(tp.extra_quantity) || 0;
                           const tpPrice = Number(tp.new_price) || 0;
                           const tpCost = tpQty * tpPrice;
