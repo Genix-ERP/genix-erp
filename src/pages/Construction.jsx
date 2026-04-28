@@ -916,11 +916,15 @@ const OverviewTabContent = React.memo(function OverviewTabContent({
       go: () => { setActiveGroup('materiallar'); setActiveTab('forms'); },
     },
     {
-      id: 'material',
-      label: t('material') || 'Material',
-      icon: Package,
-      hint: t('material_hint') || "Materiallarni kirim/sarf ko'rinishida boshqarish",
-      go: () => { setActiveGroup('materiallar'); setActiveTab('material_usage'); },
+      // Foto hisobot replaces the old Material shortcut — the
+      // Materiallar group is hidden in the nav anyway, so the Material
+      // tile led nowhere visible. Photo reports live under
+      // Jamoa → Foto hisobot, so route there directly.
+      id: 'photo_reports',
+      label: t('nav_photo_reports') || 'Foto hisobot',
+      icon: Camera,
+      hint: t('photo_report_hint') || "Loyiha bo'yicha foto hisobotlar",
+      go: () => { setActiveGroup('jamoa'); setActiveTab('photo_reports'); },
     },
     {
       id: 'journal',
@@ -2443,7 +2447,11 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                             <span className="font-medium">{building.floors_count || '-'}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-slate-500">{t('total_area') || 'Umumiy maydon'} (m²)</span>
+                            {/* The `total_area` translation already
+                               includes "(m²)" in every locale, so the
+                               extra " (m²)" suffix here was rendering
+                               the unit twice ("Total Area (m²) (m²)"). */}
+                            <span className="text-slate-500">{t('total_area') || 'Umumiy maydon (m²)'}</span>
                             <span className="font-medium">{building.total_area ? `${building.total_area} m²` : '-'}</span>
                           </div>
                           <div className="flex justify-between">

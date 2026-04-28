@@ -159,7 +159,28 @@ export default function SmetaManagementTab({ project }) {
   // used for things that need a single concrete id (Form 2 generation,
   // snapshots, audit log filter, "+resurs" modal). It's whichever Единич
   // for the block has the highest id (latest import).
-  const [buildingId, setBuildingId] = useState(''); // '' / '0' / numeric
+  // Block selection persists across tab navigation (Smeta boshqaruvi
+  // remounts every time the user comes back from another tab, so a
+  // plain `useState('')` would reset to the first block on every
+  // return). We stash the selection in localStorage, scoped per
+  // project id so different projects keep their own last-block. The
+  // value is hydrated lazily on first render and re-written below
+  // whenever the user picks a new block.
+  const blockStorageKey = project?.id ? `smeta:lastBlockId:${project.id}` : '';
+  const [buildingId, setBuildingIdRaw] = useState(() => {
+    if (!blockStorageKey) return '';
+    try { return window.localStorage.getItem(blockStorageKey) || ''; }
+    catch { return ''; }
+  });
+  const setBuildingId = useCallback((next) => {
+    setBuildingIdRaw(next);
+    if (blockStorageKey) {
+      try {
+        if (next == null || next === '') window.localStorage.removeItem(blockStorageKey);
+        else window.localStorage.setItem(blockStorageKey, String(next));
+      } catch { /* localStorage may be unavailable (private mode); ignore. */ }
+    }
+  }, [blockStorageKey]);
   const [estimateId, setEstimateId] = useState('');
   const [lines, setLines] = useState([]);
   const [loadingEstimates, setLoadingEstimates] = useState(false);
@@ -259,11 +280,18 @@ export default function SmetaManagementTab({ project }) {
     return opts;
   }, [estimates]);
 
-  // Pick a default block when the list first loads.
+  // Pick a default block when the list first loads. If localStorage
+  // gave us an id that's no longer in the available block list (e.g.
+  // the block was deleted, or the user is hopping between projects
+  // with the same key), fall back to the first option so the page
+  // doesn't show an empty selection.
   useEffect(() => {
-    if (!buildingId && blockOptions.length > 0) {
+    if (blockOptions.length === 0) return;
+    const exists = blockOptions.some((b) => String(b.id) === String(buildingId));
+    if (!buildingId || !exists) {
       setBuildingId(blockOptions[0].id);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [blockOptions, buildingId]);
 
   // Resolve buildingId → primary estimateId (latest едиinич of that block)
@@ -535,23 +563,31 @@ export default function SmetaManagementTab({ project }) {
 
   const sections = useMemo(() => {
     // Per-parent effective cost = Σ resource cost across its sub-lines,
-    // where each sub-line's cost follows the same plan-vs-topup rule
-    // used in WorkCard (top-ups, when present, REPLACE the planned
-    // qty × unit_rate — see WorkCard.resourceCost). When a parent has
-    // no resource breakdown at all, fall back to its own total_amount.
+    // where each sub-line follows the same plan-vs-topup rule used in
+    // WorkCard.resourceCost: top-ups replace the planned cost ONLY when
+    // their total quantity covers the resource quantity. A partial
+    // top-up (Σ tp.qty < line.quantity) leaves the planned cost in
+    // place. When a parent has no resource breakdown at all, fall
+    // back to its own total_amount.
     const effByParent = new Map();
     for (const ln of lines) {
       const pid = Number(ln.parent_line_id || 0);
       if (!pid) continue;
       const tps = Array.isArray(ln.topups) ? ln.topups : [];
+      const lnQty = Number(ln.quantity || 0);
       let c;
       if (tps.length > 0) {
-        c = tps.reduce(
-          (m, tp) => m + (Number(tp.extra_quantity) || 0) * (Number(tp.new_price) || 0),
-          0,
-        );
+        const tpQty = tps.reduce((m, tp) => m + (Number(tp.extra_quantity) || 0), 0);
+        if (tpQty >= lnQty) {
+          c = tps.reduce(
+            (m, tp) => m + (Number(tp.extra_quantity) || 0) * (Number(tp.new_price) || 0),
+            0,
+          );
+        } else {
+          c = Number(ln.unit_rate || 0) * lnQty;
+        }
       } else {
-        c = Number(ln.unit_rate || 0) * Number(ln.quantity || 0);
+        c = Number(ln.unit_rate || 0) * lnQty;
       }
       if (!c) continue;
       effByParent.set(pid, (effByParent.get(pid) || 0) + c);
@@ -1129,10 +1165,10 @@ export default function SmetaManagementTab({ project }) {
                         className="text-[11px] font-mono px-2 py-0.5 rounded"
                         style={{ background: C.inset, color: C.muted }}
                       >
-                        {sec.lines.length} ish
+                        {sec.lines.length} {t('works_count_suffix') || 'ish'}
                       </span>
                       <span className="text-[13px] font-mono font-semibold" style={{ color: C.amber }}>
-                        {fmt(sec.total)} so'm
+                        {fmt(sec.total)} {t('currency_som') || "so'm"}
                       </span>
                     </button>
 
@@ -1668,23 +1704,32 @@ function WorkCard({
   // nesting), so all subs of a sub-stage are resources.
   const subResources = (subs || []).filter((s) => !isSubStageRow(s));
 
-  // Per-resource effective cost. Two regimes:
+  // Per-resource effective cost. Three regimes:
   //   - No top-ups → qty × unit_rate (planned, original behavior).
-  //   - With top-ups (migration 358) → sum of top-up costs ONLY. The
-  //     foreman has now recorded what was ACTUALLY purchased (with the
-  //     real quantities and the prices that applied at order time), so
-  //     the planned qty × unit_rate is replaced — not augmented. Adding
-  //     both would double-count: each top-up represents a slice of the
-  //     same physical material, not extra units on top of the plan.
+  //   - Top-ups whose total qty covers the main resource qty
+  //     (Σ topup.extra_quantity ≥ resource.quantity) → use the
+  //     top-up sum. The foreman has now recorded what was actually
+  //     purchased for the FULL planned amount at the prices that
+  //     applied at order time, so the planned qty × unit_rate is
+  //     replaced.
+  //   - Top-ups whose total qty is SMALLER than the main resource qty
+  //     → fall back to the main's own qty × unit_rate. A partial
+  //     top-up is just a side-record (e.g. the foreman split the
+  //     purchase) — it doesn't represent the whole spend, so using
+  //     the planned cost gives the correct sum.
   const resourceCost = (s) => {
     const tps = Array.isArray(s.topups) ? s.topups : [];
+    const mainQty = Number(s.quantity || 0);
     if (tps.length > 0) {
-      return tps.reduce(
-        (m, tp) => m + (Number(tp.extra_quantity) || 0) * (Number(tp.new_price) || 0),
-        0,
-      );
+      const tpQty = tps.reduce((m, tp) => m + (Number(tp.extra_quantity) || 0), 0);
+      if (tpQty >= mainQty) {
+        return tps.reduce(
+          (m, tp) => m + (Number(tp.extra_quantity) || 0) * (Number(tp.new_price) || 0),
+          0,
+        );
+      }
     }
-    return Number(s.unit_rate || 0) * Number(s.quantity || 0);
+    return Number(s.unit_rate || 0) * mainQty;
   };
   const breakdown = subResources.reduce(
     (acc, s) => {
@@ -1771,7 +1816,7 @@ function WorkCard({
           {isEmpty ? '⚠ 0' : fmt(qty)}
         </div>
         <div className="text-[12px] font-mono text-right tabular-nums" style={{ color: C.dim }}>
-          {subResources.length} resurs
+          {subResources.length} {t('resources_count_suffix') || 'resurs'}
           {!isSubStage && (subs || []).filter(isSubStageRow).length > 0 && (
             <span style={{ color: C.amber }}> +{(subs || []).filter(isSubStageRow).length} etap</span>
           )}
@@ -1806,7 +1851,7 @@ function WorkCard({
               className="text-[11px] uppercase tracking-[0.1em]"
               style={{ color: C.muted }}
             >
-              {isSubStage ? (t('stage_qty') || 'Etap hajmi') : (t('work_qty') || 'Ish hajmi')}:
+              {isSubStage ? (t('label_stage_qty') || t('stage_qty') || 'Etap hajmi') : (t('label_work_qty') || t('work_qty') || 'Ish hajmi')}:
             </label>
             <input
               type="text"
@@ -1896,14 +1941,14 @@ function WorkCard({
                 <thead>
                   <tr>
                     {[
-                      { l: 'Tur',         w: 60,  align: 'left' },
-                      { l: 'Resurs nomi', w: null, align: 'left' },
-                      { l: "O'lchov",     w: 70,  align: 'center' },
-                      { l: 'Norma',       w: 90,  align: 'right' },
-                      { l: 'Jami',        w: 100, align: 'right' },
-                      { l: 'Narx',        w: 130, align: 'right', lock: true },
-                      { l: 'Summa',       w: 130, align: 'right' },
-                      { l: '',            w: 70,  align: 'left' },
+                      { l: t('col_tur')           || 'Tur',         w: 60,  align: 'left' },
+                      { l: t('col_resource_name') || 'Resurs nomi', w: null, align: 'left' },
+                      { l: t('col_unit')          || "O'lchov",     w: 70,  align: 'center' },
+                      { l: t('col_norm')          || 'Norma',       w: 90,  align: 'right' },
+                      { l: t('col_total_qty')     || 'Jami',        w: 100, align: 'right' },
+                      { l: t('col_price')         || 'Narx',        w: 130, align: 'right', lock: true },
+                      { l: t('col_amount')        || 'Summa',       w: 130, align: 'right' },
+                      { l: '',                                       w: 70,  align: 'left' },
                     ].map((h, i) => (
                       <th
                         key={i}
@@ -1934,13 +1979,19 @@ function WorkCard({
                       (m, tp) => m + (Number(tp.extra_quantity) || 0) * (Number(tp.new_price) || 0),
                       0,
                     );
-                    // When the resource carries top-ups, its Summa
-                    // becomes the sum of those top-ups (real spend,
-                    // broken down by price tier). The planned qty ×
-                    // unit_rate is dropped to avoid double-counting —
-                    // the top-ups together cover the same physical
-                    // material at the prices that were actually paid.
-                    const cost = topups.length > 0 ? topupTotal : baseCost;
+                    const topupQty = topups.reduce(
+                      (m, tp) => m + (Number(tp.extra_quantity) || 0),
+                      0,
+                    );
+                    // Replace the planned cost with the top-up sum
+                    // ONLY when the top-ups together cover the full
+                    // planned quantity (Σ topup.qty ≥ resource.qty).
+                    // For partial top-ups (Σ topup.qty < resource.qty)
+                    // the foreman has just side-recorded part of the
+                    // purchase; the resource still owes the rest at
+                    // the planned rate, so we keep qty × unit_rate.
+                    const topupsCover = topups.length > 0 && topupQty >= sq;
+                    const cost = topupsCover ? topupTotal : baseCost;
                     const isResourceLike = ['material', 'labor', 'equipment', 'machine', 'machines'].includes(
                       String(sub.resource_type || '').toLowerCase(),
                     );
@@ -2142,9 +2193,9 @@ function WorkCard({
                   <FooterItem label={t('footer_material')|| 'Material'} value={breakdown.materials}color={C.teal} />
                 </div>
                 <div className="pl-5 flex items-center gap-2" style={{ borderLeft: `1px solid ${C.border2}` }}>
-                  <span className="text-[11px]" style={{ color: C.muted }}>JAMI:</span>
+                  <span className="text-[11px]" style={{ color: C.muted }}>{t('label_total_caps') || 'JAMI'}:</span>
                   <span className="font-mono font-semibold text-[15px]" style={{ color: C.amber }}>
-                    {fmt(workTotal)} so'm
+                    {fmt(workTotal)} {t('currency_som') || "so'm"}
                   </span>
                 </div>
               </div>

@@ -166,15 +166,19 @@ export default function AddResourcePickerModal({ open, onClose, projectId, estim
   const handleConfirm = useCallback(async () => {
     if (!selected || !parent) return;
     const r = parseNum(rate);
+    // Total Qty is optional. When the user enters one we send it as
+    // a manual override so the row carries that exact quantity. When
+    // they leave it blank, we DON'T override — the backend then
+    // computes quantity = parent.quantity × norm_rate (cascade
+    // rule), which is what the user expects: a fresh resource added
+    // with just a norma should auto-respect the work's qty (e.g.
+    // norma 10 on a work with qty 21 → JAMI = 210), not stay 0.
     const tq = parseNum(totalQty);
-    if (tq <= 0) {
-      toast.error(t('total_qty_required') || 'Jami miqdorni kiriting');
-      return;
-    }
+    const overrideQty = tq > 0;
     setSaving(true);
     try {
       const parentNum = parent.item_number || String(parent.id || '');
-      await constructionService.createEstimateLine(estimateId, {
+      const payload = {
         parent_line_id: parent.id,
         name: selected.name,
         uom: selected.uom || parent.uom || '',
@@ -182,9 +186,12 @@ export default function AddResourcePickerModal({ open, onClose, projectId, estim
         norm_rate: r,
         unit_price: pickedPrice,
         item_number: parentNum ? `${parentNum}-${nextSeq || 1}` : undefined,
-        quantity_override: true,
-        quantity: tq,
-      });
+        quantity_override: overrideQty,
+      };
+      // Only send quantity when the user typed one — otherwise let
+      // the backend cascade from parent.qty × norm_rate.
+      if (overrideQty) payload.quantity = tq;
+      await constructionService.createEstimateLine(estimateId, payload);
       toast.success(t('added') || "Qo'shildi");
       onSaved?.();
       onClose?.();
