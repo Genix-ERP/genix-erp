@@ -115,6 +115,29 @@ export default function AddResourcePickerModal({ open, onClose, projectId, estim
     return xs.slice(0, 60);
   }, [resources, search]);
 
+  // Distinct unit-of-measure list, sourced from the resources already
+  // imported into this project's estimates. Powers the O'lchov dropdown
+  // in the inline "create new resource" form so foremen don't have to
+  // remember the exact spelling/casing the smeta uses (e.g. "ЧЕЛ.-Ч"
+  // vs "chel-soat") — picking from this list keeps new rows consistent
+  // with the imported smeta and avoids near-duplicate UOMs piling up.
+  // Dedupe is case-insensitive on the trimmed value; we keep the first
+  // casing seen so the dropdown shows the actual imported labels.
+  const uomOptions = useMemo(() => {
+    const seen = new Set();
+    const out = [];
+    for (const r of resources || []) {
+      const raw = String(r?.uom || '').trim();
+      if (!raw) continue;
+      const key = raw.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(raw);
+    }
+    out.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+    return out;
+  }, [resources]);
+
   const pickedPrice = useMemo(() => {
     if (!selected) return 0;
     const rt = String(selected.resource_type || '').toLowerCase();
@@ -218,6 +241,11 @@ export default function AddResourcePickerModal({ open, onClose, projectId, estim
         <DialogPrimitive.Content
           aria-describedby={undefined}
           style={{
+            // Light-theme rewrite — was a dark-mode panel (#1E293B / #0B1220)
+            // matching the v2 mockup, but the rest of the construction module
+            // is on a white surface and the user asked for the modals to
+            // match. Palette now mirrors the rest of the Smeta boshqaruvi
+            // page: white surface, slate-200 border, slate-900 text.
             position: 'fixed',
             top: '50%', left: '50%',
             transform: 'translate(-50%, -50%)',
@@ -225,9 +253,9 @@ export default function AddResourcePickerModal({ open, onClose, projectId, estim
             maxWidth: 760,
             maxHeight: 'calc(100vh - 64px)',
             zIndex: 101,
-            background: '#1E293B',
-            color: '#F1F5F9',
-            border: '1px solid #334155',
+            background: '#FFFFFF',
+            color: '#0F172A',
+            border: '1px solid #E2E8F0',
             borderRadius: 12,
             fontFamily: "'Inter', system-ui, sans-serif",
             display: 'flex',
@@ -239,19 +267,19 @@ export default function AddResourcePickerModal({ open, onClose, projectId, estim
           {/* Head */}
           <div
             className="px-6 py-5 flex justify-between items-start gap-4"
-            style={{ borderBottom: '1px solid #1E293B', flexShrink: 0 }}
+            style={{ borderBottom: '1px solid #E2E8F0', flexShrink: 0 }}
           >
             <div className="min-w-0 flex-1">
-              <div className="text-[11px] uppercase tracking-[0.1em] mb-1" style={{ color: '#94A3B8' }}>
+              <div className="text-[11px] uppercase tracking-[0.1em] mb-1" style={{ color: '#64748B' }}>
                 {t('add_extra_resource_title') || "Qo'shimcha resurs qo'shish"}
               </div>
-              <DialogPrimitive.Title className="text-base font-semibold truncate" title={parentLabel}>
+              <DialogPrimitive.Title className="text-base font-semibold truncate" title={parentLabel} style={{ color: '#0F172A' }}>
                 {parentLabel}
               </DialogPrimitive.Title>
             </div>
             <DialogPrimitive.Close
-              className="w-8 h-8 rounded-md flex items-center justify-center shrink-0"
-              style={{ background: '#1E293B', border: '1px solid #334155', color: '#CBD5E1' }}
+              className="w-8 h-8 rounded-md flex items-center justify-center shrink-0 hover:bg-slate-50"
+              style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', color: '#64748B' }}
             >
               <X className="w-4 h-4" />
             </DialogPrimitive.Close>
@@ -260,7 +288,7 @@ export default function AddResourcePickerModal({ open, onClose, projectId, estim
           {/* Body — scrolls when content exceeds available height */}
           <div className="px-6 py-5" style={{ overflowY: 'auto', flex: 1, minHeight: 0 }}>
             <div className="mb-4">
-              <label className="text-[11px] block mb-1.5" style={{ color: '#94A3B8' }}>
+              <label className="text-[11px] block mb-1.5" style={{ color: '#64748B' }}>
                 {t('pick_resource') || 'Resursni tanlang'}
               </label>
               <div className="flex items-stretch gap-2">
@@ -271,8 +299,8 @@ export default function AddResourcePickerModal({ open, onClose, projectId, estim
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder={t('search_resource_by_name') || "Resurs nomi bo'yicha qidirish..."}
-                    className="w-full pl-9 pr-3 py-2.5 rounded-md text-[13px] outline-none"
-                    style={{ background: '#0B1220', color: '#F1F5F9', border: '1px solid #334155', fontFamily: 'inherit' }}
+                    className="w-full pl-9 pr-3 py-2.5 rounded-md text-[13px] outline-none focus:border-teal-500"
+                    style={{ background: '#FFFFFF', color: '#0F172A', border: '1px solid #CBD5E1', fontFamily: 'inherit' }}
                     autoFocus
                   />
                 </div>
@@ -286,8 +314,8 @@ export default function AddResourcePickerModal({ open, onClose, projectId, estim
                   title={t('create_new_resource') || "Yangi resurs yaratish"}
                   className="px-3 rounded-md flex items-center justify-center"
                   style={{
-                    background: createOpen ? '#14B8A6' : '#0B1220',
-                    color: createOpen ? '#0B1220' : '#14B8A6',
+                    background: createOpen ? '#14B8A6' : '#FFFFFF',
+                    color: createOpen ? '#FFFFFF' : '#14B8A6',
                     border: '1px solid #14B8A6',
                   }}
                 >
@@ -300,11 +328,11 @@ export default function AddResourcePickerModal({ open, onClose, projectId, estim
             {createOpen && (
               <div
                 className="mb-4 p-3 rounded-lg"
-                style={{ background: '#0B1220', border: '1px solid #334155' }}
+                style={{ background: '#F8FAFC', border: '1px solid #E2E8F0' }}
               >
                 <div className="grid grid-cols-2 gap-2 mb-2">
                   <div className="col-span-2">
-                    <label className="text-[10.5px] block mb-1" style={{ color: '#94A3B8' }}>
+                    <label className="text-[10.5px] block mb-1" style={{ color: '#64748B' }}>
                       {t('resource_name') || 'Resurs nomi'}
                     </label>
                     <input
@@ -313,31 +341,48 @@ export default function AddResourcePickerModal({ open, onClose, projectId, estim
                       onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))}
                       placeholder={t('resource_name_placeholder') || "Masalan: AVTOBETONONASOSY 65 М3/Ч"}
                       className="w-full px-3 py-2 rounded text-[12.5px] outline-none"
-                      style={{ background: '#1E293B', color: '#F1F5F9', border: '1px solid #334155', fontFamily: 'inherit' }}
+                      style={{ background: '#FFFFFF', color: '#0F172A', border: '1px solid #CBD5E1', fontFamily: 'inherit' }}
                     />
                   </div>
                   <div>
-                    <label className="text-[10.5px] block mb-1" style={{ color: '#94A3B8' }}>
+                    <label className="text-[10.5px] block mb-1" style={{ color: '#64748B' }}>
                       {t('unit') || "O'lchov"}
                     </label>
+                    {/* Combobox: native datalist dropdown sourced from the
+                        UOMs already imported into this project's estimates,
+                        but the field still accepts free text for the rare
+                        case where the foreman needs a unit the smeta didn't
+                        include. Keeping uomOptions case-deduped means the
+                        dropdown won't show "м3" and "М3" as separate rows
+                        when the imported smeta mixed both casings. */}
                     <input
                       type="text"
+                      list="add-resource-uom-options"
                       value={createForm.uom}
                       onChange={(e) => setCreateForm((f) => ({ ...f, uom: e.target.value }))}
-                      placeholder={t('unit_placeholder') || "м3, шт, ЧЕЛ.-Ч…"}
+                      placeholder={
+                        uomOptions.length > 0
+                          ? `${t('select_or_type') || 'Tanlang yoki kiriting'}…`
+                          : (t('unit_placeholder') || "м3, шт, ЧЕЛ.-Ч…")
+                      }
                       className="w-full px-3 py-2 rounded text-[12.5px] outline-none"
-                      style={{ background: '#1E293B', color: '#F1F5F9', border: '1px solid #334155', fontFamily: 'inherit' }}
+                      style={{ background: '#FFFFFF', color: '#0F172A', border: '1px solid #CBD5E1', fontFamily: 'inherit' }}
                     />
+                    <datalist id="add-resource-uom-options">
+                      {uomOptions.map((u) => (
+                        <option key={u} value={u} />
+                      ))}
+                    </datalist>
                   </div>
                   <div>
-                    <label className="text-[10.5px] block mb-1" style={{ color: '#94A3B8' }}>
+                    <label className="text-[10.5px] block mb-1" style={{ color: '#64748B' }}>
                       {t('type') || 'Tur'}
                     </label>
                     <select
                       value={createForm.resource_type}
                       onChange={(e) => setCreateForm((f) => ({ ...f, resource_type: e.target.value }))}
                       className="w-full px-3 py-2 rounded text-[12.5px] outline-none cursor-pointer"
-                      style={{ background: '#1E293B', color: '#F1F5F9', border: '1px solid #334155', fontFamily: 'inherit' }}
+                      style={{ background: '#FFFFFF', color: '#0F172A', border: '1px solid #CBD5E1', fontFamily: 'inherit' }}
                     >
                       <option value="material">{t('mat_type_material') || 'Material'}</option>
                       <option value="equipment">{t('mat_type_equipment') || 'Mashina'}</option>
@@ -345,7 +390,7 @@ export default function AddResourcePickerModal({ open, onClose, projectId, estim
                     </select>
                   </div>
                   <div className="col-span-2">
-                    <label className="text-[10.5px] block mb-1" style={{ color: '#94A3B8' }}>
+                    <label className="text-[10.5px] block mb-1" style={{ color: '#64748B' }}>
                       {t('unit_price') || 'Birlik narxi'}
                     </label>
                     <input
@@ -355,12 +400,12 @@ export default function AddResourcePickerModal({ open, onClose, projectId, estim
                       onChange={(e) => setCreateForm((f) => ({ ...f, unit_price: stripAmountInput(e.target.value) }))}
                       placeholder="0"
                       className="w-full px-3 py-2 rounded text-[12.5px] font-mono outline-none"
-                      style={{ background: '#1E293B', color: '#F1F5F9', border: '1px solid #334155' }}
+                      style={{ background: '#FFFFFF', color: '#0F172A', border: '1px solid #CBD5E1' }}
                     />
                   </div>
                 </div>
                 {createForm.resource_type === 'material' && (
-                  <div className="text-[10.5px] mb-2" style={{ color: '#FBBF24' }}>
+                  <div className="text-[10.5px] mb-2" style={{ color: '#B45309' }}>
                     📦 {t('material_inventory_note') || "Material turidagi resurs Mahsulotlar (Inventar) ro'yxatiga ham qo'shiladi"}
                   </div>
                 )}
@@ -370,7 +415,7 @@ export default function AddResourcePickerModal({ open, onClose, projectId, estim
                     onClick={() => setCreateOpen(false)}
                     disabled={creating}
                     className="px-3 py-1.5 rounded text-[11.5px] disabled:opacity-50"
-                    style={{ background: 'transparent', color: '#CBD5E1', border: '1px solid #334155' }}
+                    style={{ background: '#FFFFFF', color: '#475569', border: '1px solid #CBD5E1' }}
                   >
                     {t('cancel') || 'Bekor qilish'}
                   </button>
@@ -379,7 +424,7 @@ export default function AddResourcePickerModal({ open, onClose, projectId, estim
                     onClick={handleCreate}
                     disabled={creating || !String(createForm.name || '').trim()}
                     className="px-3 py-1.5 rounded text-[11.5px] font-medium flex items-center gap-1.5 disabled:opacity-50"
-                    style={{ background: '#14B8A6', color: '#1E293B', border: 'none' }}
+                    style={{ background: '#14B8A6', color: '#FFFFFF', border: 'none' }}
                   >
                     {creating && <Loader2 className="w-3 h-3 animate-spin" />}
                     {t('create') || 'Yaratish'}
@@ -390,12 +435,12 @@ export default function AddResourcePickerModal({ open, onClose, projectId, estim
 
             <div className="mb-4" style={{ maxHeight: 300, overflowY: 'auto' }}>
               {loading ? (
-                <div className="py-8 text-center" style={{ color: '#94A3B8' }}>
+                <div className="py-8 text-center" style={{ color: '#64748B' }}>
                   <Loader2 className="w-5 h-5 mx-auto mb-2 animate-spin" />
                   {t('loading') || 'Yuklanmoqda…'}
                 </div>
               ) : filtered.length === 0 ? (
-                <div className="py-8 text-center text-[13px]" style={{ color: '#94A3B8' }}>
+                <div className="py-8 text-center text-[13px]" style={{ color: '#64748B' }}>
                   {t('no_resources_found') || 'Hech narsa topilmadi'}
                 </div>
               ) : (
@@ -413,10 +458,10 @@ export default function AddResourcePickerModal({ open, onClose, projectId, estim
                       key={r.id}
                       type="button"
                       onClick={() => setSelected(r)}
-                      className="w-full mb-1.5 px-3 py-2.5 rounded-md grid items-center gap-3 transition text-left"
+                      className="w-full mb-1.5 px-3 py-2.5 rounded-md grid items-center gap-3 transition text-left hover:bg-slate-50"
                       style={{
-                        background: isSelected ? '#1E293B' : '#0B1220',
-                        border: `1px solid ${isSelected ? '#14B8A6' : '#334155'}`,
+                        background: isSelected ? 'rgba(20,184,166,0.06)' : '#FFFFFF',
+                        border: `1px solid ${isSelected ? '#14B8A6' : '#E2E8F0'}`,
                         gridTemplateColumns: '90px 1fr 80px 130px',
                         fontSize: 12,
                         cursor: 'pointer',
@@ -428,9 +473,9 @@ export default function AddResourcePickerModal({ open, onClose, projectId, estim
                       >
                         {tag.label}
                       </span>
-                      <span className="truncate" style={{ color: '#F1F5F9' }} title={r.name}>{r.name}</span>
-                      <span className="text-center" style={{ color: '#CBD5E1' }}>{r.uom || ''}</span>
-                      <span className="text-right font-mono tabular-nums" style={{ color: '#F59E0B' }}>{fmt(price)}</span>
+                      <span className="truncate" style={{ color: '#0F172A' }} title={r.name}>{r.name}</span>
+                      <span className="text-center" style={{ color: '#475569' }}>{r.uom || ''}</span>
+                      <span className="text-right font-mono tabular-nums" style={{ color: '#D97706' }}>{fmt(price)}</span>
                     </button>
                   );
                 })
@@ -440,14 +485,14 @@ export default function AddResourcePickerModal({ open, onClose, projectId, estim
             {selected && (
               <div
                 className="rounded-lg p-4"
-                style={{ background: '#0B1220', border: '1px solid #334155' }}
+                style={{ background: '#F8FAFC', border: '1px solid #E2E8F0' }}
               >
-                <label className="text-[11px] block mb-1.5" style={{ color: '#94A3B8' }}>
+                <label className="text-[11px] block mb-1.5" style={{ color: '#64748B' }}>
                   {t('selected_resource') || 'Tanlangan resurs'}
                 </label>
                 <div
                   className="px-3 py-2.5 rounded text-[13px] mb-4 flex items-center gap-2"
-                  style={{ background: '#1E293B' }}
+                  style={{ background: '#FFFFFF', border: '1px solid #E2E8F0' }}
                 >
                   {(() => {
                     const cat = classify(selected.resource_type);
@@ -461,15 +506,15 @@ export default function AddResourcePickerModal({ open, onClose, projectId, estim
                       </span>
                     );
                   })()}
-                  <span className="truncate" title={selected.name}>{selected.name}</span>
-                  <span className="text-[12px]" style={{ color: '#94A3B8' }}>
+                  <span className="truncate" title={selected.name} style={{ color: '#0F172A' }}>{selected.name}</span>
+                  <span className="text-[12px]" style={{ color: '#64748B' }}>
                     ({selected.uom || ''} · {fmt(pickedPrice)} so'm)
                   </span>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 mb-4">
                   <div>
-                    <label className="text-[11px] block mb-1.5" style={{ color: '#94A3B8' }}>
+                    <label className="text-[11px] block mb-1.5" style={{ color: '#64748B' }}>
                       {t('norma_per_unit') || 'Norma (bir birlik uchun)'}
                     </label>
                     <input
@@ -479,11 +524,11 @@ export default function AddResourcePickerModal({ open, onClose, projectId, estim
                       onChange={(e) => setRate(e.target.value)}
                       onFocus={(e) => e.target.select()}
                       className="w-full px-3 py-2.5 rounded-md text-[13px] font-mono outline-none"
-                      style={{ background: '#0B1220', color: '#F1F5F9', border: '1px solid #334155' }}
+                      style={{ background: '#FFFFFF', color: '#0F172A', border: '1px solid #CBD5E1' }}
                     />
                   </div>
                   <div>
-                    <label className="text-[11px] block mb-1.5" style={{ color: '#94A3B8' }}>
+                    <label className="text-[11px] block mb-1.5" style={{ color: '#64748B' }}>
                       {t('total_qty') || 'Jami miqdor'}
                     </label>
                     <input
@@ -493,17 +538,17 @@ export default function AddResourcePickerModal({ open, onClose, projectId, estim
                       onChange={(e) => setTotalQty(e.target.value)}
                       onFocus={(e) => e.target.select()}
                       className="w-full px-3 py-2.5 rounded-md text-[13px] font-mono outline-none"
-                      style={{ background: '#0B1220', color: '#F1F5F9', border: '1px solid #334155' }}
+                      style={{ background: '#FFFFFF', color: '#0F172A', border: '1px solid #CBD5E1' }}
                     />
                   </div>
                 </div>
 
                 <div
                   className="px-3 py-3 rounded-md flex justify-between items-center font-mono text-[12px]"
-                  style={{ background: '#1E293B' }}
+                  style={{ background: '#FFFFFF', border: '1px solid #E2E8F0' }}
                 >
-                  <span style={{ color: '#94A3B8' }}>{t('amount') || 'Summa'}:</span>
-                  <span style={{ color: '#F59E0B', fontWeight: 600 }}>{fmt(summa)} so'm</span>
+                  <span style={{ color: '#64748B' }}>{t('amount') || 'Summa'}:</span>
+                  <span style={{ color: '#D97706', fontWeight: 600 }}>{fmt(summa)} so'm</span>
                 </div>
               </div>
             )}
@@ -512,13 +557,13 @@ export default function AddResourcePickerModal({ open, onClose, projectId, estim
           {/* Foot */}
           <div
             className="px-6 py-4 flex justify-end gap-2.5"
-            style={{ borderTop: '1px solid #1E293B', flexShrink: 0 }}
+            style={{ borderTop: '1px solid #E2E8F0', flexShrink: 0 }}
           >
             <button
               onClick={onClose}
               disabled={saving}
               className="px-4 py-2 rounded-md text-xs disabled:opacity-50"
-              style={{ background: 'transparent', color: '#CBD5E1', border: '1px solid #334155' }}
+              style={{ background: '#FFFFFF', color: '#475569', border: '1px solid #CBD5E1' }}
             >
               {t('cancel') || 'Bekor qilish'}
             </button>
@@ -526,7 +571,7 @@ export default function AddResourcePickerModal({ open, onClose, projectId, estim
               onClick={handleConfirm}
               disabled={!selected || saving}
               className="px-4 py-2 rounded-md text-xs font-medium flex items-center gap-1.5 disabled:opacity-50"
-              style={{ background: '#14B8A6', color: '#1E293B', border: 'none' }}
+              style={{ background: '#14B8A6', color: '#FFFFFF', border: 'none' }}
             >
               {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               {t('add') || "Qo'shish"}

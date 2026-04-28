@@ -780,10 +780,18 @@ export default function SmetaManagementTab({ project }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeEstimateIds, loadLines, t]);
+  // nextSeqFor returns the next sequence number to use when composing a
+  // new sub-stage's item_number ("13-1", "13-2", …). It must count ONLY
+  // existing sub-stages — not the resource children (Mehnat/Mashina/
+  // Material) that also live under the same parent_line_id. Counting all
+  // children was the cause of "added etap got numbered 13-4 instead of
+  // 13-1": work #13 had 3 resources, so MAX(subline_seq)+1 = 4.
   const nextSeqFor = (parentId) => {
     if (!parentId) return 1;
-    const subs = lines.filter((r) => Number(r.parent_line_id) === Number(parentId));
-    return subs.reduce((m, s) => Math.max(m, Number(s.subline_seq) || 0), 0) + 1;
+    const subStages = lines.filter(
+      (r) => Number(r.parent_line_id) === Number(parentId) && isSubStageRow(r),
+    );
+    return subStages.length + 1;
   };
 
   // ── UI helpers ────────────────────────────────────────────────────
@@ -1267,6 +1275,7 @@ export default function SmetaManagementTab({ project }) {
         <div className="px-8 pt-6 pb-12">
           <AuditPage
             t={t}
+            language={language}
             loading={loadingAudit}
             entries={auditEntries}
             filter={auditFilter}
@@ -1842,7 +1851,14 @@ function WorkCard({
             padding: '0 16px 14px 16px',
           }}
         >
-          {/* Qty row + add buttons */}
+          {/* Qty row + add buttons.
+              Layout: NORMA (read-only, reja from smeta = original_quantity)
+              alongside FAKT QILINGAN HAJM (editable, current quantity). The
+              Bosqichlar tab already shows REJA + BAJARILDI side-by-side; this
+              brings the same pair to Smeta boshqaruvi so the user can see how
+              far the entered quantity has drifted from the imported smeta
+              norm without flipping tabs. The label group is captioned
+              "Norma va fakt qilingan hajm" per the product spec. */}
           <div
             className="flex items-center gap-3 py-3 mb-3 flex-wrap"
             style={{ borderBottom: `1px solid ${C.border}` }}
@@ -1851,28 +1867,59 @@ function WorkCard({
               className="text-[11px] uppercase tracking-[0.1em]"
               style={{ color: C.muted }}
             >
-              {isSubStage ? (t('label_stage_qty') || t('stage_qty') || 'Etap hajmi') : (t('label_work_qty') || t('work_qty') || 'Ish hajmi')}:
+              {t('norma_va_fakt_qilingan_hajm') || 'Norma va fakt qilingan hajm'}:
             </label>
-            <input
-              type="text"
-              inputMode="decimal"
-              value={qtyValue ?? ''}
-              onClick={(e) => e.stopPropagation()}
-              onChange={(e) => setQtyDraft(e.target.value)}
-              onFocus={(e) => e.target.select()}
-              onBlur={(e) => {
-                if (qtyChanged) commitQty(line, e.target.value);
-                clearQtyDraft();
-              }}
-              className={`px-3 py-2 rounded-[5px] text-[13px] font-mono text-right outline-none transition ${isEmpty ? 'smeta-empty-pulse' : ''}`}
-              style={{
-                background: isEmpty ? 'rgba(217,119,6,0.05)' : C.inset,
-                color: isEmpty ? C.amber : (qtyChanged ? C.teal : C.text),
-                border: `1px solid ${isEmpty ? C.amber : C.border2}`,
-                width: 140,
-                fontWeight: qtyChanged || isEmpty ? 600 : 400,
-              }}
-            />
+            {/* NORMA — reja quantity from the imported smeta. Read-only.
+                Sized identically to the Fakt input below (same width /
+                padding / font / height) so the two read as a matched pair
+                in the row. */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] uppercase tracking-[0.08em]" style={{ color: C.fade }}>
+                {t('label_norma_short') || 'Norma'}
+              </span>
+              <span
+                className="px-3 py-2 rounded-[5px] text-[13px] font-mono text-right tabular-nums inline-flex items-center justify-end"
+                style={{
+                  background: C.hover,
+                  color: origQty > 0 ? C.text : C.muted,
+                  border: `1px solid ${C.border2}`,
+                  width: 120,
+                  height: 38, // matches the input's computed height (text-[13px] + py-2 + 1px borders)
+                  boxSizing: 'border-box',
+                }}
+                title={t('reja_smeta_hint') || "Smeta bo'yicha reja miqdor"}
+              >
+                {origQty > 0 ? fmt(origQty) : '—'}
+              </span>
+            </div>
+            {/* FAKT QILINGAN HAJM — editable. Drives the cascade to children. */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] uppercase tracking-[0.08em]" style={{ color: C.fade }}>
+                {t('label_fakt_qilingan_hajm_short') || 'Fakt'}
+              </span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={qtyValue ?? ''}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => setQtyDraft(e.target.value)}
+                onFocus={(e) => e.target.select()}
+                onBlur={(e) => {
+                  if (qtyChanged) commitQty(line, e.target.value);
+                  clearQtyDraft();
+                }}
+                className={`px-3 py-2 rounded-[5px] text-[13px] font-mono text-right outline-none transition ${isEmpty ? 'smeta-empty-pulse' : ''}`}
+                style={{
+                  background: isEmpty ? 'rgba(217,119,6,0.05)' : C.inset,
+                  color: isEmpty ? C.amber : (qtyChanged ? C.teal : C.text),
+                  border: `1px solid ${isEmpty ? C.amber : C.border2}`,
+                  width: 120,
+                  height: 38, // pinned to match the Norma chip exactly
+                  boxSizing: 'border-box',
+                  fontWeight: qtyChanged || isEmpty ? 600 : 400,
+                }}
+              />
+            </div>
             <span className="text-xs" style={{ color: C.muted }}>{line.uom || ''}</span>
             {qtyModified && (
               <button
@@ -2280,6 +2327,7 @@ function HistoryPage({ t, loading, snapshots, onView, onDelete, onRefresh, onSav
               <tr style={{ background: C.sec, borderBottom: `1px solid ${C.border}` }}>
                 <th className="px-3 py-2 text-left font-medium" style={{ color: C.muted }}>{t('history_col_saved') || 'Sana'}</th>
                 <th className="px-3 py-2 text-left font-medium" style={{ color: C.muted }}>{t('history_col_act') || 'Akt №'}</th>
+                <th className="px-3 py-2 text-left font-medium" style={{ color: C.muted }}>{t('history_col_block') || 'Blok'}</th>
                 <th className="px-3 py-2 text-left font-medium" style={{ color: C.muted }}>{t('history_col_period') || 'Davr'}</th>
                 <th className="px-3 py-2 text-right font-medium" style={{ color: C.muted }}>{t('history_col_total') || 'Jami'}</th>
                 <th className="px-3 py-2 text-center font-medium" style={{ color: C.muted }}>{t('history_col_vat') || 'НДС'}</th>
@@ -2292,6 +2340,18 @@ function HistoryPage({ t, loading, snapshots, onView, onDelete, onRefresh, onSav
                 <tr key={s.id} style={{ borderBottom: `1px solid ${C.border}` }}>
                   <td className="px-3 py-2 font-mono" style={{ color: C.text }}>{fmtDate(s.created_at)}</td>
                   <td className="px-3 py-2" style={{ color: C.dim }}>{s.act_number || '—'}</td>
+                  <td className="px-3 py-2">
+                    {s.building_name ? (
+                      <span
+                        className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium"
+                        style={{ background: C.inset, color: C.teal, border: `1px solid ${C.border2}` }}
+                      >
+                        {s.building_name}
+                      </span>
+                    ) : (
+                      <span style={{ color: C.muted }}>—</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2" style={{ color: C.dim }}>{fmtPeriod(s.period_from, s.period_to)}</td>
                   <td className="px-3 py-2 text-right font-mono font-semibold" style={{ color: C.amber }}>
                     {fmt(Number(s.use_vat ? s.total_with_vat : s.total_without_vat) || 0)}
@@ -2336,25 +2396,46 @@ function HistoryPage({ t, loading, snapshots, onView, onDelete, onRefresh, onSav
 // from/to values, free-form description, who did it and when. The header
 // includes a filter dropdown that re-queries the backend with ?action=.
 // =====================================================================
+// AUDIT_ACTION_META — display metadata per audit action code. Each entry
+// carries the trio of locale labels (uz / ru / en) so the table doesn't
+// render Uzbek strings against a Russian-mode UI. New action codes shipped
+// by the backend MUST land here too — without an entry the table falls
+// back to printing the raw code (the bug user reported with `topup_add` /
+// `topup_del` showing as "topup_add" / "topup_del").
 const AUDIT_ACTION_META = {
-  qty_change:      { color: '#0D9488', icon: Edit3,        label_uz: 'Hajm',         label_ru: 'Объём' },
-  price_change:    { color: '#D97706', icon: DollarSign,   label_uz: 'Narx',         label_ru: 'Цена' },
-  mat_type:        { color: '#7C3AED', icon: Tag,          label_uz: 'Material',     label_ru: 'Тип материала' },
-  subwork_add:     { color: '#16A34A', icon: Plus,         label_uz: 'Yangi etap',   label_ru: 'Новый этап' },
-  subwork_del:     { color: '#DC2626', icon: Trash2,       label_uz: "Etap o'chdi",  label_ru: 'Этап удалён' },
-  res_add:         { color: '#0D9488', icon: Plus,         label_uz: 'Resurs +',     label_ru: 'Ресурс +' },
-  res_del:         { color: '#DC2626', icon: Trash2,       label_uz: "Resurs o'chdi",label_ru: 'Ресурс удалён' },
-  reset_qty:       { color: '#475569', icon: RotateCcw,    label_uz: 'Hajm reset',   label_ru: 'Сброс объёма' },
-  reset_qty_all:   { color: '#475569', icon: RotateCcw,    label_uz: 'Barcha hajm',  label_ru: 'Сброс всех объёмов' },
-  reset_price:     { color: '#475569', icon: RotateCcw,    label_uz: 'Narx reset',   label_ru: 'Сброс цены' },
-  reset_price_all: { color: '#475569', icon: RotateCcw,    label_uz: 'Barcha narx',  label_ru: 'Сброс всех цен' },
-  form_save:       { color: '#0D9488', icon: SaveIcon,     label_uz: 'Forma 2',      label_ru: 'Сохр. Форма 2' },
-  form_delete:     { color: '#DC2626', icon: Trash2,       label_uz: 'Forma 2 ←',    label_ru: 'Удал. Форма 2' },
-  other_pct:       { color: '#7C3AED', icon: Percent,      label_uz: 'Прочие %',     label_ru: 'Прочие %' },
-  use_vat:         { color: '#7C3AED', icon: ToggleLeft,   label_uz: 'НДС',          label_ru: 'НДС' },
+  qty_change:      { color: '#0D9488', icon: Edit3,        label_uz: 'Hajm',                 label_ru: 'Объём',              label_en: 'Quantity' },
+  price_change:    { color: '#D97706', icon: DollarSign,   label_uz: 'Narx',                 label_ru: 'Цена',               label_en: 'Price' },
+  mat_type:        { color: '#7C3AED', icon: Tag,          label_uz: 'Material turi',        label_ru: 'Тип материала',      label_en: 'Material type' },
+  subwork_add:     { color: '#16A34A', icon: Plus,         label_uz: 'Yangi etap',           label_ru: 'Новый этап',         label_en: 'New stage' },
+  subwork_del:     { color: '#DC2626', icon: Trash2,       label_uz: "Etap o'chdi",          label_ru: 'Этап удалён',        label_en: 'Stage deleted' },
+  res_add:         { color: '#0D9488', icon: Plus,         label_uz: "Resurs qo'shildi",     label_ru: 'Ресурс добавлен',    label_en: 'Resource added' },
+  res_del:         { color: '#DC2626', icon: Trash2,       label_uz: "Resurs o'chdi",        label_ru: 'Ресурс удалён',      label_en: 'Resource deleted' },
+  reset_qty:       { color: '#475569', icon: RotateCcw,    label_uz: 'Hajm reset',           label_ru: 'Сброс объёма',       label_en: 'Quantity reset' },
+  reset_qty_all:   { color: '#475569', icon: RotateCcw,    label_uz: "Barcha hajm reset",    label_ru: 'Сброс всех объёмов', label_en: 'All quantities reset' },
+  reset_price:     { color: '#475569', icon: RotateCcw,    label_uz: 'Narx reset',           label_ru: 'Сброс цены',         label_en: 'Price reset' },
+  reset_price_all: { color: '#475569', icon: RotateCcw,    label_uz: 'Barcha narx reset',    label_ru: 'Сброс всех цен',     label_en: 'All prices reset' },
+  form_save:       { color: '#0D9488', icon: SaveIcon,     label_uz: 'Forma 2 saqlandi',     label_ru: 'Форма 2 сохранена',  label_en: 'Forma 2 saved' },
+  form_delete:     { color: '#DC2626', icon: Trash2,       label_uz: "Forma 2 o'chdi",       label_ru: 'Форма 2 удалена',    label_en: 'Forma 2 deleted' },
+  other_pct:       { color: '#7C3AED', icon: Percent,      label_uz: 'Boshqa xarajat %',     label_ru: 'Прочие %',           label_en: 'Other costs %' },
+  use_vat:         { color: '#7C3AED', icon: ToggleLeft,   label_uz: 'QQS',                  label_ru: 'НДС',                label_en: 'VAT' },
+  // Top-up actions — the foreman recording an extra purchase that
+  // covers (or partially covers) a planned resource at a different
+  // price. Backend writes these from construction_resource_topup.go.
+  topup_add:       { color: '#0D9488', icon: Plus,         label_uz: "Qo'shimcha buyurtma",  label_ru: 'Доп. заказ',         label_en: 'Top-up added' },
+  topup_del:       { color: '#DC2626', icon: Trash2,       label_uz: "Qo'shimcha o'chdi",    label_ru: 'Доп. удалён',        label_en: 'Top-up deleted' },
 };
 
-function AuditPage({ t, loading, entries, filter, onFilterChange, onRefresh }) {
+// Pick the locale-appropriate label for an action meta record. Called
+// from the action cell + the filter dropdown so both stay in sync with
+// the current language.
+function auditActionLabel(meta, language) {
+  if (!meta) return '';
+  if (language === 'ru' && meta.label_ru) return meta.label_ru;
+  if (language === 'en' && meta.label_en) return meta.label_en;
+  return meta.label_uz || meta.label_ru || meta.label_en || '';
+}
+
+function AuditPage({ t, language, loading, entries, filter, onFilterChange, onRefresh }) {
   const fmtDate = (s) => {
     if (!s) return '—';
     try {
@@ -2377,7 +2458,7 @@ function AuditPage({ t, loading, entries, filter, onFilterChange, onRefresh }) {
         >
           <option value="">{t('audit_filter_all') || 'Barchasi'}</option>
           {Object.entries(AUDIT_ACTION_META).map(([k, m]) => (
-            <option key={k} value={k}>{m.label_uz}</option>
+            <option key={k} value={k}>{auditActionLabel(m, language)}</option>
           ))}
         </select>
         <button
@@ -2414,8 +2495,13 @@ function AuditPage({ t, loading, entries, filter, onFilterChange, onRefresh }) {
             </thead>
             <tbody>
               {entries.map((e) => {
-                const meta = AUDIT_ACTION_META[e.action] || { color: C.muted, icon: Activity, label_uz: e.action };
+                // Unknown action codes get a neutral icon + the raw code
+                // as label (so a brand-new backend action shows up
+                // identifiably rather than disappearing). Once the action
+                // is added to AUDIT_ACTION_META it gets the proper label.
+                const meta = AUDIT_ACTION_META[e.action] || { color: C.muted, icon: Activity, label_uz: e.action, label_ru: e.action, label_en: e.action };
                 const Icon = meta.icon;
+                const actionLabel = auditActionLabel(meta, language);
                 return (
                   <tr key={e.id} style={{ borderBottom: `1px solid ${C.border}` }}>
                     <td className="px-3 py-2 font-mono" style={{ color: C.dim }}>{fmtDate(e.created_at)}</td>
@@ -2427,7 +2513,7 @@ function AuditPage({ t, loading, entries, filter, onFilterChange, onRefresh }) {
                         >
                           <Icon className="w-3 h-3" />
                         </span>
-                        <span className="text-[12px]" style={{ color: meta.color, fontWeight: 500 }}>{meta.label_uz}</span>
+                        <span className="text-[12px]" style={{ color: meta.color, fontWeight: 500 }}>{actionLabel}</span>
                       </div>
                     </td>
                     <td className="px-3 py-2" style={{ color: C.text }}>

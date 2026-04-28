@@ -682,12 +682,41 @@ ${linkParts.join('\n')}
     subCell.alignment = { horizontal: 'center' };
     r++;
 
+    // Mirror the on-screen header: object full name (above), project
+    // name (middle, bold-ish), and joined address (below) — all centred
+    // so the printed Excel matches what the user sees in the modal.
+    const objectFullNameXlsx = String(project?.object_full_name || '').trim();
+    if (objectFullNameXlsx) {
+      ws.mergeCells(`A${r}:${lastColLetter(LAST_COL)}${r}`);
+      const c = ws.getCell(`A${r}`);
+      c.value = objectFullNameXlsx;
+      c.font = { size: 11, color: { argb: C.slate700 } };
+      c.alignment = { horizontal: 'center' };
+      r++;
+    }
     if (project?.name) {
       ws.mergeCells(`A${r}:${lastColLetter(LAST_COL)}${r}`);
       const projCell = ws.getCell(`A${r}`);
       projCell.value = project.name;
-      projCell.font = { size: 11, color: { argb: C.slate700 } };
+      projCell.font = { size: 11, bold: true, color: { argb: C.slate900 } };
       projCell.alignment = { horizontal: 'center' };
+      r++;
+    }
+    const locationXlsx = [
+      project?.region,
+      project?.city,
+      project?.district,
+      project?.address,
+    ]
+      .map((p) => String(p || '').trim())
+      .filter(Boolean)
+      .join(', ');
+    if (locationXlsx) {
+      ws.mergeCells(`A${r}:${lastColLetter(LAST_COL)}${r}`);
+      const c = ws.getCell(`A${r}`);
+      c.value = locationXlsx;
+      c.font = { size: 10, color: { argb: C.slate500 } };
+      c.alignment = { horizontal: 'center' };
       r++;
     }
 
@@ -703,7 +732,10 @@ ${linkParts.join('\n')}
       v.font = { bold: true, color: { argb: C.slate900 }, size: 10 };
       r++;
     };
-    if (project?.building_name) metaRow('Объект:', project.building_name);
+    // Same fallback as the on-screen header — when the project entity
+    // doesn't carry a building_name (most cases), use the active estimate's.
+    const blockNameXlsx = project?.building_name || estimate?.building_name || '';
+    if (blockNameXlsx) metaRow('Объект:', blockNameXlsx);
     metaRow('Отчётный период:', periodLabel || '—');
     if (customerName) metaRow('Заказчик:', customerName);
 
@@ -1162,7 +1194,16 @@ ${linkParts.join('\n')}
               <div className="text-[22px] font-bold text-slate-900">№ 2</div>
             </div>
 
-            {/* Centered title block — recibo header. */}
+            {/* Centered title block — recibo header.
+                The mockup (Form2_Works_v23_prochie_breakdown.html) prints
+                three lines under the title: the construction object's
+                full name (object_full_name from the project), the
+                project's display name, and a free-form address built from
+                the project's region / city / district / address fields.
+                Without this the printed Form 2 only carried the project
+                name — the user reported "shu nomlari smetada bor shular
+                chiqishi kerak" (these names exist in the smeta, they
+                should appear here). */}
             <div className="flex-1 text-center">
               <div className="text-[11px] uppercase tracking-widest text-slate-500 mb-1">
                 Локальный ресурсный сметный расчёт
@@ -1170,11 +1211,45 @@ ${linkParts.join('\n')}
               <div className="text-[26px] font-extrabold text-slate-900 tracking-wide">
                 АКТ ВЫПОЛНЕННЫХ РАБОТ
               </div>
-              {project?.name && (
-                <div className="text-[13px] text-slate-700 mt-2 max-w-[640px] mx-auto">
-                  {project.name}
-                </div>
-              )}
+              {(() => {
+                // Object full name (e.g. "Строительство многоэтажных
+                // жилых домов") goes ABOVE the bare project name when
+                // present — it's the regulatory description the smeta
+                // was issued against.
+                const objectFullName = String(project?.object_full_name || '').trim();
+                // Address line — joined from whichever of the four
+                // location fields the project has filled in. We skip
+                // empties and de-dup so a project that only has region
+                // doesn't render "г.Самарканд, , , ".
+                const locationParts = [
+                  project?.region,
+                  project?.city,
+                  project?.district,
+                  project?.address,
+                ]
+                  .map((p) => String(p || '').trim())
+                  .filter(Boolean);
+                const locationLine = locationParts.join(', ');
+                return (
+                  <>
+                    {objectFullName && (
+                      <div className="text-[13px] text-slate-700 mt-2 max-w-[640px] mx-auto">
+                        {objectFullName}
+                      </div>
+                    )}
+                    {project?.name && (
+                      <div className="text-[13px] font-semibold text-slate-800 mt-1.5 max-w-[640px] mx-auto">
+                        {project.name}
+                      </div>
+                    )}
+                    {locationLine && (
+                      <div className="text-[12px] text-slate-500 mt-1 max-w-[640px] mx-auto">
+                        {locationLine}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           </div>
 
@@ -1183,12 +1258,21 @@ ${linkParts.join('\n')}
              product feedback ("period itself enough" + the act is dated by
              when it's signed, not by today's render time). The customer
              name comes from the user's active company in CompanyContext. */}
+          {(() => {
+            // Block name resolution — prefer the project-level building_name
+            // (set when the project owns just one block), then fall back to
+            // the active estimate's building_name (Smeta boshqaruvi → Blok
+            // dropdown). Without this fallback the print preview rendered
+            // an empty Объект cell whenever the user opened Forma 2 from
+            // the Smeta tab — see screenshot bug report.
+            const blockName = project?.building_name || estimate?.building_name || '';
+            return (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4 text-xs text-slate-600">
             <div>
-              {project?.building_name && (
+              {blockName && (
                 <>
                   <span className="text-slate-400">Объект:</span>{' '}
-                  <strong className="text-slate-800">{project.building_name}</strong>
+                  <strong className="text-slate-800">{blockName}</strong>
                 </>
               )}
             </div>
@@ -1207,6 +1291,8 @@ ${linkParts.join('\n')}
               )}
             </div>
           </div>
+            );
+          })()}
         </div>
 
         {sections.length === 0 ? (

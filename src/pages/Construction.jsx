@@ -105,7 +105,11 @@ const ProgressTab = lazy(() => import('@/components/construction/tabs/ProgressTa
 const SubcontractorsTab = lazy(() => import('@/components/construction/tabs/SubcontractorsTab'));
 const ActsTab = lazy(() => import('@/components/construction/tabs/ActsTab'));
 const FormsTab = lazy(() => import('@/components/construction/tabs/FormsTab'));
-const FinancialTab = lazy(() => import('@/components/construction/tabs/FinancialTab'));
+// FinancialTab (Moliya → Tahlil) was removed from the sidebar nav per
+// product request — the page mostly duplicated Byudjet and showed
+// misleading numbers when smeta totals weren't loaded. The component
+// file is kept on disk in case we reinstate it later.
+// const FinancialTab = lazy(() => import('@/components/construction/tabs/FinancialTab'));
 const RejaFaktTab = lazy(() => import('@/components/construction/tabs/RejaFaktTab'));
 const SmetaVsFactTab = lazy(() => import('@/components/construction/tabs/SmetaVsFactTab'));
 const PhotoReportsTab = lazy(() => import('@/components/construction/tabs/PhotoReportsTab'));
@@ -848,16 +852,29 @@ const ProjectsTab = ({
                       <Edit className="w-3.5 h-3.5 mr-1.5" />
                       {t('edit') || 'Tahrirlash'}
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 w-8 p-0 text-slate-400 hover:text-slate-900 hover:bg-slate-100 cursor-pointer"
-                      onClick={(e) => { e.stopPropagation(); onOpenFiles && onOpenFiles(project); }}
-                      aria-label={t('files') || 'Fayllar'}
-                      title={t('files') || 'Fayllar'}
-                    >
-                      <FileText className="w-3.5 h-3.5" />
-                    </Button>
+                    {/* Files icon button — overlaid badge in the top-right
+                        shows how many files are uploaded for this project
+                        (zero = no badge so the icon stays clean). */}
+                    <div className="relative">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0 text-slate-400 hover:text-slate-900 hover:bg-slate-100 cursor-pointer"
+                        onClick={(e) => { e.stopPropagation(); onOpenFiles && onOpenFiles(project); }}
+                        aria-label={t('files') || 'Fayllar'}
+                        title={t('files') || 'Fayllar'}
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                      </Button>
+                      {typeof project.files_count === 'number' && project.files_count > 0 && (
+                        <span
+                          className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 rounded-full bg-blue-600 text-white text-[10px] font-semibold leading-[16px] text-center pointer-events-none shadow-sm"
+                          aria-hidden="true"
+                        >
+                          {project.files_count > 99 ? '99+' : project.files_count}
+                        </span>
+                      )}
+                    </div>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -1116,7 +1133,11 @@ const ProjectDetailView = ({
     { key: 'moliya', label: t('nav_finance') || 'Moliya', icon: DollarSign, subs: [
       { key: 'budget', label: t('nav_budget') || 'Byudjet' },
       { key: 'expenses', label: t('nav_expenses') || 'Xarajatlar' },
-      { key: 'financial', label: t('nav_analysis') || 'Tahlil' },
+      // 'financial' / Tahlil sub-tab removed per product request — the
+      // page mostly duplicated Byudjet's data and showed misleading
+      // "-21666566.7%" margin numbers when smeta totals weren't loaded
+      // yet. Keep FinancialTab.jsx in the codebase for now in case we
+      // reinstate it later, but it's no longer reachable from the UI.
     ]},
     // Materiallar hidden for now — uncomment to bring it back.
     // { key: 'materiallar', label: t('nav_materials') || 'Materiallar', icon: Package, subs: [
@@ -3077,10 +3098,10 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
           <SmetaVsFactTab project={project} />
         )}
 
-        {/* Financial Analysis Tab */}
-        {activeTab === 'financial' && (
-          <FinancialTab project={project} />
-        )}
+        {/* Financial Analysis (Tahlil) tab removed — see comment in
+            sidebar definition. The render slot is kept here as a no-op
+            stub so any deep-link with ?tab=financial still loads the
+            page without exploding. */}
 
         {/* Photo Reports Tab */}
         {activeTab === 'photo_reports' && (
