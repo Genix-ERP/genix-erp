@@ -146,20 +146,26 @@ function calcWorkBrutto(work, subLines) {
       continue;
     }
     // Resource top-ups (migration 358) REPLACE the planned qty × unit_rate
-    // when present — each top-up captures a slice of the same physical
-    // purchase at the price actually paid, so adding the planned cost
-    // back in would double-count. When no top-ups exist, fall back to
-    // the planned cost. Overhead (transport+storage накрутка) follows
-    // the same effective base.
+    // when their total quantity covers the planned qty (Σ tp.qty ≥
+    // r.quantity). Otherwise they're a partial side-record and the
+    // planned cost still drives the row — adding the partial sum on
+    // top would inflate the work, replacing it would understate it.
+    // Overhead (transport+storage накрутка) tracks the effective base.
     const tps = Array.isArray(r.topups) ? r.topups : [];
+    const rQty = Number(r.quantity || 0);
     let effective;
     if (tps.length > 0) {
-      effective = tps.reduce(
-        (m, tp) => m + (Number(tp.extra_quantity) || 0) * (Number(tp.new_price) || 0),
-        0,
-      );
+      const tpQty = tps.reduce((m, tp) => m + (Number(tp.extra_quantity) || 0), 0);
+      if (tpQty >= rQty) {
+        effective = tps.reduce(
+          (m, tp) => m + (Number(tp.extra_quantity) || 0) * (Number(tp.new_price) || 0),
+          0,
+        );
+      } else {
+        effective = Number(r.unit_rate || 0) * rQty;
+      }
     } else {
-      effective = Number(r.unit_rate || 0) * Number(r.quantity || 0);
+      effective = Number(r.unit_rate || 0) * rQty;
     }
     if (effective > 0) {
       base += effective;
@@ -188,19 +194,26 @@ function buildSummary(lines, otherCostsPct, useVat) {
     // already included in the parent's `total_amount`. Skip here so they
     // don't double-count.
     if (isSubStage(ln)) continue;
-    // Top-ups (migration 358), when present, REPLACE the planned cost
-    // — each top-up records a piece of the actual purchase at its real
-    // price. The aggregate stays in the same bucket as the parent
-    // resource (cable top-ups stay cable, labor stays labor, etc).
+    // Top-ups (migration 358), when present AND covering the planned
+    // qty, REPLACE the planned cost. Partial top-ups
+    // (Σ tp.qty < line.qty) leave the planned cost in place — they're
+    // just side-records of part of the purchase. Bucket goes by the
+    // parent resource's classification (cable top-ups stay cable, etc).
     const tps = Array.isArray(ln.topups) ? ln.topups : [];
+    const lnQty = Number(ln.quantity || 0);
     let cost;
     if (tps.length > 0) {
-      cost = tps.reduce(
-        (m, tp) => m + (Number(tp.extra_quantity) || 0) * (Number(tp.new_price) || 0),
-        0,
-      );
+      const tpQty = tps.reduce((m, tp) => m + (Number(tp.extra_quantity) || 0), 0);
+      if (tpQty >= lnQty) {
+        cost = tps.reduce(
+          (m, tp) => m + (Number(tp.extra_quantity) || 0) * (Number(tp.new_price) || 0),
+          0,
+        );
+      } else {
+        cost = Number(ln.unit_rate || 0) * lnQty;
+      }
     } else {
-      cost = Number(ln.unit_rate || 0) * Number(ln.quantity || 0);
+      cost = Number(ln.unit_rate || 0) * lnQty;
     }
     if (cost <= 0) continue;
     const cat = classifyResource(ln);
@@ -535,19 +548,23 @@ ${linkParts.join('\n')}
             rows.push(['', 'ДОП.', '    ДОП. ' + (r.name || ''), '', r.uom || '', r.quantity || 0, r.unit_rate || 0, Math.round(stageTotal * 100) / 100]);
             continue;
           }
-          const baseCost = Number(r.unit_rate || 0) * Number(r.quantity || 0);
+          const rQty = Number(r.quantity || 0);
+          const baseCost = Number(r.unit_rate || 0) * rQty;
           const tps = Array.isArray(r.topups) ? r.topups : [];
+          const tpQty = tps.reduce(
+            (m, tp) => m + (Number(tp.extra_quantity) || 0),
+            0,
+          );
           const tpSum = tps.reduce(
             (m, tp) => m + (Number(tp.extra_quantity) || 0) * (Number(tp.new_price) || 0),
             0,
           );
           if (baseCost <= 0 && tpSum <= 0) continue;
-          // Same rule as the modal: when top-ups exist, the parent
-          // resource's Сумма is the top-up sum (not the planned base
-          // — those are the same physical purchase). Listed top-ups
-          // follow as indented child rows for traceability.
-          const hasTps = tps.length > 0;
-          const summaForRow = hasTps ? tpSum : baseCost;
+          // Same coverage rule as the modal: top-ups replace the
+          // planned base ONLY when their total quantity covers the
+          // planned qty. Partial top-ups leave the base in place.
+          const topupsCover = tps.length > 0 && tpQty >= rQty;
+          const summaForRow = topupsCover ? tpSum : baseCost;
           rows.push(['', CAT_COLORS[classifyResource(r)]?.name || '', '    ' + (r.name || ''), '', r.uom || '', r.quantity || 0, r.unit_rate || 0, Math.round(summaForRow * 100) / 100]);
           for (const tp of tps) {
             const tpQty = Number(tp.extra_quantity) || 0;
@@ -789,18 +806,23 @@ ${linkParts.join('\n')}
             r++;
             continue;
           }
-          const baseCost = Number(res.unit_rate || 0) * Number(res.quantity || 0);
+          const resQty = Number(res.quantity || 0);
+          const baseCost = Number(res.unit_rate || 0) * resQty;
           const tps = Array.isArray(res.topups) ? res.topups : [];
+          const tpQty = tps.reduce(
+            (m, tp) => m + (Number(tp.extra_quantity) || 0),
+            0,
+          );
           const tpSum = tps.reduce(
             (m, tp) => m + (Number(tp.extra_quantity) || 0) * (Number(tp.new_price) || 0),
             0,
           );
           if (baseCost <= 0 && tpSum <= 0) continue;
-          // Same rule as the modal/CSV: when top-ups exist the
-          // resource Сумма is the top-up total — they replace the
-          // planned base, not augment it.
-          const hasTps = tps.length > 0;
-          const summaForRow = hasTps ? tpSum : baseCost;
+          // Same coverage rule as the modal/CSV: top-ups replace the
+          // planned base ONLY when their total qty covers the
+          // resource's planned qty.
+          const topupsCover = tps.length > 0 && tpQty >= resQty;
+          const summaForRow = topupsCover ? tpSum : baseCost;
           {
             ws.getCell(r, 1).value = '';
             ws.getCell(r, 2).value = CAT_COLORS[classifyResource(res)]?.name || '';
@@ -1280,12 +1302,20 @@ ${linkParts.join('\n')}
                             // The full накрутка breakdown lives in the
                             // СВОДНЫЕ ИТОГИ block below, applied once
                             // against the section subtotals.
-                            // When the resource carries top-ups the
-                            // displayed Сумма becomes the topup-sum
-                            // (the planned base is replaced, not
-                            // augmented — same rule as Smeta tab).
-                            const hasTopups = topups.length > 0;
-                            const summaForRow = hasTopups ? topupSum : base;
+                            // When the resource carries top-ups whose
+                            // total quantity covers the planned qty,
+                            // the displayed Сумма becomes the topup-
+                            // sum (replaces the planned base — same
+                            // rule as Smeta tab). Partial top-ups
+                            // (Σ tp.qty < r.qty) leave the planned
+                            // base in place; the +ДОП rows are still
+                            // listed for traceability.
+                            const topupQty = topups.reduce(
+                              (m, tp) => m + (Number(tp.extra_quantity) || 0),
+                              0,
+                            );
+                            const topupsCover = topups.length > 0 && topupQty >= totQ;
+                            const summaForRow = topupsCover ? topupSum : base;
                             return (
                               <React.Fragment key={r.id}>
                                 <tr style={{ background: '#FDFBF5' }}>

@@ -355,6 +355,7 @@ function parseEdinich(workbook) {
     // Rows with item number in A — parent work items or standalone materials
     if (colA && /^\d+$/.test(colA)) {
       const hasCode = colB && colB !== 'С';
+      const isCDirect = colB === 'С';
       lastParentNumber = colA;
 
       // TEMPLATE MODE: parent works always start at quantity = 0 — the
@@ -363,6 +364,14 @@ function parseEdinich(workbook) {
       // измерения" columns for the parent. Children's per-unit norm is
       // captured below in `quantity_per_unit`; child.quantity stays 0
       // so the cascade `parent.qty × norm` resolves to 0 too.
+      //
+      // Exception for С-shifr direct-material rows: the work IS the
+      // material with no labor/machine breakdown, so column E carries
+      // the project qty for that single material. Capture it on
+      // `c_direct_qty` so the auto-attach in buildImportPayloadFor
+      // can use it as the norm_rate of the synthetic child resource
+      // (instead of falling back to a hardcoded 1).
+      const cQty = isCDirect && !isNaN(Number(colE)) ? Number(colE) : 0;
       currentSection.items.push({
         item_number: colA,
         code: colB,
@@ -373,6 +382,7 @@ function parseEdinich(workbook) {
         is_parent: hasCode,
         resource_type: '',
         parent_item_number: '',
+        c_direct_qty: cQty,
       });
       continue;
     }
@@ -1359,6 +1369,7 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
     // strip ВОР quantities to 0 too, REJA stays at 0 across the
     // workflow.
     const templateMode = String(type || '').toLowerCase() !== 'vor';
+    const isEdinich = String(type || '').toLowerCase() === 'edinich';
     for (const section of result.sections || []) {
       if (!section.items || section.items.length === 0) continue;
       const sectionPath = section.name || '';
@@ -1396,6 +1407,50 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
           parent_item_number: item.parent_item_number || sectionPath,
           sort_order: sortIdx,
         });
+
+        // Direct-material works (shifr "С" in the source file) have
+        // no labor/machine breakdown — the work IS the material. The
+        // file lists them as a single line and stops, which means
+        // after import the work shows "0 resurs" and zero cost. To
+        // drive the smeta math correctly we auto-attach a single
+        // material child that mirrors the parent: same name + uom,
+        // norm_rate = 1 so the cascade sets child.qty = parent.qty,
+        // and the post-import resource-price propagation pipeline
+        // (matches by name against the Ресурс catalog) fills in the
+        // unit_rate on the backend. Only fires for Единич imports —
+        // ВОР keeps standalone "С" rows as project-qty entries, and
+        // the Ресурс sheet has no "С" rows of its own.
+        const codeStr = String(item.code || '').trim().toUpperCase();
+        if (
+          isEdinich
+          && codeStr === 'С'
+          && item.item_number
+          && !item.parent_item_number  // skip if it's already a child
+        ) {
+          sortIdx++;
+          // norm_rate comes straight from the file's qty column for
+          // this С-shifr row (parser stashed it on `c_direct_qty`).
+          // Falls back to 1 if the parser couldn't parse a number,
+          // so a 1:1 cascade still works in the worst case.
+          const childNorm = Number(item.c_direct_qty) > 0
+            ? Number(item.c_direct_qty)
+            : 1;
+          allLines.push({
+            name: item.name,
+            uom: item.uom || 'шт',
+            quantity: 0,
+            material_rate: 0,
+            labor_rate: 0,
+            equipment_rate: 0,
+            code: '',
+            item_number: '',
+            resource_type: 'material',
+            norm_rate: childNorm,
+            material_type: item.material_type || undefined,
+            parent_item_number: item.item_number,
+            sort_order: sortIdx,
+          });
+        }
       }
       importedCount += section.items.length;
     }
@@ -1529,13 +1584,13 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
 
         {/* Step indicators */}
         <div className="flex items-center gap-2 text-xs text-slate-500 pb-2 border-b">
-          <span className={step >= 1 ? 'text-blue-600 font-medium' : ''}>1. Fayl yuklash</span>
+          <span className={step >= 1 ? 'text-blue-600 font-medium' : ''}>{t('import_step_upload') || '1. Fayl yuklash'}</span>
           <ArrowRight className="w-3 h-3" />
-          <span className={step >= 2 ? 'text-blue-600 font-medium' : ''}>2. Tur tanlash</span>
+          <span className={step >= 2 ? 'text-blue-600 font-medium' : ''}>{t('import_step_select_type') || '2. Tur tanlash'}</span>
           <ArrowRight className="w-3 h-3" />
-          <span className={step >= 3 ? 'text-blue-600 font-medium' : ''}>3. Ko'rish</span>
+          <span className={step >= 3 ? 'text-blue-600 font-medium' : ''}>{t('import_step_preview') || "3. Ko'rish"}</span>
           <ArrowRight className="w-3 h-3" />
-          <span className={step >= 4 ? 'text-blue-600 font-medium' : ''}>4. Import</span>
+          <span className={step >= 4 ? 'text-blue-600 font-medium' : ''}>{t('import_step_import') || '4. Import'}</span>
         </div>
 
         {/* Errors */}
@@ -1708,7 +1763,7 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
 
             <div className="flex justify-between pt-4">
               <Button variant="outline" onClick={() => setStep(1)}>
-                <ArrowLeft className="w-4 h-4 mr-1" /> Orqaga
+                <ArrowLeft className="w-4 h-4 mr-1" /> {t('import_back') || 'Orqaga'}
               </Button>
               <Button onClick={handleParseSheet} disabled={selectedTypes.length === 0 || isProcessing}>
                 {isProcessing ? (
@@ -1761,9 +1816,9 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
 
             <div className="flex items-center justify-between">
               <div className="text-sm text-slate-600">
-                <span className="font-medium">{totalItems}</span> qator
+                <span className="font-medium">{totalItems}</span> {t('rows_count_suffix') || 'qator'}
                 {selectedType !== 'svod' && (
-                  <>, <span className="font-medium">{parsedData.sections?.length || 0}</span> bo'lim</>
+                  <>, <span className="font-medium">{parsedData.sections?.length || 0}</span> {t('sections_count_suffix') || "bo'lim"}</>
                 )}
                 {selectedType === 'svod' && parsedData.buildings && (
                   <>, <span className="font-medium">{parsedData.buildings.length}</span> bino</>
@@ -1787,13 +1842,13 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
             {/* Building selector (not needed for svod) */}
             {selectedType !== 'svod' && (
               <div className="flex items-center gap-2">
-                <Label className="text-sm shrink-0">Bino:</Label>
+                <Label className="text-sm shrink-0">{t('building') || 'Bino'}:</Label>
                 <select
                   value={selectedBuildingId}
                   onChange={(e) => setSelectedBuildingId(e.target.value)}
                   className="border rounded-md px-3 py-1.5 text-sm max-w-xs"
                 >
-                  <option value="">Binoni tanlang...</option>
+                  <option value="">{t('select_building_placeholder') || 'Binoni tanlang...'}</option>
                   <option value="project">Butun loyiha</option>
                   {buildings.map((b) => (
                     <option key={b.id} value={b.id}>
@@ -1880,7 +1935,7 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
                       )}
                       <span className="font-medium text-sm">{section.name}</span>
                       <Badge variant="secondary" className="text-xs">
-                        {section.items.length} qator
+                        {section.items.length} {t('rows_count_suffix') || 'qator'}
                       </Badge>
                     </div>
 
@@ -1948,7 +2003,7 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
 
             <div className="flex justify-between pt-2">
               <Button variant="outline" onClick={() => setStep(2)}>
-                <ArrowLeft className="w-4 h-4 mr-1" /> Orqaga
+                <ArrowLeft className="w-4 h-4 mr-1" /> {t('import_back') || 'Orqaga'}
               </Button>
               <Button
                 onClick={handleImport}
@@ -1974,9 +2029,11 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
                     return acc + (r.sections?.reduce((s, sec) => s + (sec.items?.length || 0), 0) || 0);
                   }, 0);
                   const typeCount = Object.keys(parsedResults).length;
+                  const importLabel = t('import_button_label') || 'Import';
+                  const rowsSuffix = t('rows_count_suffix') || 'qator';
                   return typeCount > 1
-                    ? `Import (${typeCount} tur, ${total} qator)`
-                    : `Import (${total} qator)`;
+                    ? `${importLabel} (${typeCount} ${t('types_count_suffix') || 'tur'}, ${total} ${rowsSuffix})`
+                    : `${importLabel} (${total} ${rowsSuffix})`;
                 })()}
               </Button>
             </div>
