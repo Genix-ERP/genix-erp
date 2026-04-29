@@ -61,9 +61,15 @@ export default function ProductCombobox({ products: initialProducts = [], value,
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className="w-full justify-between font-normal h-9 px-3 text-sm"
+          // overflow-hidden + the inner min-w-0 flex-1 + truncate
+          // are all required so a long product name like
+          // "АНКЕРНЫЕ ДЕТАЛИ ИЗ ПРЯМЫХ ИЛИ ГНУТЫХ КРУГЛ..." gets
+          // ellipsis-truncated instead of stretching the button (and
+          // the entire line-item row, which then overflows the
+          // create-PO modal).
+          className="w-full justify-between font-normal h-9 px-3 text-sm overflow-hidden"
         >
-          <span className="truncate">
+          <span className="truncate min-w-0 flex-1 text-left">
             {selectedProduct ? selectedProduct.name : placeholder}
           </span>
           <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
