@@ -61,15 +61,29 @@ export default function ProductCombobox({ products: initialProducts = [], value,
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          // overflow-hidden + the inner min-w-0 flex-1 + truncate
-          // are all required so a long product name like
-          // "АНКЕРНЫЕ ДЕТАЛИ ИЗ ПРЯМЫХ ИЛИ ГНУТЫХ КРУГЛ..." gets
-          // ellipsis-truncated instead of stretching the button (and
-          // the entire line-item row, which then overflows the
-          // create-PO modal).
-          className="w-full justify-between font-normal h-9 px-3 text-sm overflow-hidden"
+          // Truncation chain that actually works inside a flex row
+          // with an unconstrained Tailwind Button:
+          //  - max-w-full + overflow-hidden on the Button itself
+          //    (so it can never exceed its column even if a child
+          //    insists on its intrinsic width)
+          //  - inline style on the span: min-width:0, flex:1,
+          //    overflow:hidden, text-overflow:ellipsis, white-space:nowrap
+          //    (Tailwind's `truncate` sometimes loses to shadcn
+          //    Button's intrinsic flex-children sizing — explicit
+          //    inline styles win every cascade fight)
+          className="w-full max-w-full overflow-hidden justify-between font-normal h-9 px-3 text-sm"
         >
-          <span className="truncate min-w-0 flex-1 text-left">
+          <span
+            className="text-left"
+            style={{
+              minWidth: 0,
+              flex: '1 1 0%',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              display: 'block',
+            }}
+          >
             {selectedProduct ? selectedProduct.name : placeholder}
           </span>
           <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
