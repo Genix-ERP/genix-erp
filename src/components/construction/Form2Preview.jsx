@@ -296,7 +296,7 @@ function buildSections(lines) {
   return Array.from(bySection.values());
 }
 
-export default function Form2Preview({ estimate, lines, project, onClose, onSaveSnapshot }) {
+export default function Form2Preview({ estimate, lines, project, onClose, onSaveSnapshot, snapshot }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   // Active company → Заказчик. CompanyContext exposes the user's currently
@@ -308,16 +308,39 @@ export default function Form2Preview({ estimate, lines, project, onClose, onSave
     || project?.tenant_name
     || project?.organization_name
     || '';
-  const [otherCostsPct, setOtherCostsPct] = useState(0);
-  // VAT is now a boolean toggle (matches v23 mockup) — when on, the fixed
-  // 12% rate is added to the subtotal; when off, the grand total stops at
-  // the subtotal. The percentage itself isn't user-editable any more.
-  const [useVat, setUseVat] = useState(true);
-  // Reporting period (давр) — user-editable date range that prints in the
-  // document header and travels with the saved snapshot. Both fields are
-  // optional so the doc can still be generated without a fixed window.
-  const [periodFrom, setPeriodFrom] = useState('');
-  const [periodTo, setPeriodTo] = useState('');
+  // ── Snapshot-aware initial state ────────────────────────────────
+  // When the parent re-opens a saved snapshot it passes the row through
+  // as `snapshot`. We seed the period / VAT / other-costs-pct state
+  // from those saved fields so the document re-renders exactly as it
+  // was saved — without this, opening a snapshot from "Formalar tarixi"
+  // produced an empty "Hisobot davri: —" because the inputs were
+  // freshly initialised to '' / 12% / true regardless of the saved
+  // payload (user-reported bug, two screenshots: history row had
+  // 01.01.2026 — 01.07.2026 but the printed Form 2 was empty).
+  // Date strings are stored as ISO yyyy-mm-dd (matches the <input
+  // type="date"> value format); strip a possible trailing time
+  // component the API serialises for postgres DATEs.
+  const isoDate = (s) => {
+    if (!s) return '';
+    const str = String(s);
+    const m = str.match(/^(\d{4}-\d{2}-\d{2})/);
+    return m ? m[1] : '';
+  };
+  const [otherCostsPct, setOtherCostsPct] = useState(
+    snapshot?.other_costs_pct != null ? Number(snapshot.other_costs_pct) : 0,
+  );
+  // VAT is a boolean toggle (matches v23 mockup) — when on, the fixed
+  // 12% rate is added to the subtotal; when off, the grand total stops
+  // at the subtotal. The percentage itself isn't user-editable any more.
+  const [useVat, setUseVat] = useState(
+    snapshot?.use_vat != null ? Boolean(snapshot.use_vat) : true,
+  );
+  // Reporting period (давр) — user-editable date range that prints in
+  // the document header and travels with the saved snapshot. Both
+  // fields are optional so the doc can still be generated without a
+  // fixed window.
+  const [periodFrom, setPeriodFrom] = useState(isoDate(snapshot?.period_from));
+  const [periodTo, setPeriodTo] = useState(isoDate(snapshot?.period_to));
   const [savingSnapshot, setSavingSnapshot] = useState(false);
 
   // Akt № modal state. The browser's window.prompt() is jarring on a
@@ -669,7 +692,7 @@ ${linkParts.join('\n')}
     // ── Title block ──
     const titleCell = ws.getCell(`A${r}`);
     ws.mergeCells(`A${r}:${lastColLetter(LAST_COL)}${r}`);
-    titleCell.value = 'ФОРМА № 2 — АКТ ВЫПОЛНЕННЫХ РАБОТ';
+    titleCell.value = `${t('f2_form_label') || 'ФОРМА'} № 2 — ${t('f2_act_title') || 'АКТ ВЫПОЛНЕННЫХ РАБОТ'}`;
     titleCell.font = { bold: true, size: 18, color: { argb: C.slate900 } };
     titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
     ws.getRow(r).height = 32;
@@ -677,7 +700,7 @@ ${linkParts.join('\n')}
 
     const subCell = ws.getCell(`A${r}`);
     ws.mergeCells(`A${r}:${lastColLetter(LAST_COL)}${r}`);
-    subCell.value = 'Локальный ресурсный сметный расчёт';
+    subCell.value = t('f2_local_resource_estimate') || 'Локальный ресурсный сметный расчёт';
     subCell.font = { italic: true, size: 11, color: { argb: C.slate500 } };
     subCell.alignment = { horizontal: 'center' };
     r++;
@@ -735,9 +758,9 @@ ${linkParts.join('\n')}
     // Same fallback as the on-screen header — when the project entity
     // doesn't carry a building_name (most cases), use the active estimate's.
     const blockNameXlsx = project?.building_name || estimate?.building_name || '';
-    if (blockNameXlsx) metaRow('Объект:', blockNameXlsx);
-    metaRow('Отчётный период:', periodLabel || '—');
-    if (customerName) metaRow('Заказчик:', customerName);
+    if (blockNameXlsx) metaRow(`${t('f2_object') || 'Объект'}:`, blockNameXlsx);
+    metaRow(`${t('f2_period') || 'Отчётный период'}:`, periodLabel || '—');
+    if (customerName) metaRow(`${t('f2_customer') || 'Заказчик'}:`, customerName);
 
     r++; // blank spacer
 
@@ -753,7 +776,7 @@ ${linkParts.join('\n')}
       // Section banner — amber tint with thick orange left border.
       ws.mergeCells(`A${r}:${lastColLetter(LAST_COL)}${r}`);
       const banner = ws.getCell(`A${r}`);
-      banner.value = `Раздел ${ROMAN[secIdx] || (secIdx + 1)}. ${sec.name}`;
+      banner.value = `${t('f2_section') || 'Раздел'} ${ROMAN[secIdx] || (secIdx + 1)}. ${sec.name}`;
       banner.font = { bold: true, size: 11, color: { argb: C.slate900 } };
       banner.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.amber50 } };
       banner.alignment = { vertical: 'middle' };
@@ -765,7 +788,15 @@ ${linkParts.join('\n')}
       r++;
 
       // Column headers for this section.
-      const headers = ['№', 'Шифр / Тип', 'Наименование работ, затрат и ресурсов', 'Ед.изм.', 'Кол-во', 'Цена, сум', 'Сумма, сум'];
+      const headers = [
+        t('f2_col_no') || '№',
+        t('f2_col_code') || 'Шифр / Тип',
+        t('f2_col_name') || 'Наименование работ, затрат и ресурсов',
+        t('f2_col_unit') || 'Ед.изм.',
+        t('f2_col_qty') || 'Кол-во',
+        t('f2_col_price') || 'Цена, сум',
+        t('f2_col_amount') || 'Сумма, сум',
+      ];
       for (let c = 1; c <= LAST_COL; c++) {
         const cell = ws.getCell(r, c);
         cell.value = headers[c - 1];
@@ -974,59 +1005,59 @@ ${linkParts.join('\n')}
       r++;
     };
 
-    banner('СВОДНЫЕ ИТОГИ ПО ПРЯМЫМ ЗАТРАТАМ');
-    lineRow('Затраты труда рабочих-строителей', summary.labor);
-    lineRow('Эксплуатация машин и механизмов', summary.machines);
-    lineRow('ИТОГО ПО СТРОИТЕЛЬНЫМ МАТЕРИАЛАМ И КОНСТРУКЦИИ:', sumByType.standard, { bold: true });
-    lineRow('ИТОГО ПО ОБОРУДОВАНИЮ:', sumByType.equipment, { bold: true });
-    lineRow('ИТОГО ПО КАБЕЛЬНО-ПРОВОДНИКОВОЙ ПРОДУКЦИИ:', sumByType.cable, { bold: true });
-    lineRow('ИТОГО ПРЯМЫЕ ЗАТРАТЫ:', summary.direct, {
+    banner(t('f2_block_direct') || 'СВОДНЫЕ ИТОГИ ПО ПРЯМЫМ ЗАТРАТАМ');
+    lineRow(t('f2_labor_costs') || 'Затраты труда рабочих-строителей', summary.labor);
+    lineRow(t('f2_machine_ops') || 'Эксплуатация машин и механизмов', summary.machines);
+    lineRow(t('f2_total_construction_materials_full') || 'ИТОГО ПО СТРОИТЕЛЬНЫМ МАТЕРИАЛАМ И КОНСТРУКЦИИ:', sumByType.standard, { bold: true });
+    lineRow(t('f2_total_equipment') || 'ИТОГО ПО ОБОРУДОВАНИЮ:', sumByType.equipment, { bold: true });
+    lineRow(t('f2_total_cable') || 'ИТОГО ПО КАБЕЛЬНО-ПРОВОДНИКОВОЙ ПРОДУКЦИИ:', sumByType.cable, { bold: true });
+    lineRow(t('f2_total_direct_costs') || 'ИТОГО ПРЯМЫЕ ЗАТРАТЫ:', summary.direct, {
       bold: true, size: 11, fill: C.amber50, valueColor: C.orange700,
     });
 
-    banner('ТРАНСПОРТ И СКЛАДСКОЕ ХРАНЕНИЕ');
+    banner(t('f2_block_transport') || 'ТРАНСПОРТ И СКЛАДСКОЕ ХРАНЕНИЕ');
     const buckets = [
-      { key: 'standard',  base: 'ИТОГО ПО СТРОИТЕЛЬНЫМ МАТЕРИАЛАМ:',         with: 'ИТОГО ПО СТРОИТЕЛЬНЫМ МАТЕРИАЛАМ С НАКРУТКАМИ:',     split: '(5% + 2%)' },
-      { key: 'equipment', base: 'ИТОГО ПО ОБОРУДОВАНИЮ:',                     with: 'ИТОГО ПО ОБОРУДОВАНИЮ С НАКРУТКАМИ:',                 split: '(2% + 1,2%)' },
-      { key: 'cable',     base: 'ИТОГО ПО КАБЕЛЬНО-ПРОВОДНИКОВОЙ ПРОДУКЦИИ:', with: 'ИТОГО ПО КАБЕЛЬНОЙ ПРОДУКЦИИ С НАКРУТКАМИ:',          split: '(1,5% + 2%)' },
+      { key: 'standard',  base: t('f2_total_construction_materials')          || 'ИТОГО ПО СТРОИТЕЛЬНЫМ МАТЕРИАЛАМ:',         with: t('f2_total_construction_materials_with_overhead') || 'ИТОГО ПО СТРОИТЕЛЬНЫМ МАТЕРИАЛАМ С НАКРУТКАМИ:', split: '(5% + 2%)' },
+      { key: 'equipment', base: t('f2_total_equipment')                       || 'ИТОГО ПО ОБОРУДОВАНИЮ:',                     with: t('f2_total_equipment_with_overhead')              || 'ИТОГО ПО ОБОРУДОВАНИЮ С НАКРУТКАМИ:',             split: '(2% + 1,2%)' },
+      { key: 'cable',     base: t('f2_total_cable')                           || 'ИТОГО ПО КАБЕЛЬНО-ПРОВОДНИКОВОЙ ПРОДУКЦИИ:', with: t('f2_total_cable_with_overhead')                  || 'ИТОГО ПО КАБЕЛЬНОЙ ПРОДУКЦИИ С НАКРУТКАМИ:',      split: '(1,5% + 2%)' },
     ];
     for (const b of buckets) {
       lineRow(b.base, sumByType[b.key], { bold: true });
-      lineRow(`Транспорт и складское хранение ${b.split}`, combined[b.key], {
+      lineRow(`${t('f2_transport_storage') || 'Транспорт и складское хранение'} ${b.split}`, combined[b.key], {
         size: 9, italic: true, labelColor: C.slate500,
       });
       lineRow(b.with, (sumByType[b.key] || 0) + (combined[b.key] || 0), {
         bold: true, valueColor: C.orange700,
       });
     }
-    lineRow('Итого транспорт и складское хранение:', combined.total, {
+    lineRow(t('f2_transport_storage_total') || 'Итого транспорт и складское хранение:', combined.total, {
       bold: true, fill: C.amber50, valueColor: C.orange700,
     });
 
-    banner('3. ПРОЧИЕ ЗАТРАТЫ ПО СТРОИТЕЛЬСТВУ');
-    lineRow('ИТОГО БАЗА ДЛЯ ПРОЧИХ:', summary.otherBase, { bold: true });
+    banner(t('f2_block_other') || '3. ПРОЧИЕ ЗАТРАТЫ ПО СТРОИТЕЛЬСТВУ');
+    lineRow(t('f2_total_other_base') || 'ИТОГО БАЗА ДЛЯ ПРОЧИХ:', summary.otherBase, { bold: true });
     lineRow(
-      `+ Прочие затраты производственного характера (${otherCostsPct || 0}%)`,
+      `+ ${t('f2_other_costs') || 'Прочие расходы'} (${otherCostsPct || 0}%)`,
       summary.other,
       { italic: true },
     );
-    lineRow('ИТОГО ПО СТРОИТЕЛЬСТВУ (база + прочие):', summary.constructionTotal, {
+    lineRow(t('f2_total_construction') || 'ИТОГО ПО СТРОИТЕЛЬСТВУ (база + прочие):', summary.constructionTotal, {
       bold: true, size: 11, fill: C.amber50, valueColor: C.orange700,
     });
 
     if ((summary.equipmentTotal || 0) > 0) {
-      banner('4. ОБОРУДОВАНИЕ (отдельно)');
-      lineRow('ИТОГО ПО ОБОРУДОВАНИЮ (с накрутками, без прочих):', summary.equipmentTotal, {
+      banner(t('f2_block_equipment_separate') || '4. ОБОРУДОВАНИЕ (отдельно)');
+      lineRow(t('f2_total_equipment_separate') || 'ИТОГО ПО ОБОРУДОВАНИЮ (с накрутками, без прочих):', summary.equipmentTotal, {
         bold: true, fill: C.amber50, valueColor: C.orange700,
       });
     }
 
-    banner('5. ИТОГО И НАЛОГИ');
-    lineRow('ИТОГО (стройка + оборудование, до НДС):', summary.subtotal, {
+    banner(t('f2_block_total_taxes') || '5. ИТОГО И НАЛОГИ');
+    lineRow(t('f2_total_before_vat') || 'ИТОГО (стройка + оборудование, до НДС):', summary.subtotal, {
       bold: true, size: 11, fill: '111111', labelColor: 'FFFFFF', valueColor: 'FFFFFF',
     });
     if (summary.useVat) {
-      lineRow(`Налог на добавленную стоимость (НДС ${VAT_PCT}%)`, summary.vat, {
+      lineRow(`${t('f2_vat_full') || 'Налог на добавленную стоимость (НДС)'} (${t('f2_vat_label') || 'НДС'} ${VAT_PCT}%)`, summary.vat, {
         italic: true, labelColor: C.slate700,
       });
     }
@@ -1190,7 +1221,7 @@ ${linkParts.join('\n')}
               className="shrink-0 border-2 border-slate-900 rounded px-3 py-2 text-center leading-tight"
               style={{ minWidth: 84 }}
             >
-              <div className="text-[10px] uppercase tracking-widest text-slate-500">ФОРМА</div>
+              <div className="text-[10px] uppercase tracking-widest text-slate-500">{t('f2_form_label') || 'ФОРМА'}</div>
               <div className="text-[22px] font-bold text-slate-900">№ 2</div>
             </div>
 
@@ -1206,10 +1237,10 @@ ${linkParts.join('\n')}
                 should appear here). */}
             <div className="flex-1 text-center">
               <div className="text-[11px] uppercase tracking-widest text-slate-500 mb-1">
-                Локальный ресурсный сметный расчёт
+                {t('f2_local_resource_estimate') || 'Локальный ресурсный сметный расчёт'}
               </div>
               <div className="text-[26px] font-extrabold text-slate-900 tracking-wide">
-                АКТ ВЫПОЛНЕННЫХ РАБОТ
+                {t('f2_act_title') || 'АКТ ВЫПОЛНЕННЫХ РАБОТ'}
               </div>
               {(() => {
                 // Object full name (e.g. "Строительство многоэтажных
@@ -1271,19 +1302,19 @@ ${linkParts.join('\n')}
             <div>
               {blockName && (
                 <>
-                  <span className="text-slate-400">Объект:</span>{' '}
+                  <span className="text-slate-400">{t('f2_object') || 'Объект'}:</span>{' '}
                   <strong className="text-slate-800">{blockName}</strong>
                 </>
               )}
             </div>
             <div className="md:text-center">
-              <span className="text-slate-400">Отчётный период:</span>{' '}
+              <span className="text-slate-400">{t('f2_period') || 'Отчётный период'}:</span>{' '}
               <strong className="text-slate-800">{periodLabel || '—'}</strong>
             </div>
             <div className="md:text-right">
               {customerName && (
                 <>
-                  <span className="text-slate-400">Заказчик:</span>{' '}
+                  <span className="text-slate-400">{t('f2_customer') || 'Заказчик'}:</span>{' '}
                   <strong className="text-slate-800 uppercase tracking-wide">
                     {customerName}
                   </strong>
@@ -1306,18 +1337,18 @@ ${linkParts.join('\n')}
             return sections.map((sec, i) => (
               <div key={sec.name} className="mt-5">
                 <div className="bg-amber-50 border-l-4 border-orange-700 px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-900 mb-0.5">
-                  Раздел {ROMAN[i] || (i + 1)}. {sec.name}
+                  {t('f2_section') || 'Раздел'} {ROMAN[i] || (i + 1)}. {sec.name}
                 </div>
                 <table className="w-full border-collapse text-[11px]">
                   <thead>
                     <tr>
-                      <th className="bg-amber-100 border border-amber-400 px-1.5 py-2 text-[10px] font-semibold text-slate-700 w-[50px]">№</th>
-                      <th className="bg-amber-100 border border-amber-400 px-1.5 py-2 text-[10px] font-semibold text-slate-700 w-[110px]">Шифр / Тип</th>
-                      <th className="bg-amber-100 border border-amber-400 px-1.5 py-2 text-[10px] font-semibold text-slate-700">Наименование работ, затрат и ресурсов</th>
-                      <th className="bg-amber-100 border border-amber-400 px-1.5 py-2 text-[10px] font-semibold text-slate-700 w-[75px]">Ед.изм.</th>
-                      <th className="bg-amber-100 border border-amber-400 px-1.5 py-2 text-[10px] font-semibold text-slate-700 w-[85px]">Кол-во</th>
-                      <th className="bg-amber-100 border border-amber-400 px-1.5 py-2 text-[10px] font-semibold text-slate-700 w-[105px]">Цена, сум</th>
-                      <th className="bg-amber-100 border border-amber-400 px-1.5 py-2 text-[10px] font-semibold text-slate-700 w-[135px]">Сумма, сум</th>
+                      <th className="bg-amber-100 border border-amber-400 px-1.5 py-2 text-[10px] font-semibold text-slate-700 w-[50px]">{t('f2_col_no') || '№'}</th>
+                      <th className="bg-amber-100 border border-amber-400 px-1.5 py-2 text-[10px] font-semibold text-slate-700 w-[110px]">{t('f2_col_code') || 'Шифр / Тип'}</th>
+                      <th className="bg-amber-100 border border-amber-400 px-1.5 py-2 text-[10px] font-semibold text-slate-700">{t('f2_col_name') || 'Наименование работ, затрат и ресурсов'}</th>
+                      <th className="bg-amber-100 border border-amber-400 px-1.5 py-2 text-[10px] font-semibold text-slate-700 w-[75px]">{t('f2_col_unit') || 'Ед.изм.'}</th>
+                      <th className="bg-amber-100 border border-amber-400 px-1.5 py-2 text-[10px] font-semibold text-slate-700 w-[85px]">{t('f2_col_qty') || 'Кол-во'}</th>
+                      <th className="bg-amber-100 border border-amber-400 px-1.5 py-2 text-[10px] font-semibold text-slate-700 w-[105px]">{t('f2_col_price') || 'Цена, сум'}</th>
+                      <th className="bg-amber-100 border border-amber-400 px-1.5 py-2 text-[10px] font-semibold text-slate-700 w-[135px]">{t('f2_col_amount') || 'Сумма, сум'}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1456,7 +1487,7 @@ ${linkParts.join('\n')}
                     })}
                     <tr style={{ background: '#FAF6EC', fontWeight: 700 }}>
                       <td className="border border-amber-300 px-2 py-2" colSpan={6} style={{ textAlign: 'right' }}>
-                        ИТОГО по разделу {ROMAN[i] || (i + 1)} (без транспорта и склада):
+                        {t('f2_section_total_no_overhead') || 'ИТОГО по разделу (без транспорта и склада)'} {ROMAN[i] || (i + 1)}:
                       </td>
                       <td className="border border-amber-300 px-2 py-2 text-right font-mono text-orange-700">
                         {fmtRu(Math.round((sec.base ?? sec.total) * 100) / 100)}
@@ -1475,7 +1506,7 @@ ${linkParts.join('\n')}
         {sections.length > 0 && (
           <div className="mt-8 p-6 bg-stone-50 border border-stone-300 rounded">
             <div className="text-sm font-bold uppercase tracking-wide pb-3 border-b-2 border-slate-900 mb-4">
-              Сводный расчёт сметной стоимости
+              {t('f2_summary_title') || 'Сводный расчёт сметной стоимости'}
             </div>
 
             <table className="w-full text-[12px]">
@@ -1487,30 +1518,30 @@ ${linkParts.join('\n')}
                    so the document layout is identical regardless of which
                    buckets the estimate actually uses. */}
                 <tr className="font-bold bg-amber-100">
-                  <td colSpan={3} className="px-2 py-2.5">СВОДНЫЕ ИТОГИ ПО ПРЯМЫМ ЗАТРАТАМ</td>
+                  <td colSpan={3} className="px-2 py-2.5">{t('f2_block_direct') || 'СВОДНЫЕ ИТОГИ ПО ПРЯМЫМ ЗАТРАТАМ'}</td>
                 </tr>
                 <tr>
-                  <td className="pl-5 py-1.5">Затраты труда рабочих-строителей</td><td />
+                  <td className="pl-5 py-1.5">{t('f2_labor_costs') || 'Затраты труда рабочих-строителей'}</td><td />
                   <td className="text-right font-mono">{fmtRu(Math.round(summary.labor * 100) / 100)}</td>
                 </tr>
                 <tr>
-                  <td className="pl-5 py-1.5">Эксплуатация машин и механизмов</td><td />
+                  <td className="pl-5 py-1.5">{t('f2_machine_ops') || 'Эксплуатация машин и механизмов'}</td><td />
                   <td className="text-right font-mono">{fmtRu(Math.round(summary.machines * 100) / 100)}</td>
                 </tr>
                 <tr className="font-semibold">
-                  <td className="px-2 py-1.5">ИТОГО ПО СТРОИТЕЛЬНЫМ МАТЕРИАЛАМ И КОНСТРУКЦИИ:</td><td />
+                  <td className="px-2 py-1.5">{t('f2_total_construction_materials_full') || 'ИТОГО ПО СТРОИТЕЛЬНЫМ МАТЕРИАЛАМ И КОНСТРУКЦИИ:'}</td><td />
                   <td className="text-right font-mono text-orange-700">{fmtRu(Math.round(summary.matByType.standard * 100) / 100)}</td>
                 </tr>
                 <tr className="font-semibold">
-                  <td className="px-2 py-1.5">ИТОГО ПО ОБОРУДОВАНИЮ:</td><td />
+                  <td className="px-2 py-1.5">{t('f2_total_equipment') || 'ИТОГО ПО ОБОРУДОВАНИЮ:'}</td><td />
                   <td className="text-right font-mono text-orange-700">{fmtRu(Math.round(summary.matByType.equipment * 100) / 100)}</td>
                 </tr>
                 <tr className="font-semibold">
-                  <td className="px-2 py-1.5">ИТОГО ПО КАБЕЛЬНО-ПРОВОДНИКОВОЙ ПРОДУКЦИИ:</td><td />
+                  <td className="px-2 py-1.5">{t('f2_total_cable') || 'ИТОГО ПО КАБЕЛЬНО-ПРОВОДНИКОВОЙ ПРОДУКЦИИ:'}</td><td />
                   <td className="text-right font-mono text-orange-700">{fmtRu(Math.round(summary.matByType.cable * 100) / 100)}</td>
                 </tr>
                 <tr className="font-bold border-t border-amber-400 bg-amber-50">
-                  <td className="px-2 py-2">ИТОГО ПРЯМЫЕ ЗАТРАТЫ:</td><td />
+                  <td className="px-2 py-2">{t('f2_total_direct_costs') || 'ИТОГО ПРЯМЫЕ ЗАТРАТЫ:'}</td><td />
                   <td className="text-right font-mono text-orange-700">{fmtRu(Math.round(summary.direct * 100) / 100)}</td>
                 </tr>
 
@@ -1524,12 +1555,12 @@ ${linkParts.join('\n')}
                    retired at user request — those lines flow into the
                    standard bucket and inherit its 7% rate. */}
                 <tr className="font-bold bg-amber-100">
-                  <td colSpan={3} className="px-2 py-2.5">ТРАНСПОРТ И СКЛАДСКОЕ ХРАНЕНИЕ</td>
+                  <td colSpan={3} className="px-2 py-2.5">{t('f2_block_transport') || 'ТРАНСПОРТ И СКЛАДСКОЕ ХРАНЕНИЕ'}</td>
                 </tr>
                 {[
-                  { key: 'standard',  base: 'ИТОГО ПО СТРОИТЕЛЬНЫМ МАТЕРИАЛАМ:',                with: 'ИТОГО ПО СТРОИТЕЛЬНЫМ МАТЕРИАЛАМ С НАКРУТКАМИ:',                split: '(5% + 2%)' },
-                  { key: 'equipment', base: 'ИТОГО ПО ОБОРУДОВАНИЮ:',                            with: 'ИТОГО ПО ОБОРУДОВАНИЮ С НАКРУТКАМИ:',                            split: '(2% + 1,2%)' },
-                  { key: 'cable',     base: 'ИТОГО ПО КАБЕЛЬНО-ПРОВОДНИКОВОЙ ПРОДУКЦИИ:',        with: 'ИТОГО ПО КАБЕЛЬНОЙ ПРОДУКЦИИ С НАКРУТКАМИ:',                     split: '(1,5% + 2%)' },
+                  { key: 'standard',  base: t('f2_total_construction_materials')          || 'ИТОГО ПО СТРОИТЕЛЬНЫМ МАТЕРИАЛАМ:',         with: t('f2_total_construction_materials_with_overhead') || 'ИТОГО ПО СТРОИТЕЛЬНЫМ МАТЕРИАЛАМ С НАКРУТКАМИ:', split: '(5% + 2%)' },
+                  { key: 'equipment', base: t('f2_total_equipment')                       || 'ИТОГО ПО ОБОРУДОВАНИЮ:',                     with: t('f2_total_equipment_with_overhead')              || 'ИТОГО ПО ОБОРУДОВАНИЮ С НАКРУТКАМИ:',             split: '(2% + 1,2%)' },
+                  { key: 'cable',     base: t('f2_total_cable')                           || 'ИТОГО ПО КАБЕЛЬНО-ПРОВОДНИКОВОЙ ПРОДУКЦИИ:', with: t('f2_total_cable_with_overhead')                  || 'ИТОГО ПО КАБЕЛЬНОЙ ПРОДУКЦИИ С НАКРУТКАМИ:',      split: '(1,5% + 2%)' },
                 ].map(({ key, base, with: withMarkup, split }) => (
                   <React.Fragment key={key}>
                     <tr className="font-semibold">
@@ -1540,7 +1571,7 @@ ${linkParts.join('\n')}
                     </tr>
                     <tr>
                       <td className="pl-8 py-1.5 text-slate-700">
-                        Транспорт и складское хранение <span className="text-slate-400">{split}</span>
+                        {t('f2_transport_storage') || 'Транспорт и складское хранение'} <span className="text-slate-400">{split}</span>
                       </td>
                       <td className="text-center text-slate-500 font-mono">{OVERHEAD_RATES.combined[key]}%</td>
                       <td className="text-right font-mono">{fmtRu(Math.round(summary.combined[key] * 100) / 100)}</td>
@@ -1554,7 +1585,7 @@ ${linkParts.join('\n')}
                   </React.Fragment>
                 ))}
                 <tr className="font-bold border-t border-amber-400 bg-amber-50">
-                  <td className="px-2 py-2">Итого транспорт и складское хранение:</td>
+                  <td className="px-2 py-2">{t('f2_transport_storage_total') || 'Итого транспорт и складское хранение:'}</td>
                   <td />
                   <td className="text-right font-mono text-orange-700">{fmtRu(Math.round(summary.combined.total * 100) / 100)}</td>
                 </tr>
@@ -1562,38 +1593,38 @@ ${linkParts.join('\n')}
                 {/* 3. Прочие затраты по строительству — itemised base + % input
                    + ИТОГО ПО СТРОИТЕЛЬСТВУ. Equipment is intentionally
                    excluded from the base; it gets its own line below. */}
-                <tr className="font-bold bg-amber-100"><td colSpan={3} className="px-2 py-2.5">3. ПРОЧИЕ ЗАТРАТЫ ПО СТРОИТЕЛЬСТВУ</td></tr>
+                <tr className="font-bold bg-amber-100"><td colSpan={3} className="px-2 py-2.5">{t('f2_block_other') || '3. ПРОЧИЕ ЗАТРАТЫ ПО СТРОИТЕЛЬСТВУ'}</td></tr>
                 <tr style={{ background: '#FAF6EC' }}>
                   <td colSpan={3} className="px-3 py-2 text-[10.5px] italic text-amber-900 border-b border-stone-300">
-                    📋 База для прочих расходов = всё, кроме оборудования (материалы + накрутки):
+                    📋 {t('f2_other_base_hint') || 'База для прочих расходов = всё, кроме оборудования (материалы + накрутки)'}:
                   </td>
                 </tr>
                 {summary.labor > 0 && (
-                  <tr><td className="pl-8 py-1 text-slate-600">└ Оплата труда рабочих</td><td /><td className="text-right font-mono text-slate-600">{fmtRu(Math.round(summary.labor * 100) / 100)}</td></tr>
+                  <tr><td className="pl-8 py-1 text-slate-600">└ {t('f2_breakdown_labor') || 'Оплата труда рабочих'}</td><td /><td className="text-right font-mono text-slate-600">{fmtRu(Math.round(summary.labor * 100) / 100)}</td></tr>
                 )}
                 {summary.machines > 0 && (
-                  <tr><td className="pl-8 py-1 text-slate-600">└ Эксплуатация машин и механизмов</td><td /><td className="text-right font-mono text-slate-600">{fmtRu(Math.round(summary.machines * 100) / 100)}</td></tr>
+                  <tr><td className="pl-8 py-1 text-slate-600">└ {t('f2_breakdown_machines') || 'Эксплуатация машин и механизмов'}</td><td /><td className="text-right font-mono text-slate-600">{fmtRu(Math.round(summary.machines * 100) / 100)}</td></tr>
                 )}
                 {summary.matByType.standard > 0 && (
-                  <tr><td className="pl-8 py-1 text-slate-600">└ Стройматериалы (чистая сумма)</td><td /><td className="text-right font-mono text-slate-600">{fmtRu(Math.round(summary.matByType.standard * 100) / 100)}</td></tr>
+                  <tr><td className="pl-8 py-1 text-slate-600">└ {t('f2_breakdown_materials') || 'Стройматериалы (чистая сумма)'}</td><td /><td className="text-right font-mono text-slate-600">{fmtRu(Math.round(summary.matByType.standard * 100) / 100)}</td></tr>
                 )}
                 {summary.matByType.cable > 0 && (
-                  <tr><td className="pl-8 py-1 text-slate-600">└ Кабельная продукция (чистая сумма)</td><td /><td className="text-right font-mono text-slate-600">{fmtRu(Math.round(summary.matByType.cable * 100) / 100)}</td></tr>
+                  <tr><td className="pl-8 py-1 text-slate-600">└ {t('f2_breakdown_cable') || 'Кабельная продукция (чистая сумма)'}</td><td /><td className="text-right font-mono text-slate-600">{fmtRu(Math.round(summary.matByType.cable * 100) / 100)}</td></tr>
                 )}
                 {summary.combined.standard > 0 && (
-                  <tr><td className="pl-8 py-1 text-teal-700">└ Накрутка стройматериалов (транспорт+склад, {OVERHEAD_RATES.combined.standard}%)</td><td /><td className="text-right font-mono text-teal-700">{fmtRu(Math.round(summary.combined.standard * 100) / 100)}</td></tr>
+                  <tr><td className="pl-8 py-1 text-teal-700">└ {(t('f2_breakdown_overhead_materials') || 'Накрутка стройматериалов (транспорт+склад, {pct}%)').replace('{pct}', OVERHEAD_RATES.combined.standard)}</td><td /><td className="text-right font-mono text-teal-700">{fmtRu(Math.round(summary.combined.standard * 100) / 100)}</td></tr>
                 )}
                 {summary.combined.cable > 0 && (
-                  <tr><td className="pl-8 py-1 text-pink-700">└ Накрутка кабеля (транспорт+склад, {OVERHEAD_RATES.combined.cable}%)</td><td /><td className="text-right font-mono text-pink-700">{fmtRu(Math.round(summary.combined.cable * 100) / 100)}</td></tr>
+                  <tr><td className="pl-8 py-1 text-pink-700">└ {(t('f2_breakdown_overhead_cable') || 'Накрутка кабеля (транспорт+склад, {pct}%)').replace('{pct}', OVERHEAD_RATES.combined.cable)}</td><td /><td className="text-right font-mono text-pink-700">{fmtRu(Math.round(summary.combined.cable * 100) / 100)}</td></tr>
                 )}
                 <tr className="font-bold" style={{ background: '#F5EFE0' }}>
-                  <td className="pl-5 py-2">ИТОГО БАЗА ДЛЯ ПРОЧИХ:</td><td /><td className="text-right font-mono">{fmtRu(Math.round(summary.otherBase * 100) / 100)}</td>
+                  <td className="pl-5 py-2">{t('f2_total_other_base') || 'ИТОГО БАЗА ДЛЯ ПРОЧИХ:'}</td><td /><td className="text-right font-mono">{fmtRu(Math.round(summary.otherBase * 100) / 100)}</td>
                 </tr>
                 <tr style={{ background: 'linear-gradient(90deg,#FFF8DC 0%,#FFF4C2 100%)', borderLeft: '3px solid #D97706' }}>
                   <td className="pl-5 py-2.5 text-amber-900">
-                    <strong className="text-amber-900">+ Прочие затраты производственного характера</strong>
+                    <strong className="text-amber-900">+ {t('f2_other_costs_label') || 'Прочие затраты производственного характера'}</strong>
                     <br />
-                    <span className="text-[10px] italic text-amber-700">% от базы для прочих (применяется ТОЛЬКО к строительству)</span>
+                    <span className="text-[10px] italic text-amber-700">{t('f2_other_costs_hint') || '% от базы для прочих (применяется ТОЛЬКО к строительству)'}</span>
                   </td>
                   <td className="text-center bg-amber-50">
                     <input
@@ -1611,23 +1642,23 @@ ${linkParts.join('\n')}
                   <td className="text-right font-mono font-bold text-amber-900 bg-amber-50">{fmtRu(Math.round(summary.other * 100) / 100)}</td>
                 </tr>
                 <tr className="font-bold bg-amber-50 border-t border-amber-400">
-                  <td className="px-2 py-2.5">ИТОГО ПО СТРОИТЕЛЬСТВУ (база + прочие):</td><td /><td className="text-right font-mono text-orange-700">{fmtRu(Math.round(summary.constructionTotal * 100) / 100)}</td>
+                  <td className="px-2 py-2.5">{t('f2_total_construction') || 'ИТОГО ПО СТРОИТЕЛЬСТВУ (база + прочие):'}</td><td /><td className="text-right font-mono text-orange-700">{fmtRu(Math.round(summary.constructionTotal * 100) / 100)}</td>
                 </tr>
 
                 {/* 4. Equipment as its own line — never gets the прочие mult */}
                 {summary.equipmentTotal > 0 && (
                   <>
-                    <tr className="font-bold bg-amber-100"><td colSpan={3} className="px-2 py-2.5">4. ОБОРУДОВАНИЕ (отдельно)</td></tr>
+                    <tr className="font-bold bg-amber-100"><td colSpan={3} className="px-2 py-2.5">{t('f2_block_equipment_separate') || '4. ОБОРУДОВАНИЕ (отдельно)'}</td></tr>
                     <tr className="font-bold bg-amber-50">
-                      <td className="px-2 py-2.5">ИТОГО ПО ОБОРУДОВАНИЮ (с накрутками, без прочих):</td><td /><td className="text-right font-mono text-orange-700">{fmtRu(Math.round(summary.equipmentTotal * 100) / 100)}</td>
+                      <td className="px-2 py-2.5">{t('f2_total_equipment_separate') || 'ИТОГО ПО ОБОРУДОВАНИЮ (с накрутками, без прочих):'}</td><td /><td className="text-right font-mono text-orange-700">{fmtRu(Math.round(summary.equipmentTotal * 100) / 100)}</td>
                     </tr>
                   </>
                 )}
 
                 {/* 5. Subtotal + VAT */}
-                <tr className="font-bold bg-amber-100"><td colSpan={3} className="px-2 py-2.5">5. ИТОГО И НАЛОГИ</td></tr>
+                <tr className="font-bold bg-amber-100"><td colSpan={3} className="px-2 py-2.5">{t('f2_block_total_taxes') || '5. ИТОГО И НАЛОГИ'}</td></tr>
                 <tr style={{ background: '#111', color: '#fff' }} className="font-bold">
-                  <td className="px-2 py-3.5">ИТОГО (стройка + оборудование, до НДС):</td><td /><td className="text-right font-mono text-base">{fmtRu(Math.round(summary.subtotal * 100) / 100)}</td>
+                  <td className="px-2 py-3.5">{t('f2_total_before_vat') || 'ИТОГО (стройка + оборудование, до НДС):'}</td><td /><td className="text-right font-mono text-base">{fmtRu(Math.round(summary.subtotal * 100) / 100)}</td>
                 </tr>
                 <tr>
                   <td className="px-2 py-2">
@@ -1638,10 +1669,10 @@ ${linkParts.join('\n')}
                         onChange={(e) => setUseVat(e.target.checked)}
                         className="w-4 h-4 cursor-pointer accent-amber-700"
                       />
-                      Налог на добавленную стоимость (НДС)
+                      {t('f2_vat_full') || 'Налог на добавленную стоимость (НДС)'}
                     </label>
                     <div className="text-[10px] italic text-slate-500 ml-6 mt-0.5">
-                      {useVat ? 'включён в итог' : 'НЕ включён в итог'}
+                      {useVat ? (t('f2_vat_included') || 'включён в итог') : (t('f2_vat_excluded') || 'НЕ включён в итог')}
                     </div>
                   </td>
                   <td className="text-center font-mono">{useVat ? `${VAT_PCT}%` : '—'}</td>
@@ -1657,10 +1688,10 @@ ${linkParts.join('\n')}
           <div className="mt-7 p-4 bg-slate-900 text-white flex justify-between items-center">
             <div>
               <div className="text-[11px] tracking-widest uppercase text-stone-300">
-                ВСЕГО ПО СМЕТЕ ({useVat ? 'с НДС' : 'без НДС'})
+                {t('f2_grand_total') || 'ВСЕГО ПО СМЕТЕ'} ({useVat ? (t('f2_with_vat') || 'с НДС') : (t('f2_without_vat') || 'без НДС')})
               </div>
               <div className="text-[12px] text-stone-400 mt-1">
-                Разделов: {sections.length} · Прочие расходы: {otherCostsPct}% (на стройку) · НДС: {useVat ? `${VAT_PCT}%` : 'не применяется'}
+                {t('f2_sections_count') || 'Разделов'}: {sections.length} · {t('f2_other_costs') || 'Прочие расходы'}: {otherCostsPct}% ({t('f2_on_construction') || 'на стройку'}) · {t('f2_vat_label') || 'НДС'}: {useVat ? `${VAT_PCT}%` : (t('f2_vat_not_applied') || 'не применяется')}
               </div>
             </div>
             <div className="text-[22px] font-bold font-mono">{fmtRu(Math.round(summary.grand * 100) / 100)} сум</div>
@@ -1670,7 +1701,7 @@ ${linkParts.join('\n')}
         {/* Footnote citing the regulatory basis (mockup-faithful) */}
         {sections.length > 0 && (
           <div className="mt-6 p-4 border-l-4 border-orange-700 bg-stone-50 text-[10px] text-slate-600 leading-relaxed">
-            <strong className="text-orange-700">Основание для накруток:</strong> Письмо Госкомархитектстроя РУз № 352/11-05 от 31.01.2011 г. · Правила ШНК 4.01.16-09 (п. 4.6 и п. 5.6). Накрутка «Транспорт и складское хранение» объединяет транспортные и заготовительно-складские расходы: для обычных стройматериалов 7% (5%+2%), для оборудования 3,2% (2%+1,2%), для кабельной продукции 3,5% (1,5%+2%).
+            <strong className="text-orange-700">{t('f2_overhead_basis_label') || 'Основание для накруток:'}</strong> {t('f2_overhead_basis_text') || 'Письмо Госкомархитектстроя РУз № 352/11-05 от 31.01.2011 г. · Правила ШНК 4.01.16-09 (п. 4.6 и п. 5.6). Накрутка «Транспорт и складское хранение» объединяет транспортные и заготовительно-складские расходы: для обычных стройматериалов 7% (5%+2%), для оборудования 3,2% (2%+1,2%), для кабельной продукции 3,5% (1,5%+2%).'}
           </div>
         )}
 
@@ -1678,14 +1709,14 @@ ${linkParts.join('\n')}
         {sections.length > 0 && (
           <div className="mt-7 pt-4 border-t border-stone-300 grid grid-cols-2 gap-7 text-[11px] text-slate-700">
             <div>
-              <div className="text-slate-500">Составил:</div>
+              <div className="text-slate-500">{t('f2_compiled_by') || 'Составил'}:</div>
               <div className="border-b border-slate-400 h-7 mt-2" />
-              <div className="text-[10px] text-slate-400 mt-1">(подпись, Ф.И.О.)</div>
+              <div className="text-[10px] text-slate-400 mt-1">{t('f2_signature_caption') || '(подпись, Ф.И.О.)'}</div>
             </div>
             <div>
-              <div className="text-slate-500">Проверил:</div>
+              <div className="text-slate-500">{t('f2_checked_by') || 'Проверил'}:</div>
               <div className="border-b border-slate-400 h-7 mt-2" />
-              <div className="text-[10px] text-slate-400 mt-1">(подпись, Ф.И.О.)</div>
+              <div className="text-[10px] text-slate-400 mt-1">{t('f2_signature_caption') || '(подпись, Ф.И.О.)'}</div>
             </div>
           </div>
         )}
@@ -1693,8 +1724,8 @@ ${linkParts.join('\n')}
         {/* Legal footer */}
         {sections.length > 0 && (
           <div className="mt-6 p-3 bg-amber-50 border-l-2 border-orange-700 text-[10px] text-slate-600 leading-relaxed">
-            <strong className="text-orange-800">Основание для накруток:</strong> Письмо Госкомархитектстроя РУз № 352/11-05 от 31.01.2011 г. · Правила ШНК 4.01.16-09 (п. 4.6 и п. 5.6).
-            Транспортные и заготовительно-складские расходы применяются только к обычным стройматериалам, оборудованию и кабельной продукции.
+            <strong className="text-orange-800">{t('f2_overhead_basis_label') || 'Основание для накруток:'}</strong>{' '}
+            {t('f2_overhead_scope_text') || 'Транспортные и заготовительно-складские расходы применяются только к обычным стройматериалам, оборудованию и кабельной продукции.'}
           </div>
         )}
       </div>
