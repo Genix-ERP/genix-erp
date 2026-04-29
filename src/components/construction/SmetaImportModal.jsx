@@ -358,17 +358,23 @@ function parseEdinich(workbook) {
       lastParentNumber = colA;
 
       // TEMPLATE MODE: parent works always start at quantity = 0 — the
-      // user fills it in manually via the Bajarildi field. We don't pull
-      // anything from the file's "по проектным данным" / "на. ед.
-      // измерения" columns for the parent. Children's per-unit norm is
-      // captured below in `quantity_per_unit`; child.quantity stays 0
-      // so the cascade `parent.qty × norm` resolves to 0 too.
+      // user fills it in manually via the Bajarildi field. We capture
+      // the file's "по проектным данным" total (colF) into a separate
+      // `norma_quantity` so the Smeta boshqaruvi NORMA pill has a
+      // reference value to display ("the original imported norm")
+      // even though the live `quantity` ledger column starts at 0.
+      // Without this the pill renders "—" and the user has no anchor
+      // to compare against the value they type into Bajarildi.
+      // Children's per-unit norm is captured below in
+      // `quantity_per_unit`; child.quantity stays 0 so the cascade
+      // `parent.qty × norm` resolves to 0 too.
       currentSection.items.push({
         item_number: colA,
         code: colB,
         name: colC,
         uom: colD,
         quantity: 0,
+        norma_quantity: isNaN(colF) ? 0 : colF,
         quantity_per_unit: 0,
         is_parent: hasCode,
         resource_type: '',
@@ -1374,6 +1380,17 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
           // the cascade). ВОР → keep the file's Miqdor so the planned
           // project volume survives the round-trip.
           quantity: templateMode ? 0 : Number(item.quantity || 0),
+          // Norma anchor (migration 349). Parents in template mode keep
+          // the file's planned project quantity (colF) as the
+          // original_quantity even though the live quantity is 0; the
+          // Smeta boshqaruvi NORMA pill reads this. Children pass 0
+          // (their norm-driven quantity is computed from parent on the
+          // fly, no anchor needed). Non-template (ВОР) imports omit
+          // it so the trigger defaults to the live quantity, matching
+          // pre-existing behaviour.
+          original_quantity: templateMode
+            ? Number(item.norma_quantity || 0)
+            : undefined,
           material_rate: rt === 'material' ? unitPrice : 0,
           labor_rate: rt === 'labor' ? unitPrice : 0,
           equipment_rate: rt === 'equipment' ? unitPrice : 0,

@@ -231,7 +231,17 @@ const ProgressTab = ({ project }) => {
     // Only items attached to a block/building are shown. Project-wide
     // ("Umumiy") items are hidden so the tab row and table stay aligned with
     // the Stages (Bosqichlar) view, which also has no Umumiy pill.
-    const items = allItems.filter((it) => Boolean(it.building_name));
+    //
+    // Per product feedback: the Jarayon (Progress) page should ONLY list
+    // items currently in progress. Completed and not-started rows are
+    // hidden — completed work belongs on a History/Tugallangan view, and
+    // not-started items have no progress to report yet. The bucket key
+    // 'on_track' is what the backend tags in-progress items with (see
+    // GetProjectInProgressItems); we keep the legacy name to avoid
+    // touching server-side aggregation.
+    const items = allItems.filter(
+      (it) => Boolean(it.building_name) && it.bucket === 'on_track',
+    );
 
     if (items.length === 0) {
       return (
