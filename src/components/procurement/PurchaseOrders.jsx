@@ -992,7 +992,7 @@ export default function PurchaseOrders() {
           });
         }
       }}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto overflow-x-hidden">
           <DialogHeader>
             <DialogTitle>{t('new_purchase_order') || 'New Purchase Order'}</DialogTitle>
           </DialogHeader>
@@ -1181,7 +1181,7 @@ export default function PurchaseOrders() {
                   </div>
                 </div>
               )}
-              <div className="space-y-2 max-h-60 overflow-y-auto">
+              <div className="space-y-2 max-h-60 overflow-y-auto overflow-x-hidden">
                 {newPO.lines.map((line, index) => {
                   const selectedProduct = products.find(p => p.id === line.product_id);
                   const hasVariants = selectedProduct?.has_variants && productVariants[line.product_id]?.length > 0;
@@ -1524,7 +1524,7 @@ export default function PurchaseOrders() {
 
       {/* Order Details Modal */}
       <Dialog open={showDetailModal} onOpenChange={(open) => { setShowDetailModal(open); if (!open) { setDetailPO(null); setDetailPOLines([]); setOrderReturns([]); } }}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto overflow-x-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {t('order_details') || 'Order Details'}
