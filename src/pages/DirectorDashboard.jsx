@@ -42,6 +42,20 @@ const PROJECT_STATUS_COLOR = {
   completed: { bg: '#EEE', fg: '#555' },
 };
 
+// (uz, ru, en) tuples for status badges. The local t() helper takes
+// the triple positionally — same shape as the rest of this page —
+// so consumers call t(...STATUS_LABEL[p.status]) when rendering.
+const STATUS_LABEL = {
+  draft: ['Qoralama', 'Черновик', 'Draft'],
+  in_progress: ['Jarayonda', 'В процессе', 'In Progress'],
+  active: ['Faol', 'Активный', 'Active'],
+  planning: ['Rejalashtirish', 'Планирование', 'Planning'],
+  completed: ['Tugallangan', 'Завершён', 'Completed'],
+  delayed: ['Kechikkan', 'С задержкой', 'Delayed'],
+  on_hold: ['Toʻxtatilgan', 'Приостановлено', 'On Hold'],
+  cancelled: ['Bekor qilingan', 'Отменён', 'Cancelled'],
+};
+
 const initials = (name) => (name || '').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
 const fmtMln = (n) => `${(n / 1_000_000).toFixed(1)} mln`;
 const fmtCompact = (n) => {
@@ -707,7 +721,11 @@ export default function DirectorDashboard() {
                           <td className="text-right py-2 font-medium">{fmtCompact(p.contract_amount || 0)}</td>
                           <td className="text-right py-2 pr-2">
                             <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-medium" style={{ background: sc.bg, color: sc.fg }}>
-                              {p.status || '—'}
+                              {p.status
+                                ? (STATUS_LABEL[p.status]
+                                    ? t(...STATUS_LABEL[p.status])
+                                    : p.status)
+                                : '—'}
                             </span>
                           </td>
                         </tr>
