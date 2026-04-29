@@ -546,11 +546,24 @@ export default function DirectorDashboard() {
                 if (data.length === 0) {
                   return <div className="flex items-center justify-center h-full text-xs text-slate-400">{t('Maʼlumot yo‘q', 'Нет данных', 'No data')}</div>;
                 }
+                // Truncate long warehouse names on the X-axis tick so
+                // they don't overlap; full name still shown in tooltip
+                // (tooltip reads the raw `name` field, tickFormatter
+                // only affects the rendered tick label).
+                const truncate = (s, n = 10) =>
+                  typeof s === 'string' && s.length > n ? s.slice(0, n - 1) + '…' : s;
                 return (
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={data} margin={{ top: 4, right: 4, left: -10, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" />
-                      <XAxis dataKey="name" tick={{ fontSize: 9 }} interval={0} angle={-15} textAnchor="end" height={50} />
+                      <XAxis
+                        dataKey="name"
+                        tick={{ fontSize: 9 }}
+                        interval={0}
+                        textAnchor="middle"
+                        height={28}
+                        tickFormatter={(v) => truncate(v, 10)}
+                      />
                       <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtCompact} />
                       <Tooltip formatter={(v) => fmtCompact(v)} />
                       <Bar dataKey="value" fill="#1D9E75" radius={[4, 4, 0, 0]} />
@@ -564,23 +577,83 @@ export default function DirectorDashboard() {
             <div className="text-xs font-semibold text-[#1a1a1a] mb-2">
               {t('Kompaniyalar bo‘yicha sklad', 'Склад по компаниям', 'Stock by company')}
             </div>
-            <div className="h-[220px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={visibleCompanies.map(co => ({
-                    name: co.company_name,
-                    value: perCompany[co.id]?.stockValue || 0,
-                  }))}
-                  margin={{ top: 4, right: 4, left: -10, bottom: 0 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" />
-                  <XAxis dataKey="name" tick={{ fontSize: 9 }} interval={0} angle={-15} textAnchor="end" height={50} />
-                  <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtCompact} />
-                  <Tooltip formatter={(v) => fmtCompact(v)} />
-                  <Bar dataKey="value" fill="#185FA5" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            {(() => {
+              // Horizontal bars (layout="vertical" in Recharts terms:
+              // value on X, company on Y) so long company names get a
+              // full row each and are readable. Top-N + "Other" so
+              // the chart stays compact even with 20+ companies.
+              const TOP_N = 8;
+              const allCompanyData = visibleCompanies
+                .map(co => ({
+                  name: co.company_name,
+                  value: perCompany[co.id]?.stockValue || 0,
+                }))
+                .sort((a, b) => b.value - a.value);
+              const top = allCompanyData.slice(0, TOP_N);
+              const rest = allCompanyData.slice(TOP_N);
+              const otherSum = rest.reduce((s, c) => s + c.value, 0);
+              const companyData =
+                otherSum > 0
+                  ? [
+                      ...top,
+                      {
+                        name:
+                          t('Boshqalar', 'Другие', 'Other') +
+                          ` (${rest.length})`,
+                        value: otherSum,
+                      },
+                    ]
+                  : top;
+              const truncate = (s, n = 18) =>
+                typeof s === 'string' && s.length > n
+                  ? s.slice(0, n - 1) + '…'
+                  : s;
+              // Auto-grow so each bar gets ~26px of vertical space.
+              const chartHeight = Math.max(220, companyData.length * 26 + 20);
+              if (companyData.length === 0) {
+                return (
+                  <div className="h-[220px] flex items-center justify-center text-xs text-slate-400">
+                    {t('Maʼlumot yo‘q', 'Нет данных', 'No data')}
+                  </div>
+                );
+              }
+              return (
+                <div style={{ height: chartHeight }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      layout="vertical"
+                      data={companyData}
+                      margin={{ top: 4, right: 16, left: 4, bottom: 4 }}
+                    >
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        horizontal={false}
+                        stroke="rgba(0,0,0,0.04)"
+                      />
+                      <XAxis
+                        type="number"
+                        tick={{ fontSize: 10 }}
+                        tickFormatter={fmtCompact}
+                      />
+                      <YAxis
+                        type="category"
+                        dataKey="name"
+                        tick={{ fontSize: 10 }}
+                        width={140}
+                        interval={0}
+                        tickFormatter={(v) => truncate(v, 18)}
+                      />
+                      <Tooltip formatter={(v) => fmtCompact(v)} />
+                      <Bar
+                        dataKey="value"
+                        fill="#185FA5"
+                        radius={[0, 4, 4, 0]}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}
