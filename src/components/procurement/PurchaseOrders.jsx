@@ -996,7 +996,7 @@ export default function PurchaseOrders() {
           <DialogHeader>
             <DialogTitle>{t('new_purchase_order') || 'New Purchase Order'}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-4 py-4 min-w-0">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium mb-1 block">{t('supplier') || 'Supplier'} *</label>
@@ -1125,7 +1125,7 @@ export default function PurchaseOrders() {
             </div>
 
             {/* Order Lines */}
-            <div className="border-t pt-4">
+            <div className="border-t pt-4 min-w-0">
               {/* Hidden file input for receipt scan */}
               <input
                 ref={receiptInputRef}
@@ -1181,14 +1181,21 @@ export default function PurchaseOrders() {
                   </div>
                 </div>
               )}
-              <div className="space-y-2 max-h-60 overflow-y-auto">
+              <div className="space-y-2 max-h-60 overflow-y-auto min-w-0">
                 {newPO.lines.map((line, index) => {
                   const selectedProduct = products.find(p => p.id === line.product_id);
                   const hasVariants = selectedProduct?.has_variants && productVariants[line.product_id]?.length > 0;
                   const hasPackagings = productPackagings[line.product_id]?.length > 0;
                   return (
-                  <div key={index} className="bg-slate-50 p-3 rounded space-y-2">
-                    <div className="flex gap-2 items-end">
+                  // min-w-0 chain: row → bg-slate-50 wrapper → space-y div.
+                  // For the inner column's `flex-[2] min-w-0` to actually
+                  // let the ProductCombobox shrink, every flex/block
+                  // ancestor up to the modal must also allow shrinking.
+                  // Without this chain, a long product name makes the
+                  // column grow regardless of what we set on the
+                  // combobox itself.
+                  <div key={index} className="bg-slate-50 p-3 rounded space-y-2 min-w-0">
+                    <div className="flex gap-2 items-end min-w-0">
                       <div className="flex-[2] min-w-0">
                         {index === 0 && <label className="text-xs text-slate-500 mb-1 block">{t('product')}</label>}
                         <ProductCombobox
