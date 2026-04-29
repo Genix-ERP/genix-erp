@@ -454,9 +454,43 @@ const ExpensesTab = ({ project, scope }) => {
                     const totalCount = (data.items || []).length;
                     const totalPages = Math.ceil(totalCount / pageSize);
                     const paginatedItems = (data.items || []).slice((currentPage - 1) * pageSize, currentPage * pageSize);
-                    return paginatedItems.map(line => (
+                    return paginatedItems.map(line => {
+                    // Display: prefer created_at (TIMESTAMP — has hh:mm),
+                    // fall back to expense_date (DATE — only date). The
+                    // backend stores expense_date as a DATE type so its
+                    // ISO output is always "YYYY-MM-DDT00:00:00Z" with
+                    // a fake midnight; created_at carries the real time.
+                    // Format manually to dd.mm.yyyy hh:mm so the locale
+                    // matches the rest of the Uzbek UI.
+                    const fmtDate = (val) => {
+                      if (!val) return '—';
+                      // Backend stores TIMESTAMP WITHOUT TIME ZONE
+                      // (server-local — Asia/Tashkent for this deploy).
+                      // Go's JSON encoder still appends a Z to the ISO
+                      // string, which makes browsers interpret the value
+                      // as UTC and then shift it by the local TZ offset
+                      // (the +5h skew the user reported). Stripping the
+                      // Z and any sub-second fraction lets new Date()
+                      // parse the value as local time, which matches
+                      // what the Postgres column actually holds.
+                      const stripped = String(val)
+                        .replace(/Z$/, '')
+                        .replace(/\.\d+$/, '');
+                      const d = new Date(stripped);
+                      if (isNaN(d.getTime())) return String(val).slice(0, 10);
+                      const pad = (n) => String(n).padStart(2, '0');
+                      const datePart = `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`;
+                      // Skip the time when it's exactly midnight (the
+                      // expense_date fallback path) — we don't want to
+                      // pretend a fake "00:00" was a real entry time.
+                      const h = d.getHours();
+                      const m = d.getMinutes();
+                      if (h === 0 && m === 0) return datePart;
+                      return `${datePart} ${pad(h)}:${pad(m)}`;
+                    };
+                    return (
                     <tr key={line.id} className="border-b hover:bg-slate-50">
-                      <td className="py-2 px-3 whitespace-nowrap">{line.expense_date}</td>
+                      <td className="py-2 px-3 whitespace-nowrap">{fmtDate(line.created_at || line.expense_date)}</td>
                       <td className="py-2 px-3 max-w-[200px] truncate" title={line.description}>{line.description}</td>
                       <td className="py-2 px-3">{line.supplier_name || '—'}</td>
                       <td className="py-2 px-3">{line.stage_name || '—'}</td>
@@ -488,7 +522,8 @@ const ExpensesTab = ({ project, scope }) => {
                         </div>
                       </td>
                     </tr>
-                  ));
+                  );
+                  });
                   })()}
                 </tbody>
               </table>

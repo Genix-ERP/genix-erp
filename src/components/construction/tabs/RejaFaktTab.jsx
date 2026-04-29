@@ -643,20 +643,12 @@ const RejaFaktTab = ({ project }) => {
           <CardContent className="p-4">
             <p className="text-xs text-slate-500">{t('rf_plan_total')}</p>
             <p className="text-xl font-bold text-blue-600">{formatCurrency(summary.plan_total || 0)}</p>
-            <div className="flex gap-2 text-[10px] text-slate-400 mt-1">
-              <span>{t('rf_materials_short')} {formatCurrency(summary.material_plan_total || 0)}</span>
-              <span>{t('rf_equipment_short')} {formatCurrency(summary.equipment_plan_total || 0)}</span>
-            </div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <p className="text-xs text-slate-500">{t('rf_fact_total')}</p>
             <p className="text-xl font-bold">{formatCurrency(summary.fact_total || 0)}</p>
-            <div className="flex gap-2 text-[10px] text-slate-400 mt-1">
-              <span>{t('rf_materials_short')} {formatCurrency(summary.material_fact_total || 0)}</span>
-              <span>{t('rf_equipment_short')} {formatCurrency(summary.equipment_fact_total || 0)}</span>
-            </div>
           </CardContent>
         </Card>
         <Card className={diffBg(summary.difference)}>
@@ -768,9 +760,6 @@ const RejaFaktTab = ({ project }) => {
                         <div className="flex items-center gap-3">
                           {isExpanded ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
                           <span className="font-medium text-sm">{sub.name}</span>
-                          <Badge variant="outline" className="text-xs">
-                            {materials.length} {t('rf_materials_short')} / {equipment.length} {t('rf_equipment_short')}
-                          </Badge>
                           {sub.difference < 0 && <AlertTriangle className="w-3.5 h-3.5 text-red-500" />}
                           {sub.difference >= 0 && subPct > 90 && <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />}
                         </div>

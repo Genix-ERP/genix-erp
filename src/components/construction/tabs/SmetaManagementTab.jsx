@@ -4,7 +4,7 @@ import {
   Loader2, Search, Users, Wrench, Package, FileText, RefreshCw,
   Plus, Trash2, ChevronDown, RotateCcw, ListChecks, Boxes, Grid3x3,
   History as HistoryIcon, Activity, Eye, Edit3, DollarSign,
-  Tag, Save as SaveIcon, ToggleLeft, Percent, User as UserIcon,
+  Tag, Save as SaveIcon, ToggleLeft, Percent, User as UserIcon, Lock,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -1717,6 +1717,15 @@ function WorkCard({
   const origQty = Number(line.original_quantity || 0);
   const qtyModified = origQty > 0 && Math.abs(qty - origQty) > 0.0001;
 
+  // YAKUNIY (confirmed_engineer) → row is permanently locked per the v2
+  // workflow spec (migration 353): no role can change quantity, status,
+  // or anything else without an explicit engineer-side unlock action.
+  // We disable the Fakt input and hide every per-row affordance that
+  // would mutate the line. The engineer's unlock flow is on the
+  // Bosqichlar (StagesTabV2) page, not here, so there's no inline
+  // "unlock" button on Smeta boshqaruvi.
+  const isLocked = line.approval_status === 'confirmed_engineer';
+
   // Sub-stage cards never carry sub-stages of their own (we don't allow
   // nesting), so all subs of a sub-stage are resources.
   const subResources = (subs || []).filter((s) => !isSubStageRow(s));
@@ -1799,7 +1808,13 @@ function WorkCard({
           style={{ color: C.teal }}
           title={line.code || ''}
         >
-          {isSubStage ? "QO'SH." : (line.code || '')}
+          {/* Sub-stages: show user-entered code if any, otherwise fall
+              back to the "QO'SH." badge so legacy rows without a code
+              still render. Top-level works always show their own code
+              (or blank). Per user feedback: "kodini qoshdim qosh
+              sozini orniga chiqishi kerak chiqmadi" — when a code
+              exists, it must replace the QO'SH. label. */}
+          {isSubStage ? (line.code || "QO'SH.") : (line.code || '')}
         </div>
         <div
           className="text-[13px] font-medium leading-snug"
@@ -1865,18 +1880,12 @@ function WorkCard({
               Bosqichlar tab already shows REJA + BAJARILDI side-by-side; this
               brings the same pair to Smeta boshqaruvi so the user can see how
               far the entered quantity has drifted from the imported smeta
-              norm without flipping tabs. The label group is captioned
-              "Norma va fakt qilingan hajm" per the product spec. */}
+              norm without flipping tabs. Label removed per product feedback —
+              the per-pill labels (Norma / Fakt) below are explicit enough. */}
           <div
             className="flex items-center gap-3 py-3 mb-3 flex-wrap"
             style={{ borderBottom: `1px solid ${C.border}` }}
           >
-            <label
-              className="text-[11px] uppercase tracking-[0.1em]"
-              style={{ color: C.muted }}
-            >
-              {t('norma_va_fakt_qilingan_hajm') || 'Norma va fakt qilingan hajm'}:
-            </label>
             {/* NORMA — reja quantity from the imported smeta. Read-only.
                 Sized identically to the Fakt input below (same width /
                 padding / font / height) so the two read as a matched pair
@@ -1900,36 +1909,57 @@ function WorkCard({
                 {origQty > 0 ? fmt(origQty) : '—'}
               </span>
             </div>
-            {/* FAKT QILINGAN HAJM — editable. Drives the cascade to children. */}
+            {/* FAKT QILINGAN HAJM — editable while the work is open;
+                read-only once the engineer confirms (YAKUNIY). The
+                read-only path swaps the <input> for a styled <span> so
+                no role accidentally types into a locked row even if a
+                browser plugin re-enables disabled inputs. */}
             <div className="flex items-center gap-1.5">
               <span className="text-[10px] uppercase tracking-[0.08em]" style={{ color: C.fade }}>
                 {t('label_fakt_qilingan_hajm_short') || 'Fakt'}
               </span>
-              <input
-                type="text"
-                inputMode="decimal"
-                value={qtyValue ?? ''}
-                onClick={(e) => e.stopPropagation()}
-                onChange={(e) => setQtyDraft(e.target.value)}
-                onFocus={(e) => e.target.select()}
-                onBlur={(e) => {
-                  if (qtyChanged) commitQty(line, e.target.value);
-                  clearQtyDraft();
-                }}
-                className={`px-3 py-2 rounded-[5px] text-[13px] font-mono text-right outline-none transition ${isEmpty ? 'smeta-empty-pulse' : ''}`}
-                style={{
-                  background: isEmpty ? 'rgba(217,119,6,0.05)' : C.inset,
-                  color: isEmpty ? C.amber : (qtyChanged ? C.teal : C.text),
-                  border: `1px solid ${isEmpty ? C.amber : C.border2}`,
-                  width: 120,
-                  height: 38, // pinned to match the Norma chip exactly
-                  boxSizing: 'border-box',
-                  fontWeight: qtyChanged || isEmpty ? 600 : 400,
-                }}
-              />
+              {isLocked ? (
+                <span
+                  className="px-3 py-2 rounded-[5px] text-[13px] font-mono text-right tabular-nums inline-flex items-center justify-end"
+                  style={{
+                    background: C.hover,
+                    color: C.muted,
+                    border: `1px solid ${C.border2}`,
+                    width: 120,
+                    height: 38,
+                    boxSizing: 'border-box',
+                  }}
+                  title={t('locked_by_engineer') || 'YAKUNIY: faqat bosh muhandis tahrirlay oladi'}
+                >
+                  {qty > 0 ? fmt(qty) : '—'}
+                </span>
+              ) : (
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={qtyValue ?? ''}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => setQtyDraft(e.target.value)}
+                  onFocus={(e) => e.target.select()}
+                  onBlur={(e) => {
+                    if (qtyChanged) commitQty(line, e.target.value);
+                    clearQtyDraft();
+                  }}
+                  className={`px-3 py-2 rounded-[5px] text-[13px] font-mono text-right outline-none transition ${isEmpty ? 'smeta-empty-pulse' : ''}`}
+                  style={{
+                    background: isEmpty ? 'rgba(217,119,6,0.05)' : C.inset,
+                    color: isEmpty ? C.amber : (qtyChanged ? C.teal : C.text),
+                    border: `1px solid ${isEmpty ? C.amber : C.border2}`,
+                    width: 120,
+                    height: 38, // pinned to match the Norma chip exactly
+                    boxSizing: 'border-box',
+                    fontWeight: qtyChanged || isEmpty ? 600 : 400,
+                  }}
+                />
+              )}
             </div>
             <span className="text-xs" style={{ color: C.muted }}>{line.uom || ''}</span>
-            {qtyModified && (
+            {qtyModified && !isLocked && (
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); resetQty(line); }}
@@ -1941,9 +1971,28 @@ function WorkCard({
               </button>
             )}
             <div className="flex-1" />
+            {/* Locked banner — replaces the add/delete buttons when the
+                work is YAKUNIY. Tells the user the row is read-only and
+                whose role can change that. */}
+            {isLocked && (
+              <span
+                className="px-2.5 py-1 rounded-md text-[11px] inline-flex items-center gap-1.5"
+                style={{
+                  background: 'rgba(16,185,129,0.08)',
+                  color: '#065F46',
+                  border: '1px solid rgba(16,185,129,0.25)',
+                }}
+                title={t('locked_by_engineer') || 'YAKUNIY: faqat bosh muhandis tahrirlay oladi'}
+              >
+                <Lock className="w-3 h-3" />
+                {t('locked') || 'Qulflangan'}
+              </span>
+            )}
             {/* Top-level works get BOTH buttons. Sub-stages only get
-                "Resurs qo'shish" — we don't support nested stages. */}
-            {!isSubStage && (
+                "Resurs qo'shish" — we don't support nested stages.
+                Both are hidden when the row is locked so a foreman can't
+                graft new sub-rows onto a finalised work. */}
+            {!isSubStage && !isLocked && (
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); openAddStage(line); }}
@@ -1958,21 +2007,24 @@ function WorkCard({
                 {t('new_stage') || "Yangi etap"}
               </button>
             )}
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); openAddResource(line); }}
-              className="px-3.5 py-2 rounded-md text-xs flex items-center gap-1.5 transition"
-              style={{
-                background: 'rgba(13,148,136,0.08)',
-                color: C.teal,
-                border: '1px dashed rgba(13,148,136,0.3)',
-              }}
-            >
-              <Plus className="w-3.5 h-3.5" />
-              {isSubStage ? (t('add_resource') || "Resurs qo'shish") : (t('extra_resource_btn') || "Qo'shimcha resurs")}
-            </button>
-            {/* Sub-stages can be deleted from their own header. */}
-            {isSubStage && (
+            {!isLocked && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); openAddResource(line); }}
+                className="px-3.5 py-2 rounded-md text-xs flex items-center gap-1.5 transition"
+                style={{
+                  background: 'rgba(13,148,136,0.08)',
+                  color: C.teal,
+                  border: '1px dashed rgba(13,148,136,0.3)',
+                }}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                {isSubStage ? (t('add_resource') || "Resurs qo'shish") : (t('extra_resource_btn') || "Qo'shimcha resurs")}
+              </button>
+            )}
+            {/* Sub-stages can be deleted from their own header — except
+                when locked. */}
+            {isSubStage && !isLocked && (
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); removeLine(line); }}
