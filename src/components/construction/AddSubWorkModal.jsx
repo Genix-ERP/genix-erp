@@ -15,9 +15,17 @@ import { constructionService } from '@/api/services/construction';
 // styles get out-cascaded by class rules). Going direct gives us full
 // pixel control with zero fight.
 
+// One canonical entry per physical unit — the previous list duplicated
+// the same hour-unit in three different transliterations (ЧЕЛ.-Ч /
+// CHEL-SOAT / ISH-KUN; МАШ.-Ч / MASH-CHAS / MASH-SOAT) which made the
+// dropdown read like three separate UOMs and produced inconsistent
+// labels in the saved smeta. We keep the Russian forms because the
+// imported Goskomarkhitektstroy smetas use exactly those strings, and
+// matching the imported casing keeps cross-sheet joins (REJA vs FAKT,
+// resource lookups by name+uom) intact.
 const UOMS_BY_CATEGORY = {
-  labor:    ['ЧЕЛ.-Ч', 'CHEL-SOAT', 'ISH-KUN'],
-  machines: ['МАШ.-Ч', 'MASH-CHAS', 'MASH-SOAT'],
+  labor:    ['ЧЕЛ.-Ч'],
+  machines: ['МАШ.-Ч'],
   material: ['M3', 'M2', 'KG', 'TN', 'DONA', 'POG.M', 'L', 'KOMPL', '1000 M3 GRUNTA', '100 M3', 'M3 GRUNTA'],
 };
 

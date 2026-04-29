@@ -1327,8 +1327,16 @@ export default function SmetaManagementTab({ project }) {
         <DialogContent className="max-w-[1200px] w-[95vw] h-[95vh] p-0 overflow-hidden flex flex-col">
           <div className="flex-1 overflow-auto bg-stone-100">
             {snapshotPreview && (
+              // `key` forces React to remount Form2Preview when switching
+              // between snapshots — its date / VAT / other-costs state is
+              // seeded from `snapshot` in useState() initializers, which
+              // only run once per mount. Without the key, the second
+              // snapshot you opened would reuse the first snapshot's
+              // state.
               <Form2Preview
+                key={`snap-${snapshotPreview.id}`}
                 estimate={selectedEstimate}
+                snapshot={snapshotPreview}
                 lines={(() => {
                   try {
                     const d = typeof snapshotPreview.snapshot_data === 'string'
@@ -2435,6 +2443,26 @@ function auditActionLabel(meta, language) {
   return meta.label_uz || meta.label_ru || meta.label_en || '';
 }
 
+// Approval-status codes the backend writes into audit `from_value` /
+// `to_value` cells when transitionWork() flips a row's
+// approval_status. The audit table renders these raw, so they used to
+// surface as English machine codes ("in_progress → submitted") in any
+// language. This helper passes them through the existing
+// work_status_*_long translation keys so the column reads "Jarayonda
+// → Tekshiruvda" / "В процессе → На проверке" / "In progress → In
+// review" depending on the active language. Numeric / arbitrary values
+// (qty changes, price changes, etc.) fall through unchanged.
+const AUDIT_STATUS_CODES = new Set([
+  'pending', 'in_progress', 'submitted',
+  'confirmed_supervisor', 'confirmed_engineer',
+]);
+function localizeAuditValue(t, raw) {
+  if (raw == null) return raw;
+  const s = String(raw).trim();
+  if (!AUDIT_STATUS_CODES.has(s)) return raw;
+  return t(`work_status_${s}_long`) || raw;
+}
+
 function AuditPage({ t, language, loading, entries, filter, onFilterChange, onRefresh }) {
   const fmtDate = (s) => {
     if (!s) return '—';
@@ -2517,7 +2545,16 @@ function AuditPage({ t, language, loading, entries, filter, onFilterChange, onRe
                       </div>
                     </td>
                     <td className="px-3 py-2" style={{ color: C.text }}>
-                      {e.target || '—'}
+                      {/* Hide the literal "topup" target written by older
+                          versions of the topup endpoint — the row's
+                          description already starts with the resource
+                          name ("ЗАТРАТЫ ТРУДА … uchun qo'shimcha
+                          buyurtma: …"), so the bare "topup" headline
+                          adds nothing. New rows carry the actual
+                          resource line name in `target` and render
+                          normally. */}
+                      {e.target && e.target !== 'topup' ? e.target : null}
+                      {!e.target || e.target === 'topup' ? (e.description ? null : '—') : null}
                       {e.description && (
                         <div className="text-[11px]" style={{ color: C.muted }}>{e.description}</div>
                       )}
@@ -2525,9 +2562,9 @@ function AuditPage({ t, language, loading, entries, filter, onFilterChange, onRe
                     <td className="px-3 py-2 font-mono" style={{ color: C.dim }}>
                       {e.from_value || e.to_value
                         ? <>
-                            {e.from_value && <span style={{ color: C.muted }}>{e.from_value}</span>}
+                            {e.from_value && <span style={{ color: C.muted }}>{localizeAuditValue(t, e.from_value)}</span>}
                             {e.from_value && e.to_value && <span style={{ color: C.fade }}> → </span>}
-                            {e.to_value && <span style={{ color: C.text, fontWeight: 600 }}>{e.to_value}</span>}
+                            {e.to_value && <span style={{ color: C.text, fontWeight: 600 }}>{localizeAuditValue(t, e.to_value)}</span>}
                           </>
                         : '—'}
                     </td>

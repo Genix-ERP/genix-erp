@@ -1548,7 +1548,12 @@ function WorksTable({
         <thead>
           <tr className="bg-slate-50">
             <th className="py-2.5 px-2" style={{ width: 28 }} />
-            <th className="text-center py-2.5 px-3 text-[10.5px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 40 }}>#</th>
+            {/* `#` column was 40 px — too narrow for hyphenated sub-stage
+                item numbers like "4-1" / "13-1", which were wrapping
+                to two lines ("4-" then "1") in the cell. Widened to
+                64 px and the cell uses whiteSpace:nowrap below so even
+                the longest realistic number ("13-12") stays on one line. */}
+            <th className="text-center py-2.5 px-3 text-[10.5px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 64 }}>#</th>
             <th className="text-left   py-2.5 px-3 text-[10.5px] uppercase tracking-wider font-bold text-slate-500">{t('work_name')}</th>
             <th className="text-center py-2.5 px-3 text-[10.5px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 90 }}>{t('unit')}</th>
             <th className="text-right  py-2.5 px-3 text-[10.5px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 100 }}>{t('plan')}</th>
@@ -1614,7 +1619,7 @@ function WorksTable({
                     </button>
                   )}
                 </td>
-                <td className="text-center py-2.5 px-3 font-bold">{w.item_number || (idx + 1)}</td>
+                <td className="text-center py-2.5 px-3 font-bold whitespace-nowrap">{w.item_number || (idx + 1)}</td>
                 <td className="py-2.5 px-3">
                   <div className="font-medium text-slate-900">{w.name}</div>
                   {w.code && (
@@ -1690,7 +1695,16 @@ function WorksTable({
                   const planTotal = storedTotal > 0
                     ? storedTotal
                     : derivedUnitRate * planQty;
-                  const factTotal = Math.min(doneQty, planQty) * derivedUnitRate;
+                  // FAKT JAMI = actual quantity × rate. We deliberately
+                  // do NOT cap doneQty at planQty here — the user
+                  // reported "REJA va BAJARILDI har xil bo'lsa ham
+                  // jami bir xil" because the previous cap
+                  // (Math.min(doneQty, planQty)) hid over-completion in
+                  // the cost column. The done quantity already drives
+                  // the sub-resource FAKT SARF column un-capped, so
+                  // matching that here keeps the parent and child
+                  // numbers consistent.
+                  const factTotal = doneQty * derivedUnitRate;
                   return (<>
                     <td className="text-right py-2.5 px-3 font-mono">{fmt(derivedUnitRate)}</td>
                     <td className="text-right py-2.5 px-3 font-mono font-semibold">{fmt(Math.round(planTotal))}</td>

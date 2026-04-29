@@ -136,8 +136,15 @@ const BudgetTab = ({ project }) => {
         </div>
       )}
 
-      {/* Summary KPIs */}
-      <div className="grid grid-cols-4 gap-4">
+      {/* Summary KPIs.
+          The 4th "Byudjetdan foydalanish" (% utilization) card was
+          removed per product feedback — the same percentage was
+          already implied by the difference card (Og'ish), and a
+          progress bar at 0–1% on a barely-started project read more
+          like a chart artefact than useful information. Three cards
+          here, four-column grid kept to match the surrounding spacing
+          on the page. */}
+      <div className="grid grid-cols-3 gap-4">
         <Card><CardContent className="p-4">
           <p className="text-sm text-slate-500">{t('budget_total_planned') || 'Total planned budget'}</p>
           <p className="text-xl font-bold text-blue-600">{formatCurrency(totalPlanned)}</p>
@@ -151,16 +158,6 @@ const BudgetTab = ({ project }) => {
           <p className={`text-xl font-bold ${totalVariance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
             {totalVariance >= 0 ? '+' : ''}{formatCurrency(totalVariance)}
           </p>
-        </CardContent></Card>
-        <Card><CardContent className="p-4">
-          <p className="text-sm text-slate-500">{t('budget_utilization') || 'Utilization (%)'}</p>
-          <p className={`text-xl font-bold ${getBadgeColor(totalPct)}`}>{totalPct.toFixed(1)}%</p>
-          <div className="w-full bg-slate-200 rounded-full h-2 mt-2">
-            <div
-              className={`h-2 rounded-full ${totalPct < 90 ? 'bg-green-500' : totalPct <= 100 ? 'bg-yellow-500' : 'bg-red-500'}`}
-              style={{ width: `${Math.min(100, totalPct)}%` }}
-            />
-          </div>
         </CardContent></Card>
       </div>
 

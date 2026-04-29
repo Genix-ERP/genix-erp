@@ -995,6 +995,19 @@ const OverviewTabContent = React.memo(function OverviewTabContent({
     // "Bino turi" row removed per product feedback — the field rarely
     // carried meaningful data on real projects and the value was
     // duplicated/contradicted by `project_type` above.
+    //
+    // "Loyiha ombori" — the project's chosen default warehouse (migration
+    // 365). When set, every material reservation and request goes here;
+    // when not set the row reads "(Avtomatik tanlash)" so the user knows
+    // the system is auto-picking and may want to set an explicit one.
+    {
+      label: t('project_warehouse') || 'Loyiha ombori',
+      value: project.warehouse_name ? project.warehouse_name : (
+        <span className="text-slate-400 italic">
+          {t('no_default_warehouse') || '(Avtomatik tanlash)'}
+        </span>
+      ),
+    },
     {
       label: t('total_area') || 'Umumiy maydon',
       value: project.total_area ? `${project.total_area} m²` : EMPTY,
@@ -1709,8 +1722,14 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
     }
   };
 
-  // Add a blank item line to the material request form
+  // Add a blank item line to the material request form. Pre-fills
+  // warehouse_id with the project's chosen default (migration 365) so
+  // every line of every request defaults to the same warehouse — the
+  // user can still override per line if a specific material legitimately
+  // ships from elsewhere. Empty string when the project has no default,
+  // letting the per-line picker appear blank as before.
   const addMaterialRequestItem = () => {
+    const defaultWarehouseID = project?.warehouse_id || '';
     setMaterialRequestForm(prev => ({
       ...prev,
       items: [
@@ -1719,7 +1738,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
           _key: `new-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           product_id: '',
           variant_id: '',
-          warehouse_id: '',
+          warehouse_id: defaultWarehouseID,
           quantity: 1,
           unit_cost: 0,
           product_name: '',
@@ -4323,6 +4342,20 @@ export default function Construction() {
     loadProjects();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Warehouses for the project form's "Loyiha ombori" picker. Loaded
+  // once on mount and reused for both the create modal and the inline
+  // edit affordance on the project info card. Sorted alphabetically so
+  // the dropdown is predictable for users with many sites.
+  const [warehouses, setWarehouses] = useState([]);
+  useEffect(() => {
+    inventoryService.listWarehouses({ limit: 100 })
+      .then((data) => {
+        const list = Array.isArray(data) ? data : (data?.items || []);
+        setWarehouses(list.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')));
+      })
+      .catch(() => setWarehouses([]));
+  }, []);
+
   const activeTab = searchParams.get("tab") || "projects";
   const setActiveTab = (tab) => setSearchParams((prev) => {
     const next = new URLSearchParams(prev);
@@ -4351,6 +4384,10 @@ export default function Construction() {
     planned_start_date: '',
     planned_end_date: '',
     status: 'draft',
+    // Optional default warehouse for material reservations and material
+    // requests. Empty string = no preference; backend falls back to its
+    // existing auto-pick chain (highest-stock → oldest-active).
+    warehouse_id: '',
     // Forma 2 / Forma 3 client (Заказчик) identity
     client_name: '',
     client_phone: '',
@@ -4521,6 +4558,7 @@ export default function Construction() {
       project_type: '', building_type: '',
       total_area: '', floors_count: '', contract_amount: '', planned_start_date: '', planned_end_date: '',
       status: 'draft',
+      warehouse_id: '',
       // Client (Buyurtmachi / Customer) fields are left BLANK by default.
       // In construction ERP the "client" is the external customer ordering
       // the work — NOT the user's own organization. Pre-filling these with
@@ -4559,6 +4597,7 @@ export default function Construction() {
       planned_start_date: project.planned_start_date ? format(new Date(project.planned_start_date), 'yyyy-MM-dd') : '',
       planned_end_date: project.planned_end_date ? format(new Date(project.planned_end_date), 'yyyy-MM-dd') : '',
       status: project.status || 'draft',
+      warehouse_id: project.warehouse_id || '',
       client_name: project.client_name || '',
       client_phone: project.client_phone || '',
       client_contact: project.client_contact || '',
@@ -5179,6 +5218,50 @@ export default function Construction() {
                     value={projectForm.floors_count}
                     onChange={(e) => setProjectForm({ ...projectForm, floors_count: e.target.value })}
                   />
+                </div>
+              </div>
+
+              {/* Default warehouse for materials. Optional — when empty the
+                  backend falls back to its existing auto-pick. When set,
+                  every material reservation (foreman submit) and every
+                  material request created on this project lands on this
+                  warehouse, so there's no more cross-charging or random
+                  tiebreakers. The "(none)" sentinel uses a non-empty
+                  string because Radix Select forbids "" as an item value;
+                  it's translated back to empty string before submit. */}
+              <div className="grid grid-cols-1 gap-3">
+                <div>
+                  <Label htmlFor="proj-warehouse">
+                    {t('project_warehouse') || 'Loyiha ombori'}
+                    <span className="text-slate-400 font-normal ml-1">
+                      ({t('optional') || 'ixtiyoriy'})
+                    </span>
+                  </Label>
+                  <Select
+                    value={projectForm.warehouse_id || '__none__'}
+                    onValueChange={(v) => setProjectForm({
+                      ...projectForm,
+                      warehouse_id: v === '__none__' ? '' : v,
+                    })}
+                  >
+                    <SelectTrigger id="proj-warehouse">
+                      <SelectValue placeholder={t('select_warehouse') || 'Ombor tanlang'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">
+                        {t('no_default_warehouse') || "(Avtomatik tanlash)"}
+                      </SelectItem>
+                      {warehouses.map((w) => (
+                        <SelectItem key={w.id} value={w.id}>
+                          {w.name}{w.code ? ` · ${w.code}` : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {t('project_warehouse_hint') ||
+                      "Material so'rovlari va YAKUNIY ish tasdiqlovi shu omborga yoziladi"}
+                  </p>
                 </div>
               </div>
             </section>

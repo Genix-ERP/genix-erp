@@ -21,16 +21,20 @@ import {
   ReferenceLine,
 } from 'recharts';
 
+// Swapped on_track ↔ completed colours to match the renamed status
+// labels ("Jarayonda" → blue, "Tugallangan" → green) so the badges
+// agree with the legend chips and the standard "blue = in progress,
+// green = done, red = behind" convention used elsewhere in the app.
 const STATUS_BADGE = {
-  on_track: 'bg-green-100 text-green-700',
+  on_track: 'bg-blue-100 text-blue-700',
   behind: 'bg-red-100 text-red-700',
-  completed: 'bg-blue-100 text-blue-700',
+  completed: 'bg-green-100 text-green-700',
 };
 
 const STATUS_BAR_COLORS = {
-  on_track: '#22c55e',
+  on_track: '#3b82f6',
   behind: '#ef4444',
-  completed: '#3b82f6',
+  completed: '#22c55e',
 };
 
 const ProgressTab = ({ project }) => {
@@ -75,8 +79,14 @@ const ProgressTab = ({ project }) => {
     }
   }, [progressData, selectedBlock]);
 
+  // "On track" used to mean "running on schedule" but the user-facing
+  // semantics on this tab are simpler — every item that's been started
+  // and isn't done is just "in progress" (Jarayonda). Renaming to
+  // match the natural Uzbek phrasing the user asked for; the bucket
+  // KEY stays `on_track` so we don't have to migrate the backend
+  // KPI/aggregation that already returns that name.
   const STATUS_LABELS = {
-    on_track: t('on_track') || 'On track',
+    on_track: t('in_progress') || 'Jarayonda',
     behind: t('behind') || 'Behind',
     completed: t('completed') || 'Bajarildi',
   };
@@ -167,7 +177,11 @@ const ProgressTab = ({ project }) => {
     const k = progressData.kpis || {};
     const totalItems = k.total ?? items.length;
     const onTrackCount = k.on_track ?? items.filter((i) => i.bucket === 'on_track').length;
-    const behindCount = k.behind ?? items.filter((i) => i.bucket === 'behind').length;
+    // KPI block doesn't ship a `completed` count yet — derive it
+    // client-side. The `bucket` field is set by the backend per item
+    // based on the underlying stage/sub-stage status; rows in the
+    // 'completed' bucket are works that have been fully signed off.
+    const completedCount = k.completed ?? items.filter((i) => i.bucket === 'completed').length;
     const avgPct = Number(k.avg_pct ?? 0).toFixed(1);
 
     return (
@@ -180,14 +194,25 @@ const ProgressTab = ({ project }) => {
         </Card>
         <Card>
           <CardContent className="p-4">
-            <p className="text-sm text-slate-500">{t('on_track_count') || "O'z vaqtida"}</p>
-            <p className="text-2xl font-bold text-green-600">{onTrackCount}</p>
+            {/* Renamed from "O'z vaqtida" → "Jarayonda" per product
+                feedback. This card always shows the count of items
+                in the on_track bucket (anything actively in progress);
+                the previous label implied "on schedule" which doesn't
+                match how the bucket is actually computed. */}
+            <p className="text-sm text-slate-500">{t('in_progress') || 'Jarayonda'}</p>
+            <p className="text-2xl font-bold text-blue-600">{onTrackCount}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <p className="text-sm text-slate-500">{t('behind_count') || 'Kechikkan'}</p>
-            <p className="text-2xl font-bold text-red-600">{behindCount}</p>
+            {/* New "Tugallangan" KPI card so the user can see at a
+                glance how many works are fully completed. Replaces the
+                previous "Kechikkan" card which mixed semantics with
+                "O'z vaqtida" — those two together suggested a strict
+                schedule comparison the data model doesn't actually
+                track. */}
+            <p className="text-sm text-slate-500">{t('completed') || 'Tugallangan'}</p>
+            <p className="text-2xl font-bold text-green-600">{completedCount}</p>
           </CardContent>
         </Card>
         <Card>
@@ -305,10 +330,14 @@ const ProgressTab = ({ project }) => {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b text-slate-500">
+                {/* `Reja` (planned window) and `Haqiqiy boshlanish`
+                    (actual start) columns dropped per product
+                    feedback — those dates rarely line up with the
+                    construction realities the foreman tracks here.
+                    Source / Name / Progress / Status carry all the
+                    information that's actually used. */}
                 <th className="text-left py-2 px-3">{t('source') || 'Manba'}</th>
                 <th className="text-left py-2 px-3">{t('name') || 'Nomi'}</th>
-                <th className="text-center py-2 px-3">{t('planned_window') || 'Reja'}</th>
-                <th className="text-center py-2 px-3">{t('actual_start') || 'Haqiqiy boshlanish'}</th>
                 <th className="text-left py-2 px-3 w-[200px]">{t('progress') || 'Jarayon'}</th>
                 <th className="text-center py-2 px-3">{t('status') || 'Holat'}</th>
               </tr>
@@ -331,12 +360,6 @@ const ProgressTab = ({ project }) => {
                           ↳ {item.parent_name}
                         </div>
                       )}
-                    </td>
-                    <td className="py-2 px-3 text-center text-xs text-slate-600 whitespace-nowrap">
-                      {fmt(item.planned_start)} — {fmt(item.planned_end)}
-                    </td>
-                    <td className="py-2 px-3 text-center text-xs text-slate-600">
-                      {fmt(item.actual_start)}
                     </td>
                     <td className="py-2 px-3">
                       <div className="flex items-center gap-2">
@@ -490,19 +513,22 @@ const ProgressTab = ({ project }) => {
             <CardContent>{renderTable()}</CardContent>
           </Card>
 
-          {/* Legend */}
+          {/* Legend — labels match the renamed status badges in the
+              table above ("Jarayonda" / "Tugallangan"). The "Behind"
+              chip stays for items the backend tags into the `behind`
+              bucket; we just don't have a stat card for it any more. */}
           <div className="flex gap-4 text-xs text-slate-500 flex-wrap">
             <span className="flex items-center gap-1">
+              <span className="w-3 h-3 rounded bg-blue-200 inline-block" />
+              {t('in_progress') || 'Jarayonda'}
+            </span>
+            <span className="flex items-center gap-1">
               <span className="w-3 h-3 rounded bg-green-200 inline-block" />
-              {t('on_track') || 'On track'} — {t('progress_on_track_desc') || "Rejada"}
+              {t('completed') || 'Tugallangan'}
             </span>
             <span className="flex items-center gap-1">
               <span className="w-3 h-3 rounded bg-red-200 inline-block" />
               {t('behind') || 'Behind'} — {t('progress_behind_desc') || "Kechikkan"}
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded bg-blue-200 inline-block" />
-              {t('completed') || 'Bajarildi'} — {t('progress_completed_desc') || "Tugallangan"}
             </span>
           </div>
         </>
