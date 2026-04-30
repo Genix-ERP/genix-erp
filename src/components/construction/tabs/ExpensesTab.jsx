@@ -12,10 +12,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Plus, Edit, Trash2, CheckCircle, XCircle, Receipt, Tag, ChevronLeft, ChevronRight } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { sortBuildings } from '@/utils/naturalSort';
 import { toast } from 'sonner';
 
 const STATUS_COLORS = {
@@ -73,9 +75,23 @@ const ExpensesTab = ({ project, scope }) => {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
-  const [filters, setFilters] = useState({ status: '', stage_id: '', category_id: '' });
+  const [filters, setFilters] = useState({ status: '', stage_id: '', category_id: '', building_id: 'all' });
+  const [buildings, setBuildings] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 20;
+
+  // Buildings drive the block-pill row above the summary cards. Loaded
+  // once per project; the pills mirror the Byudjet tab so users get a
+  // consistent block-filter UX across the Moliya area.
+  useEffect(() => {
+    if (!project?.id) return;
+    let cancelled = false;
+    constructionService
+      .listBuildings(project.id)
+      .then((rows) => { if (!cancelled) setBuildings(sortBuildings(Array.isArray(rows) ? rows : [])); })
+      .catch(() => { if (!cancelled) setBuildings([]); });
+    return () => { cancelled = true; };
+  }, [project?.id]);
 
   const load = useCallback(async () => {
     if (!project?.id) return;
@@ -86,6 +102,11 @@ const ExpensesTab = ({ project, scope }) => {
       if (filters.status) params.status = filters.status;
       if (filters.stage_id) params.stage_id = filters.stage_id;
       if (filters.category_id) params.category_id = filters.category_id;
+      // Backend treats absent / 0 as project-wide; only forward when a
+      // specific block is picked.
+      if (filters.building_id && filters.building_id !== 'all') {
+        params.building_id = filters.building_id;
+      }
       const [expData, stageData, catData] = await Promise.all([
         constructionService.listExpenseLines(project.id, params),
         constructionService.listStages(project.id),
@@ -370,6 +391,44 @@ const ExpensesTab = ({ project, scope }) => {
         </Card>
       ) : (
       <>
+      {/* Building tab row — mirrors the Byudjet tab. "Hammasi" keeps
+          the project-wide view available; per-block pills filter both
+          the summary totals and the operations table. Only render when
+          the project actually has buildings attached so single-building
+          projects don't see a useless one-pill row. */}
+      {buildings.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setFilters((f) => ({ ...f, building_id: 'all' }))}
+            className={cn(
+              'px-3 py-1.5 rounded-full text-xs font-medium border transition-colors',
+              filters.building_id === 'all'
+                ? 'bg-slate-900 text-white border-slate-900'
+                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50',
+            )}
+          >
+            {t('all') || 'Hammasi'}
+          </button>
+          {buildings.map((b) => (
+            <button
+              key={b.id}
+              type="button"
+              onClick={() => setFilters((f) => ({ ...f, building_id: String(b.id) }))}
+              className={cn(
+                'px-3 py-1.5 rounded-full text-xs font-medium border transition-colors',
+                String(filters.building_id) === String(b.id)
+                  ? 'bg-slate-900 text-white border-slate-900'
+                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50',
+              )}
+              title={b.code || b.name}
+            >
+              {b.name || b.code || `#${b.id}`}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Summary */}
       <div className="grid grid-cols-3 gap-4">
         <Card><CardContent className="p-4">

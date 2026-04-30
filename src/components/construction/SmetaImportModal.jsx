@@ -524,6 +524,39 @@ function parseResurs(workbook) {
     materialType: 'standard',
   };
 
+  // Imported-budget capture. The Ресурс sheet ends with a small block of
+  // summary rows that carry the canonical project budget — we sum them
+  // into the dedicated fields below so the Reja vs Fakt page can show
+  // the real budget instead of computing it from per-line plan totals.
+  //
+  //   ИТОГО ПО СТРОИТЕЛЬНЫМ МАТЕРИАЛАМ      → materialBudget
+  //   ТРАНСПОРТНЫЕ РАСХОДЫ НА МАТЕРИАЛЫ    → transportBudget
+  //   ИТОГО ПРЯМЫЕ ЗАТРАТЫ                  → budgetTotal (the headline)
+  //
+  // The transport row also appears mid-sheet as per-section overhead
+  // (which the parser already skips). The bottom block is identifiable
+  // because it sits AFTER all the section data and its label appears in
+  // colB or colC with no item number in colA.
+  let materialBudget = 0;
+  let transportBudget = 0;
+  let budgetTotal = 0;
+
+  // Pull the numeric total off a summary row. The total can live in
+  // colE/F/G depending on the file — pick the first numeric one we find,
+  // preferring the right-most column (that's where the file lays the
+  // grand total). Falls back to scanning the whole row so weird padding
+  // (extra empty columns) still works.
+  const pickSummaryAmount = (row) => {
+    if (!Array.isArray(row)) return 0;
+    for (let c = row.length - 1; c >= 4; c--) {
+      const cell = row[c];
+      if (cell == null || cell === '') continue;
+      const n = typeof cell === 'number' ? cell : parseFloat(String(cell).replace(/[\s ]/g, '').replace(',', '.'));
+      if (!isNaN(n) && n > 0) return n;
+    }
+    return 0;
+  };
+
   for (let i = 11; i < rawData.length; i++) {
     const row = rawData[i];
     if (!row || row.every((cell) => cell == null || cell === '')) continue;
@@ -543,8 +576,34 @@ function parseResurs(workbook) {
     // subtotals — those are calculated overhead lines that should never
     // be persisted as items.
     const textToCheck = (colC || colB || '').toUpperCase();
-    if (textToCheck.includes('ИТОГО')) continue;
-    if (textToCheck.includes('ТРАНСПОРТНЫЕ') && textToCheck.includes('РАСХОД')) continue;
+    if (textToCheck.includes('ИТОГО')) {
+      // Capture the file's bottom-summary totals on the way through.
+      // Only the bottom-block ИТОГО rows carry the project-wide totals
+      // we want; per-section ИТОГО (which always have data above and
+      // below them) are also caught here, but their numbers are smaller
+      // than the project total so the MAX-style assignment below is
+      // self-correcting on real files.
+      const amount = pickSummaryAmount(row);
+      if (amount > 0) {
+        if (textToCheck.includes('ПРЯМЫЕ') && textToCheck.includes('ЗАТРАТ')) {
+          // Headline: the WHOLE direct-cost budget for this estimate.
+          if (amount > budgetTotal) budgetTotal = amount;
+        } else if (textToCheck.includes('СТРОИТЕЛЬНЫМ') && textToCheck.includes('МАТЕРИАЛ')) {
+          // Material-only sub-total (excludes transport / labor / machines).
+          if (amount > materialBudget) materialBudget = amount;
+        }
+      }
+      continue;
+    }
+    if (textToCheck.includes('ТРАНСПОРТНЫЕ') && textToCheck.includes('РАСХОД')) {
+      // Pick up only the BOTTOM transport-overhead row — i.e. the one
+      // that sums materials project-wide. The parser walks top-to-bottom,
+      // so the LAST one we see is the project-level total. Overwriting
+      // every time achieves that without needing extra book-keeping.
+      const amount = pickSummaryAmount(row);
+      if (amount > 0) transportBudget = amount;
+      continue;
+    }
 
     // Detect section header (resource type group) or numbered section header.
     // detectResourceSection now returns { resourceType, materialType }.
@@ -616,7 +675,21 @@ function parseResurs(workbook) {
     sections.push(currentSection);
   }
 
-  return { sections, objectName };
+  // If ИТОГО ПРЯМЫЕ ЗАТРАТЫ wasn't on the sheet (some older Ресурс
+  // exports skip the grand-total row), fall back to materials + transport.
+  // This still beats the per-line summation in the Reja vs Fakt handler
+  // because it includes transport overhead.
+  if (budgetTotal === 0 && (materialBudget > 0 || transportBudget > 0)) {
+    budgetTotal = materialBudget + transportBudget;
+  }
+
+  return {
+    sections,
+    objectName,
+    budgetTotal,
+    materialBudget,
+    transportBudget,
+  };
 }
 
 // =====================================================
@@ -1468,6 +1541,13 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
       importedCount,
       sectionCount: result.sections?.length || 0,
       defaultName: nameOverride || result.objectName || result.sections?.[0]?.name || 'Imported',
+      // Imported budget totals — populated only by parseResurs (the only
+      // sheet that carries project-wide totals at the bottom). Other
+      // parsers leave these as 0/undefined so the existing Reja-jami
+      // computation stays in charge.
+      budgetTotal: Number(result.budgetTotal || 0),
+      materialBudget: Number(result.materialBudget || 0),
+      transportBudget: Number(result.transportBudget || 0),
     };
   };
 
@@ -1544,6 +1624,12 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
           lines: payload.lines,
           sectionNames: payload.sectionNames,
           subcontractId,
+          // Imported budget — Ресурс sheet only. The handler forwards
+          // these to the backend so the Reja vs Fakt page can show the
+          // file's grand total instead of a derived sum.
+          budgetTotal: payload.budgetTotal,
+          materialBudget: payload.materialBudget,
+          transportBudget: payload.transportBudget,
         });
         totalLines += payload.importedCount;
         totalSections += payload.sectionCount;

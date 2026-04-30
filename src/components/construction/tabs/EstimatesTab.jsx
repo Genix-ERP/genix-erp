@@ -113,7 +113,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
 
   // importColumns removed - SmetaImportModal handles parsing directly
 
-  const handleImport = async ({ estimateName, buildingId, lines, sourceType, sectionNames, subcontractId, sourceFileName }) => {
+  const handleImport = async ({ estimateName, buildingId, lines, sourceType, sectionNames, subcontractId, sourceFileName, budgetTotal, materialBudget, transportBudget }) => {
     try {
       // Find existing draft estimate with same name for this building, or create new
       let est = estimates.find(e =>
@@ -148,6 +148,12 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
         replace: isExisting,
         sourceType: sourceType || '',
         sourceFileName: sourceFileName || '',
+        // Imported-budget capture (Ресурс sheet only — other types pass
+        // 0 and the backend leaves the existing values alone). See
+        // SmetaImportModal.parseResurs for the source rows.
+        budgetTotal: Number(budgetTotal || 0),
+        materialBudget: Number(materialBudget || 0),
+        transportBudget: Number(transportBudget || 0),
       });
 
       // Show toast if products were auto-created from resource lines.

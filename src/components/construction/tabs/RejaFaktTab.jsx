@@ -643,6 +643,30 @@ const RejaFaktTab = ({ project }) => {
           <CardContent className="p-4">
             <p className="text-xs text-slate-500">{t('rf_plan_total')}</p>
             <p className="text-xl font-bold text-blue-600">{formatCurrency(summary.plan_total || 0)}</p>
+            {/* When the project budget came from a Ресурс file's bottom
+                summary (ИТОГО ПРЯМЫЕ ЗАТРАТЫ — migration 369), show a
+                subtle "import" badge so the user can tell at a glance
+                that the figure is the file's grand total rather than
+                a derived sum. The backend leaves imported_budget at 0
+                when no Ресурс was imported, so the legacy per-line
+                summation continues to drive plan_total in that case. */}
+            {(summary.imported_budget || 0) > 0 && (
+              <p className="text-[10px] text-slate-400 mt-1">
+                {`Imported: ${formatCurrency(summary.imported_budget)}`}
+                {(summary.imported_material || 0) > 0 && (
+                  <>
+                    {' · '}
+                    {`Material: ${formatCurrency(summary.imported_material)}`}
+                  </>
+                )}
+                {(summary.imported_transport || 0) > 0 && (
+                  <>
+                    {' · '}
+                    {`Transport: ${formatCurrency(summary.imported_transport)}`}
+                  </>
+                )}
+              </p>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -752,21 +776,39 @@ const RejaFaktTab = ({ project }) => {
 
                   return (
                     <div key={sub.id} className="border-t">
-                      {/* Sub-stage header */}
+                      {/* Sub-stage header — name on the left, three
+                          fixed-width columns on the right (plan, fact,
+                          diff icon). The currency strings carry inner
+                          spaces ("83 451 810 so'm") and used to wrap
+                          when the work name was long, knocking values
+                          out of the grid the user expected. The
+                          min-w-0 + flex-1 wrap on the left makes the
+                          name truncate to one line; whitespace-nowrap
+                          on each value keeps the right column rigid. */}
                       <button
-                        className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-50 transition-colors text-left"
+                        className="w-full flex items-center justify-between gap-4 px-4 py-3 hover:bg-slate-50 transition-colors text-left"
                         onClick={() => toggleSubStage(sub.id)}
                       >
-                        <div className="flex items-center gap-3">
-                          {isExpanded ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
-                          <span className="font-medium text-sm">{sub.name}</span>
-                          {sub.difference < 0 && <AlertTriangle className="w-3.5 h-3.5 text-red-500" />}
-                          {sub.difference >= 0 && subPct > 90 && <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />}
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          {isExpanded ? <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />}
+                          <span className="font-medium text-sm break-words">{sub.name}</span>
+                          {sub.difference < 0 && <AlertTriangle className="w-3.5 h-3.5 text-red-500 shrink-0" />}
+                          {sub.difference >= 0 && subPct > 90 && <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
                         </div>
-                        <div className="flex items-center gap-4 text-xs">
-                          <span className="text-blue-600">{formatCurrency(sub.plan_total)}</span>
-                          <span>{formatCurrency(sub.fact_total)}</span>
-                          <span className={`font-medium ${diffColor(sub.difference)}`}>
+                        <div className="flex items-center gap-2 text-xs shrink-0">
+                          <span
+                            className="text-blue-600 text-right whitespace-nowrap tabular-nums"
+                            style={{ minWidth: 140 }}
+                          >
+                            {formatCurrency(sub.plan_total)}
+                          </span>
+                          <span
+                            className="text-right whitespace-nowrap tabular-nums"
+                            style={{ minWidth: 140 }}
+                          >
+                            {formatCurrency(sub.fact_total)}
+                          </span>
+                          <span className={`font-medium w-5 flex justify-center ${diffColor(sub.difference)}`}>
                             <DiffIcon diff={sub.difference} />
                           </span>
                         </div>

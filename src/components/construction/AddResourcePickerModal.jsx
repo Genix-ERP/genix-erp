@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { Loader2, Plus, Search, X } from 'lucide-react';
 import { toast } from 'sonner';
@@ -348,31 +348,25 @@ export default function AddResourcePickerModal({ open, onClose, projectId, estim
                     <label className="text-[10.5px] block mb-1" style={{ color: '#64748B' }}>
                       {t('unit') || "O'lchov"}
                     </label>
-                    {/* Combobox: native datalist dropdown sourced from the
-                        UOMs already imported into this project's estimates,
-                        but the field still accepts free text for the rare
-                        case where the foreman needs a unit the smeta didn't
-                        include. Keeping uomOptions case-deduped means the
-                        dropdown won't show "м3" and "М3" as separate rows
-                        when the imported smeta mixed both casings. */}
-                    <input
-                      type="text"
-                      list="add-resource-uom-options"
+                    {/* Custom combobox replacing the previous native
+                        <datalist>. The browser's datalist popup
+                        position is uncontrollable — Chrome on macOS
+                        was opening it above the modal, sometimes
+                        clipped at the top of the viewport. This
+                        custom dropdown always opens directly below
+                        the input via position: absolute. Free-text
+                        input is preserved (foreman can type a unit
+                        the smeta doesn't have). */}
+                    <UomCombobox
                       value={createForm.uom}
-                      onChange={(e) => setCreateForm((f) => ({ ...f, uom: e.target.value }))}
+                      onChange={(v) => setCreateForm((f) => ({ ...f, uom: v }))}
+                      options={uomOptions}
                       placeholder={
                         uomOptions.length > 0
                           ? `${t('select_or_type') || 'Tanlang yoki kiriting'}…`
                           : (t('unit_placeholder') || "м3, шт, ЧЕЛ.-Ч…")
                       }
-                      className="w-full px-3 py-2 rounded text-[12.5px] outline-none"
-                      style={{ background: '#FFFFFF', color: '#0F172A', border: '1px solid #CBD5E1', fontFamily: 'inherit' }}
                     />
-                    <datalist id="add-resource-uom-options">
-                      {uomOptions.map((u) => (
-                        <option key={u} value={u} />
-                      ))}
-                    </datalist>
                   </div>
                   <div>
                     <label className="text-[10.5px] block mb-1" style={{ color: '#64748B' }}>
@@ -580,5 +574,101 @@ export default function AddResourcePickerModal({ open, onClose, projectId, estim
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
+  );
+}
+
+// UomCombobox — a self-contained text input + popdown list anchored
+// directly below the input. Replaces the native HTML <datalist> whose
+// popup position is browser-controlled (Chrome on macOS was opening
+// it above the modal, sometimes clipped). The list filters by what
+// the user has typed and accepts free text on Enter/blur, so the
+// foreman can still enter a unit the smeta doesn't have.
+function UomCombobox({ value, onChange, options, placeholder }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+
+  // Close when the user clicks outside the wrapper. Pointerdown so
+  // we close BEFORE any click on a list row gets a chance to fire —
+  // the list rows have their own onMouseDown handlers (see below).
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', handler);
+    return () => document.removeEventListener('pointerdown', handler);
+  }, [open]);
+
+  // Filter options by the typed text — case-insensitive substring.
+  // When the field is empty we show every option so the dropdown
+  // works as a plain "pick one" list on first focus.
+  const filtered = useMemo(() => {
+    const q = String(value || '').trim().toLowerCase();
+    if (!q) return options;
+    return options.filter((u) => String(u || '').toLowerCase().includes(q));
+  }, [value, options]);
+
+  return (
+    <div ref={wrapRef} style={{ position: 'relative' }}>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => { onChange(e.target.value); if (!open) setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        placeholder={placeholder}
+        className="w-full px-3 py-2 rounded text-[12.5px] outline-none"
+        style={{
+          background: '#FFFFFF',
+          color: '#0F172A',
+          border: '1px solid #CBD5E1',
+          fontFamily: 'inherit',
+        }}
+      />
+      {open && filtered.length > 0 && (
+        <ul
+          // Absolute-positioned, anchored directly under the input.
+          // z-index keeps it above other modal content; max-height +
+          // overflow-y prevents it from blowing up the modal when the
+          // project has 50+ unique UOMs.
+          style={{
+            position: 'absolute',
+            top: 'calc(100% + 4px)',
+            left: 0,
+            right: 0,
+            zIndex: 60,
+            background: '#FFFFFF',
+            border: '1px solid #CBD5E1',
+            borderRadius: 6,
+            boxShadow: '0 8px 24px rgba(15, 23, 42, 0.12)',
+            maxHeight: 220,
+            overflowY: 'auto',
+            margin: 0,
+            padding: '4px 0',
+            listStyle: 'none',
+          }}
+        >
+          {filtered.map((u) => (
+            <li
+              key={u}
+              // onMouseDown (not onClick) so the input's blur doesn't
+              // close the dropdown before we get a chance to fire.
+              onMouseDown={(e) => {
+                e.preventDefault();
+                onChange(u);
+                setOpen(false);
+              }}
+              className="px-3 py-1.5 text-[12.5px] cursor-pointer"
+              style={{ color: '#0F172A' }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = '#F1F5F9'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+            >
+              {u}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
