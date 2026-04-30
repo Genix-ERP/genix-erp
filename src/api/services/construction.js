@@ -743,15 +743,31 @@ export const constructionService = {
     return response.data.data;
   },
 
-  async bulkCreateEstimateLines(estimateId, lines, { replace = false, sourceType = '', sourceFileName = '' } = {}) {
+  async bulkCreateEstimateLines(estimateId, lines, {
+    replace = false,
+    sourceType = '',
+    sourceFileName = '',
+    budgetTotal = 0,
+    materialBudget = 0,
+    transportBudget = 0,
+  } = {}) {
     // `source_file_name` lets the backend dedupe auto-created Forma 2
     // drafts across estimates extracted from the same uploaded Excel
     // file — see migration 339 and autoCreateForma2FromEstimate.
+    //
+    // `budget_total` carries the Ресурс file's bottom-summary grand
+    // total (ИТОГО ПРЯМЫЕ ЗАТРАТЫ). The backend persists it to
+    // construction_estimate.budget_total (migration 369) so the
+    // Reja vs Fakt page can display the imported budget verbatim
+    // instead of computing it from per-line plan totals.
     const response = await apiClient.post(`/construction/estimates/${estimateId}/lines/bulk`, {
       lines,
       replace,
       source_type: sourceType,
       source_file_name: sourceFileName,
+      budget_total: budgetTotal,
+      material_budget: materialBudget,
+      transport_budget: transportBudget,
     });
     return response.data.data;
   },

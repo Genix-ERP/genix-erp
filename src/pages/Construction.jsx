@@ -997,17 +997,17 @@ const OverviewTabContent = React.memo(function OverviewTabContent({
     // duplicated/contradicted by `project_type` above.
     //
     // "Loyiha ombori" — the project's chosen default warehouse (migration
-    // 365). When set, every material reservation and request goes here;
-    // when not set the row reads "(Avtomatik tanlash)" so the user knows
-    // the system is auto-picking and may want to set an explicit one.
-    {
-      label: t('project_warehouse') || 'Loyiha ombori',
-      value: project.warehouse_name ? project.warehouse_name : (
-        <span className="text-slate-400 italic">
-          {t('no_default_warehouse') || '(Avtomatik tanlash)'}
-        </span>
-      ),
-    },
+    // 365). Only rendered when an explicit warehouse is set on the
+    // project. When the field is empty the runtime auto-picks per the
+    // org-aware fallback chain, and showing a placeholder row in the
+    // info card just adds noise — the user explicitly asked to hide it
+    // when no warehouse is selected.
+    ...(project.warehouse_name
+      ? [{
+          label: t('project_warehouse') || 'Loyiha ombori',
+          value: project.warehouse_name,
+        }]
+      : []),
     {
       label: t('total_area') || 'Umumiy maydon',
       value: project.total_area ? `${project.total_area} m²` : EMPTY,
