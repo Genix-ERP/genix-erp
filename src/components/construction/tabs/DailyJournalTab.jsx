@@ -41,6 +41,7 @@ import {
 } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import Loader from '@/components/ui/loader';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { format } from 'date-fns';
 
@@ -224,7 +225,9 @@ const DailyJournalTab = ({ project, buildings = [] }) => {
       {/* Logs List */}
       {loading ? (
         <Card>
-          <CardContent className="p-8 text-center text-slate-500">{t('loading') || 'Yuklanmoqda...'}</CardContent>
+          <CardContent className="p-8">
+            <Loader />
+          </CardContent>
         </Card>
       ) : logs.length === 0 ? (
         <Card>

@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { constructionService } from '@/api/services/construction';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { TrendingUp, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { TrendingUp, ChevronLeft, ChevronRight, FileSpreadsheet } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { sortBuildings } from '@/utils/naturalSort';
+import SvodReportModal from '@/components/construction/SvodReportModal';
 
 const getRowColor = (pct) => {
   if (pct <= 0) return '';
@@ -37,6 +39,11 @@ const BudgetTab = ({ project }) => {
   // since budget totals make sense at the project level too, unlike Stages.
   const [buildings, setBuildings] = useState([]);
   const [buildingFilter, setBuildingFilter] = useState('all');
+
+  // Свод (consolidated estimate) export modal — opens the Uzbek 12-line
+  // "Сводная сметная" layout with the project's per-building FAKT figures
+  // and user-editable percentage rows (overhead / insurance / VAT / PQ-161).
+  const [svodOpen, setSvodOpen] = useState(false);
 
   // Load buildings once per project for the tab row.
   useEffect(() => {
@@ -117,40 +124,58 @@ const BudgetTab = ({ project }) => {
     <div className="space-y-4">
       {/* Building tab row — mirrors Bosqichlar tab (migration 333). Unlike
           Stages, we keep a "Hammasi" pill so the user can still see the
-          project-wide totals (which is the default view). Only render when
-          the project actually has buildings attached. */}
-      {buildings.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => setBuildingFilter('all')}
-            className={cn(
-              'px-3 py-1.5 rounded-full text-xs font-medium border transition-colors',
-              buildingFilter === 'all'
-                ? 'bg-slate-900 text-white border-slate-900'
-                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50',
-            )}
-          >
-            {t('all') || 'Hammasi'}
-          </button>
-          {buildings.map((b) => (
+          project-wide totals (which is the default view). The Свод export
+          button sits on the right of this row so it's always visible
+          alongside the block filter, regardless of whether buildings exist. */}
+      <div className="flex flex-wrap items-center gap-2">
+        {buildings.length > 0 && (
+          <>
             <button
-              key={b.id}
               type="button"
-              onClick={() => setBuildingFilter(String(b.id))}
+              onClick={() => setBuildingFilter('all')}
               className={cn(
                 'px-3 py-1.5 rounded-full text-xs font-medium border transition-colors',
-                String(buildingFilter) === String(b.id)
+                buildingFilter === 'all'
                   ? 'bg-slate-900 text-white border-slate-900'
                   : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50',
               )}
-              title={b.code || b.name}
             >
-              {b.name || b.code || `#${b.id}`}
+              {t('all') || 'Hammasi'}
             </button>
-          ))}
-        </div>
-      )}
+            {buildings.map((b) => (
+              <button
+                key={b.id}
+                type="button"
+                onClick={() => setBuildingFilter(String(b.id))}
+                className={cn(
+                  'px-3 py-1.5 rounded-full text-xs font-medium border transition-colors',
+                  String(buildingFilter) === String(b.id)
+                    ? 'bg-slate-900 text-white border-slate-900'
+                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50',
+                )}
+                title={b.code || b.name}
+              >
+                {b.name || b.code || `#${b.id}`}
+              </button>
+            ))}
+          </>
+        )}
+        <div className="flex-1" />
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setSvodOpen(true)}
+          className="text-xs"
+        >
+          <FileSpreadsheet className="w-4 h-4 mr-1" />
+          {/* Inline language map — `t()` from useTranslation returns the
+              key itself when missing, so the old `t('svod_report') || ''`
+              fallback never fired and the button rendered the raw key.
+              We keep this label localised here (3 strings) instead of
+              extending the 24k-line translations.jsx file. */}
+          {({ uz: 'Свод hisobot', ru: 'Сводный отчёт', en: 'Svod report' })[language] || 'Свод hisobot'}
+        </Button>
+      </div>
 
       {/* Summary KPIs.
           The 4th "Byudjetdan foydalanish" (% utilization) card was
@@ -298,6 +323,16 @@ const BudgetTab = ({ project }) => {
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-yellow-200 inline-block" /> 90–100% — {t('budget_legend_attention') || 'Attention'}</span>
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-200 inline-block" /> &gt;100% — {t('budget_legend_over') || 'Over budget'}</span>
       </div>
+
+      {/* Свод (consolidated estimate) export modal. Mounted unconditionally;
+          its `open` prop controls visibility so the data fetch only fires
+          on actual open. */}
+      <SvodReportModal
+        open={svodOpen}
+        onClose={() => setSvodOpen(false)}
+        projectId={project?.id}
+        projectName={project?.name}
+      />
     </div>
   );
 };

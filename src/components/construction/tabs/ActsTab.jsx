@@ -13,6 +13,7 @@ import { Plus, Trash2, CheckCircle, XCircle, ArrowLeft, FileText, Eye, Download,
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import Loader from '@/components/ui/loader';
 import { UploadFile } from '@/api/integrations';
 import { toast } from 'sonner';
 
@@ -483,7 +484,7 @@ const ActsTab = ({ project }) => {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="text-center py-8 text-slate-400">{t('loading') || 'Yuklanmoqda...'}</div>
+            <Loader />
           ) : (acts || []).length === 0 ? (
             <div className="text-center py-12">
               <FileText className="w-16 h-16 text-slate-300 mx-auto mb-4" />

@@ -1385,6 +1385,15 @@ export const constructionService = {
     return response.data.data;
   },
 
+  // СВОД (consolidated estimate) — per-building FAKT broken into the four
+  // primary cost rows (labor / machine / material / installed-equipment).
+  // The frontend modal layers user-editable percentage rows on top
+  // (overhead, insurance, VAT, PQ-161) to render the full 12-line layout.
+  async getSvodReport(projectId) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/reports/svod`);
+    return response.data.data;
+  },
+
   async getMaterialsReport(projectId, params = {}) {
     const response = await apiClient.get(`/construction/projects/${projectId}/reports/materials`, { params });
     return response.data.data;

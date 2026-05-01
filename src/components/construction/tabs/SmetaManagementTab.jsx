@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
+import Loader from '@/components/ui/loader';
 import {
   Loader2, Search, Users, Wrench, Package, FileText, RefreshCw,
   Plus, Trash2, ChevronDown, RotateCcw, ListChecks, Boxes, Grid3x3,
@@ -941,7 +942,7 @@ export default function SmetaManagementTab({ project }) {
             className="px-3 py-2 rounded-md text-xs outline-none cursor-pointer"
             style={{ background: C.inset, color: C.text, border: `1px solid ${C.border2}`, fontFamily: 'inherit', minWidth: 200 }}
           >
-            {loadingEstimates && <option value="">{t('loading') || 'Yuklanmoqda…'}</option>}
+            {loadingEstimates && <option value="">…</option>}
             {!loadingEstimates && blockOptions.length === 0 && <option value="">{t('no_estimates') || "Smeta yo'q"}</option>}
             {blockOptions.map((b) => (
               <option key={b.id} value={b.id} style={{ background: C.card, color: C.text }}>
@@ -1138,10 +1139,7 @@ export default function SmetaManagementTab({ project }) {
           {/* Section list */}
           <div className="px-8 pb-12">
             {loadingLines ? (
-              <div className="text-center py-12" style={{ color: C.fade }}>
-                <Loader2 className="w-6 h-6 mx-auto mb-2 animate-spin" />
-                {t('loading') || 'Yuklanmoqda…'}
-              </div>
+              <Loader className="py-12" />
             ) : activeEstimateIds.length === 0 ? (
               <div className="text-center py-12" style={{ color: C.fade }}>
                 {t('select_estimate_to_continue') || 'Davom etish uchun smetani tanlang'}
@@ -2370,10 +2368,7 @@ function HistoryPage({ t, loading, snapshots, onView, onDelete, onRefresh, onSav
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-12" style={{ color: C.muted }}>
-          <Loader2 className="w-5 h-5 animate-spin mr-2" />
-          {t('loading') || 'Yuklanmoqda...'}
-        </div>
+        <Loader className="py-12" size="w-5 h-5" />
       ) : snapshots.length === 0 ? (
         <div className="rounded-[10px] py-12 text-center" style={{ background: C.card, border: `1px dashed ${C.border2}`, color: C.muted }}>
           <HistoryIcon className="w-6 h-6 mx-auto mb-2" />
@@ -2552,10 +2547,7 @@ function AuditPage({ t, language, loading, entries, filter, onFilterChange, onRe
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-12" style={{ color: C.muted }}>
-          <Loader2 className="w-5 h-5 animate-spin mr-2" />
-          {t('loading') || 'Yuklanmoqda...'}
-        </div>
+        <Loader className="py-12" size="w-5 h-5" />
       ) : entries.length === 0 ? (
         <div className="rounded-[10px] py-12 text-center" style={{ background: C.card, border: `1px dashed ${C.border2}`, color: C.muted }}>
           <Activity className="w-6 h-6 mx-auto mb-2" />

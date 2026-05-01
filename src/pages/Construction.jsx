@@ -4249,7 +4249,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="text-lg font-bold truncate" title={file.filename}>{file.filename}</p>
+                        <p className="text-lg font-bold break-words" title={file.filename}>{file.filename}</p>
                         <p className="text-xs text-slate-400">
                           {formatFileSize(file.file_size)}
                           {file.created_at && ` · ${format(new Date(file.created_at), 'dd.MM.yyyy HH:mm')}`}
@@ -5401,7 +5401,7 @@ export default function Construction() {
           setProjectFileDescription('');
         }
       }}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto" aria-describedby="proj-files-help">
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto" aria-describedby="proj-files-help">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText className="w-5 h-5 text-green-600" />
@@ -5513,9 +5513,14 @@ export default function Construction() {
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="text-lg font-bold truncate" title={file.filename}>{file.filename}</p>
+                        {/* Filenames can be long (especially Свод reports
+                            that include project name + period + mode in the
+                            filename). break-words lets them wrap onto a
+                            second line instead of being truncated and
+                            losing the .xlsx extension off the right edge. */}
+                        <p className="text-lg font-bold break-words" title={file.filename}>{file.filename}</p>
                         {file.description && (
-                          <p className="text-xs text-slate-500 truncate">{file.description}</p>
+                          <p className="text-xs text-slate-500 break-words">{file.description}</p>
                         )}
                         <p className="text-xs text-slate-400">
                           {formatProjectFileSize(file.file_size)}

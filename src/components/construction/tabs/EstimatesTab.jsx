@@ -51,6 +51,7 @@ import { ImportExportButtons } from '@/components/shared';
 import SmetaImportModal from '@/components/construction/SmetaImportModal';
 import SmetaExportModal from '@/components/construction/SmetaExportModal';
 import SmetaSummaryView from '@/components/construction/SmetaSummaryView';
+import Loader from '@/components/ui/loader';
 import SublineModal from '@/components/construction/SublineModal';
 import EstimateLineEditModal from '@/components/construction/EstimateLineEditModal';
 
@@ -822,7 +823,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
               <p className="text-slate-500">{t('select_building_first') || "Avval bino tanlang"}</p>
             </div>
           ) : loading ? (
-            <div className="text-center py-12 text-slate-500">{t('loading') || 'Yuklanmoqda...'}</div>
+            <Loader className="py-12" />
           ) : filteredEstimates.length === 0 ? (
             <div className="text-center py-12">
               <FileSpreadsheet className="w-12 h-12 text-slate-300 mx-auto mb-3" />
@@ -909,7 +910,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                              flow, so this Smetalar table stays a read-only overview. */}
 
                           {isLoadingLines ? (
-                            <div className="text-center py-6 text-slate-500 text-sm">{t('loading') || 'Yuklanmoqda...'}</div>
+                            <Loader className="py-6" size="w-5 h-5" />
                           ) : lines.length === 0 ? (
                             <div className="text-center py-6">
                               <p className="text-slate-400 text-sm">{t('no_lines') || "Qatorlar yo'q"}</p>
@@ -929,23 +930,26 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                 squeezed to 30-40px with the values wrapped
                                 across two lines.
                               */}
+                              {/* Ресурс tab is now a slim catalog view: Nomi /
+                                  O'lchov / Birlik narxi only. The four numeric
+                                  breakdown columns (Miqdor / Material / Ish /
+                                  Jihozlar / Jami) were per-product noise on the
+                                  resource catalog and have been hidden from the
+                                  UI per UX request. ВОР/Единич keep the original
+                                  Shifr / Nomi / O'lchov / Miqdor layout. */}
                               <div className="overflow-x-auto">
                                 <table
-                                  className={`w-full text-sm table-fixed ${est.source_type === 'resurs' ? 'min-w-[1400px]' : 'min-w-[900px]'}`}
+                                  className={`w-full text-sm table-fixed ${est.source_type === 'resurs' ? 'min-w-[640px]' : 'min-w-[900px]'}`}
                                 >
                                   <colgroup>
                                     <col style={{ width: '56px' }} />
                                     {est.source_type !== 'resurs' && <col style={{ width: '120px' }} />}
                                     <col />{/* Nomi — absorbs remaining width */}
                                     <col style={{ width: '110px' }} />
-                                    <col style={{ width: '100px' }} />
-                                    {est.source_type === 'resurs' && <>
-                                      <col style={{ width: '110px' }} />
-                                      <col style={{ width: '110px' }} />
-                                      <col style={{ width: '110px' }} />
-                                      <col style={{ width: '120px' }} />
-                                      <col style={{ width: '130px' }} />
-                                    </>}
+                                    {est.source_type !== 'resurs' && <col style={{ width: '100px' }} />}
+                                    {est.source_type === 'resurs' && (
+                                      <col style={{ width: '140px' }} />
+                                    )}
                                     {est.state === 'draft' && <col style={{ width: '96px' }} />}
                                   </colgroup>
                                   <thead>
@@ -954,14 +958,12 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                       {est.source_type !== 'resurs' && <th className="text-left py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">{t('code') || 'Shifr'}</th>}
                                       <th className="text-left py-2 px-2 text-xs font-medium text-slate-500">{t('name') || 'Nomi'}</th>
                                       <th className="text-right py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">{t('unit') || "O'lchov"}</th>
-                                      <th className="text-right py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">{t('quantity') || 'Miqdor'}</th>
-                                      {est.source_type === 'resurs' && <>
-                                        <th className="text-right py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">{t('material') || 'Material'}</th>
-                                        <th className="text-right py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">{t('labor') || 'Ish haqi'}</th>
-                                        <th className="text-right py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">{t('equipment') || 'Jihozlar'}</th>
+                                      {est.source_type !== 'resurs' && (
+                                        <th className="text-right py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">{t('quantity') || 'Miqdor'}</th>
+                                      )}
+                                      {est.source_type === 'resurs' && (
                                         <th className="text-right py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">{t('unit_rate') || 'Birlik narxi'}</th>
-                                        <th className="text-right py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">{t('total') || 'Jami'}</th>
-                                      </>}
+                                      )}
                                       {/* Inline +/edit/trash row actions removed — line editing is
                                          now done from the dedicated Smeta boshqaruvi tab so this
                                          table stays a read-only summary. */}
@@ -1018,7 +1020,18 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                         }
                                       }
                                       const rows = [];
-                                      const colSpan = est.source_type === 'resurs' ? 10 : 6;
+                                      // Subtotal row uses (colSpan - 2) for the content cell
+                                      // which sits between the leftmost empty(es) and the
+                                      // rightmost value cell. Total visible cols after the
+                                      // resurs column-hide change:
+                                      //   resurs:  №, Nomi, O'lchov, Birlik narxi          → 4
+                                      //   other:   №, Shifr, Nomi, O'lchov, Miqdor          → 5
+                                      // resurs subtotal layout: [empty №] + content (cs-2) + [value]
+                                      //   ⇒ 1 + (cs-2) + 1 = 4  ⇒  cs = 4
+                                      // non-resurs subtotal layout: [empty №] + [empty Shifr] + content (cs-2) + [value]
+                                      //   ⇒ 1 + 1 + (cs-2) + 1 = 5  ⇒  cs = 4 also (the extra
+                                      //   empty Shifr td makes up for the lost width)
+                                      const colSpan = 4;
 
                                       const renderLine = (line, isSubline, parent) => {
                                         // Sub-lines (podkator) get a green tint + left accent border so they're
@@ -1050,14 +1063,12 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                               )}
                                             </td>
                                             <td className="py-2 px-2 text-right text-xs text-slate-600 whitespace-nowrap">{line.uom}</td>
-                                            <td className="py-2 px-2 text-right text-xs whitespace-nowrap">{line.quantity}</td>
-                                            {est.source_type === 'resurs' && <>
-                                              <td className="py-2 px-2 text-right text-xs whitespace-nowrap">{formatCurrency(line.material_rate)}</td>
-                                              <td className="py-2 px-2 text-right text-xs whitespace-nowrap">{formatCurrency(line.labor_rate)}</td>
-                                              <td className="py-2 px-2 text-right text-xs whitespace-nowrap">{formatCurrency(line.equipment_rate)}</td>
+                                            {est.source_type !== 'resurs' && (
+                                              <td className="py-2 px-2 text-right text-xs whitespace-nowrap">{line.quantity}</td>
+                                            )}
+                                            {est.source_type === 'resurs' && (
                                               <td className="py-2 px-2 text-right text-xs font-medium whitespace-nowrap">{formatCurrency(line.unit_rate)}</td>
-                                              <td className="py-2 px-2 text-right text-xs font-medium whitespace-nowrap">{formatCurrency(line.total_amount)}</td>
-                                            </>}
+                                            )}
                                             {/* Per-row +/edit/trash actions removed — Smeta boshqaruvi tab
                                                is the single editing surface for estimate lines. */}
                                           </tr>
@@ -1096,8 +1107,11 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                   </tbody>
                                   {est.source_type === 'resurs' && (
                                     <tfoot>
+                                      {/* resurs visible cols after hide: №, Nomi, O'lchov, Birlik narxi
+                                          (+ optional Actions). Label cell spans the first 3, value cell
+                                          fills col 4, draft puts an empty cell at col 5. */}
                                       <tr className="font-semibold bg-white">
-                                        <td colSpan={8} className="py-2 px-2 text-right text-xs">{t('direct_cost') || "To'g'ridan-to'g'ri xarajat"}:</td>
+                                        <td colSpan={3} className="py-2 px-2 text-right text-xs">{t('direct_cost') || "To'g'ridan-to'g'ri xarajat"}:</td>
                                         <td className="py-2 px-2 text-right text-xs">{formatCurrency(est.amount_direct || 0)}</td>
                                         {est.state === 'draft' && <td></td>}
                                       </tr>

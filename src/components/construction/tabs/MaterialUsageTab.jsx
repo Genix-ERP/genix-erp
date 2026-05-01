@@ -13,6 +13,7 @@ import { Plus, Edit, Trash2, Package, BarChart3, ChevronLeft, ChevronRight } fro
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import Loader from '@/components/ui/loader';
 import { sortBuildings } from '@/utils/naturalSort';
 import { toast } from 'sonner';
 
@@ -211,7 +212,7 @@ const MaterialUsageTab = ({ project }) => {
           </CardHeader>
           <CardContent>
             {summaryLoading ? (
-              <div className="text-center py-8 text-slate-400">{t('loading') || 'Yuklanmoqda...'}</div>
+              <Loader />
             ) : summary.length === 0 ? (
               <div className="text-center py-12">
                 <BarChart3 className="w-16 h-16 text-slate-300 mx-auto mb-4" />
@@ -267,7 +268,7 @@ const MaterialUsageTab = ({ project }) => {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="text-center py-8 text-slate-400">{t('loading') || 'Yuklanmoqda...'}</div>
+            <Loader />
           ) : usageRecords.length === 0 ? (
             <div className="text-center py-12">
               <Package className="w-16 h-16 text-slate-300 mx-auto mb-4" />

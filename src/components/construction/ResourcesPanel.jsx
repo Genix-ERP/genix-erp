@@ -1,12 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
-import { Loader2, Search, Users, Wrench, Package, Grid3x3, RotateCcw, Clock, X } from 'lucide-react';
+import { Search, Users, Wrench, Package, Grid3x3, RotateCcw, Clock, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useAuth } from '@/components/contexts/AuthContext';
 import { constructionService } from '@/api/services/construction';
 import { formatApiError } from '@/utils/apiErrors';
+import Loader from '@/components/ui/loader';
 
 // ResourcesPanel — faithful port of the mockup's Resources page
 // (files/Form2_Works_v2 (7).html → renderResourcesPage()).
@@ -436,10 +437,7 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
          without them being baked together. */}
       <div className="mt-5">
         {loading && items.length === 0 ? (
-          <div className="text-center py-12" style={{ color: '#64748B' }}>
-            <Loader2 className="w-6 h-6 mx-auto mb-2 animate-spin" />
-            {t('loading') || 'Yuklanmoqda…'}
-          </div>
+          <Loader className="py-12" />
         ) : filtered.length === 0 ? (
           <div className="text-center py-12" style={{ color: '#64748B' }}>
             {t('no_resources_found') || 'Hech narsa topilmadi'}
@@ -708,10 +706,7 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
           </div>
           <div className="px-6 py-5">
             {historyLoading ? (
-              <div className="py-8 text-center" style={{ color: '#64748B' }}>
-                <Loader2 className="w-5 h-5 mx-auto mb-2 animate-spin" />
-                {t('loading') || 'Yuklanmoqda…'}
-              </div>
+              <Loader />
             ) : historyRows.length === 0 ? (
               <div className="py-8 text-center text-sm" style={{ color: '#64748B' }}>
                 {t('no_price_history') || "Tarix bo'sh"}
