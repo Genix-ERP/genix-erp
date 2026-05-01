@@ -37,6 +37,21 @@ const STATUS_BAR_COLORS = {
   completed: '#22c55e',
 };
 
+// Per-work-status badge palette. The Progress feed includes works at
+// every mid-pipeline approval state (in_progress / submitted /
+// confirmed_supervisor); rendering them all as a flat "Jarayonda" pill
+// hides important review-stage signal — the user reported "if stage is
+// in preview status, progress page also should show in preview". We
+// branch on the raw item.status when it matches one of the v2
+// approval-workflow values; otherwise fall back to the bucket-level
+// label so legacy stages / sub-stages keep their existing rendering.
+const WORK_STATUS_BADGE = {
+  in_progress:          'bg-blue-100 text-blue-700',
+  submitted:            'bg-amber-100 text-amber-700',
+  confirmed_supervisor: 'bg-amber-100 text-amber-700',
+  confirmed_engineer:   'bg-green-100 text-green-700',
+};
+
 const ProgressTab = ({ project }) => {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
@@ -89,6 +104,18 @@ const ProgressTab = ({ project }) => {
     on_track: t('in_progress') || 'Jarayonda',
     behind: t('behind') || 'Behind',
     completed: t('completed') || 'Bajarildi',
+  };
+
+  // Work-status labels mirror the badges shown on the Bosqichlar tab so
+  // a foreman seeing "TEKSHIRUVDA" there sees the same pill here.
+  // Falls back to STATUS_LABELS[bucket] when item.status isn't one of
+  // the v2 approval values (e.g. legacy sub-stage rows that only carry
+  // the bucket).
+  const WORK_STATUS_LABELS = {
+    in_progress:          t('work_status_in_progress_long') || t('in_progress') || 'Jarayonda',
+    submitted:            t('work_status_submitted_long') || 'Tekshiruvda',
+    confirmed_supervisor: t('work_status_confirmed_supervisor_long') || 'Texnadzor tasdiqlagan',
+    confirmed_engineer:   t('work_status_confirmed_engineer_long') || t('completed') || 'Yakuniy',
   };
 
   // Pulls the in-progress feed (stages + sub-stages with status='in_progress'
@@ -380,8 +407,19 @@ const ProgressTab = ({ project }) => {
                       </div>
                     </td>
                     <td className="py-2 px-3 text-center">
-                      <Badge className={STATUS_BADGE[bucket] || 'bg-slate-100 text-slate-700'}>
-                        {STATUS_LABELS[bucket] || bucket}
+                      {/* Prefer the fine-grained work status (Bosqichlar's
+                          v2 pipeline value) when the item carries one, so
+                          the foreman sees the same TEKSHIRUVDA / Texnadzor ✓
+                          / Yakuniy pill they see on the Bosqichlar tab.
+                          Falls back to the bucket-level label otherwise. */}
+                      <Badge className={
+                        WORK_STATUS_BADGE[item.status]
+                          || STATUS_BADGE[bucket]
+                          || 'bg-slate-100 text-slate-700'
+                      }>
+                        {WORK_STATUS_LABELS[item.status]
+                          || STATUS_LABELS[bucket]
+                          || bucket}
                       </Badge>
                     </td>
                   </tr>

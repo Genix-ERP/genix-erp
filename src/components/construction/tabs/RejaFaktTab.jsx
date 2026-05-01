@@ -725,7 +725,13 @@ const RejaFaktTab = ({ project }) => {
                         {t('rf_over')}
                       </Badge>
                     )}
-                    {stage.difference >= 0 && stagePct > 90 && stagePct <= 100 && (
+                    {/* Amber "approaching" warning — fires only when
+                        Fakt is strictly less than Reja but already past
+                        90% of the budget. Excluding the exactly-equal
+                        case (difference > 0 instead of >= 0) avoids the
+                        noisy "byudjet oshgan" badge appearing on rows
+                        where Reja and Fakt match perfectly. */}
+                    {stage.difference > 0 && stagePct > 90 && stagePct <= 100 && (
                       <Badge className="bg-amber-100 text-amber-700 flex items-center gap-1">
                         <AlertTriangle className="w-3 h-3" />
                         {t('rf_warning')}
@@ -767,9 +773,27 @@ const RejaFaktTab = ({ project }) => {
                       >
                         <div className="flex items-center gap-3 min-w-0 flex-1">
                           {isExpanded ? <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />}
+                          {/* Budget-status indicator placed BEFORE the
+                              name so it stays anchored on the left even
+                              when the work title wraps across multiple
+                              lines. Two states only:
+                                • difference < 0  → over-budget (red)
+                                • difference > 0 AND subPct > 90 → close
+                                  to busting the budget (amber)
+                              When reja == fakt exactly (difference == 0)
+                              there's nothing to warn about — both the
+                              red and amber paths skip, so no icon shows.
+                              The previous condition `difference >= 0`
+                              caught the equal case and produced an amber
+                              warning at exactly-on-budget, which the
+                              user reported as noise. */}
+                          {sub.difference < 0 && (
+                            <AlertTriangle className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                          )}
+                          {sub.difference > 0 && subPct > 90 && (
+                            <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                          )}
                           <span className="font-medium text-sm break-words">{sub.name}</span>
-                          {sub.difference < 0 && <AlertTriangle className="w-3.5 h-3.5 text-red-500 shrink-0" />}
-                          {sub.difference >= 0 && subPct > 90 && <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
                         </div>
                         <div className="flex items-center gap-2 text-xs shrink-0">
                           <span

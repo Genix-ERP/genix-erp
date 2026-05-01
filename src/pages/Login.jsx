@@ -12,7 +12,6 @@ export default function Login() {
   const [identifier, setIdentifier] = useState('');
   const [isPhone, setIsPhone] = useState(false);
   const [password, setPassword] = useState('');
-  const [usePhone, setUsePhone] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [tenants, setTenants] = useState(null);
@@ -27,9 +26,8 @@ export default function Login() {
   // Translation helpers for phone-specific strings
   const T = {
     phone: { uz: 'Telefon raqam', ru: 'Номер телефона', en: 'Phone number' },
-    enter_phone: { uz: 'Telefon raqamingizni kiriting', ru: 'Введите номер телефона', en: 'Enter your phone number' },
-    use_email: { uz: 'Email bilan kirish', ru: 'Войти с email', en: 'Sign in with email' },
-    use_phone: { uz: 'Telefon bilan kirish', ru: 'Войти с телефоном', en: 'Sign in with phone' },
+    email_or_phone: { uz: 'Email yoki telefon', ru: 'Email или телефон', en: 'Email or phone' },
+    enter_email_or_phone: { uz: 'Email yoki telefon raqam kiriting', ru: 'Введите email или телефон', en: 'Enter email or phone' },
   };
   const tr = (key) => T[key]?.[language] || T[key]?.en || key;
 
@@ -38,13 +36,6 @@ export default function Login() {
       navigate('/');
     }
   }, [shouldNavigate, isAuthenticated, user, navigate]);
-
-  // Reset identifier when toggling input type
-  const toggleInputType = () => {
-    setUsePhone(prev => !prev);
-    setIdentifier('');
-    setError('');
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -61,7 +52,9 @@ export default function Login() {
     if (domPassword !== password) setPassword(domPassword);
 
     const cleanIdentifier = domIdentifier.replace(/\s/g, '');
-    const result = await login(cleanIdentifier, domPassword, selectedTenantId, usePhone);
+    // Auto-detect phone from input shape: starts with + or all digits, no @ sign
+    const looksLikePhone = /^[\+\d]/.test(cleanIdentifier) && !cleanIdentifier.includes('@');
+    const result = await login(cleanIdentifier, domPassword, selectedTenantId, looksLikePhone);
 
     if (result.success) {
       setShouldNavigate(true);
@@ -85,9 +78,11 @@ export default function Login() {
     const domPassword = document.getElementById('password')?.value || password;
 
     // Use Google auth if we have a stored credential
+    const cleanIdentifier = domIdentifier.replace(/\s/g, '');
+    const looksLikePhone = /^[\+\d]/.test(cleanIdentifier) && !cleanIdentifier.includes('@');
     const result = googleCredential
       ? await loginWithGoogle(googleCredential, tenantId)
-      : await login(domIdentifier.replace(/\s/g, ''), domPassword, tenantId, usePhone);
+      : await login(cleanIdentifier, domPassword, tenantId, looksLikePhone);
 
     if (result.success) {
       setShouldNavigate(true);
@@ -209,41 +204,24 @@ export default function Login() {
             )}
 
             <div className="login-form__field">
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <label htmlFor="identifier" className="login-form__label">
-                  {usePhone ? tr('phone') : t('email')}
-                </label>
-                <button
-                  type="button"
-                  onClick={toggleInputType}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    fontSize: '0.75rem',
-                    color: '#0EA5E9',
-                    cursor: 'pointer',
-                    padding: 0,
-                    fontWeight: 500,
-                  }}
-                >
-                  {usePhone ? tr('use_email') : tr('use_phone')}
-                </button>
-              </div>
+              <label htmlFor="identifier" className="login-form__label">
+                {isPhone ? tr('phone') : tr('email_or_phone')}
+              </label>
               <div className="login-form__input-wrap">
-                {usePhone
+                {isPhone
                   ? <Phone className="login-form__icon" />
                   : <Mail className="login-form__icon" />
                 }
                 <input
                   id="identifier"
                   name="email"
-                  type={usePhone ? 'tel' : 'text'}
+                  type="text"
                   autoComplete="username"
-                  placeholder={usePhone ? tr('enter_phone') : (isPhone ? '+998 XX XXX XX XX' : t('enter_email_or_phone'))}
+                  placeholder={isPhone ? '+998 XX XXX XX XX' : tr('enter_email_or_phone')}
                   value={identifier}
                   onChange={(e) => {
                     const raw = e.target.value;
-                    // If already in phone mode OR first char is digit/+
+                    // Auto-detect: if already in phone mode OR first char is digit/+ and no @
                     if (isPhone || (/^[\+\d]/.test(raw) && !raw.includes('@'))) {
                       const digits = raw.replace(/\D/g, '');
                       const local = digits.startsWith('998') ? digits.slice(3) : digits;
