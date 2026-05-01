@@ -86,12 +86,28 @@ const BudgetTab = ({ project }) => {
   const totalVariance = report.total_variance || 0;
   const totalPct = totalPlanned > 0 ? (totalActual / totalPlanned) * 100 : 0;
 
-  // Group rows by stage
+  // Group rows by stage. We track two pieces per stage:
+  //   • rows: the per-category breakdown shown as indented sub-rows.
+  //     Filtered to entries with a real category_id so we don't render
+  //     "↳ Uncategorized" rows for backfilled expenses that lack a
+  //     cost_category_id.
+  //   • actualTotal: the sum of every row's actual for the stage,
+  //     INCLUDING category_id = 0 rows. Per-work expenses written by
+  //     the YAKUNIY backfill (migration 376) and the runtime
+  //     finaliseMaterialsForWork have no cost_category_id, so without
+  //     this they'd be invisible in the stage row's Fakt column even
+  //     though the top-card "Umumiy fakt xarajatlar" sums them.
   const byStage = {};
   rows.forEach(row => {
     if (!byStage[row.stage_id]) {
-      byStage[row.stage_id] = { name: row.stage_name, planned: row.planned_budget, rows: [] };
+      byStage[row.stage_id] = {
+        name: row.stage_name,
+        planned: row.planned_budget,
+        rows: [],
+        actualTotal: 0,
+      };
     }
+    byStage[row.stage_id].actualTotal += Number(row.actual || 0);
     if (row.category_id > 0 && row.actual > 0) {
       byStage[row.stage_id].rows.push(row);
     }
@@ -197,7 +213,10 @@ const BudgetTab = ({ project }) => {
                     const paginatedEntries = stageEntries.slice(startIdx, endIdx);
 
                     return paginatedEntries.map(([stageId, stage]) => {
-                    const stageActual = stage.rows.reduce((s, r) => s + r.actual, 0);
+                    // Use the all-rows total (incl. uncategorized expenses)
+                    // not just the categorised rows below — see byStage
+                    // construction above for why.
+                    const stageActual = stage.actualTotal || stage.rows.reduce((s, r) => s + r.actual, 0);
                     const stagePct = stage.planned > 0 ? (stageActual / stage.planned) * 100 : 0;
                     const stageVariance = stage.planned - stageActual;
                     return (
