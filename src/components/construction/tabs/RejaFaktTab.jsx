@@ -643,30 +643,6 @@ const RejaFaktTab = ({ project }) => {
           <CardContent className="p-4">
             <p className="text-xs text-slate-500">{t('rf_plan_total')}</p>
             <p className="text-xl font-bold text-blue-600">{formatCurrency(summary.plan_total || 0)}</p>
-            {/* When the project budget came from a Ресурс file's bottom
-                summary (ИТОГО ПРЯМЫЕ ЗАТРАТЫ — migration 369), show a
-                subtle "import" badge so the user can tell at a glance
-                that the figure is the file's grand total rather than
-                a derived sum. The backend leaves imported_budget at 0
-                when no Ресурс was imported, so the legacy per-line
-                summation continues to drive plan_total in that case. */}
-            {(summary.imported_budget || 0) > 0 && (
-              <p className="text-[10px] text-slate-400 mt-1">
-                {`Imported: ${formatCurrency(summary.imported_budget)}`}
-                {(summary.imported_material || 0) > 0 && (
-                  <>
-                    {' · '}
-                    {`Material: ${formatCurrency(summary.imported_material)}`}
-                  </>
-                )}
-                {(summary.imported_transport || 0) > 0 && (
-                  <>
-                    {' · '}
-                    {`Transport: ${formatCurrency(summary.imported_transport)}`}
-                  </>
-                )}
-              </p>
-            )}
           </CardContent>
         </Card>
         <Card>
