@@ -192,20 +192,22 @@ export function SubscriptionProvider({ children }) {
   // Backend trial status (real data from server)
   const [trialStatus, setTrialStatus] = useState(null); // { status, plan, trial_ends_at, account_clear_at, trial_days_remaining, days_until_clear }
 
+  // The /subscription/status endpoint isn't deployed on the production
+  // backend (returns 404), and the resulting noise pollutes every page
+  // load via SubscriptionContext mounting at the app root. We've
+  // disabled the call until the backend ships the endpoint. The
+  // downstream consumers (isTrialExpiredReal, getTrialDaysRemainingReal,
+  // etc.) already handle null trialStatus gracefully — they fall back
+  // to the local subscription state.
   const fetchTrialStatus = useCallback(async () => {
-    if (!backendAvailable || !authUser) return;
-    try {
-      const data = await subscriptionService.getStatus();
-      setTrialStatus(data);
-    } catch {
-      // silently ignore — UI degrades gracefully
-    }
-  }, [backendAvailable, authUser]);
+    // no-op — see comment above
+  }, []);
 
+  // Interval also disabled since the fetch is a no-op. Kept the hook
+  // shell so existing wiring (imports, deps array, exports) doesn't
+  // need to change; flip the body back when the API ships.
   useEffect(() => {
-    fetchTrialStatus();
-    const interval = setInterval(fetchTrialStatus, 10 * 60 * 1000);
-    return () => clearInterval(interval);
+    // intentionally empty
   }, [fetchTrialStatus]);
 
   // Listen for payment_success message from the Multicard tab
