@@ -353,10 +353,7 @@ const PhotoReportsTab = ({ project }) => {
             <Button variant="outline" onClick={() => setShowModal(false)}>{t('cancel') || 'Bekor qilish'}</Button>
             <Button onClick={handleSave} disabled={saving || uploadFiles.length === 0}>
               {saving ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  {t('uploading') || 'Yuklanmoqda...'}
-                </>
+                <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 <>
                   <Upload className="w-4 h-4 mr-2" />

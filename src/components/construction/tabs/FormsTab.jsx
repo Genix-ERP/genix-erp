@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import Loader from '@/components/ui/loader';
 import { Plus, Trash2, CheckCircle, XCircle, ArrowLeft, FileText, Zap, Eye, Download, PenLine, Ban, Loader2, ChevronUp, ChevronDown, Send, Save, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -1488,7 +1489,7 @@ const FormsTab = ({ project }) => {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="text-center py-8 text-slate-400">{t('loading') || 'Yuklanmoqda...'}</div>
+            <Loader />
           ) : (acts || []).length === 0 ? (
             <div className="text-center py-12">
               <FileText className="w-16 h-16 text-slate-300 mx-auto mb-4" />
@@ -1691,9 +1692,7 @@ const FormsTab = ({ project }) => {
               <div>
                 <Label className="text-base font-semibold">{t('estimate_lines') || 'Smeta qatorlari'}</Label>
                 {estimateLinesLoading ? (
-                  <div className="flex items-center gap-2 py-4 text-slate-400">
-                    <Loader2 className="w-4 h-4 animate-spin" /> {t('loading') || 'Yuklanmoqda...'}
-                  </div>
+                  <Loader className="py-4" size="w-4 h-4" />
                 ) : estimateLines.length === 0 ? (
                   <p className="text-sm text-slate-400 py-2">{t('no_estimate_lines') || 'Smeta qatorlari topilmadi'}</p>
                 ) : (

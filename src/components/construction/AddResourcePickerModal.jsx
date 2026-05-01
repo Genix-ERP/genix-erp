@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { constructionService } from '@/api/services/construction';
+import Loader from '@/components/ui/loader';
 
 // AddResourcePickerModal — faithful port of the Form2_Works_v2 mockup's
 // "Qo'shimcha resurs qo'shish" modal.
@@ -429,10 +430,7 @@ export default function AddResourcePickerModal({ open, onClose, projectId, estim
 
             <div className="mb-4" style={{ maxHeight: 300, overflowY: 'auto' }}>
               {loading ? (
-                <div className="py-8 text-center" style={{ color: '#64748B' }}>
-                  <Loader2 className="w-5 h-5 mx-auto mb-2 animate-spin" />
-                  {t('loading') || 'Yuklanmoqda…'}
-                </div>
+                <Loader />
               ) : filtered.length === 0 ? (
                 <div className="py-8 text-center text-[13px]" style={{ color: '#64748B' }}>
                   {t('no_resources_found') || 'Hech narsa topilmadi'}

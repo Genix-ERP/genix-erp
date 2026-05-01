@@ -13,6 +13,7 @@ import { useTranslation } from '@/components/utils/translations';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { constructionService } from '@/api/services/construction';
+import Loader from '@/components/ui/loader';
 
 // SublineModal — Add or edit a sub-line (podkator) under an existing estimate line.
 // Matches the Claude Chrome design mock from the "Light Mode in Excel" chat.
@@ -365,10 +366,7 @@ export default function SublineModal({ open, onClose, parent, estimateId, projec
                   />
                   <CommandList>
                     {loadingResources && (
-                      <div className="py-4 text-center text-xs text-muted-foreground">
-                        <Loader2 className="w-4 h-4 animate-spin inline-block mr-2" />
-                        {t('loading_resources') || "Yuklanmoqda…"}
-                      </div>
+                      <Loader className="py-4" size="w-4 h-4" />
                     )}
                     {!loadingResources && filteredResources.length === 0 && (
                       <CommandEmpty>

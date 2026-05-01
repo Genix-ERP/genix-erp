@@ -11,6 +11,7 @@ import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell,
 } from 'recharts';
+import Loader from '@/components/ui/loader';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#6366f1'];
 
@@ -68,7 +69,7 @@ const FinancialTab = ({ project }) => {
 
   useEffect(() => { load(); }, [load]);
 
-  if (loading) return <div className="text-center py-8 text-slate-400">{t('loading') || 'Yuklanmoqda...'}</div>;
+  if (loading) return <Loader />;
   if (error) return <div className="text-center py-8 text-red-500">{error}</div>;
 
   // --- P&L data ---
