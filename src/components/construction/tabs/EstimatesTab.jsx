@@ -44,6 +44,7 @@ import {
   Package,
 } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
+import { useEmployeePermissions } from '@/components/contexts/EmployeePermissionsContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
@@ -58,6 +59,12 @@ import EstimateLineEditModal from '@/components/construction/EstimateLineEditMod
 const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontracts = [] }) => {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  // Permission gating — backend already enforces construction.estimate.delete
+  // via h.perm.Require() middleware (handler.go:2105), but we hide the UI
+  // affordance for users without the right so they don't click and hit a
+  // 403 toast. Admins / owners / site admins return true via the hook.
+  const { canDelete } = useEmployeePermissions();
+  const canDeleteEstimate = canDelete('construction');
   const { formatCurrency } = useCurrencyFormatter();
 
   const [estimates, setEstimates] = useState([]);
@@ -889,10 +896,33 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                             <Badge className={`text-xs ${getStateColor(est.state)}`}>
                               {getStateLabel(est.state)}
                             </Badge>
-                            {/* Per-estimate "..." kebab menu (Tahrirlash / Tasdiqlash /
-                               Nusxalash / O'chirish / Mahsulotlar yaratish) removed —
-                               those operations now live in the Smeta boshqaruvi tab so
-                               this Smetalar list stays a read-only summary. */}
+                            {/* Per-estimate delete button — visible only when:
+                                 (1) the user has construction.estimate.delete
+                                     permission (admins/owners auto-pass), AND
+                                 (2) the estimate is in draft state (backend
+                                     also rejects non-draft delete with 400).
+                               stopPropagation prevents the parent header's
+                               onClick from toggling row expansion. The
+                               confirm-dialog and i18n strings are wired up
+                               in handleDeleteEstimate. The backend
+                               middleware (h.perm.Require) is the actual
+                               authority — this UI gate is just to hide the
+                               button from users who'd hit a 403 if they
+                               clicked. */}
+                            {canDeleteEstimate && est.state === 'draft' && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteEstimate(est);
+                                }}
+                                className="p-1.5 rounded-md text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                                title={t('delete') || "O'chirish"}
+                                aria-label={t('delete') || "O'chirish"}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
                           </div>
                         </div>
                         <div className="flex items-center justify-between ml-6">

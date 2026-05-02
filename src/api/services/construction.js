@@ -1394,6 +1394,17 @@ export const constructionService = {
     return response.data.data;
   },
 
+  // Material consolidation — per-block aggregation of FAKT material usage
+  // grouped by (name, UOM, unit_rate). Same name+UOM with different prices
+  // produce separate rows; same name+UOM+price are summed into one. Topups
+  // (resource purchases at a different price after the smeta was set) are
+  // returned as nested children of the parent group. Mirrors the Material
+  // yig'indisi modal launched from Smeta boshqaruvi.
+  async getMaterialConsolidationReport(projectId) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/reports/material-consolidation`);
+    return response.data.data;
+  },
+
   async getMaterialsReport(projectId, params = {}) {
     const response = await apiClient.get(`/construction/projects/${projectId}/reports/materials`, { params });
     return response.data.data;
