@@ -14,6 +14,7 @@ import { useTranslation } from '@/components/utils/translations';
 import { constructionService } from '@/api/services/construction';
 import { formatApiError } from '@/utils/apiErrors';
 import Form2Preview from '@/components/construction/Form2Preview';
+import MaterialConsolidationModal from '@/components/construction/MaterialConsolidationModal';
 import ResourcesPanel from '@/components/construction/ResourcesPanel';
 import AddResourcePickerModal from '@/components/construction/AddResourcePickerModal';
 import AddSubWorkModal from '@/components/construction/AddSubWorkModal';
@@ -207,6 +208,9 @@ export default function SmetaManagementTab({ project }) {
   const [topupTarget, setTopupTarget] = useState(null);
 
   const [form2Open, setForm2Open] = useState(false);
+  // Material consolidation modal — toggled by the "Material yig'indisi"
+  // button in the topbar next to "Forma 2 ni yaratish".
+  const [matConsOpen, setMatConsOpen] = useState(false);
   const [qtyDraft, setQtyDraft] = useState({});
 
   // "X o'zgarish" badge — count of resources whose price drifted from
@@ -970,6 +974,26 @@ export default function SmetaManagementTab({ project }) {
               {t('create_form2') || "Forma 2 ni yaratish"}
             </button>
           )}
+          {/* Material consolidation — sits next to "Forma 2 ni yaratish".
+              Same visual weight as the form2 button; opens a modal that
+              shows per-block material aggregation in Fakt mode. */}
+          <button
+            onClick={() => setMatConsOpen(true)}
+            className="px-3.5 py-2.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition"
+            style={{ background: C.sec, color: C.teal, border: '1px solid rgba(13,148,136,0.3)' }}
+            title={({
+              uz: "Material yig'indisi",
+              ru: 'Сводная по материалам',
+              en: 'Materials consolidation',
+            })[language] || "Material yig'indisi"}
+          >
+            <Package className="w-3.5 h-3.5" />
+            {({
+              uz: "Material yig'indisi",
+              ru: 'Сводная по материалам',
+              en: 'Materials consolidation',
+            })[language] || "Material yig'indisi"}
+          </button>
         </div>
       </div>
 
@@ -1301,6 +1325,14 @@ export default function SmetaManagementTab({ project }) {
         parent={addTarget}
         nextSeq={addTarget ? nextSeqFor(addTarget.id) : 1}
         onSaved={() => loadLines(activeEstimateIds)}
+      />
+
+      {/* Material consolidation modal — opened from the topbar button. */}
+      <MaterialConsolidationModal
+        open={matConsOpen}
+        onClose={() => setMatConsOpen(false)}
+        projectId={project?.id}
+        projectName={project?.name}
       />
 
       <Dialog open={form2Open} onOpenChange={setForm2Open}>
