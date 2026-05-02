@@ -402,6 +402,30 @@ export default function MaterialConsolidationModal({
 
 // ─────────────── BlockSection (extracted for clarity) ───────────────
 function BlockSection({ label, groups, totalAmount, language, totalLabel, isProjectTotal = false }) {
+  // Defensive frontend filter — drops any group whose actually-consumed
+  // quantity is zero AND has no top-up purchases. The backend already
+  // filters with HAVING SUM(fakt_quantity) > 0, but we also clean up
+  // here in case (a) the backend hasn't been redeployed yet, (b) the
+  // user is viewing a cached response, or (c) someone hits this
+  // component with manually-constructed data. Topup-only rows are
+  // preserved so a material that was bought via a top-up at a new
+  // price still surfaces.
+  const visibleGroups = (groups || []).filter((g) => {
+    const qty = Number(g.fakt_quantity) || 0;
+    if (qty > 0) return true;
+    const hasTopups = Array.isArray(g.topups) && g.topups.some(
+      (t) => (Number(t.extra_quantity) || 0) > 0,
+    );
+    return hasTopups;
+  });
+
+  // If the section has nothing left after filtering AND no aggregate
+  // total worth showing, hide the entire block — keeps the report
+  // tight when one of the blocks has no actual consumption.
+  if (visibleGroups.length === 0 && !(Number(totalAmount) > 0)) {
+    return null;
+  }
+
   return (
     <div className="mb-6">
       <div
@@ -424,11 +448,11 @@ function BlockSection({ label, groups, totalAmount, language, totalLabel, isProj
             </tr>
           </thead>
           <tbody>
-            {groups.length === 0 ? (
+            {visibleGroups.length === 0 ? (
               <tr>
                 <td colSpan={5} className="text-center text-slate-400 py-3">—</td>
               </tr>
-            ) : groups.map((g, i) => (
+            ) : visibleGroups.map((g, i) => (
               <React.Fragment key={`${g.name}|${g.uom}|${g.unit_rate}|${i}`}>
                 <tr className="border-b border-slate-200 hover:bg-slate-50">
                   <td className="px-3 py-1.5 border-r border-slate-200">{g.name}</td>

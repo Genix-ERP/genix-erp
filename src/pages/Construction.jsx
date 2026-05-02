@@ -1453,9 +1453,36 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
     }
 
     try {
-      const autoCode = buildingForm.code ||
+      // Auto-generate a code from the building name when the user
+      // didn't type one. The deterministic transform ("Block 2" →
+      // "BLOCK_2") used to collide whenever two buildings in the
+      // same project shared a name; the backend now uniquifies on
+      // collision (suffixing -2, -3, ...), but we pre-empt the
+      // collision here too so the user SEES the resolved code in
+      // the form before submit instead of being surprised by it
+      // post-save.
+      const baseCode = (buildingForm.code && buildingForm.code.trim()) ||
         name.toUpperCase().replace(/\s+/g, '_').replace(/[^A-Z0-9_]/g, '').slice(0, 20) ||
         'BUILDING';
+
+      // Only attempt local dedup when this is a NEW building. For
+      // edits we keep whatever code the row already has.
+      let autoCode = baseCode;
+      if (!buildingForm.id && Array.isArray(buildings)) {
+        const existing = new Set(
+          buildings.map((b) => String(b.code || '').toUpperCase())
+        );
+        if (existing.has(baseCode.toUpperCase())) {
+          for (let n = 2; n < 100; n++) {
+            const candidate = `${baseCode}-${n}`;
+            if (!existing.has(candidate.toUpperCase())) {
+              autoCode = candidate;
+              break;
+            }
+          }
+        }
+      }
+
       const formData = {
         ...buildingForm,
         name,
@@ -2377,11 +2404,25 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
               ) : (
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                   {buildings.map((building) => (
-                    <Card key={building.id} className="border hover:shadow-md transition-shadow">
+                    <Card key={building.id} className="border hover:shadow-md transition-shadow overflow-hidden">
                       <CardContent className="p-4">
-                        <div className="flex items-start justify-between mb-3">
-                          <div>
-                            <h3 className="font-semibold text-slate-800">{building.name}</h3>
+                        <div className="flex items-start justify-between mb-3 gap-2">
+                          {/* min-w-0 lets the flex item shrink below its
+                              intrinsic content width so a long no-space
+                              building name (e.g. user-entered gibberish)
+                              wraps inside the card instead of overflowing
+                              and pushing the action buttons off the right
+                              edge. break-words handles natural word
+                              boundaries; [overflow-wrap:anywhere] forces
+                              breaks even inside contiguous strings so the
+                              UI stays bounded for adversarial inputs. */}
+                          <div className="min-w-0 flex-1">
+                            <h3
+                              className="font-semibold text-slate-800 break-words [overflow-wrap:anywhere]"
+                              title={building.name}
+                            >
+                              {building.name}
+                            </h3>
                           </div>
                           <div className="flex items-center gap-2">
                             {/* Inline status switcher — single click to change
