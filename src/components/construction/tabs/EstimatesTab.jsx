@@ -1094,7 +1094,19 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                             </td>
                                             <td className="py-2 px-2 text-right text-xs text-slate-600 whitespace-nowrap">{line.uom}</td>
                                             {est.source_type !== 'resurs' && (
-                                              <td className="py-2 px-2 text-right text-xs whitespace-nowrap">{line.quantity}</td>
+                                              // Show the imported file quantity (original_quantity, the
+                                              // immutable anchor) rather than the live `quantity` ledger.
+                                              // For Единич imports we deliberately zero `quantity` at
+                                              // import time so FAKT in Smeta boshqaruvi starts at 0 and
+                                              // the foreman fills it in — but the user still wants to
+                                              // SEE the planned file quantity here in the Smetalar list.
+                                              // Falls back to `quantity` for legacy rows that predate
+                                              // the original_quantity anchor (migration 349).
+                                              <td className="py-2 px-2 text-right text-xs whitespace-nowrap">
+                                                {Number(line.original_quantity) > 0
+                                                  ? line.original_quantity
+                                                  : line.quantity}
+                                              </td>
                                             )}
                                             {est.source_type === 'resurs' && (
                                               <td className="py-2 px-2 text-right text-xs font-medium whitespace-nowrap">{formatCurrency(line.unit_rate)}</td>
