@@ -326,9 +326,35 @@ export default function Form2Preview({ estimate, lines, project, onClose, onSave
     const m = str.match(/^(\d{4}-\d{2}-\d{2})/);
     return m ? m[1] : '';
   };
-  const [otherCostsPct, setOtherCostsPct] = useState(
-    snapshot?.other_costs_pct != null ? Number(snapshot.other_costs_pct) : 0,
+  // `otherCostsPctStr` is the raw text the user is typing — kept as a
+  // string so values like "10.", ".5", or "12.34" survive intermediate
+  // keystrokes. Without this, `Number("10.")` collapsed to `10` and
+  // re-rendered the input as `"10"`, eating the user's decimal point
+  // and making it impossible to type fractional %.
+  // `otherCostsPct` is the parsed numeric value used in calculations
+  // and for save/snapshot. Number() wraps elsewhere already accept
+  // either a string or number, so they keep working.
+  const [otherCostsPctStr, setOtherCostsPctStr] = useState(
+    snapshot?.other_costs_pct != null ? String(Number(snapshot.other_costs_pct)) : '0',
   );
+  const otherCostsPct = (() => {
+    const v = parseFloat(String(otherCostsPctStr).replace(',', '.'));
+    return Number.isFinite(v) ? v : 0;
+  })();
+  // Helper used by both input copies — accepts the raw input string,
+  // keeps it if it's empty or matches the decimal pattern (digits +
+  // optional single dot + optional digits), rejects junk silently.
+  // Clamps to [0, 100] only on full numeric values so partial states
+  // like "1." don't snap-back to "1" mid-typing.
+  const setOtherCostsPct = (raw) => {
+    const r = String(raw).replace(',', '.');
+    if (r === '' || r === '.' || /^\d{0,3}(\.\d*)?$/.test(r)) {
+      const n = parseFloat(r);
+      if (!Number.isFinite(n) || (n >= 0 && n <= 100)) {
+        setOtherCostsPctStr(r);
+      }
+    }
+  };
   // VAT is a boolean toggle (matches v23 mockup) — when on, the fixed
   // 12% rate is added to the subtotal; when off, the grand total stops
   // at the subtotal. The percentage itself isn't user-editable any more.
@@ -1164,11 +1190,10 @@ ${linkParts.join('\n')}
         <div className="flex items-center gap-3">
           <label className="text-xs text-slate-500">{t('other_costs_pct') || 'Прочие %'}</label>
           <Input
-            value={otherCostsPct}
-            onChange={(e) => {
-              const v = Number(e.target.value);
-              if (Number.isFinite(v) && v >= 0 && v <= 100) setOtherCostsPct(v);
-            }}
+            type="text"
+            inputMode="decimal"
+            value={otherCostsPctStr}
+            onChange={(e) => setOtherCostsPct(e.target.value)}
             className="w-20 h-8 text-right font-mono text-sm"
           />
           {/* VAT is a toggle now — fixed 12% rate, just decides whether to
@@ -1622,7 +1647,21 @@ ${linkParts.join('\n')}
                 </tr>
                 <tr style={{ background: 'linear-gradient(90deg,#FFF8DC 0%,#FFF4C2 100%)', borderLeft: '3px solid #D97706' }}>
                   <td className="pl-5 py-2.5 text-amber-900">
-                    <strong className="text-amber-900">+ {t('f2_other_costs_label') || 'Прочие затраты производственного характера'}</strong>
+                    <strong className="text-amber-900">
+                      {/* Inline label override — `t()` returns the key
+                          itself when missing, so the `||` fallback on
+                          `f2_other_costs_label` never fires; the
+                          translation file currently maps to "Boshqa
+                          ishlab chiqarish xarajatlari" which the user
+                          wants shortened. Hardcoding via the language
+                          context keeps this fix local without touching
+                          the 24K-line translations.jsx file. */}
+                      + {({
+                        uz: 'Boshqa xarajatlar',
+                        ru: 'Прочие расходы',
+                        en: 'Other expenses',
+                      })[language] || 'Boshqa xarajatlar'}
+                    </strong>
                     <br />
                     <span className="text-[10px] italic text-amber-700">{t('f2_other_costs_hint') || '% от базы для прочих (применяется ТОЛЬКО к строительству)'}</span>
                   </td>
@@ -1630,11 +1669,8 @@ ${linkParts.join('\n')}
                     <input
                       type="text"
                       inputMode="decimal"
-                      value={otherCostsPct}
-                      onChange={(e) => {
-                        const v = Number(e.target.value);
-                        if (Number.isFinite(v) && v >= 0 && v <= 100) setOtherCostsPct(v);
-                      }}
+                      value={otherCostsPctStr}
+                      onChange={(e) => setOtherCostsPct(e.target.value)}
                       onFocus={(e) => e.target.select()}
                       className="w-14 text-center font-mono font-bold text-amber-900 bg-amber-50 border-2 border-amber-600 rounded outline-none px-1 py-0.5 text-[11.5px]"
                     />%
