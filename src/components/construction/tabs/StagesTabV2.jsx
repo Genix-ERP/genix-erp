@@ -1821,12 +1821,27 @@ function SubResourcesTable({ subs, doneQty, planQty, canSeeCost, workStatus, t }
       ? ` · ${t('materials_reserved') || 'Mahsulot bron qilindi'}`
       : '';
 
-  // Sort: materials first (most actionable for warehouse), then machines, then labour.
+  // Sort: materials first (most actionable for warehouse), then
+  // machines, then labour. Within the SAME category, newly added
+  // resources (higher id) appear LAST so the originally-imported
+  // ones (the foreman is used to seeing them in their imported order)
+  // stay at the top, and manual additions land at the bottom of that
+  // category — matching the user's mental model of "the new one I
+  // just added should show up at the end of the list, not jump to
+  // the top".
+  //
+  // Secondary key: subline_seq if present (set at import time so it
+  // mirrors the file's row order), then id ASC as a stable fallback
+  // for rows that don't have one.
   const order = { material: 0, equipment: 1, labor: 2 };
   const sortedSubs = [...subs].sort((a, b) => {
     const ra = order[String(a.resource_type || '').toLowerCase()] ?? 99;
     const rb = order[String(b.resource_type || '').toLowerCase()] ?? 99;
-    return ra - rb;
+    if (ra !== rb) return ra - rb;
+    const sa = Number(a.subline_seq ?? 0);
+    const sb = Number(b.subline_seq ?? 0);
+    if (sa !== sb) return sa - sb;
+    return (Number(a.id) || 0) - (Number(b.id) || 0);
   });
 
   return (
