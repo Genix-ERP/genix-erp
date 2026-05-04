@@ -866,8 +866,12 @@ export default function ProductionOrders() {
 
           {selectedOrder && (
             <div className="space-y-6 py-4">
-              {/* Order Summary */}
-              <div className="grid grid-cols-3 gap-4 p-4 bg-slate-50 rounded-lg">
+              {/* Order Summary. Auto-grow from 3 columns to 4 when this
+                  production order was spawned from a sales order so the
+                  operator can trace what they're building for. The 4th
+                  tile is omitted entirely for ad-hoc production orders
+                  to keep the layout clean. */}
+              <div className={`grid ${selectedOrder.sales_order_number ? 'grid-cols-4' : 'grid-cols-3'} gap-4 p-4 bg-slate-50 rounded-lg`}>
                 <div>
                   <p className="text-xs text-slate-500">{t('product') || 'Product'}</p>
                   <p className="font-semibold">{selectedOrder.product_name}</p>
@@ -880,6 +884,12 @@ export default function ProductionOrders() {
                   <p className="text-xs text-slate-500">{t('shift') || 'Shift'}</p>
                   <p className="font-semibold">{getShiftLabel(selectedOrder.shift)}</p>
                 </div>
+                {selectedOrder.sales_order_number && (
+                  <div>
+                    <p className="text-xs text-slate-500">{t('sales_order') || 'Sales Order'}</p>
+                    <p className="font-semibold text-blue-700">{selectedOrder.sales_order_number}</p>
+                  </div>
+                )}
               </div>
 
               {/* Stage Workflow */}
