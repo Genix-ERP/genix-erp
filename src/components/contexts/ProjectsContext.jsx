@@ -2,12 +2,14 @@ import { createContext, useContext, useState, useCallback, useEffect, useMemo } 
 import { projectsService } from '@/api/services/projects';
 import { useAdminSettings } from './AdminSettingsContext';
 import { useCompany } from './CompanyContext';
+import { useEmployeePermissions } from './EmployeePermissionsContext';
 
 const ProjectsContext = createContext(null);
 
 export function ProjectsProvider({ children }) {
   const { getSetting } = useAdminSettings();
   const { activeCompany } = useCompany();
+  const { canAccessModule, isAdmin } = useEmployeePermissions();
   const [projects, setProjects] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [milestones, setMilestones] = useState([]);
@@ -40,10 +42,17 @@ export function ProjectsProvider({ children }) {
     if (activeCompany) {
       loadData();
     }
-  }, [activeCompany]);
+  }, [activeCompany, isAdmin, canAccessModule]);
 
   const loadData = async () => {
     if (!activeCompany) return;
+    // Skip the API call entirely for users without projects access — it
+    // would just 403 and clutter the console. Admins always load.
+    if (!(isAdmin || canAccessModule('projects'))) {
+      setProjects([]);
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     setError(null);
     try {
