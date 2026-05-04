@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { hrService, purchaseService, salesService, financeService, procurementService, projectsService } from '@/api/services';
 import { useCompany } from './CompanyContext';
+import { useEmployeePermissions } from './EmployeePermissionsContext';
 import { checkBackendHealth } from '@/config/dataMode';
 
 // Storage key for permissions only (still using localStorage)
@@ -39,6 +40,7 @@ const ModulesContext = createContext();
 
 export function ModulesProvider({ children }) {
   const { activeCompany } = useCompany();
+  const { canAccessModule, isAdmin } = useEmployeePermissions();
   const [employees, setEmployees] = useState([]);
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [salesOrders, setSalesOrders] = useState([]);
@@ -80,7 +82,16 @@ export function ModulesProvider({ children }) {
         return;
       }
 
-      // Load all data from API in parallel
+      // Load all data from API in parallel.
+      // Each call is gated by the user's actual module permission. Without
+      // this gating, ModulesContext was firing every backend list endpoint
+      // on every page mount and producing a wall of red 403s in the
+      // network tab for anything the user wasn't permissioned for
+      // (e.g. payroll-periods, contracts, sales orders). Admins skip all
+      // gates and load everything.
+      const allow = (moduleId) => isAdmin || canAccessModule(moduleId);
+      const skip = () => Promise.resolve([]);
+
       const [
         empData,
         poData,
@@ -91,14 +102,18 @@ export function ModulesProvider({ children }) {
         assetsData,
         payrollsData
       ] = await Promise.all([
-        hrService.listEmployees().catch(err => { console.warn('Employees API error:', err); return []; }),
-        purchaseService.listOrders().catch(err => { console.warn('PO API error:', err); return []; }),
-        salesService.listOrders({ page_size: 1000 }).catch(err => { console.warn('SO API error:', err); return []; }),
-        projectsService.listProjects().catch(err => { console.warn('Projects API error:', err); return []; }),
-        procurementService.listContracts().catch(err => { console.warn('Contracts API error:', err); return []; }),
-        financeService.listExpenses().catch(err => { console.warn('Expenses API error:', err); return []; }),
-        financeService.listFixedAssets().catch(err => { console.warn('Assets API error:', err); return []; }),
-        hrService.listPayrollPeriods().catch(err => { console.warn('Payroll API error:', err); return []; })
+        allow('hr')          ? hrService.listEmployees().catch(err => { console.warn('Employees API error:', err); return []; })            : skip(),
+        allow('purchase')    ? purchaseService.listOrders().catch(err => { console.warn('PO API error:', err); return []; })                : skip(),
+        allow('sales')       ? salesService.listOrders({ page_size: 1000 }).catch(err => { console.warn('SO API error:', err); return []; }) : skip(),
+        allow('projects')    ? projectsService.listProjects().catch(err => { console.warn('Projects API error:', err); return []; })        : skip(),
+        allow('contracts') || allow('purchase')
+                             ? procurementService.listContracts().catch(err => { console.warn('Contracts API error:', err); return []; })   : skip(),
+        allow('expenses') || allow('finance')
+                             ? financeService.listExpenses().catch(err => { console.warn('Expenses API error:', err); return []; })         : skip(),
+        allow('assets') || allow('finance')
+                             ? financeService.listFixedAssets().catch(err => { console.warn('Assets API error:', err); return []; })        : skip(),
+        allow('hr') || allow('payroll')
+                             ? hrService.listPayrollPeriods().catch(err => { console.warn('Payroll API error:', err); return []; })         : skip()
       ]);
 
       // Helper to safely extract array from API response
@@ -174,7 +189,7 @@ export function ModulesProvider({ children }) {
     } finally {
       setIsLoading(false);
     }
-  }, [activeCompany]);
+  }, [activeCompany, canAccessModule, isAdmin]);
 
   useEffect(() => {
     loadData();
