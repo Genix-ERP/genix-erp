@@ -127,7 +127,7 @@ function LayoutContent({ children, currentPageName }) {
   const location = useLocation();
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { isAppInstalled } = useInstalledApps();
+  const { isAppInstalled, isAppHiddenInActiveCompany } = useInstalledApps();
   const [searchQuery, setSearchQuery] = React.useState("");
   const [isAIChatOpen, setIsAIChatOpen] = React.useState(false);
   const [isPhoneOpen, setIsPhoneOpen] = React.useState(false);
@@ -434,13 +434,18 @@ function LayoutContent({ children, currentPageName }) {
       const appConfig = appNavigationMap[appId];
       const installed = isAppInstalled(appId);
       const hasModulePermission = canAccessModule(appConfig.moduleId);
+      // Per-org hide override (migration 386). Even if the app is
+      // installed tenant-wide and the user has permission, an admin
+      // can hide specific apps inside specific companies (e.g. the
+      // Cargo subsidiary doesn't show Construction).
+      const hiddenInActiveCompany = isAppHiddenInActiveCompany(appId);
 
       // Privileged users: show if app is installed (they have access to everything)
       // Employees: show if they have explicit module permission (permission implies installation)
       const hasAccess = isPrivilegedUser || hasModulePermission;
       const shouldShow = isPrivilegedUser ? installed : (installed || hasModulePermission);
 
-      if (shouldShow && hasAccess) {
+      if (shouldShow && hasAccess && !hiddenInActiveCompany) {
         dynamicItems.push(appConfig);
       }
     });
@@ -470,7 +475,7 @@ function LayoutContent({ children, currentPageName }) {
     dynamicItems.push(coreNavigationItems[2]);
 
     return dynamicItems;
-  }, [coreNavigationItems, adminNavigationItems, appNavigationMap, isAdmin, isUserSiteAdmin, isUserOwner, userRole, canAccessModule, isAppInstalled, t]);
+  }, [coreNavigationItems, adminNavigationItems, appNavigationMap, isAdmin, isUserSiteAdmin, isUserOwner, userRole, canAccessModule, isAppInstalled, isAppHiddenInActiveCompany, t]);
 
   const filteredNavigationItems = React.useMemo(() => {
     if (!searchQuery.trim()) return navigationItems;

@@ -72,7 +72,7 @@ export default function SalesOrders() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { activeCompany } = useCompany();
-  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
+  const { canCreate, canUpdate, canDelete, canRead, MODULES } = usePermissions();
   const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
   const { salesOrders = [], createSalesOrder, updateSalesOrder, isLoading: ordersLoading, refreshData: refreshModulesData } = useModules();
   const { customers = [] } = useCustomers();
@@ -385,6 +385,12 @@ export default function SalesOrders() {
       // Find all intercompany customers (those with source_organization_id)
       const intercompanyCustomers = (customers || []).filter(c => c.source_organization_id);
       if (intercompanyCustomers.length === 0) return;
+
+      // /projects/by-organization is gated by projects:read on the backend.
+      // A user with sales but no projects access would 403 on every
+      // intercompany customer; skip the fetch and just leave the
+      // intercompany-projects list empty (the UI handles that).
+      if (!canRead(MODULES.PROJECTS)) return;
 
       setLoadingIntercompanyProjects(true);
       try {
