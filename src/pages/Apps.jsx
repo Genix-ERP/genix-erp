@@ -23,10 +23,15 @@ import {
   Ship,
   Lock,
   Building2,
-  BarChart3
+  BarChart3,
+  Eye,
+  EyeOff
 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useInstalledApps } from '@/components/contexts/InstalledAppsContext';
+import { useCompany } from '@/components/contexts/CompanyContext';
 import { useTranslation } from '@/components/utils/translations';
 import { usePermissions } from '@/hooks/usePermissions';
 import { MODULES } from '@/config/permissions';
@@ -172,6 +177,18 @@ const appsList = [
 const AppCard = ({ app, isInstalled, onAction, isLoading, hasPermission }) => {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { companies } = useCompany();
+  const { getOrgsHidingApp, setAppHiddenForOrg } = useInstalledApps();
+  const [visibilityOpen, setVisibilityOpen] = React.useState(false);
+  const [savingOrgId, setSavingOrgId] = React.useState(null);
+
+  // The set of orgs that currently HIDE this app. Drives both the
+  // hint text on the card ("Hidden in N companies") and the initial
+  // state of the modal's checkboxes (checked = visible, i.e. NOT hidden).
+  const hiddenOrgIds = React.useMemo(
+    () => new Set(getOrgsHidingApp(app.id)),
+    [getOrgsHidingApp, app.id]
+  );
 
   const handleAction = async (e) => {
     e.preventDefault();
@@ -179,6 +196,21 @@ const AppCard = ({ app, isInstalled, onAction, isLoading, hasPermission }) => {
     if (!hasPermission) return;
     await onAction(app, isInstalled ? 'uninstall' : 'install');
   };
+
+  const handleToggleVisibility = async (orgId, nextVisible) => {
+    // nextVisible=true means "show this app for that org"
+    //                = remove from hidden_apps. And vice versa.
+    setSavingOrgId(orgId);
+    try {
+      await setAppHiddenForOrg(app.id, orgId, !nextVisible);
+    } catch (err) {
+      console.error('Failed to update app visibility:', err);
+    } finally {
+      setSavingOrgId(null);
+    }
+  };
+
+  const hiddenCount = hiddenOrgIds.size;
 
   return (
     <Card className={`hover:shadow-xl hover:-translate-y-1 transition-all duration-300 bg-white/80 backdrop-blur-sm border-slate-200/60 flex flex-col h-full ${!hasPermission ? 'opacity-60' : ''}`}>
@@ -230,34 +262,58 @@ const AppCard = ({ app, isInstalled, onAction, isLoading, hasPermission }) => {
               </Badge>
             </div>
           ) : isInstalled ? (
-            <div className="flex items-center justify-between gap-3">
-              <Badge className="bg-green-50 text-green-700 border border-green-200 flex items-center justify-center gap-2 h-10 px-4 flex-shrink-0">
-                <CheckCircle className="w-4 h-4 flex-shrink-0" />
-                <span className="font-semibold text-sm whitespace-nowrap">{t('installed')}</span>
-              </Badge>
-              <Button
-                variant="outline"
-                className="text-slate-600 hover:bg-red-50 hover:text-red-600 hover:border-red-200 font-medium h-10 px-4 flex-shrink-0"
-                onClick={handleAction}
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center gap-3">
+                <Badge className="bg-green-50 text-green-700 border border-green-200 flex items-center justify-center gap-2 h-10 px-4 flex-1 min-w-0">
+                  <CheckCircle className="w-4 h-4 flex-shrink-0" />
+                  <span className="font-semibold text-sm whitespace-nowrap">{t('installed')}</span>
+                </Badge>
+                <Button
+                  variant="outline"
+                  className="text-slate-600 hover:bg-red-50 hover:text-red-600 hover:border-red-200 font-medium h-10 px-4 flex-1 min-w-0"
+                  onClick={handleAction}
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      <span className="text-sm whitespace-nowrap">{t('uninstall')}</span>
+                    </>
+                  ) : (
                     <span className="text-sm whitespace-nowrap">{t('uninstall')}</span>
-                  </>
-                ) : (
-                  <span className="text-sm whitespace-nowrap">{t('uninstall')}</span>
-                )}
-              </Button>
+                  )}
+                </Button>
+              </div>
+              {/* Per-org visibility row. Only shown when there's more
+                  than one company — single-org tenants don't need to
+                  manage per-org overrides. */}
+              {(companies?.length || 0) > 1 && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.preventDefault(); setVisibilityOpen(true); }}
+                  className="flex items-center justify-center gap-2 text-xs text-slate-500 hover:text-slate-800 transition-colors py-1"
+                >
+                  {hiddenCount > 0 ? (
+                    <EyeOff className="w-3.5 h-3.5" />
+                  ) : (
+                    <Eye className="w-3.5 h-3.5" />
+                  )}
+                  <span>
+                    {hiddenCount > 0
+                      ? `${hiddenCount} ta kompaniyada yashirilgan`
+                      : 'Barcha kompaniyalarda koʻrinadi'}
+                  </span>
+                  <span className="underline ml-1">Boshqarish</span>
+                </button>
+              )}
             </div>
           ) : (
-            <div className="flex items-center justify-between gap-3">
-              <Badge variant="secondary" className="bg-slate-100 text-slate-600 border border-slate-200 h-10 px-4 font-medium text-sm flex items-center justify-center flex-shrink-0">
+            <div className="flex items-center gap-3">
+              <Badge variant="secondary" className="bg-slate-100 text-slate-600 border border-slate-200 h-10 px-4 font-medium text-sm flex items-center justify-center flex-1 min-w-0">
                 <span className="whitespace-nowrap">{t('not_installed')}</span>
               </Badge>
               <Button
-                className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90 shadow-md font-semibold h-10 px-4 flex-shrink-0"
+                className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90 shadow-md font-semibold h-10 px-4 flex-1 min-w-0"
                 onClick={handleAction}
                 disabled={isLoading}
               >
@@ -277,6 +333,58 @@ const AppCard = ({ app, isInstalled, onAction, isLoading, hasPermission }) => {
           )}
         </div>
       </CardContent>
+
+      {/* Per-organization visibility modal (migration 386). Empty
+          hidden_apps = visible everywhere. Unchecking a company hides
+          this app from the sidebar when that company is the active
+          one. The backend route is NOT gated; this is purely a UI
+          visibility override. */}
+      <Dialog open={visibilityOpen} onOpenChange={setVisibilityOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {`Koʻrinish: ${t(app.nameKey)}`}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-500">
+              Belgilangan kompaniyalarda ushbu ilova sidebarda koʻrinadi. Belgini olib tashlasangiz, oʻsha kompaniyada yashiriladi (ilova oʻrnatilgan boʻlib qoladi).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+            {(companies || []).map(co => {
+              const visible = !hiddenOrgIds.has(co.id);
+              return (
+                <label
+                  key={co.id}
+                  className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-slate-50 cursor-pointer"
+                >
+                  <Checkbox
+                    checked={visible}
+                    disabled={savingOrgId === co.id}
+                    onCheckedChange={(checked) => handleToggleVisibility(co.id, !!checked)}
+                  />
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium text-slate-800">{co.company_name || co.company_code || '—'}</span>
+                    {co.company_code ? (
+                      <span className="text-xs text-slate-400">{co.company_code}</span>
+                    ) : null}
+                  </div>
+                  {savingOrgId === co.id && (
+                    <Loader2 className="w-3.5 h-3.5 ml-auto animate-spin text-slate-400" />
+                  )}
+                </label>
+              );
+            })}
+            {(!companies || companies.length === 0) && (
+              <div className="text-sm text-slate-500 px-2 py-4 text-center">
+                Kompaniyalar yoʻq
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setVisibilityOpen(false)}>Yopish</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 };
@@ -284,7 +392,7 @@ const AppCard = ({ app, isInstalled, onAction, isLoading, hasPermission }) => {
 export default function Apps() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { isLoading: appsLoading, isAppInstalled, installApp, uninstallApp } = useInstalledApps();
+  const { isLoading: appsLoading, isAppInstalled, installApp, uninstallApp, isAppHiddenInActiveCompany } = useInstalledApps();
   const { canAccess } = usePermissions();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -312,11 +420,17 @@ export default function Apps() {
     }
   };
 
-  // Filter apps by search query
-  const filteredApps = appsList.filter(app =>
-    t(app.nameKey).toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t(app.descriptionKey).toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Filter apps by search query, then drop apps that are hidden in
+  // the currently active company (consistent with sidebar behavior).
+  // To unhide, the admin switches active company to one where the app
+  // is visible and toggles it back from there.
+  const filteredApps = appsList.filter(app => {
+    if (isAppHiddenInActiveCompany(app.id)) return false;
+    return (
+      t(app.nameKey).toLowerCase().includes(searchQuery.toLowerCase()) ||
+      t(app.descriptionKey).toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  });
 
   // Check if user has permission for each app
   const appsWithPermission = useMemo(() => {
