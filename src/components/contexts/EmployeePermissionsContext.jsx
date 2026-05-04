@@ -104,6 +104,29 @@ export function EmployeePermissionsProvider({ children }) {
     }
   }, [isAuthenticated, user?.id, loadPermissions]);
 
+  // Re-fetch permissions when the tab regains focus or becomes visible.
+  // This means admin changes propagate within seconds instead of requiring
+  // the affected user to logout/login. Without this, a user could see a
+  // sidebar tab that was just revoked (or lose one that was just granted)
+  // and end up confused by the resulting 403s.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const onFocus = () => { loadPermissions(); };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        loadPermissions();
+      }
+    };
+
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [isAuthenticated, loadPermissions]);
+
   // Check if user has permission for a specific action on a module
   const hasPermission = useCallback((moduleId, action) => {
     // Admins have all permissions
