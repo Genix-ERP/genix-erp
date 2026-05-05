@@ -5,15 +5,15 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LabelWithHelp } from "@/components/ui/field-help";
-import { X, ChevronDown, ChevronUp, Clock } from "lucide-react";
+import { X } from "lucide-react";
 import { useTranslation } from "@/components/utils/translations";
 import { useAuth } from "@/components/contexts/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useCompany } from "@/components/contexts/CompanyContext";
 import apiClient from "@/api/client";
-import { leadsService } from "@/api/services/leads";
 import { formatPhoneInput, parsePhoneInput } from '@/utils/formatCurrency';
 import { pipelineStagesService } from "@/api/services/crm";
+import { Phone, CalendarDays, Mail, Bell } from "lucide-react";
 
 // English defaults — if name matches, show translation; otherwise show custom name
 const DEFAULT_STAGE_NAMES = {
@@ -35,8 +35,6 @@ export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
 
   const [users, setUsers] = useState([]);
   const [leadStages, setLeadStages] = useState([]);
-  const [auditLogs, setAuditLogs] = useState([]);
-  const [showHistory, setShowHistory] = useState(false);
 
   const [formData, setFormData] = useState({
     contact_name: lead?.contact_name || "",
@@ -45,9 +43,28 @@ export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
     phone: lead?.phone || "+998",
     status: lead?.status || "new",
     source: lead?.source || "website",
-    notes: lead?.notes || "",
+    // Notes always open empty — they're treated as a per-update
+    // comment, captured in the change-history audit log of THIS edit.
+    // Showing the previous note would imply it's the lead's "current
+    // note" which isn't the intent (and would trick users into editing
+    // an old comment instead of writing a fresh one for this change).
+    notes: "",
     assigned_to: lead?.assigned_to || user?.id || ""
   });
+
+  // Structured follow-up: a separate scheduled activity that fires a
+  // notification at the chosen time. All fields optional — if nothing
+  // is filled, no activity is created.
+  const [followup, setFollowup] = useState({
+    action_type: "call",      // call | meeting | email | follow_up
+    date: "",                 // YYYY-MM-DD
+    time: "",                 // HH:MM (24h)
+    comment: "",              // becomes activity.description
+  });
+
+  const handleFollowupChange = (field, value) => {
+    setFollowup(prev => ({ ...prev, [field]: value }));
+  };
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -77,12 +94,6 @@ export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
     fetchStages();
   }, [activeCompany?.id]);
 
-  useEffect(() => {
-    if (lead?.id) {
-      leadsService.getAuditLogs(lead.id).then(setAuditLogs).catch(() => {});
-    }
-  }, [lead?.id]);
-
   // Load pipeline stages for the status dropdown
   useEffect(() => {
     pipelineStagesService.list(companyId, 'lead')
@@ -90,28 +101,62 @@ export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
       .catch(() => {});
   }, [companyId]);
 
-  const fieldLabels = {
-    contact_name: t('contact_name'),
-    company_name: t('company_name'),
-    email: t('email'),
-    phone: t('phone'),
-    status: t('status'),
-    source: t('source'),
-    notes: t('notes'),
-    assigned_to: t('sales_person'),
-    expected_value: t('expected_value'),
-  };
-
-  const formatFieldValue = (field, value) => {
-    if (!value && value !== 0) return '—';
-    if (field === 'status') return t(value) || value;
-    if (field === 'source') return t(value) || value;
-    return String(value);
+  // Subjects shown in the activity list / notification title.
+  const ACTION_SUBJECT_PREFIX = {
+    call: t('action_call') || 'Call',
+    meeting: t('action_meeting') || 'Meeting',
+    email: t('action_email') || 'Email',
+    follow_up: t('action_other') || 'Follow-up',
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSave(formData);
+
+    // Build follow-up payload in two modes:
+    //   1. Date + time filled  → scheduled activity (call/meeting/email)
+    //      with start_datetime + reminder_datetime → notification fires.
+    //   2. Only comment filled → note-type activity with no datetime,
+    //      no reminder. Shows up in the detail modal as a plain note.
+    // If neither comment nor date/time is filled, we send nothing.
+    let followupPayload = null;
+    const hasSchedule = !!(followup.date && followup.time);
+    const hasComment = !!(followup.comment && followup.comment.trim());
+
+    if (hasSchedule) {
+      // Scheduled follow-up. Combine local date+time into an ISO
+      // string with the user's timezone offset so the backend stores
+      // the exact wall-clock moment the user picked.
+      const local = new Date(`${followup.date}T${followup.time}:00`);
+      if (!isNaN(local.getTime())) {
+        const isoDatetime = local.toISOString();
+        followupPayload = {
+          activity_type: followup.action_type,
+          subject: `${ACTION_SUBJECT_PREFIX[followup.action_type] || ''} ${formData.contact_name || formData.company_name || ''}`.trim(),
+          description: followup.comment || "",
+          start_datetime: isoDatetime,
+          // Reminder fires at the same moment as the scheduled activity
+          // unless we add a "remind X minutes before" control later.
+          reminder_datetime: isoDatetime,
+          assigned_to: formData.assigned_to || user?.id || "",
+          status: "planned",
+          priority: "medium",
+        };
+      }
+    } else if (hasComment) {
+      // Note-only path. activity_type='note' so the detail modal can
+      // visually distinguish it from scheduled follow-ups. No
+      // reminder_datetime → background worker won't pick it up.
+      followupPayload = {
+        activity_type: "note",
+        subject: `${t('action_note') || 'Note'} ${formData.contact_name || formData.company_name || ''}`.trim(),
+        description: followup.comment.trim(),
+        assigned_to: formData.assigned_to || user?.id || "",
+        status: "completed",  // notes don't need to be "done" — they just exist
+        priority: "low",
+      };
+    }
+
+    onSave(formData, followupPayload);
   };
 
   const handleChange = (field, value) => {
@@ -282,67 +327,118 @@ export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
               )}
             </div>
 
-            <div className="space-y-2">
-              <LabelWithHelp
-                htmlFor="notes"
-                label={t('notes')}
-                helpText={t('help_lead_notes')}
-              />
-              <Textarea
-                id="notes"
-                value={formData.notes}
-                onChange={(e) => handleChange("notes", e.target.value)}
-                placeholder={t('add_notes')}
-                rows={3}
-              />
+            {/* Schedule follow-up: a structured replacement for the
+                old free-text notes textarea. If the user fills in
+                date+time, a CRM activity is created on save and a
+                notification fires at that moment. The comment field
+                here is the activity's description, NOT the lead's
+                notes column. */}
+            <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                <Bell className="w-4 h-4 text-[var(--genix-blue)]" />
+                {t('schedule_followup') || 'Schedule follow-up'}
+                <span className="text-xs font-normal text-slate-500">
+                  ({t('optional') || 'optional'})
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <LabelWithHelp
+                    htmlFor="followup_action"
+                    label={t('action_type') || 'Action'}
+                    helpText={t('help_followup_action_type')}
+                  />
+                  <Select
+                    value={followup.action_type}
+                    onValueChange={(v) => handleFollowupChange('action_type', v)}
+                  >
+                    <SelectTrigger id="followup_action">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="call">
+                        <span className="flex items-center gap-2">
+                          <Phone className="w-3.5 h-3.5" />
+                          {t('action_call') || 'Call'}
+                        </span>
+                      </SelectItem>
+                      <SelectItem value="meeting">
+                        <span className="flex items-center gap-2">
+                          <CalendarDays className="w-3.5 h-3.5" />
+                          {t('action_meeting') || 'Meeting'}
+                        </span>
+                      </SelectItem>
+                      <SelectItem value="email">
+                        <span className="flex items-center gap-2">
+                          <Mail className="w-3.5 h-3.5" />
+                          {t('action_email') || 'Email'}
+                        </span>
+                      </SelectItem>
+                      <SelectItem value="follow_up">
+                        {t('action_other') || 'Other'}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1">
+                  <LabelWithHelp
+                    htmlFor="followup_date"
+                    label={t('followup_date') || 'Date'}
+                    helpText={t('help_followup_date')}
+                  />
+                  <Input
+                    id="followup_date"
+                    type="date"
+                    value={followup.date}
+                    onChange={(e) => handleFollowupChange('date', e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <LabelWithHelp
+                    htmlFor="followup_time"
+                    label={t('followup_time') || 'Time'}
+                    helpText={t('help_followup_time')}
+                  />
+                  <Input
+                    id="followup_time"
+                    type="time"
+                    value={followup.time}
+                    onChange={(e) => handleFollowupChange('time', e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <LabelWithHelp
+                  htmlFor="followup_comment"
+                  label={t('followup_comment') || 'Comment'}
+                  helpText={t('help_followup_comment')}
+                />
+                <Textarea
+                  id="followup_comment"
+                  value={followup.comment}
+                  onChange={(e) => handleFollowupChange('comment', e.target.value)}
+                  placeholder={t('followup_comment_placeholder') || 'What do you want to discuss?'}
+                  rows={2}
+                />
+              </div>
+
+              {followup.date && followup.time && (
+                <div className="text-xs text-slate-600 bg-white rounded px-3 py-2 border border-slate-200">
+                  {t('reminder_will_fire') || 'A reminder will fire on'}{' '}
+                  <span className="font-semibold">
+                    {new Date(`${followup.date}T${followup.time}:00`).toLocaleString(undefined, { hour12: false })}
+                  </span>
+                </div>
+              )}
             </div>
 
-            {/* Change History */}
-            {lead && auditLogs.length > 0 && (
-              <div className="border-t pt-4">
-                <button
-                  type="button"
-                  className="flex items-center gap-2 text-sm font-medium text-slate-700 hover:text-slate-900 w-full"
-                  onClick={() => setShowHistory(!showHistory)}
-                >
-                  <Clock className="w-4 h-4" />
-                  {t('change_history') || "O'zgarishlar tarixi"} ({auditLogs.length})
-                  {showHistory ? <ChevronUp className="w-4 h-4 ml-auto" /> : <ChevronDown className="w-4 h-4 ml-auto" />}
-                </button>
-                {showHistory && (
-                  <div className="mt-3 space-y-3 max-h-60 overflow-y-auto">
-                    {auditLogs.map((log) => {
-                      const oldVals = typeof log.old_values === 'string' ? JSON.parse(log.old_values || '{}') : (log.old_values || {});
-                      const newVals = typeof log.new_values === 'string' ? JSON.parse(log.new_values || '{}') : (log.new_values || {});
-                      const changedFields = Object.keys(newVals).filter(
-                        k => !['updated_at', 'id', 'company_id', 'tenant_id', 'created_at'].includes(k) && JSON.stringify(oldVals[k]) !== JSON.stringify(newVals[k])
-                      );
-                      if (changedFields.length === 0) return null;
-                      return (
-                        <div key={log.id} className="border rounded-lg p-3 bg-slate-50 text-sm">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="font-medium text-slate-800">{log.user_name || log.user_email}</span>
-                            <span className="text-xs text-slate-500">
-                              {new Date(log.created_at).toLocaleString()}
-                            </span>
-                          </div>
-                          <div className="space-y-1">
-                            {changedFields.map(field => (
-                              <div key={field} className="flex flex-wrap gap-1 text-xs">
-                                <span className="font-medium text-slate-600">{fieldLabels[field] || field}:</span>
-                                <span className="text-red-600 line-through">{formatFieldValue(field, oldVals[field])}</span>
-                                <span className="text-slate-400">&rarr;</span>
-                                <span className="text-green-600">{formatFieldValue(field, newVals[field])}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
+            {/* Change history was moved to the Lead Detail modal
+                (read-only view) so users see edit history before
+                making changes rather than after opening the editor. */}
 
             <div className="flex justify-end gap-3 pt-4">
               <Button type="button" variant="outline" onClick={onCancel}>
