@@ -361,7 +361,7 @@ export default function Notifications() {
                             <Badge variant="outline" className={getTypeColor(notification.type)}>
                               {getTypeLabel(notification.type)}
                             </Badge>
-                            <span>{new Date(notification.created_at).toLocaleString()}</span>
+                            <span>{new Date(notification.created_at).toLocaleString(undefined, { hour12: false })}</span>
                           </div>
                         </div>
 

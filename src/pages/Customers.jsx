@@ -58,6 +58,7 @@ import { useCompany } from "@/components/contexts/CompanyContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { pbxService, apiClient } from "@/api/services";
+import { activitiesService } from "@/api/services/crm";
 import { useToast } from "@/components/ui/use-toast";
 import { useSales } from "@/components/contexts/SalesContext";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
@@ -884,13 +885,49 @@ export default function Customers() {
     setShowLeadForm(true);
   };
 
-  const handleLeadSave = async (leadData) => {
+  const handleLeadSave = async (leadData, followupPayload) => {
     try {
+      // Save the lead first so we have an ID for the activity link
+      // (especially important when creating a brand-new lead).
+      let savedLead;
       if (editingLead) {
-        await updateLead(editingLead.id, leadData);
+        savedLead = await updateLead(editingLead.id, leadData);
+        // updateLead may not return the entity in some implementations.
+        if (!savedLead || !savedLead.id) savedLead = { ...editingLead, ...leadData };
       } else {
-        await createLead(leadData);
+        savedLead = await createLead(leadData);
       }
+
+      // If the user scheduled a follow-up, create the activity now.
+      // We swallow individual activity errors with a toast so the
+      // lead save itself isn't rolled back — the lead is the source
+      // of truth, the reminder is a nice-to-have layered on top.
+      if (followupPayload && savedLead?.id) {
+        try {
+          await activitiesService.create({
+            ...followupPayload,
+            lead_id: savedLead.id,
+          });
+          toast({
+            title: t('followup_scheduled') || 'Follow-up scheduled',
+            description:
+              followupPayload.start_datetime
+                ? new Date(followupPayload.start_datetime).toLocaleString(undefined, { hour12: false })
+                : '',
+          });
+        } catch (activityErr) {
+          console.warn('Failed to create follow-up activity:', activityErr);
+          toast({
+            variant: 'destructive',
+            title: t('followup_failed') || 'Could not save follow-up',
+            description:
+              activityErr.response?.data?.error?.message ||
+              activityErr.message ||
+              '',
+          });
+        }
+      }
+
       setShowLeadForm(false);
       setEditingLead(null);
     } catch (error) {

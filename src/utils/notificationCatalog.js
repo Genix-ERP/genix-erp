@@ -169,6 +169,19 @@ export const NOTIFICATION_TEMPLATES = {
     bodyKey: 'notif_reconciliation_response_body',
     fields: ['partner_name', 'response'],
   },
+  // ── CRM ──────────────────────────────────────────────────────────────
+  // Reminder fired by the activity-reminder background worker. The
+  // `activity_type` field ('call', 'meeting', 'email', 'follow_up') is
+  // mapped via t() to the user-facing label so the title is fully
+  // translated regardless of the language the activity was created in.
+  crm_activity_reminder: {
+    titleKey: 'notif_crm_activity_reminder_title',
+    bodyKey: 'notif_crm_activity_reminder_body',
+    fields: ['activity_type'],
+    translate: {
+      activity_type: (v) => v === 'follow_up' ? 'action_other' : `action_${v}`,
+    },
+  },
 };
 
 // The API ships `data` as a JSON string (ListNotifications does `data::text`).
@@ -194,11 +207,21 @@ function formatValue(value, kind, language) {
 
 // `template` is a translated string like "Mahsulot {product_name} kam qoldi
 // ({available} qoldi)". We replace each `{field}` with the matching value
-// from `data`, applying the optional formatter.
-function interpolate(template, data, formatters = {}, language = 'en') {
+// from `data`, applying the optional formatter or the optional translation
+// helper. `translate[field]` is a function that takes the raw value and
+// returns a translation key — useful when the value itself is an enum
+// like activity_type='call' that we want rendered as a localized label.
+function interpolate(template, data, formatters = {}, language = 'en', translate = {}, t = null) {
   return String(template).replace(/\{(\w+)\}/g, (_, key) => {
     const raw = data[key];
     if (raw === undefined || raw === null || raw === '') return '';
+    if (translate[key] && typeof t === 'function') {
+      const tkey = translate[key](raw);
+      const translated = t(tkey);
+      // If the dictionary doesn't have the key, t() returns the key
+      // itself — fall back to the raw value rather than show "action_xxx".
+      if (translated && translated !== tkey) return translated;
+    }
     return formatValue(raw, formatters[key], language);
   });
 }
@@ -234,7 +257,7 @@ export function renderNotification(n, t, language) {
   if (titleTemplate === tmpl.titleKey || bodyTemplate === tmpl.bodyKey) return fallback;
 
   return {
-    title: interpolate(titleTemplate, data, tmpl.format, language),
-    body: interpolate(bodyTemplate, data, tmpl.format, language),
+    title: interpolate(titleTemplate, data, tmpl.format, language, tmpl.translate, t),
+    body: interpolate(bodyTemplate, data, tmpl.format, language, tmpl.translate, t),
   };
 }
