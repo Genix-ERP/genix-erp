@@ -7949,6 +7949,20 @@ export const translations = {
     "total_qty_required": "Total quantity is required",
     "uom_required": "Unit of measure is required",
     "work_qty": "Work qty",
+    // Apps page — per-organization visibility (migration 386)
+    "visibility_visible_all_companies": "Visible in all companies",
+    "visibility_hidden_in_companies": "Hidden in {n} companies",
+    "manage_visibility": "Manage",
+    "visibility_modal_title": "Visibility: {name}",
+    "visibility_modal_help": "Checked companies show this app in their sidebar. Unchecking hides it for that company (the app stays installed).",
+    "no_companies_yet": "No companies",
+    // Products → Import modal
+    "products_import_title": "Import products",
+    "products_import_description": "The Excel (.xlsx) file must have the following columns. Download the template, fill it in, then upload.",
+    "products_import_expected_columns": "Expected columns",
+    "products_import_help_note": "* — required field. If a category does not exist it will be auto-created. Existing products with the same name are linked to the active company instead of being duplicated.",
+    "products_import_download_template": "Download template",
+    "products_import_choose_and_upload": "Choose file and upload",
   },
 
   uz: {
@@ -16146,6 +16160,20 @@ export const translations = {
     "total_qty_required": "Jami miqdorni kiriting",
     "uom_required": "O'lchov birligini kiriting",
     "work_qty": "Ish hajmi",
+    // Apps sahifasi — kompaniya boʻyicha koʻrinish (migration 386)
+    "visibility_visible_all_companies": "Barcha kompaniyalarda koʻrinadi",
+    "visibility_hidden_in_companies": "{n} ta kompaniyada yashirilgan",
+    "manage_visibility": "Boshqarish",
+    "visibility_modal_title": "Koʻrinish: {name}",
+    "visibility_modal_help": "Belgilangan kompaniyalarda ushbu ilova sidebarda koʻrinadi. Belgini olib tashlasangiz, oʻsha kompaniyada yashiriladi (ilova oʻrnatilgan boʻlib qoladi).",
+    "no_companies_yet": "Kompaniyalar yoʻq",
+    // Mahsulotlar → Import modali
+    "products_import_title": "Mahsulotlarni import qilish",
+    "products_import_description": "Excel (.xlsx) faylda quyidagi ustunlar boʻlishi kerak. Andozani yuklab oling, toʻldiring va keyin yuklang.",
+    "products_import_expected_columns": "Kutilgan ustunlar",
+    "products_import_help_note": "* — majburiy maydon. Kategoriya nomi mavjud boʻlmasa, avtomatik yaratiladi. Bir xil nomli mahsulot allaqachon mavjud boʻlsa, dublikat yaratilmaydi — joriy kompaniyaga ulanadi.",
+    "products_import_download_template": "Andozani yuklab olish",
+    "products_import_choose_and_upload": "Faylni tanlash va yuklash",
   },
 
   ru: {
@@ -24423,6 +24451,20 @@ export const translations = {
     "total_qty_required": "Введите общий объём",
     "uom_required": "Введите единицу измерения",
     "work_qty": "Объём работ",
+    // Страница Apps — видимость по компаниям (миграция 386)
+    "visibility_visible_all_companies": "Видно во всех компаниях",
+    "visibility_hidden_in_companies": "Скрыто в {n} компаниях",
+    "manage_visibility": "Управление",
+    "visibility_modal_title": "Видимость: {name}",
+    "visibility_modal_help": "В отмеченных компаниях это приложение отображается в боковом меню. Снимите галочку, чтобы скрыть его в этой компании (само приложение остаётся установленным).",
+    "no_companies_yet": "Нет компаний",
+    // Товары → Модал импорта
+    "products_import_title": "Импорт товаров",
+    "products_import_description": "Файл Excel (.xlsx) должен содержать следующие столбцы. Скачайте шаблон, заполните и загрузите.",
+    "products_import_expected_columns": "Ожидаемые столбцы",
+    "products_import_help_note": "* — обязательное поле. Если категория не существует — она будет создана автоматически. Если товар с таким именем уже существует, дубликат не создаётся — он привязывается к активной компании.",
+    "products_import_download_template": "Скачать шаблон",
+    "products_import_choose_and_upload": "Выбрать файл и загрузить",
   }
 };
 

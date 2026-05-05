@@ -21,6 +21,18 @@ export const inventoryService = {
     return response.data.data;
   },
 
+  // Bulk create — used by the import flow on Products.jsx.
+  // Sends an entire xlsx in one request. Response shape:
+  //   { created, skipped, failed, total, outcomes: [{row, name, status, reason, id}] }
+  // The caller can show a summary + list of skipped/failed rows.
+  async bulkCreateProducts({ products, organization_ids } = {}) {
+    const response = await apiClient.post('/products/bulk', {
+      products: products || [],
+      organization_ids: organization_ids || [],
+    });
+    return response.data.data;
+  },
+
   async updateProduct(id, data) {
     const response = await apiClient.put(`/products/${id}`, data);
     return response.data.data;

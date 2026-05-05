@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,8 @@ import {
   Plus, Search, Package, Pencil, Trash2, Eye, DollarSign,
   Tag, Barcode, Box, Boxes, Filter, MoreHorizontal, AlertCircle,
   CheckCircle, XCircle, ShoppingCart, Archive, Upload, Download, History,
-  Layers, Printer, HelpCircle, Truck, RefreshCw, Scale, ChevronDown, ChevronLeft, ChevronRight, ShieldCheck
+  Layers, Printer, HelpCircle, Truck, RefreshCw, Scale, ChevronDown, ChevronLeft, ChevronRight, ShieldCheck,
+  Loader2
 } from "lucide-react";
 import {
   Tooltip,
@@ -16,7 +17,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import ExcelJS from "exceljs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -56,6 +58,13 @@ import {
   ImportExportButtons,
   useAuditTrail,
 } from '@/components/shared';
+// parseSpreadsheetFile lets us bypass the ImportModal for product import.
+// The Radix Dialog used by ImportModal closes itself when the OS file picker
+// returns (its outside-interaction detection misfires on file pickers in
+// macOS), tearing down the input before its change handler can run. By
+// running the file input directly on the products page we skip the dialog
+// entirely.
+import { parseSpreadsheetFile } from '@/components/shared/ImportExport';
 
 // ── EAN-13 Barcode Utilities ──────────────────────────────────────────────────
 const EAN13_L = ['0001101','0011001','0010011','0111101','0100011','0110001','0101111','0111011','0110111','0001011'];
@@ -169,7 +178,8 @@ export default function Products() {
     updateCategory,
     deleteCategory,
     isLoading,
-    isLotTrackingEnabled
+    isLotTrackingEnabled,
+    refreshData: refreshInventoryData,
   } = useInventory();
   const { accounts } = useFinancials();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
@@ -223,6 +233,23 @@ export default function Products() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  // Confirmation modal that appears before the file picker — gives users
+  // a "Download Template" button so they can grab the expected column
+  // shape (Nomi / Shtrix kod / Kategoriya / Teglar / Tan narxi / Sotish
+  // narxi) and a "Choose File" button that triggers the body-level
+  // singleton input.
+  const [showImportConfirmModal, setShowImportConfirmModal] = useState(false);
+  // Direct file-input ref for product import. The ref points at the
+  // wrapper <div>; the actual <input type=file> is mounted into it via
+  // the useEffect below using vanilla DOM APIs (addEventListener, NOT
+  // React onChange). Reason: React's onChange on a file input was
+  // mysteriously dropping events in this app — verified by the user's
+  // browser-level test where a `document.createElement('input')` with
+  // `inp.onchange = ...` worked perfectly while the same flow through
+  // a JSX `<input onChange={...}>` did not fire. By staying on the DOM
+  // side for the listener we guarantee the change event reaches us.
+  const productImportFileRef = useRef(null);
+  const [isProductImporting, setIsProductImporting] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showCategoryImportModal, setShowCategoryImportModal] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
@@ -398,37 +425,351 @@ export default function Products() {
   ];
 
   const handleImport = async (data) => {
-    for (const row of data) {
-      if (!row.name || !row.name.toString().trim()) continue;
-      const generatedCode = row.barcode || row.name.toString().toUpperCase().replace(/\s+/g, '-').substring(0, 50);
+    // Build the payload for the bulk endpoint. The backend handles
+    // category resolution by name, code auto-generation, and per-row
+    // duplicate detection — we just pass through what's in the sheet.
+    // (Old behaviour: 690 sequential `await createProduct(...)` calls,
+    // which froze the modal for ~3 minutes and bailed on the first
+    // failure with one terse error.)
+    // eslint-disable-next-line no-console
+    console.log('[product-import] handleImport called', {
+      rows: Array.isArray(data) ? data.length : 'not-array',
+      firstRow: Array.isArray(data) ? data[0] : null,
+      activeCompanyId: activeCompany?.id || null,
+    });
+    const products = (data || [])
+      .filter(row => row && row.name != null && String(row.name).trim() !== '')
+      .map(row => {
+        let categoryId = '';
+        if (row.category) {
+          const cat = categories.find(c => c.name?.toLowerCase() === row.category?.toString().toLowerCase());
+          if (cat) categoryId = cat.id;
+        }
+        return {
+          name: String(row.name).trim(),
+          // Caller-supplied barcode wins; otherwise the server auto-slugs
+          // a code from the name.
+          barcode: row.barcode != null ? String(row.barcode).trim() : '',
+          category_id: categoryId || undefined,
+          // Pass the raw category string too so the backend can match by
+          // case-insensitive name even if the frontend cache is stale.
+          category: row.category != null ? String(row.category).trim() : undefined,
+          tags: row.tags ? String(row.tags).split(',').map(t => t.trim()).filter(Boolean) : [],
+          type: 'product',
+          cost_price: parseFloat(row.cost_price) || 0,
+          list_price: parseFloat(row.list_price) || 0,
+          is_active: true,
+        };
+      });
 
-      // Resolve category by name (case-insensitive)
-      let categoryId = '';
-      if (row.category) {
-        const cat = categories.find(c => c.name?.toLowerCase() === row.category?.toString().toLowerCase());
-        if (cat) categoryId = cat.id;
+    // eslint-disable-next-line no-console
+    console.log('[product-import] built products payload', {
+      count: products.length,
+      firstThree: products.slice(0, 3),
+    });
+
+    if (products.length === 0) {
+      // eslint-disable-next-line no-console
+      console.warn('[product-import] aborting: products array is empty after mapping. ' +
+        'This usually means the column mapping in the modal didn\'t map "Nomi" → name. ' +
+        'Raw data sample:', (data || []).slice(0, 2));
+      toast({ title: 'Import: 0 rows', description: 'Faylda mahsulot topilmadi (mapping bo‘sh bo‘lishi mumkin)' });
+      return;
+    }
+
+    // eslint-disable-next-line no-console
+    console.log('[product-import] POST /products/bulk →', {
+      productCount: products.length,
+      organization_ids: activeCompany?.id ? [activeCompany.id] : [],
+    });
+
+    let result;
+    try {
+      result = await inventoryService.bulkCreateProducts({
+        products,
+        organization_ids: activeCompany?.id ? [activeCompany.id] : [],
+      });
+      // eslint-disable-next-line no-console
+      console.log('[product-import] bulk result', result);
+    } catch (err) {
+      // Network or 5xx — surface a real message instead of axios's
+      // generic "Request failed with status code 500".
+      console.error('[product-import] Bulk import failed:', err);
+      console.error('[product-import] response data:', err?.response?.data);
+      console.error('[product-import] response status:', err?.response?.status);
+      const detail = err?.response?.data?.message || err?.message || String(err);
+      throw new Error(detail);
+    }
+
+    const { created = 0, skipped = 0, failed = 0, total = products.length, outcomes = [] } = result || {};
+
+    // Refresh inventory state so the new products appear in the list
+    // without a page reload.
+    if (typeof refreshInventoryData === 'function') {
+      try { await refreshInventoryData(); } catch (_) { /* non-fatal */ }
+    }
+
+    addAuditLog('create', 'batch',
+      `${created}/${total} products imported (skipped: ${skipped}, failed: ${failed})`);
+
+    // Surface a summary. If anything was skipped or failed, log the
+    // per-row details so the admin can investigate.
+    const summaryTitle = `Import: ${created} created · ${skipped} skipped · ${failed} failed`;
+    if (skipped > 0 || failed > 0) {
+      const issues = outcomes
+        .filter(o => o.status === 'skipped' || o.status === 'failed')
+        .slice(0, 20)
+        .map(o => `Row ${o.row} (${o.name}): ${o.status}${o.reason ? ' — ' + o.reason : ''}`)
+        .join('\n');
+      console.warn('[Product import] outcome summary:\n' + issues);
+      toast({
+        title: summaryTitle,
+        description: issues || undefined,
+        variant: failed > 0 ? 'destructive' : 'default',
+      });
+    } else {
+      toast({ title: summaryTitle });
+    }
+  };
+
+  // Direct (no-modal) product import. Click flow:
+  //   1. User clicks the "Import" button → triggers the hidden file input.
+  //   2. Native file picker opens; user selects xlsx/csv.
+  //   3. We parse here, build the bulk payload, POST /products/bulk,
+  //      refresh the list, and toast a summary.
+  // This deliberately skips ImportModal because Radix Dialog kept eating
+  // the input's change event when the file picker closed.
+  // Generate a styled template xlsx with the expected column headers
+  // and trigger a browser download. Mirrors the styling of the
+  // ImportExport `downloadTemplate` so it visually matches the other
+  // import templates in the app.
+  const downloadProductImportTemplate = async () => {
+    const cols = [
+      { label: 'Nomi', required: true,  width: 32 },
+      { label: 'Shtrix kod', required: false, width: 18 },
+      { label: 'Kategoriya', required: false, width: 22 },
+      { label: 'Teglar', required: false, width: 22 },
+      { label: 'Tan narxi', required: false, width: 14 },
+      { label: 'Sotish narxi', required: false, width: 14 },
+    ];
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'GenixERP';
+    wb.created = new Date();
+    const ws = wb.addWorksheet('Mahsulotlar');
+
+    // Header row — bold white text on blue, centered, with a thin
+    // bottom border.
+    const headerRow = ws.addRow(cols.map(c => c.required ? `${c.label} *` : c.label));
+    headerRow.height = 28;
+    headerRow.eachCell((cell) => {
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
+      cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+      cell.border = {
+        top:    { style: 'thin', color: { argb: 'FF2563EB' } },
+        bottom: { style: 'thin', color: { argb: 'FF2563EB' } },
+        left:   { style: 'thin', color: { argb: 'FF2563EB' } },
+        right:  { style: 'thin', color: { argb: 'FF2563EB' } },
+      };
+    });
+
+    // Sample row to make the expected shape obvious.
+    const sample = ws.addRow([
+      'Vешалка прешебочный никель простая',
+      '4780000000123',
+      'Xomashyo',
+      'mebel, fabrika',
+      3782,
+      4500,
+    ]);
+    sample.height = 22;
+    sample.eachCell((cell) => {
+      cell.font = { italic: true, color: { argb: 'FF94A3B8' }, size: 10 };
+      cell.alignment = { vertical: 'middle' };
+      cell.border = { bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } } };
+    });
+
+    // Note row below the sample explaining required + auto-create.
+    const noteRow = ws.addRow([
+      '* — Majburiy. Mavjud bo‘lmagan kategoriya avtomatik yaratiladi. Bir xil nomli mahsulot mavjud bo‘lsa, dublikat yaratilmaydi (joriy kompaniyaga ulanadi).',
+    ]);
+    ws.mergeCells(`A${noteRow.number}:F${noteRow.number}`);
+    const note = ws.getCell(`A${noteRow.number}`);
+    note.font = { italic: true, color: { argb: 'FFEF4444' }, size: 9 };
+    note.alignment = { vertical: 'middle', wrapText: true };
+    noteRow.height = 36;
+
+    // Apply column widths.
+    cols.forEach((c, i) => { ws.getColumn(i + 1).width = c.width; });
+
+    // Freeze the header row so it stays visible when the user scrolls.
+    ws.views = [{ state: 'frozen', ySplit: 1 }];
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'Mahsulotlar_template.xlsx';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  const handleDirectProductImportFile = async (e) => {
+    const file = e.target.files?.[0];
+    // Reset the input so picking the same file twice still fires onChange.
+    if (e.target) e.target.value = '';
+    if (!file) return;
+
+    setIsProductImporting(true);
+    try {
+      const parsed = await parseSpreadsheetFile(file);
+      // eslint-disable-next-line no-console
+      console.log('[product-import] parsed', { headers: parsed.headers, rows: parsed.rows?.length });
+
+      // Map raw spreadsheet columns to our backend fields.
+      const headerKeyMap = {
+        nomi: 'name',
+        name: 'name',
+        'shtrix kod': 'barcode',
+        barcode: 'barcode',
+        kategoriya: 'category',
+        category: 'category',
+        teglar: 'tags',
+        tags: 'tags',
+        'tan narxi': 'cost_price',
+        cost_price: 'cost_price',
+        'sotish narxi': 'list_price',
+        list_price: 'list_price',
+      };
+      const mapping = {};
+      (parsed.headers || []).forEach(h => {
+        const norm = String(h || '').trim().toLowerCase();
+        if (headerKeyMap[norm]) mapping[h] = headerKeyMap[norm];
+      });
+
+      const products = (parsed.rows || [])
+        .map(raw => {
+          const row = {};
+          Object.entries(mapping).forEach(([h, key]) => { row[key] = raw[h]; });
+          return row;
+        })
+        .filter(r => r && r.name != null && String(r.name).trim() !== '')
+        .map(r => {
+          let categoryId = '';
+          if (r.category) {
+            const cat = categories.find(c => c.name?.toLowerCase() === String(r.category).toLowerCase());
+            if (cat) categoryId = cat.id;
+          }
+          return {
+            name: String(r.name).trim(),
+            barcode: r.barcode != null ? String(r.barcode).trim() : '',
+            category_id: categoryId || undefined,
+            category: r.category != null ? String(r.category).trim() : undefined,
+            tags: r.tags ? String(r.tags).split(',').map(t => t.trim()).filter(Boolean) : [],
+            type: 'product',
+            cost_price: parseFloat(r.cost_price) || 0,
+            list_price: parseFloat(r.list_price) || 0,
+            is_active: true,
+          };
+        });
+
+      if (products.length === 0) {
+        toast({ title: 'Import: 0 rows', description: 'Faylda mahsulot topilmadi (kolonkalar mos kelmadi)' });
+        return;
       }
 
-      const productData = {
-        name: row.name,
-        code: generatedCode,
-        barcode: row.barcode || '',
-        category_id: categoryId || undefined,
-        tags: row.tags ? row.tags.split(',').map(t => t.trim()) : [],
-        type: 'product',
-        cost_price: parseFloat(row.cost_price) || 0,
-        list_price: parseFloat(row.list_price) || 0,
-        is_stockable: true,
-        track_inventory: true,
-        is_purchasable: true,
-        is_sellable: true,
-        is_active: true,
+      const result = await inventoryService.bulkCreateProducts({
+        products,
         organization_ids: activeCompany?.id ? [activeCompany.id] : [],
-      };
-      await createProduct(productData);
+      });
+
+      const { created = 0, skipped = 0, failed = 0, total = products.length, outcomes = [] } = result || {};
+
+      if (typeof refreshInventoryData === 'function') {
+        try { await refreshInventoryData(); } catch (_) { /* non-fatal */ }
+      }
+      addAuditLog('create', 'batch',
+        `${created}/${total} products imported (skipped: ${skipped}, failed: ${failed})`);
+
+      const summaryTitle = `Import: ${created} created · ${skipped} skipped · ${failed} failed`;
+      if (skipped > 0 || failed > 0) {
+        const issues = outcomes
+          .filter(o => o.status === 'skipped' || o.status === 'failed')
+          .slice(0, 20)
+          .map(o => `Row ${o.row} (${o.name}): ${o.status}${o.reason ? ' — ' + o.reason : ''}`)
+          .join('\n');
+        console.warn('[product-import] outcome summary:\n' + issues);
+        toast({
+          title: summaryTitle,
+          description: issues || undefined,
+          variant: failed > 0 ? 'destructive' : 'default',
+        });
+      } else {
+        toast({ title: summaryTitle });
+      }
+    } catch (err) {
+      console.error('[product-import] failed:', err);
+      const detail = err?.response?.data?.message || err?.message || String(err);
+      toast({
+        title: 'Import error',
+        description: detail,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsProductImporting(false);
     }
-    addAuditLog('create', 'batch', `${data.length} products imported`);
   };
+
+  // Mount the file input on <body>, NOT inside the React tree.
+  // Reason: the user's Products component is being unmounted/remounted
+  // by something upstream (verified via window.__importDebug — multiple
+  // mount/cleanup cycles after page load). Keeping the input alive
+  // across those remounts means clicking it from the toolbar always has
+  // a working <input>, regardless of what React does to its tree.
+  // We attach the change listener once at app-level on the singleton
+  // input. The "Import" button just .click()s it.
+  // Hand the LATEST handler closure to a window-level slot every render.
+  // The body-attached singleton input's listener (bound once per page)
+  // reads from this slot, so it always invokes the freshest closure
+  // even after the React component unmounts/remounts.
+  useEffect(() => {
+    window.__productImportHandler = handleDirectProductImportFile;
+  });
+
+  // One-time setup: ensure a body-attached file input exists and has a
+  // change listener bound exactly once per page lifecycle. We CAN'T
+  // re-bind the listener on each component mount because the parent
+  // tree cycles unmount→mount and the cleanup would remove the listener
+  // *during* the open OS file picker — when the user then picks a file
+  // and the change event fires, there's no handler attached. By binding
+  // once and routing through `window.__productImportHandler`, the
+  // listener survives any number of React remounts.
+  useEffect(() => {
+    let input = document.getElementById('genixerp-product-import-input-singleton');
+    if (!input) {
+      input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.xlsx,.xls,.csv';
+      input.id = 'genixerp-product-import-input-singleton';
+      document.body.appendChild(input);
+    }
+    // Always re-apply style (overwrites any stale pointer-events:none
+    // from older versions of this code).
+    input.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;';
+    productImportFileRef.current = input;
+
+    if (input.dataset.bound !== 'true') {
+      input.addEventListener('change', (e) => {
+        const handler = window.__productImportHandler;
+        if (handler) handler(e);
+      });
+      input.dataset.bound = 'true';
+    }
+    // Intentionally NO cleanup — we don't want to detach the listener
+    // when the React component unmounts. The input + listener live
+    // for the whole page lifecycle.
+  }, []);
 
   const categoryImportColumns = [
     { key: 'name', label: 'Nomi', required: true },
@@ -1398,8 +1739,22 @@ export default function Products() {
                   <SelectItem value="inactive">{t('inactive')}</SelectItem>
                 </SelectContent>
               </Select>
+              {/* Import button — opens a small confirm modal that lets
+                  the user download the template first. Picking a file
+                  inside the modal triggers the body-attached singleton
+                  <input type="file"> (see useEffect above). */}
+              <button
+                type="button"
+                onClick={() => setShowImportConfirmModal(true)}
+                disabled={isProductImporting}
+                className="inline-flex items-center gap-2 h-9 px-3 text-sm font-medium border border-input bg-background rounded-md cursor-pointer hover:bg-accent hover:text-accent-foreground transition-colors disabled:opacity-50"
+              >
+                <Download className="w-4 h-4" />
+                {t('import') || 'Import'}
+                {isProductImporting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              </button>
+              {/* Keep the export button using the original component */}
               <ImportExportButtons
-                onImport={() => setShowImportModal(true)}
                 onExport={() => setShowExportModal(true)}
               />
               {canCreate(MODULES.INVENTORY) && (
@@ -3636,7 +3991,78 @@ export default function Products() {
         </DialogContent>
       </Dialog>
 
-      {/* Import Modal */}
+      {/* Product Import Confirm Modal — opens before the file picker.
+          Lets the user download the template + see the expected columns
+          before they pick a file. The file picker itself is the body-
+          attached singleton <input type="file"> mounted by the
+          useEffect above; clicking "Choose file" .click()s that input
+          (which is OUTSIDE the React tree, so this dialog can mount /
+          unmount freely without destroying it). */}
+      <Dialog open={showImportConfirmModal} onOpenChange={setShowImportConfirmModal}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Upload className="w-5 h-5" />
+              {t('products_import_title')}
+            </DialogTitle>
+            <DialogDescription className="text-sm text-slate-500">
+              {t('products_import_description')}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
+            <div className="font-medium text-slate-800 mb-2">
+              {t('products_import_expected_columns')}:
+            </div>
+            {/* The column header names (Nomi, Shtrix kod, ...) are the
+                actual literal strings the import-parser matches against
+                the spreadsheet headers, so they're intentionally NOT
+                translated — they have to match the xlsx file. */}
+            <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-slate-700 text-xs">
+              <li><span className="font-semibold">Nomi</span> <span className="text-red-500">*</span></li>
+              <li><span className="font-semibold">Shtrix kod</span></li>
+              <li><span className="font-semibold">Kategoriya</span></li>
+              <li><span className="font-semibold">Teglar</span></li>
+              <li><span className="font-semibold">Tan narxi</span></li>
+              <li><span className="font-semibold">Sotish narxi</span></li>
+            </ul>
+            <div className="mt-3 text-xs text-slate-500 leading-relaxed">
+              {t('products_import_help_note')}
+            </div>
+          </div>
+
+          <DialogFooter className="flex flex-col sm:flex-row gap-2 sm:gap-2">
+            <Button
+              variant="outline"
+              type="button"
+              onClick={downloadProductImportTemplate}
+              className="gap-2"
+            >
+              <Download className="w-4 h-4" />
+              {t('products_import_download_template')}
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                // Trigger the file picker FIRST, synchronously inside
+                // the user click handler — Chrome's transient user
+                // activation must still be active or it'll silently
+                // refuse to open the OS file picker. THEN close the
+                // modal.
+                productImportFileRef.current?.click();
+                setShowImportConfirmModal(false);
+              }}
+              disabled={isProductImporting}
+              className="gap-2 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90"
+            >
+              <Upload className="w-4 h-4" />
+              {t('products_import_choose_and_upload')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Import Modal (legacy — kept for code references; not opened) */}
       <ImportModal
         open={showImportModal}
         onClose={() => setShowImportModal(false)}
@@ -3714,7 +4140,9 @@ export default function Products() {
                       <SelectContent>
                         <SelectItem value="none">— {t('none')} —</SelectItem>
                         {accounts.map(acc => (
-                          <SelectItem key={acc.id} value={acc.id}>{acc.code} - {acc.name}</SelectItem>
+                          <SelectItem key={acc.id} value={acc.id}>
+                            {acc.code} - {language === 'ru' && acc.name_ru ? acc.name_ru : language === 'en' && acc.name_en ? acc.name_en : acc.name_uz || acc.name}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -3886,7 +4314,9 @@ export default function Products() {
                       <SelectContent>
                         <SelectItem value="none">— {t('none')} —</SelectItem>
                         {accounts.map(acc => (
-                          <SelectItem key={acc.id} value={acc.id}>{acc.code} - {acc.name}</SelectItem>
+                          <SelectItem key={acc.id} value={acc.id}>
+                            {acc.code} - {language === 'ru' && acc.name_ru ? acc.name_ru : language === 'en' && acc.name_en ? acc.name_en : acc.name_uz || acc.name}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
