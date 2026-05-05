@@ -300,10 +300,10 @@ const AppCard = ({ app, isInstalled, onAction, isLoading, hasPermission }) => {
                   )}
                   <span>
                     {hiddenCount > 0
-                      ? `${hiddenCount} ta kompaniyada yashirilgan`
-                      : 'Barcha kompaniyalarda koʻrinadi'}
+                      ? t('visibility_hidden_in_companies').replace('{n}', String(hiddenCount))
+                      : t('visibility_visible_all_companies')}
                   </span>
-                  <span className="underline ml-1">Boshqarish</span>
+                  <span className="underline ml-1">{t('manage_visibility')}</span>
                 </button>
               )}
             </div>
@@ -343,10 +343,10 @@ const AppCard = ({ app, isInstalled, onAction, isLoading, hasPermission }) => {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {`Koʻrinish: ${t(app.nameKey)}`}
+              {t('visibility_modal_title').replace('{name}', t(app.nameKey))}
             </DialogTitle>
             <DialogDescription className="text-xs text-slate-500">
-              Belgilangan kompaniyalarda ushbu ilova sidebarda koʻrinadi. Belgini olib tashlasangiz, oʻsha kompaniyada yashiriladi (ilova oʻrnatilgan boʻlib qoladi).
+              {t('visibility_modal_help')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
@@ -376,12 +376,12 @@ const AppCard = ({ app, isInstalled, onAction, isLoading, hasPermission }) => {
             })}
             {(!companies || companies.length === 0) && (
               <div className="text-sm text-slate-500 px-2 py-4 text-center">
-                Kompaniyalar yoʻq
+                {t('no_companies_yet')}
               </div>
             )}
           </div>
           <DialogFooter>
-            <Button onClick={() => setVisibilityOpen(false)}>Yopish</Button>
+            <Button onClick={() => setVisibilityOpen(false)}>{t('close')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

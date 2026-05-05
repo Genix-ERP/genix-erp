@@ -617,7 +617,10 @@ export function InventoryProvider({ children }) {
       if (isAvailable) {
         try {
           const [productsData, categoriesData, warehousesData, inventoryData, movementsData] = await Promise.all([
-            inventoryService.listProducts(),
+            // Pass a high limit so dashboard summary stats (Active /
+            // Stockable / Low Stock) compute over the full product set
+            // instead of just the first page (server default = 20).
+            inventoryService.listProducts({ limit: 5000 }),
             inventoryService.listCategories(),
             inventoryService.listWarehouses(),
             inventoryService.listInventory({ limit: 10000 }),
