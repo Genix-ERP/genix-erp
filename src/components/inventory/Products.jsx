@@ -1872,7 +1872,7 @@ export default function Products() {
                             <div className="flex flex-col items-end">
                               <span className="font-medium text-slate-900 tabular-nums">
                                 {currentStock}
-                                {product.unit_code ? ` ${product.unit_code}` : ''}
+                                {product.unit_name ? ` (${product.unit_name})` : product.unit_code ? ` (${product.unit_code})` : ''}
                               </span>
                               {stockStatus && (
                                 <Badge className={`${stockStatus.color} text-xs mt-1`}>
