@@ -83,6 +83,7 @@ import { useModules } from "@/components/contexts/ModulesContext";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { useEmployeePermissions } from "@/components/contexts/EmployeePermissionsContext";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import apiClient from "@/api/client";
 
 // Navigation link that closes mobile sidebar on click
 function NavLink({ item, isActive }) {
@@ -161,62 +162,30 @@ function LayoutContent({ children, currentPageName }) {
     };
   }, []);
 
-  // Poll unread notification count every 30s
+  // Poll unread notification count every 30s. Uses the shared axios
+  // client so the baseURL (VITE_API_URL) and auth/tenant headers come
+  // from the same interceptors as the rest of the app — avoids leaking
+  // a stray localhost:8080 fallback into production builds.
   const fetchUnreadCount = React.useCallback(async () => {
+    if (!localStorage.getItem('accessToken')) return;
     try {
-      const token = localStorage.getItem('accessToken');
-      const tenantId = localStorage.getItem('tenantId');
-      const orgId = localStorage.getItem('organizationId');
-      if (!token) return;
-      const apiBase = import.meta.env.VITE_API_URL || '/api/v1';
-      const res = await fetch(`${apiBase}/notifications/unread-count`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || '',
-          'X-Organization-ID': orgId || '',
-        },
-      });
-      if (res.ok) {
-        const json = await res.json();
-        setUnreadCount(json.data?.count || 0);
-      }
+      const res = await apiClient.get('/notifications/unread-count');
+      setUnreadCount(res.data?.data?.count || 0);
     } catch (e) { /* silent */ }
   }, []);
 
   const fetchRecentNotifications = React.useCallback(async () => {
+    if (!localStorage.getItem('accessToken')) return;
     try {
-      const token = localStorage.getItem('accessToken');
-      const tenantId = localStorage.getItem('tenantId');
-      const orgId = localStorage.getItem('organizationId');
-      if (!token) return;
-      const res = await fetch(`${import.meta.env.VITE_API_URL || '/api/v1'}/notifications?is_read=false`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || '',
-          'X-Organization-ID': orgId || '',
-        },
-      });
-      if (res.ok) {
-        const json = await res.json();
-        setRecentNotifications((json.data || []).slice(0, 8));
-      }
+      const res = await apiClient.get('/notifications', { params: { is_read: false } });
+      setRecentNotifications((res.data?.data || []).slice(0, 8));
     } catch (e) { /* silent */ }
   }, []);
 
   const markAllRead = React.useCallback(async () => {
+    if (!localStorage.getItem('accessToken')) return;
     try {
-      const token = localStorage.getItem('accessToken');
-      const tenantId = localStorage.getItem('tenantId');
-      const orgId = localStorage.getItem('organizationId');
-      if (!token) return;
-      await fetch(`${import.meta.env.VITE_API_URL || '/api/v1'}/notifications/read-all`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'X-Tenant-ID': tenantId || '',
-          'X-Organization-ID': orgId || '',
-        },
-      });
+      await apiClient.put('/notifications/read-all');
       setUnreadCount(0);
       setRecentNotifications([]);
     } catch (e) { /* silent */ }
