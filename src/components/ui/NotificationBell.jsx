@@ -7,6 +7,7 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { renderNotification } from "@/utils/notificationCatalog";
 import { createPageUrl } from "@/utils";
+import apiClient from "@/api/client";
 
 // Bell icon in the app header. Shows an unread badge, opens a dropdown
 // listing the 10 most recent notifications, and polls every 30s so a
@@ -17,19 +18,6 @@ import { createPageUrl } from "@/utils";
 // quick way to dismiss/jump to a single notification, without losing
 // their current page. The full /notifications page is still reachable
 // via the "View all" footer link for filtering / mass-management.
-const API_BASE = 'http://localhost:8080/api/v1';
-
-function getHeaders() {
-  const token = localStorage.getItem('accessToken');
-  const tenantId = localStorage.getItem('tenantId');
-  const orgId = localStorage.getItem('organizationId');
-  return {
-    'Authorization': `Bearer ${token}`,
-    'X-Tenant-ID': tenantId || '',
-    'X-Organization-ID': orgId || '',
-    'Content-Type': 'application/json',
-  };
-}
 
 const POLL_INTERVAL_MS = 30 * 1000;       // 30s — fresh-enough without spam
 const RECENT_LIMIT = 10;                  // dropdown shows the 10 most recent
@@ -54,17 +42,15 @@ export default function NotificationBell() {
     abortRef.current = ctrl;
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/notifications?limit=${RECENT_LIMIT}`, {
-        headers: getHeaders(),
+      const res = await apiClient.get('/notifications', {
+        params: { limit: RECENT_LIMIT },
         signal: ctrl.signal,
       });
-      if (!res.ok) return;
-      const json = await res.json();
-      const list = Array.isArray(json.data) ? json.data : [];
+      const list = Array.isArray(res.data?.data) ? res.data.data : [];
       setItems(list);
       setUnreadCount(list.filter((n) => !n.is_read).length);
     } catch (err) {
-      if (err.name !== 'AbortError') {
+      if (err.name !== 'CanceledError' && err.code !== 'ERR_CANCELED') {
         console.warn('Failed to fetch notifications:', err);
       }
     } finally {
@@ -78,17 +64,13 @@ export default function NotificationBell() {
   // trip cheap.
   const fetchUnreadCount = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/notifications/unread-count`, {
-        headers: getHeaders(),
-      });
-      if (!res.ok) return;
-      const json = await res.json();
+      const res = await apiClient.get('/notifications/unread-count');
       // Backend may return the count as either { data: { count: N } }
       // or { data: N } depending on which version of the handler is
       // deployed; tolerate both rather than assuming.
-      const count = typeof json.data === 'number'
-        ? json.data
-        : (json.data?.count ?? 0);
+      const count = typeof res.data?.data === 'number'
+        ? res.data.data
+        : (res.data?.data?.count ?? 0);
       setUnreadCount(count);
     } catch (err) {
       // Silent — failures here just mean the badge won't refresh, not
@@ -115,10 +97,7 @@ export default function NotificationBell() {
     setItems((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)));
     setUnreadCount((c) => Math.max(0, c - 1));
     try {
-      await fetch(`${API_BASE}/notifications/${id}/read`, {
-        method: 'PUT',
-        headers: getHeaders(),
-      });
+      await apiClient.put(`/notifications/${id}/read`);
     } catch (err) {
       console.warn('Failed to mark as read:', err);
     }
@@ -128,10 +107,7 @@ export default function NotificationBell() {
     setItems((prev) => prev.map((n) => ({ ...n, is_read: true })));
     setUnreadCount(0);
     try {
-      await fetch(`${API_BASE}/notifications/read-all`, {
-        method: 'PUT',
-        headers: getHeaders(),
-      });
+      await apiClient.put('/notifications/read-all');
     } catch (err) {
       console.warn('Failed to mark all as read:', err);
     }
