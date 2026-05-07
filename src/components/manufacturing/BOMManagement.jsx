@@ -1166,6 +1166,16 @@ export default function BOMManagement() {
                   <label className="text-sm font-medium text-slate-500">{t('type')}</label>
                   <p>{getBomTypeLabel(viewBom.bom_type || 'manufacturing')}</p>
                 </div>
+                <div className="col-span-2">
+                  <label className="text-sm font-medium text-slate-500">
+                    {language === 'uz' ? 'Tayyor mahsulot ombori' : language === 'ru' ? 'Склад готовой продукции' : 'Finished Goods Warehouse'}
+                  </label>
+                  <p>
+                    {viewBom.warehouse_name
+                      || (warehouses.find((w) => w.id === viewBom.warehouse_id)?.name)
+                      || '-'}
+                  </p>
+                </div>
               </div>
 
               {/* Tabs for Components and Operations */}
