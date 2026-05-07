@@ -816,6 +816,8 @@ export default function SalesOrders() {
       setDiscountCodeInput('');
       setDiscountValidation({ valid: false, message: '' });
       addAuditLog('create', 'new', orderData.order_number || `SO-${Date.now()}`);
+      // Refresh orders list so the new SO appears without manual page reload
+      try { await refreshModulesData?.(); } catch { /* non-blocking */ }
     } catch (error) {
       console.error('Error creating sales order:', error);
       console.error('Error response:', error.response?.data);
