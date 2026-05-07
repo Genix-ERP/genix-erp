@@ -90,6 +90,13 @@ export default function ProductionOrders() {
   const [splitItems, setSplitItems] = useState([{ product_id: '', quantity: '', warehouse_id: '' }]);
   const [splitSubmitting, setSplitSubmitting] = useState(false);
 
+  // Final output modal state — shown when advancing to the last stage so the
+  // operator MUST enter good/scrap quantities (and a reason if short of order)
+  const [showFinalOutputModal, setShowFinalOutputModal] = useState(false);
+  const [finalOutputOrder, setFinalOutputOrder] = useState(null);
+  const [finalOutputData, setFinalOutputData] = useState({ good_quantity: '', reject_quantity: '', shortfall_reason: '' });
+  const [finalOutputSubmitting, setFinalOutputSubmitting] = useState(false);
+
   // Default manufacturing stages (used when no BOM/routing available)
   const DEFAULT_STAGES = [
     { key: 'draft', label: t('stage_draft') || 'Qoralama', color: 'bg-gray-100 text-gray-700 border-gray-300' },
@@ -380,10 +387,19 @@ export default function ProductionOrders() {
     if (currentIndex < stages.length - 1) {
       const nextStage = stages[currentIndex + 1].key;
 
-      // When advancing to the last stage ('done'), check if split output is needed
+      // When advancing to the last stage ('done'), require explicit output entry
       console.log('Advance stage:', { nextStage, has_split_output: order.has_split_output, status: order.status, orderId });
-      if (nextStage === 'done' && order.has_split_output) {
-        openSplitModal(orderId);
+      if (nextStage === 'done') {
+        if (order.has_split_output) {
+          // Split output — split modal handles quantity entry
+          openSplitModal(orderId);
+        } else {
+          // No split — operator MUST enter good/scrap before MO closes.
+          // Don't update current_stage here; the modal does it on submit.
+          setFinalOutputOrder(order);
+          setFinalOutputData({ good_quantity: '', reject_quantity: '', shortfall_reason: '' });
+          setShowFinalOutputModal(true);
+        }
         return;
       }
 
@@ -398,6 +414,51 @@ export default function ProductionOrders() {
         toast.error(t('error_advancing_stage') || 'Failed to advance stage');
       }
     }
+  };
+
+  // Submit handler for the mandatory final output modal
+  const handleFinalOutputSubmit = async () => {
+    if (!finalOutputOrder) return;
+    const good = parseFloat(finalOutputData.good_quantity) || 0;
+    const reject = parseFloat(finalOutputData.reject_quantity) || 0;
+    if (good <= 0 && reject <= 0) {
+      toast.error(language === 'uz'
+        ? 'Yaxshi yoki brak miqdorini kiriting'
+        : language === 'ru'
+        ? 'Введите количество годных или брака'
+        : 'Enter at least good or reject quantity');
+      return;
+    }
+    const ordered = parseFloat(finalOutputOrder.quantity_ordered ?? finalOutputOrder.quantity ?? 0) || 0;
+    const total = good + reject;
+    const isShort = ordered > 0 && total < ordered - 1e-6;
+    if (isShort && !finalOutputData.shortfall_reason.trim()) {
+      toast.error(language === 'uz'
+        ? `Buyurtma miqdoridan kam: sabab kiriting`
+        : language === 'ru'
+        ? `Меньше заказанного: укажите причину`
+        : `Below ordered quantity: shortfall reason required`);
+      return;
+    }
+    setFinalOutputSubmitting(true);
+    try {
+      await completeProductionOrder(finalOutputOrder.id, {
+        good_quantity: good,
+        reject_quantity: reject,
+        ...(isShort ? { shortfall_reason: finalOutputData.shortfall_reason.trim() } : {}),
+      });
+      toast.success(language === 'uz' ? 'Yakunlandi' : language === 'ru' ? 'Завершено' : 'Completed');
+      setShowFinalOutputModal(false);
+      setShowViewModal(false);
+      setSelectedOrder(null);
+      setFinalOutputOrder(null);
+      refreshData();
+      refreshInventory();
+    } catch (err) {
+      console.error('Final output submit error:', err);
+      toast.error('Failed: ' + (err.response?.data?.error?.message || err.message));
+    }
+    setFinalOutputSubmitting(false);
   };
 
   // Split output helpers
@@ -1045,6 +1106,14 @@ export default function ProductionOrders() {
                     <p className="text-lg font-bold text-red-700">{selectedOrder.reject_quantity || 0}</p>
                   </div>
                 </div>
+                {selectedOrder.shortfall_reason && (
+                  <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                    <p className="text-xs text-amber-700 font-medium mb-1">
+                      {language === 'uz' ? 'Kamomad sababi' : language === 'ru' ? 'Причина недостачи' : 'Shortfall Reason'}
+                    </p>
+                    <p className="text-sm text-slate-800 whitespace-pre-wrap">{selectedOrder.shortfall_reason}</p>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1176,6 +1245,108 @@ export default function ProductionOrders() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Final Output Modal — required before MO can be closed (no auto-close) */}
+      <Dialog open={showFinalOutputModal} onOpenChange={(open) => { if (!finalOutputSubmitting) setShowFinalOutputModal(open); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {language === 'uz' ? 'Yakuniy natijani kiriting' : language === 'ru' ? 'Введите итог' : 'Enter Final Output'}
+            </DialogTitle>
+          </DialogHeader>
+          {finalOutputOrder && (() => {
+            const ordered = parseFloat(finalOutputOrder.quantity_ordered ?? finalOutputOrder.quantity ?? 0) || 0;
+            const good = parseFloat(finalOutputData.good_quantity) || 0;
+            const reject = parseFloat(finalOutputData.reject_quantity) || 0;
+            const total = good + reject;
+            const isShort = ordered > 0 && total < ordered - 1e-6;
+            const unit = finalOutputOrder.unit_name || finalOutputOrder.unit_code || '';
+            return (
+              <div className="space-y-4 py-2">
+                <div className="rounded-lg p-3 border bg-slate-50 border-slate-200 text-sm flex items-center justify-between">
+                  <div>
+                    <div className="text-xs text-slate-500">{language === 'uz' ? 'Buyurtma' : language === 'ru' ? 'Заказано' : 'Ordered'}</div>
+                    <div className="font-semibold tabular-nums">{ordered} {unit}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-slate-500">{language === 'uz' ? 'Jami kiritilgan' : language === 'ru' ? 'Введено всего' : 'Entered total'}</div>
+                    <div className={`font-semibold tabular-nums ${isShort ? 'text-amber-600' : 'text-slate-900'}`}>{total.toFixed(2)} {unit}</div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-medium block mb-1">
+                    {language === 'uz' ? 'Yaxshi miqdor' : language === 'ru' ? 'Годное количество' : 'Good Quantity'} *
+                  </label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={finalOutputData.good_quantity}
+                    onChange={(e) => setFinalOutputData(prev => ({ ...prev, good_quantity: e.target.value }))}
+                    placeholder="0"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-medium block mb-1">
+                    {language === 'uz' ? 'Brak miqdor' : language === 'ru' ? 'Брак' : 'Reject Quantity'}
+                  </label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={finalOutputData.reject_quantity}
+                    onChange={(e) => setFinalOutputData(prev => ({ ...prev, reject_quantity: e.target.value }))}
+                    placeholder="0"
+                  />
+                </div>
+
+                {isShort && (
+                  <div>
+                    <label className="text-xs font-medium block mb-1 text-amber-700">
+                      {language === 'uz' ? 'Kamomad sababi' : language === 'ru' ? 'Причина недостачи' : 'Shortfall Reason'} *
+                    </label>
+                    <textarea
+                      className="w-full border border-amber-300 rounded-md px-2 py-1.5 text-sm bg-white min-h-[80px]"
+                      value={finalOutputData.shortfall_reason}
+                      onChange={(e) => setFinalOutputData(prev => ({ ...prev, shortfall_reason: e.target.value }))}
+                      placeholder={language === 'uz'
+                        ? 'Nega kam ishlab chiqarildi? (smenada vaqt yetmadi, xom-ashyo tugadi, va h.k.)'
+                        : language === 'ru'
+                        ? 'Почему произведено меньше? (не хватило времени, материалов и т.д.)'
+                        : 'Why was less produced? (not enough time, materials ran out, etc.)'}
+                    />
+                    <p className="text-xs text-amber-600 mt-1">
+                      {language === 'uz'
+                        ? `Buyurtma ${ordered}, kiritildi ${total.toFixed(2)}. Sabab kiritish majburiy.`
+                        : language === 'ru'
+                        ? `Заказано ${ordered}, введено ${total.toFixed(2)}. Причина обязательна.`
+                        : `Ordered ${ordered}, entered ${total.toFixed(2)}. Reason required.`}
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-2">
+                  <Button variant="outline" onClick={() => setShowFinalOutputModal(false)} className="flex-1" disabled={finalOutputSubmitting}>
+                    {language === 'uz' ? 'Bekor qilish' : language === 'ru' ? 'Отмена' : 'Cancel'}
+                  </Button>
+                  <Button
+                    onClick={handleFinalOutputSubmit}
+                    disabled={finalOutputSubmitting || (good <= 0 && reject <= 0) || (isShort && !finalOutputData.shortfall_reason.trim())}
+                    className="flex-1 bg-green-600 hover:bg-green-700"
+                  >
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    {finalOutputSubmitting
+                      ? (language === 'uz' ? 'Saqlanmoqda...' : language === 'ru' ? 'Сохранение...' : 'Saving...')
+                      : (language === 'uz' ? 'Yakunlash' : language === 'ru' ? 'Завершить' : 'Complete')}
+                  </Button>
+                </div>
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 
