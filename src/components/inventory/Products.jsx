@@ -250,6 +250,90 @@ export default function Products() {
   // side for the listener we guarantee the change event reaches us.
   const productImportFileRef = useRef(null);
   const [isProductImporting, setIsProductImporting] = useState(false);
+  // Two-step modal: 'main' shows the upload/download choice; 'fields'
+  // shows the column picker — only reached via the Download Template
+  // button. Reset to 'main' whenever the modal closes so the next
+  // open starts on the simple view.
+  const [importStep, setImportStep] = useState('main');
+
+  // Single source of truth for what the product import understands.
+  // Drives BOTH the downloaded template (column order + headers) AND
+  // the spreadsheet parser (header → backend field mapping). To add a
+  // new importable field, just add an entry here — the modal, template
+  // generator, and parser all consume this list.
+  //
+  // `default: true` means the column is pre-selected when the user
+  // opens the import modal. Required (`name`) is also default-on and
+  // can't be unchecked (the parser drops rows missing it).
+  const IMPORT_FIELD_DEFS = useMemo(() => ([
+    // ── Core (recommended for almost every import) ────────────────────
+    { key: 'name',           label: 'Nomi',             group: 'core',     required: true,  default: true,  width: 32 },
+    { key: 'barcode',        label: 'Shtrix kod',       group: 'core',     default: true,  width: 18 },
+    { key: 'category',       label: 'Kategoriya',       group: 'core',     default: true,  width: 22 },
+    { key: 'tags',           label: 'Teglar',           group: 'core',     default: true,  width: 22 },
+    { key: 'cost_price',     label: 'Tan narxi',        group: 'pricing',  default: true,  width: 14, kind: 'number' },
+    { key: 'list_price',     label: 'Sotish narxi',     group: 'pricing',  default: true,  width: 14, kind: 'number' },
+
+    // ── Pricing extras ────────────────────────────────────────────────
+    { key: 'wholesale_price',label: 'Ulgurji narxi',    group: 'pricing',  width: 14, kind: 'number' },
+    { key: 'min_price',      label: 'Min narxi',        group: 'pricing',  width: 14, kind: 'number' },
+    { key: 'delivery_price', label: 'Yetkazib berish narxi', group: 'pricing', width: 16, kind: 'number' },
+
+    // ── Identifiers ───────────────────────────────────────────────────
+    { key: 'search_key',     label: 'Qidiruv kaliti',   group: 'identifiers', width: 18 },
+    { key: 'sku',            label: 'SKU',              group: 'identifiers', width: 14 },
+    { key: 'brand',          label: 'Brend',            group: 'identifiers', width: 18 },
+    { key: 'manufacturer',   label: 'Ishlab chiqaruvchi', group: 'identifiers', width: 22 },
+    { key: 'model_number',   label: 'Model raqami',     group: 'identifiers', width: 18 },
+    { key: 'upc',            label: 'UPC',              group: 'identifiers', width: 14 },
+    { key: 'ean',            label: 'EAN',              group: 'identifiers', width: 14 },
+    { key: 'isbn',           label: 'ISBN',             group: 'identifiers', width: 14 },
+    { key: 'mpn',            label: 'MPN',              group: 'identifiers', width: 14 },
+    { key: 'hs_code',        label: 'HS kodi',          group: 'identifiers', width: 14 },
+    { key: 'country_of_origin', label: 'Mamlakat',      group: 'identifiers', width: 18 },
+
+    // ── Inventory ─────────────────────────────────────────────────────
+    { key: 'inventory_type', label: 'Tovar turi',       group: 'inventory', width: 16 },
+    { key: 'min_stock_level',label: 'Min qoldiq',       group: 'inventory', width: 14, kind: 'number' },
+    { key: 'reorder_point',  label: 'Qayta buyurtma nuqtasi', group: 'inventory', width: 18, kind: 'number' },
+    { key: 'reorder_quantity', label: 'Qayta buyurtma miqdori', group: 'inventory', width: 18, kind: 'number' },
+    { key: 'shelf_life_days',label: 'Saqlash muddati (kun)', group: 'inventory', width: 18, kind: 'number' },
+    { key: 'storage_conditions', label: 'Saqlash sharoiti', group: 'inventory', width: 22 },
+
+    // ── Supplier ──────────────────────────────────────────────────────
+    { key: 'supplier_sku',   label: 'Yetkazib beruvchi SKU', group: 'supplier', width: 18 },
+    { key: 'lead_time_days', label: 'Yetkazib berish kuni', group: 'supplier', width: 18, kind: 'number' },
+    { key: 'customer_lead_time_days', label: 'Mijoz uchun kuni', group: 'supplier', width: 18, kind: 'number' },
+
+    // ── Dimensions ────────────────────────────────────────────────────
+    { key: 'weight',         label: 'Vazn (kg)',        group: 'dimensions', width: 12, kind: 'number' },
+    { key: 'length',         label: 'Uzunlik (cm)',     group: 'dimensions', width: 12, kind: 'number' },
+    { key: 'width',          label: 'Eni (cm)',         group: 'dimensions', width: 12, kind: 'number' },
+    { key: 'height',         label: 'Balandlik (cm)',   group: 'dimensions', width: 12, kind: 'number' },
+
+    // ── Other ─────────────────────────────────────────────────────────
+    { key: 'description',    label: 'Tavsif',           group: 'other',    width: 40 },
+    { key: 'warranty_months',label: 'Kafolat (oy)',     group: 'other',    width: 14, kind: 'number' },
+    { key: 'type',           label: 'Tur',              group: 'other',    width: 12 },
+  ]), []);
+
+  // Selected import fields. Initialized from `default: true` entries
+  // and persisted in localStorage so the user's preference survives
+  // page reloads and tab switches.
+  const [selectedImportFields, setSelectedImportFields] = useState(() => {
+    try {
+      const stored = localStorage.getItem('genix_product_import_fields');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (_) { /* ignore */ }
+    return IMPORT_FIELD_DEFS.filter(f => f.default).map(f => f.key);
+  });
+  useEffect(() => {
+    try { localStorage.setItem('genix_product_import_fields', JSON.stringify(selectedImportFields)); }
+    catch (_) { /* localStorage may be unavailable in private mode — non-fatal */ }
+  }, [selectedImportFields]);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showCategoryImportModal, setShowCategoryImportModal] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
@@ -544,14 +628,17 @@ export default function Products() {
   // ImportExport `downloadTemplate` so it visually matches the other
   // import templates in the app.
   const downloadProductImportTemplate = async () => {
-    const cols = [
-      { label: 'Nomi', required: true,  width: 32 },
-      { label: 'Shtrix kod', required: false, width: 18 },
-      { label: 'Kategoriya', required: false, width: 22 },
-      { label: 'Teglar', required: false, width: 22 },
-      { label: 'Tan narxi', required: false, width: 14 },
-      { label: 'Sotish narxi', required: false, width: 14 },
-    ];
+    // Build columns from the user's selected fields, preserving the
+    // canonical order from IMPORT_FIELD_DEFS. Always include the
+    // required `name` column even if somehow excluded from the
+    // selection (defensive — the UI prevents unchecking it).
+    const selectedKeys = new Set([
+      'name',
+      ...selectedImportFields,
+    ]);
+    const cols = IMPORT_FIELD_DEFS
+      .filter(f => selectedKeys.has(f.key))
+      .map(f => ({ label: f.label, required: !!f.required, width: f.width || 18, kind: f.kind }));
 
     const wb = new ExcelJS.Workbook();
     wb.creator = 'GenixERP';
@@ -574,15 +661,50 @@ export default function Products() {
       };
     });
 
-    // Sample row to make the expected shape obvious.
-    const sample = ws.addRow([
-      'Vешалка прешебочный никель простая',
-      '4780000000123',
-      'Xomashyo',
-      'mebel, fabrika',
-      3782,
-      4500,
-    ]);
+    // Sample row — one example value per selected column. Hard-coded
+    // examples for known fields; falls back to the column label for
+    // anything else so the user sees what shape we expect even on
+    // custom imports.
+    const SAMPLES = {
+      name: 'Vешалка прешебочный никель простая',
+      barcode: '4780000000123',
+      category: 'Xomashyo',
+      tags: 'mebel, fabrika',
+      cost_price: 3782,
+      list_price: 4500,
+      wholesale_price: 4200,
+      min_price: 4000,
+      delivery_price: 0,
+      brand: 'BrandName',
+      manufacturer: 'Factory',
+      model_number: 'MD-123',
+      upc: '012345678905',
+      ean: '4006381333931',
+      isbn: '978-3-16-148410-0',
+      mpn: 'MPN-001',
+      hs_code: '7308.30',
+      country_of_origin: 'CN',
+      sku: 'SKU-001',
+      search_key: 'CHAIR-NICK-3782',
+      weight: 1.5,
+      length: 40,
+      width: 30,
+      height: 90,
+      warranty_months: 12,
+      lead_time_days: 7,
+      customer_lead_time_days: 3,
+      shelf_life_days: 365,
+      storage_conditions: 'Quruq, salqin',
+      min_stock_level: 5,
+      reorder_point: 10,
+      reorder_quantity: 50,
+      supplier_sku: 'VSKU-001',
+      description: 'Mahsulot tavsifi',
+      type: 'product',
+      inventory_type: 'trade',
+    };
+    const selectedDefs = IMPORT_FIELD_DEFS.filter(f => selectedKeys.has(f.key));
+    const sample = ws.addRow(selectedDefs.map(f => SAMPLES[f.key] != null ? SAMPLES[f.key] : ''));
     sample.height = 22;
     sample.eachCell((cell) => {
       cell.font = { italic: true, color: { argb: 'FF94A3B8' }, size: 10 };
@@ -591,10 +713,18 @@ export default function Products() {
     });
 
     // Note row below the sample explaining required + auto-create.
+    // Merge across however many columns the user picked.
     const noteRow = ws.addRow([
       '* — Majburiy. Mavjud bo‘lmagan kategoriya avtomatik yaratiladi. Bir xil nomli mahsulot mavjud bo‘lsa, dublikat yaratilmaydi (joriy kompaniyaga ulanadi).',
     ]);
-    ws.mergeCells(`A${noteRow.number}:F${noteRow.number}`);
+    const lastColLetter = (n) => {
+      // Convert 1-based column number to letter (A, B, ..., Z, AA, AB, ...).
+      let s = ''; let m = n;
+      while (m > 0) { const r = (m - 1) % 26; s = String.fromCharCode(65 + r) + s; m = Math.floor((m - 1) / 26); }
+      return s;
+    };
+    const noteEnd = lastColLetter(cols.length);
+    ws.mergeCells(`A${noteRow.number}:${noteEnd}${noteRow.number}`);
     const note = ws.getCell(`A${noteRow.number}`);
     note.font = { italic: true, color: { argb: 'FFEF4444' }, size: 9 };
     note.alignment = { vertical: 'middle', wrapText: true };
@@ -627,24 +757,48 @@ export default function Products() {
       // eslint-disable-next-line no-console
       console.log('[product-import] parsed', { headers: parsed.headers, rows: parsed.rows?.length });
 
-      // Map raw spreadsheet columns to our backend fields.
-      const headerKeyMap = {
-        nomi: 'name',
+      // Build the header → backend-field map from IMPORT_FIELD_DEFS so
+      // any field the template can include is also parsable on the way
+      // back. Keep a few legacy aliases (English column names) so an
+      // older template still works after the field-set was expanded.
+      const headerKeyMap = {};
+      IMPORT_FIELD_DEFS.forEach(f => {
+        // The Uzbek label as written in the template.
+        headerKeyMap[f.label.toLowerCase()] = f.key;
+        // The bare backend key, in case the user typed it directly.
+        headerKeyMap[f.key.toLowerCase()] = f.key;
+      });
+      // English aliases for common columns so an English-template
+      // file pasted in still imports.
+      Object.assign(headerKeyMap, {
         name: 'name',
-        'shtrix kod': 'barcode',
         barcode: 'barcode',
-        kategoriya: 'category',
         category: 'category',
-        teglar: 'tags',
         tags: 'tags',
-        'tan narxi': 'cost_price',
-        cost_price: 'cost_price',
-        'sotish narxi': 'list_price',
-        list_price: 'list_price',
-      };
+        'cost price': 'cost_price',
+        'list price': 'list_price',
+        'wholesale price': 'wholesale_price',
+        'min price': 'min_price',
+        'delivery price': 'delivery_price',
+        brand: 'brand',
+        manufacturer: 'manufacturer',
+        weight: 'weight',
+        description: 'description',
+      });
+      // Strip the "*" required-marker, collapse whitespace, lowercase.
+      // The downloaded template writes headers like "Nomi *" with the
+      // asterisk inline, and users often paste them back unchanged —
+      // without this normalisation the lookup misses and every row
+      // gets filtered out, producing the "0 rows" toast.
+      const normaliseHeader = (h) =>
+        String(h || '')
+          .toLowerCase()
+          .replace(/\*/g, '')
+          .replace(/\s+/g, ' ')
+          .trim();
       const mapping = {};
       (parsed.headers || []).forEach(h => {
-        const norm = String(h || '').trim().toLowerCase();
+        const norm = normaliseHeader(h);
         if (headerKeyMap[norm]) mapping[h] = headerKeyMap[norm];
       });
 
@@ -661,17 +815,49 @@ export default function Products() {
             const cat = categories.find(c => c.name?.toLowerCase() === String(r.category).toLowerCase());
             if (cat) categoryId = cat.id;
           }
-          return {
-            name: String(r.name).trim(),
-            barcode: r.barcode != null ? String(r.barcode).trim() : '',
-            category_id: categoryId || undefined,
-            category: r.category != null ? String(r.category).trim() : undefined,
-            tags: r.tags ? String(r.tags).split(',').map(t => t.trim()).filter(Boolean) : [],
-            type: 'product',
-            cost_price: parseFloat(r.cost_price) || 0,
-            list_price: parseFloat(r.list_price) || 0,
-            is_active: true,
+          // Build the product payload from whichever columns the
+          // user provided. Fields not present in the file are simply
+          // omitted (the backend will use its column defaults). The
+          // numeric fields are still parseFloat'd to keep "12 000"
+          // and "12000" both accepted; non-numeric fields go through
+          // a String().trim() pass.
+          const num = (v) => {
+            if (v == null || v === '') return undefined;
+            const f = parseFloat(String(v).replace(/\s/g, '').replace(',', '.'));
+            return Number.isFinite(f) ? f : undefined;
           };
+          const txt = (v) => (v != null && String(v).trim() !== '' ? String(v).trim() : undefined);
+
+          const payload = {
+            name: String(r.name).trim(),
+            type: txt(r.type) || 'product',
+            is_active: true,
+            tags: r.tags ? String(r.tags).split(',').map(t => t.trim()).filter(Boolean) : [],
+            category_id: categoryId || undefined,
+            category: txt(r.category),
+          };
+
+          // Strings.
+          ['barcode', 'sku', 'search_key', 'brand', 'manufacturer',
+           'model_number', 'upc', 'ean', 'isbn', 'mpn', 'hs_code',
+           'country_of_origin', 'description', 'storage_conditions',
+           'inventory_type', 'supplier_sku',
+          ].forEach(k => { const v = txt(r[k]); if (v !== undefined) payload[k] = v; });
+
+          // Numbers.
+          ['cost_price', 'list_price', 'wholesale_price', 'min_price',
+           'delivery_price', 'weight', 'length', 'width', 'height',
+           'min_stock_level', 'reorder_point', 'reorder_quantity',
+           'warranty_months', 'lead_time_days', 'customer_lead_time_days',
+           'shelf_life_days',
+          ].forEach(k => { const v = num(r[k]); if (v !== undefined) payload[k] = v; });
+
+          // Cost / list price always present (defaults to 0) so the
+          // existing list view, margin calculations, etc. don't break.
+          if (payload.cost_price == null) payload.cost_price = 0;
+          if (payload.list_price == null) payload.list_price = 0;
+
+          return payload;
         });
 
       if (products.length === 0) {
@@ -4001,67 +4187,190 @@ export default function Products() {
           useEffect above; clicking "Choose file" .click()s that input
           (which is OUTSIDE the React tree, so this dialog can mount /
           unmount freely without destroying it). */}
-      <Dialog open={showImportConfirmModal} onOpenChange={setShowImportConfirmModal}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
+      <Dialog
+        open={showImportConfirmModal}
+        onOpenChange={(open) => {
+          setShowImportConfirmModal(open);
+          // Reset to the main step whenever the modal closes so the
+          // next time the user opens it, they see the simple view
+          // rather than landing back on the field chooser.
+          if (!open) setImportStep('main');
+        }}
+      >
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col p-0 gap-0">
+          <DialogHeader className="px-6 pt-6 pb-3 border-b flex-shrink-0">
             <DialogTitle className="flex items-center gap-2">
+              {importStep === 'fields' && (
+                <button
+                  type="button"
+                  onClick={() => setImportStep('main')}
+                  className="p-1 -ml-1 hover:bg-slate-100 rounded"
+                  title={t('back') || 'Back'}
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+              )}
               <Upload className="w-5 h-5" />
-              {t('products_import_title')}
+              {importStep === 'fields'
+                ? (t('products_import_select_fields') || 'Ustunlarni tanlang')
+                : t('products_import_title')}
             </DialogTitle>
             <DialogDescription className="text-sm text-slate-500">
-              {t('products_import_description')}
+              {importStep === 'fields'
+                ? (t('products_import_select_fields_hint') || 'Shablonga qaysi ustunlar kirishini belgilang')
+                : t('products_import_description')}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
-            <div className="font-medium text-slate-800 mb-2">
-              {t('products_import_expected_columns')}:
-            </div>
-            {/* The column header names (Nomi, Shtrix kod, ...) are the
-                actual literal strings the import-parser matches against
-                the spreadsheet headers, so they're intentionally NOT
-                translated — they have to match the xlsx file. */}
-            <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-slate-700 text-xs">
-              <li><span className="font-semibold">Nomi</span> <span className="text-red-500">*</span></li>
-              <li><span className="font-semibold">Shtrix kod</span></li>
-              <li><span className="font-semibold">Kategoriya</span></li>
-              <li><span className="font-semibold">Teglar</span></li>
-              <li><span className="font-semibold">Tan narxi</span></li>
-              <li><span className="font-semibold">Sotish narxi</span></li>
-            </ul>
-            <div className="mt-3 text-xs text-slate-500 leading-relaxed">
-              {t('products_import_help_note')}
-            </div>
-          </div>
-
-          <DialogFooter className="flex flex-col sm:flex-row gap-2 sm:gap-2">
-            <Button
-              variant="outline"
-              type="button"
-              onClick={downloadProductImportTemplate}
-              className="gap-2"
-            >
-              <Download className="w-4 h-4" />
-              {t('products_import_download_template')}
-            </Button>
-            <Button
-              type="button"
-              onClick={() => {
-                // Trigger the file picker FIRST, synchronously inside
-                // the user click handler — Chrome's transient user
-                // activation must still be active or it'll silently
-                // refuse to open the OS file picker. THEN close the
-                // modal.
-                productImportFileRef.current?.click();
-                setShowImportConfirmModal(false);
-              }}
-              disabled={isProductImporting}
-              className="gap-2 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90"
-            >
-              <Upload className="w-4 h-4" />
-              {t('products_import_choose_and_upload')}
-            </Button>
-          </DialogFooter>
+          {importStep === 'main' ? (
+            // ── Step 1: simple chooser ─────────────────────────────────
+            <>
+              <div className="overflow-y-auto px-6 py-4 flex-1 min-h-0 space-y-4">
+                <div className="text-sm text-slate-600 leading-relaxed">
+                  {t('products_import_help_note')}
+                </div>
+              </div>
+              <DialogFooter className="flex flex-col sm:flex-row gap-2 sm:gap-2 px-6 py-3 border-t bg-slate-50 flex-shrink-0">
+                <Button
+                  variant="outline"
+                  type="button"
+                  onClick={() => setImportStep('fields')}
+                  className="gap-2"
+                >
+                  <Download className="w-4 h-4" />
+                  {t('products_import_download_template')}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    // Trigger the file picker FIRST, synchronously
+                    // inside the user click handler — Chrome's
+                    // transient user activation must still be active
+                    // or it'll silently refuse to open the OS file
+                    // picker. THEN close the modal.
+                    productImportFileRef.current?.click();
+                    setShowImportConfirmModal(false);
+                    setImportStep('main');
+                  }}
+                  disabled={isProductImporting}
+                  className="gap-2 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90"
+                >
+                  <Upload className="w-4 h-4" />
+                  {t('products_import_choose_and_upload')}
+                </Button>
+              </DialogFooter>
+            </>
+          ) : (
+            // ── Step 2: column picker (only on Download flow) ──────────
+            <>
+              <div className="overflow-y-auto px-6 py-4 flex-1 min-h-0 space-y-4">
+                <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="font-medium text-slate-800">
+                      {t('products_import_select_fields') || 'Ustunlarni tanlang'}
+                      <span className="ml-2 text-xs font-normal text-slate-500">
+                        ({selectedImportFields.length}/{IMPORT_FIELD_DEFS.length})
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="text-xs text-blue-600 hover:text-blue-700"
+                        onClick={() => setSelectedImportFields(IMPORT_FIELD_DEFS.map(f => f.key))}
+                      >
+                        {t('select_all') || 'Hammasini tanlash'}
+                      </button>
+                      <span className="text-slate-300">|</span>
+                      <button
+                        type="button"
+                        className="text-xs text-blue-600 hover:text-blue-700"
+                        onClick={() => setSelectedImportFields(IMPORT_FIELD_DEFS.filter(f => f.default).map(f => f.key))}
+                      >
+                        {t('reset_to_default') || 'Sukut bo\'yicha'}
+                      </button>
+                    </div>
+                  </div>
+                  {(() => {
+                    const GROUP_LABELS = {
+                      core: t('field_group_core') || 'Asosiy',
+                      pricing: t('field_group_pricing') || 'Narxlash',
+                      identifiers: t('field_group_identifiers') || 'Identifikatorlar',
+                      inventory: t('field_group_inventory') || 'Ombor',
+                      supplier: t('field_group_supplier') || 'Yetkazib beruvchi',
+                      dimensions: t('field_group_dimensions') || 'O\'lchamlar',
+                      other: t('field_group_other') || 'Boshqa',
+                    };
+                    const grouped = IMPORT_FIELD_DEFS.reduce((acc, f) => {
+                      (acc[f.group] = acc[f.group] || []).push(f); return acc;
+                    }, {});
+                    const groupOrder = ['core', 'pricing', 'identifiers', 'inventory', 'supplier', 'dimensions', 'other'];
+                    const selectedSet = new Set(selectedImportFields);
+                    const toggle = (key) => {
+                      if (selectedSet.has(key)) {
+                        setSelectedImportFields(selectedImportFields.filter(k => k !== key));
+                      } else {
+                        setSelectedImportFields([...selectedImportFields, key]);
+                      }
+                    };
+                    return groupOrder.filter(g => grouped[g]).map(g => (
+                      <div key={g} className="mb-3 last:mb-0">
+                        <div className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold mb-1.5">
+                          {GROUP_LABELS[g]}
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                          {grouped[g].map(f => {
+                            const isChecked = selectedSet.has(f.key);
+                            const isLocked = !!f.required;
+                            return (
+                              <label
+                                key={f.key}
+                                className={`flex items-center gap-2 text-xs cursor-pointer hover:bg-white px-2 py-1 rounded ${isLocked ? 'opacity-90 cursor-not-allowed' : ''}`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked || isLocked}
+                                  disabled={isLocked}
+                                  onChange={() => !isLocked && toggle(f.key)}
+                                  className="rounded"
+                                />
+                                <span className={isChecked ? 'text-slate-800 font-medium' : 'text-slate-600'}>
+                                  {f.label}
+                                  {f.required && <span className="text-red-500 ml-0.5">*</span>}
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </div>
+              <DialogFooter className="flex flex-col sm:flex-row gap-2 sm:gap-2 px-6 py-3 border-t bg-slate-50 flex-shrink-0">
+                <Button
+                  variant="outline"
+                  type="button"
+                  onClick={() => setImportStep('main')}
+                  className="gap-2"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  {t('back') || 'Back'}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={async () => {
+                    await downloadProductImportTemplate();
+                    setShowImportConfirmModal(false);
+                    setImportStep('main');
+                  }}
+                  className="gap-2 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90"
+                >
+                  <Download className="w-4 h-4" />
+                  {t('products_import_download_template')}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
 
