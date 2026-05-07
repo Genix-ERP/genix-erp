@@ -30,6 +30,15 @@ const ERROR_TEMPLATES = {
     titleKey: 'error_tax_regime_conflict',
     fields: ['applies_to', 'conflict'],
   },
+  // Purchase-order line edits blocked by FK / business rules.
+  PO_LINES_LOCKED_RECEIVED: {
+    titleKey: 'error_po_lines_locked_received',
+    fields: [],
+  },
+  PO_LINES_LOCKED_BILLED: {
+    titleKey: 'error_po_lines_locked_billed',
+    fields: [],
+  },
 };
 
 function interpolate(template, details) {

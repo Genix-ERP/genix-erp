@@ -724,15 +724,61 @@ export function ProcurementProvider({ children }) {
         if (updates.requires_shipping !== undefined) {
           backendUpdates.requires_shipping = updates.requires_shipping;
         }
+        // Warehouse — accepts null/empty to clear back to NULL.
+        // Was previously dropped here, so the edit modal's warehouse
+        // change never reached the server.
+        if (updates.warehouse_id !== undefined) {
+          backendUpdates.warehouse_id = updates.warehouse_id || '';
+        }
+        if (updates.contact_person_id !== undefined) {
+          backendUpdates.contact_person_id = updates.contact_person_id || '';
+        }
+        if (updates.internal_notes !== undefined) {
+          backendUpdates.internal_notes = updates.internal_notes;
+        }
+        if (updates.shipping_amount !== undefined) {
+          backendUpdates.shipping_amount = updates.shipping_amount;
+        }
+        // Lines — pass through as-is. The edit modal sends a complete
+        // replacement set (handleUpdatePO in PurchaseOrders.jsx).
+        // Was being dropped, which is why edits to product/qty/price
+        // appeared to do nothing on save.
+        if (Array.isArray(updates.lines)) {
+          backendUpdates.lines = updates.lines;
+        }
 
-        // Debug: log what we're sending
         // Only call API if there are updates to send
         if (Object.keys(backendUpdates).length > 0) {
           await procurementService.updateOrder(id, backendUpdates);
         }
-        // Backend returns just a success message, so update local state with the updates
-        setPurchaseOrders(prev => prev.map(po => po.id === id ? { ...po, ...updates } : po));
-        return { id, ...updates };
+
+        // Refresh from the authoritative server response — the local
+        // optimistic merge below isn't enough because line replacement
+        // recomputes server-side totals (subtotal/tax_amount/total_amount)
+        // that the optimistic update doesn't know about. Without the
+        // refetch, the list view shows stale numbers until reload.
+        let refreshed = null;
+        try {
+          refreshed = await procurementService.getOrder(id);
+        } catch (refreshErr) {
+          console.warn('PO update succeeded but refetch failed:', refreshErr);
+        }
+
+        setPurchaseOrders(prev => prev.map(po => {
+          if (po.id !== id) return po;
+          if (refreshed) {
+            // Map backend's order_number/vendor_name to the list's
+            // expected po_number/vendor_name shape.
+            return {
+              ...po,
+              ...refreshed,
+              po_number: refreshed.po_number || refreshed.order_number || po.po_number,
+              vendor_name: refreshed.vendor_name || po.vendor_name,
+            };
+          }
+          return { ...po, ...updates };
+        }));
+        return refreshed || { id, ...updates };
       } catch (error) {
         console.error('Failed to update PO via API:', error);
         throw error;

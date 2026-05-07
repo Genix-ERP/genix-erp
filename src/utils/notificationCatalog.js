@@ -174,10 +174,16 @@ export const NOTIFICATION_TEMPLATES = {
   // `activity_type` field ('call', 'meeting', 'email', 'follow_up') is
   // mapped via t() to the user-facing label so the title is fully
   // translated regardless of the language the activity was created in.
+  //
+  // `titleFields` and `bodyFields` let the title and body fall back
+  // to stored values independently. Notifications created before the
+  // worker started packing `lead_name` still have `activity_type`, so
+  // the title gets translated even when the body has to fall back.
   crm_activity_reminder: {
     titleKey: 'notif_crm_activity_reminder_title',
     bodyKey: 'notif_crm_activity_reminder_body',
-    fields: ['activity_type'],
+    titleFields: ['activity_type'],
+    bodyFields: ['activity_type', 'lead_name'],
     translate: {
       activity_type: (v) => v === 'follow_up' ? 'action_other' : `action_${v}`,
     },
@@ -238,26 +244,38 @@ function interpolate(template, data, formatters = {}, language = 'en', translate
 export function renderNotification(n, t, language) {
   if (!n) return { title: '', body: '' };
   const tmpl = NOTIFICATION_TEMPLATES[n.type];
-  const fallback = { title: n.title || '', body: n.message || '' };
+  const storedTitle = n.title || '';
+  const storedBody = n.message || '';
 
-  if (!tmpl) return fallback;
+  if (!tmpl) return { title: storedTitle, body: storedBody };
 
   const data = normaliseData(n.data);
 
-  // If any required field is missing we don't risk rendering an empty-
-  // looking string — use the stored fallback that always has real content.
-  const missing = (tmpl.fields || []).some((f) => data[f] === undefined || data[f] === null || data[f] === '');
-  if (missing) return fallback;
+  // Per-field requirement check — title and body fall back
+  // independently. `titleFields` / `bodyFields` override the legacy
+  // shared `fields` array. This lets the title render in the user's
+  // current language even when the body has to fall back to stored
+  // text (e.g. old CRM reminders that have activity_type but no
+  // lead_name in their data payload).
+  const isMissing = (fields) =>
+    (fields || []).some((f) => data[f] === undefined || data[f] === null || data[f] === '');
+  const titleMissing = isMissing(tmpl.titleFields || tmpl.fields);
+  const bodyMissing = isMissing(tmpl.bodyFields || tmpl.fields);
 
   // A translation key returned by the t() helper equal to the key itself
   // means the entry isn't in the dictionary yet → fall back rather than
   // show a raw `notif_xxx` string.
   const titleTemplate = t(tmpl.titleKey);
   const bodyTemplate = t(tmpl.bodyKey);
-  if (titleTemplate === tmpl.titleKey || bodyTemplate === tmpl.bodyKey) return fallback;
+  const titleKeyMissing = titleTemplate === tmpl.titleKey;
+  const bodyKeyMissing = bodyTemplate === tmpl.bodyKey;
 
   return {
-    title: interpolate(titleTemplate, data, tmpl.format, language, tmpl.translate, t),
-    body: interpolate(bodyTemplate, data, tmpl.format, language, tmpl.translate, t),
+    title: (titleMissing || titleKeyMissing)
+      ? storedTitle
+      : interpolate(titleTemplate, data, tmpl.format, language, tmpl.translate, t),
+    body: (bodyMissing || bodyKeyMissing)
+      ? storedBody
+      : interpolate(bodyTemplate, data, tmpl.format, language, tmpl.translate, t),
   };
 }
