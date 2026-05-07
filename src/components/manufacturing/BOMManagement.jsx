@@ -615,7 +615,10 @@ export default function BOMManagement() {
                 </div>
               </div>
               <div>
-                <label className="text-sm font-medium mb-1 block">{language === 'uz' ? 'Tayyor mahsulot ombori' : language === 'ru' ? 'Склад готовой продукции' : 'Finished Goods Warehouse'}</label>
+                <label className="text-sm font-medium mb-1 block">
+                  {language === 'uz' ? 'Tayyor mahsulot ombori' : language === 'ru' ? 'Склад готовой продукции' : 'Finished Goods Warehouse'}
+                  <span className="text-red-500 ml-1">*</span>
+                </label>
                 <Select
                   value={newBom.warehouse_id || ''}
                   onValueChange={(value) => setNewBom({...newBom, warehouse_id: value})}
@@ -844,7 +847,7 @@ export default function BOMManagement() {
               <Button
                 onClick={handleCreateBom}
                 className="flex-1 bg-gradient-to-r from-slate-700 to-slate-800"
-                disabled={!newBom.name || !newBom.product_id || isSubmitting}
+                disabled={!newBom.name || !newBom.product_id || !newBom.warehouse_id || isSubmitting}
               >
                 {isSubmitting ? t('saving') : t('create_bom')}
               </Button>
@@ -885,7 +888,10 @@ export default function BOMManagement() {
                   </div>
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">{language === 'uz' ? 'Tayyor mahsulot ombori' : language === 'ru' ? 'Склад готовой продукции' : 'Finished Goods Warehouse'}</label>
+                  <label className="text-sm font-medium mb-1 block">
+                    {language === 'uz' ? 'Tayyor mahsulot ombori' : language === 'ru' ? 'Склад готовой продукции' : 'Finished Goods Warehouse'}
+                    <span className="text-red-500 ml-1">*</span>
+                  </label>
                   <Select
                     value={editBom.warehouse_id || ''}
                     onValueChange={(value) => setEditBom({...editBom, warehouse_id: value})}
@@ -1114,7 +1120,7 @@ export default function BOMManagement() {
                 <Button
                   onClick={handleUpdateBom}
                   className="flex-1 bg-gradient-to-r from-slate-700 to-slate-800"
-                  disabled={isSubmitting || !editBom.name || !editBom.product_id}
+                  disabled={isSubmitting || !editBom.name || !editBom.product_id || !editBom.warehouse_id}
                 >
                   {isSubmitting ? t('saving') : t('update_bom')}
                 </Button>
