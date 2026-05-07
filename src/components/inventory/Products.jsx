@@ -335,6 +335,13 @@ export default function Products() {
     catch (_) { /* localStorage may be unavailable in private mode — non-fatal */ }
   }, [selectedImportFields]);
   const [showExportModal, setShowExportModal] = useState(false);
+  // Holds the FULL filtered product set used by the Export modal.
+  // The list view itself is paginated (default 20 per page) so passing
+  // `filteredProducts` to ExportModal would only export the current
+  // page. We fetch the full set on demand when the user clicks Export
+  // so the modal sees everything that matches the current filters.
+  const [allProductsForExport, setAllProductsForExport] = useState([]);
+  const [isPreparingExport, setIsPreparingExport] = useState(false);
   const [showCategoryImportModal, setShowCategoryImportModal] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showCategoryManageModal, setShowCategoryManageModal] = useState(false);
@@ -415,8 +422,15 @@ export default function Products() {
     };
   }, []);
 
-  // Export columns configuration - comprehensive product fields
+  // Export columns configuration - comprehensive product fields.
+  //
+  // The `id` column is REQUIRED and locked-on. It carries the product's
+  // UUID so the user can edit the file in Excel and re-import it as a
+  // bulk UPDATE — the backend matches each row to an existing product
+  // by `id` and only writes the columns the user filled in. Without
+  // `id` re-importing the same export would create duplicate products.
   const exportColumns = [
+    { key: 'id', label: 'ID', required: true },
     // Basic Info
     { key: 'name', label: 'Nomi' },
     { key: 'barcode', label: 'Shtrix kod' },
@@ -768,9 +782,16 @@ export default function Products() {
         // The bare backend key, in case the user typed it directly.
         headerKeyMap[f.key.toLowerCase()] = f.key;
       });
-      // English aliases for common columns so an English-template
-      // file pasted in still imports.
+      // Aliases so the round-trip Export → Edit → Import works even
+      // when the export column labels don't perfectly match the
+      // import-template labels. `id` is always recognized so the
+      // round trip works regardless of language.
       Object.assign(headerKeyMap, {
+        // ID variants
+        id: 'id',
+        'product id': 'id',
+        'product_id': 'id',
+        // English aliases for common columns
         name: 'name',
         barcode: 'barcode',
         category: 'category',
@@ -784,6 +805,15 @@ export default function Products() {
         manufacturer: 'manufacturer',
         weight: 'weight',
         description: 'description',
+        // Uzbek labels used by the Export modal that differ slightly
+        // from the import template's labels — covers both spellings
+        // so a re-import of an exported xlsx maps correctly.
+        'turi': 'type',                  // export: "Turi" — import: "Tur"
+        'minimal narx': 'min_price',     // export: "Minimal narx" — import: "Min narxi"
+        'ulgurji narx': 'wholesale_price', // export: "Ulgurji narx" — import: "Ulgurji narxi"
+        'kelib chiqish mamlakatiy': 'country_of_origin', // export label
+        'og\'irlik': 'weight',
+        'kenglik': 'width',
       });
       // Strip the "*" required-marker, collapse whitespace, lowercase.
       // The downloaded template writes headers like "Nomi *" with the
@@ -802,42 +832,59 @@ export default function Products() {
         if (headerKeyMap[norm]) mapping[h] = headerKeyMap[norm];
       });
 
+      const txt = (v) => (v != null && String(v).trim() !== '' ? String(v).trim() : undefined);
+      const num = (v) => {
+        if (v == null || v === '') return undefined;
+        const f = parseFloat(String(v).replace(/\s/g, '').replace(',', '.'));
+        return Number.isFinite(f) ? f : undefined;
+      };
+
       const products = (parsed.rows || [])
         .map(raw => {
           const row = {};
           Object.entries(mapping).forEach(([h, key]) => { row[key] = raw[h]; });
           return row;
         })
-        .filter(r => r && r.name != null && String(r.name).trim() !== '')
+        // A row is valid for processing if it has either:
+        //   - an `id` (UPDATE mode — the user is editing an existing product), or
+        //   - a `name` (CREATE mode — making a new product).
+        // Empty-but-existent rows in the spreadsheet (Excel often leaves
+        // trailing empty rows) get filtered out.
+        .filter(r => r && (txt(r.id) || txt(r.name)))
         .map(r => {
+          const id = txt(r.id);
+          const isUpdate = !!id;
+
           let categoryId = '';
           if (r.category) {
             const cat = categories.find(c => c.name?.toLowerCase() === String(r.category).toLowerCase());
             if (cat) categoryId = cat.id;
           }
-          // Build the product payload from whichever columns the
-          // user provided. Fields not present in the file are simply
-          // omitted (the backend will use its column defaults). The
-          // numeric fields are still parseFloat'd to keep "12 000"
-          // and "12000" both accepted; non-numeric fields go through
-          // a String().trim() pass.
-          const num = (v) => {
-            if (v == null || v === '') return undefined;
-            const f = parseFloat(String(v).replace(/\s/g, '').replace(',', '.'));
-            return Number.isFinite(f) ? f : undefined;
-          };
-          const txt = (v) => (v != null && String(v).trim() !== '' ? String(v).trim() : undefined);
 
-          const payload = {
-            name: String(r.name).trim(),
-            type: txt(r.type) || 'product',
-            is_active: true,
-            tags: r.tags ? String(r.tags).split(',').map(t => t.trim()).filter(Boolean) : [],
-            category_id: categoryId || undefined,
-            category: txt(r.category),
-          };
+          // For UPDATE rows we ONLY include fields the user actually
+          // populated — anything blank stays as-is on the server. For
+          // CREATE rows we enforce sensible defaults (cost_price = 0
+          // etc.) so the row is shaped like a fresh CreateProduct call.
+          const payload = isUpdate
+            ? { id, type: txt(r.type), tags: r.tags ? String(r.tags).split(',').map(t => t.trim()).filter(Boolean) : undefined }
+            : {
+                name: String(r.name).trim(),
+                type: txt(r.type) || 'product',
+                is_active: true,
+                tags: r.tags ? String(r.tags).split(',').map(t => t.trim()).filter(Boolean) : [],
+              };
 
-          // Strings.
+          // Set name and category_id only when the user actually
+          // provided values for them. On UPDATE rows, omitted name
+          // means "keep existing"; on CREATE rows we already set name
+          // above.
+          const nameVal = txt(r.name);
+          if (nameVal && isUpdate) payload.name = nameVal;
+          if (categoryId) payload.category_id = categoryId;
+          if (txt(r.category)) payload.category = txt(r.category);
+
+          // Strings — only included when present, so UPDATE rows don't
+          // accidentally null-out columns the user didn't touch.
           ['barcode', 'sku', 'search_key', 'brand', 'manufacturer',
            'model_number', 'upc', 'ean', 'isbn', 'mpn', 'hs_code',
            'country_of_origin', 'description', 'storage_conditions',
@@ -852,10 +899,12 @@ export default function Products() {
            'shelf_life_days',
           ].forEach(k => { const v = num(r[k]); if (v !== undefined) payload[k] = v; });
 
-          // Cost / list price always present (defaults to 0) so the
-          // existing list view, margin calculations, etc. don't break.
-          if (payload.cost_price == null) payload.cost_price = 0;
-          if (payload.list_price == null) payload.list_price = 0;
+          // CREATE-only defaults: list view + margin calculations
+          // assume non-null prices.
+          if (!isUpdate) {
+            if (payload.cost_price == null) payload.cost_price = 0;
+            if (payload.list_price == null) payload.list_price = 0;
+          }
 
           return payload;
         });
@@ -870,15 +919,39 @@ export default function Products() {
         organization_ids: activeCompany?.id ? [activeCompany.id] : [],
       });
 
-      const { created = 0, skipped = 0, failed = 0, total = products.length, outcomes = [] } = result || {};
+      const { total = products.length, outcomes = [] } = result || {};
+      // Count outcomes from the per-row results so we don't miss the
+      // 'updated' status that the backend's UPDATE branch emits — the
+      // top-level `result.created` only covers CREATE rows.
+      const counts = (outcomes || []).reduce((acc, o) => {
+        acc[o.status] = (acc[o.status] || 0) + 1;
+        return acc;
+      }, {});
+      const created = counts.created || result?.created || 0;
+      const updated = counts.updated || 0;
+      const skipped = counts.skipped || result?.skipped || 0;
+      const failed  = counts.failed  || result?.failed  || 0;
 
+      // Refresh both the inventory-level cache (for stock counts on
+      // sibling tabs) AND the products list itself. The local
+      // `fetchProducts()` call is essential — without it the page
+      // keeps showing the previously-loaded page data even though
+      // the server has the updated values, making it look like the
+      // import did nothing even when the toast says "N updated".
       if (typeof refreshInventoryData === 'function') {
         try { await refreshInventoryData(); } catch (_) { /* non-fatal */ }
       }
+      try { await fetchProducts(); } catch (_) { /* non-fatal */ }
       addAuditLog('create', 'batch',
-        `${created}/${total} products imported (skipped: ${skipped}, failed: ${failed})`);
+        `${created} created · ${updated} updated · ${skipped} skipped · ${failed} failed (of ${total})`);
 
-      const summaryTitle = `Import: ${created} created · ${skipped} skipped · ${failed} failed`;
+      const parts = [];
+      if (created > 0) parts.push(`${created} created`);
+      if (updated > 0) parts.push(`${updated} updated`);
+      if (skipped > 0) parts.push(`${skipped} skipped`);
+      if (failed > 0) parts.push(`${failed} failed`);
+      const summaryTitle = `Import: ${parts.join(' · ') || '0 rows'}`;
+
       if (skipped > 0 || failed > 0) {
         const issues = outcomes
           .filter(o => o.status === 'skipped' || o.status === 'failed')
@@ -1162,6 +1235,45 @@ export default function Products() {
       return p.min_stock_level > 0 && stock <= p.min_stock_level;
     }).length
   };
+
+  // Fetch the entire filtered product set (across all pages) and open
+  // the Export modal once the data is in hand. Uses the same filters
+  // as the list view so a user who's filtered to "Plita" gets the
+  // full Plita set in their export, not just the visible page.
+  const handleOpenExport = useCallback(async () => {
+    setIsPreparingExport(true);
+    try {
+      const params = { page: 1, limit: 10000 };
+      if (searchQuery) params.search = searchQuery;
+      if (categoryFilter !== "all") params.category_id = categoryFilter;
+      if (inventoryTypeFilter !== "all") params.inventory_type = inventoryTypeFilter;
+      if (statusFilter === "inactive") params.include_inactive = "true";
+      const result = await inventoryService.listProductsPaginated(params);
+      let items = result?.data || [];
+      // Same client-side filters as fetchProducts so the export
+      // matches what the user sees on screen.
+      if (warehouseFilter !== "all") {
+        const productIdsInWarehouse = new Set(
+          inventory.filter(i => i.warehouse_id === warehouseFilter).map(i => i.product_id)
+        );
+        items = items.filter(product => productIdsInWarehouse.has(product.id));
+      }
+      if (statusFilter === "inactive") {
+        items = items.filter(product => !product.is_active);
+      }
+      setAllProductsForExport(items);
+      setShowExportModal(true);
+    } catch (err) {
+      console.error('Failed to load products for export:', err);
+      toast({
+        variant: 'destructive',
+        title: t('error') || 'Error',
+        description: t('export_load_failed') || "Eksport uchun mahsulotlarni yuklab bo'lmadi",
+      });
+    } finally {
+      setIsPreparingExport(false);
+    }
+  }, [searchQuery, categoryFilter, warehouseFilter, statusFilter, inventoryTypeFilter, inventory, toast, t]);
 
   // Server-side fetch for products with pagination
   const fetchProducts = useCallback(async () => {
@@ -1939,9 +2051,14 @@ export default function Products() {
                 {t('import') || 'Import'}
                 {isProductImporting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               </button>
-              {/* Keep the export button using the original component */}
+              {/* Keep the export button using the original component.
+                  Wrapped in handleOpenExport so we fetch the full
+                  filtered product set (across pages) BEFORE opening
+                  the modal — passing the visible page only would
+                  silently truncate the export to ~20 rows. */}
               <ImportExportButtons
-                onExport={() => setShowExportModal(true)}
+                onExport={handleOpenExport}
+                isExporting={isPreparingExport}
               />
               {canCreate(MODULES.INVENTORY) && (
                 <Button
@@ -4392,11 +4509,14 @@ export default function Products() {
         entityName="Kategoriyalar"
       />
 
-      {/* Export Modal */}
+      {/* Export Modal — receives the FULL filtered product set
+          (not just the visible page) via allProductsForExport,
+          which is populated by handleOpenExport before the modal
+          opens. */}
       <ExportModal
         open={showExportModal}
-        onClose={() => setShowExportModal(false)}
-        data={filteredProducts}
+        onClose={() => { setShowExportModal(false); setAllProductsForExport([]); }}
+        data={allProductsForExport}
         columns={exportColumns}
         entityName="Mahsulotlar"
         title="Mahsulotlar ro'yxati"

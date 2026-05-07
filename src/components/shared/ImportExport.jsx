@@ -629,6 +629,10 @@ export function ExportModal({
   const [isExporting, setIsExporting] = useState(false);
 
   const toggleColumn = (key) => {
+    // Required columns (e.g. `id` for the round-trip update flow) must
+    // stay selected — uncheck attempts are silently ignored.
+    const col = columns.find(c => c.key === key);
+    if (col?.required) return;
     setSelectedColumns((prev) =>
       prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
     );
@@ -711,7 +715,11 @@ export function ExportModal({
                 onClick={() =>
                   setSelectedColumns(
                     selectedColumns.length === columns.length
-                      ? []
+                      // Deselect-all keeps required columns selected,
+                      // since the round-trip update flow needs `id`
+                      // (or whatever else is marked required) to
+                      // identify rows on re-import.
+                      ? columns.filter((col) => col.required).map((col) => col.key)
                       : columns.map((col) => col.key)
                   )
                 }
@@ -725,13 +733,18 @@ export function ExportModal({
               {columns.map((col) => (
                 <label
                   key={col.key}
-                  className="flex items-center gap-2 cursor-pointer"
+                  className={`flex items-center gap-2 ${col.required ? 'cursor-not-allowed opacity-90' : 'cursor-pointer'}`}
+                  title={col.required ? (t('required_for_round_trip_update') || "Required for round-trip update — can't be deselected") : undefined}
                 >
                   <Checkbox
-                    checked={selectedColumns.includes(col.key)}
+                    checked={col.required ? true : selectedColumns.includes(col.key)}
                     onCheckedChange={() => toggleColumn(col.key)}
+                    disabled={col.required}
                   />
-                  <span className="text-sm">{col.label}</span>
+                  <span className="text-sm">
+                    {col.label}
+                    {col.required && <span className="text-red-500 ml-0.5">*</span>}
+                  </span>
                 </label>
               ))}
             </div>
@@ -776,6 +789,11 @@ export function ImportExportButtons({
   onExport,
   importDisabled = false,
   exportDisabled = false,
+  // When true, the export button shows a spinner and is disabled.
+  // Used by callers that need to fetch full data (across paginated
+  // pages) before opening the export modal — keeps the user from
+  // clicking again mid-fetch.
+  isExporting = false,
 }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
@@ -798,9 +816,11 @@ export function ImportExportButtons({
           variant="outline"
           size="sm"
           onClick={onExport}
-          disabled={exportDisabled}
+          disabled={exportDisabled || isExporting}
         >
-          <Download className="w-4 h-4 mr-1" />
+          {isExporting
+            ? <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+            : <Download className="w-4 h-4 mr-1" />}
           {t('export') || 'Export'}
         </Button>
       )}
