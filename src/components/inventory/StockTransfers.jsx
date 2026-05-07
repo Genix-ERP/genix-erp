@@ -171,7 +171,7 @@ export default function StockTransfers() {
         product_id: transferForm.product_id,
         from_warehouse_id: transferForm.from_warehouse_id,
         to_warehouse_id: transferForm.to_warehouse_id,
-        quantity: parseInt(transferForm.quantity),
+        quantity: parseFloat(transferForm.quantity),
         notes: transferForm.notes,
         reference: transferForm.reference || `TRF-${Date.now()}`
       });
@@ -617,14 +617,15 @@ export default function StockTransfers() {
               />
               <Input
                 type="number"
-                min="1"
+                min="0.0001"
+                step="any"
                 max={transferForm.from_warehouse_id ? getAvailableStock(transferForm.product_id, transferForm.from_warehouse_id) : undefined}
                 placeholder={t('enter_quantity') || "Miqdorni kiriting"}
                 value={transferForm.quantity}
                 onChange={(e) => setTransferForm({...transferForm, quantity: e.target.value})}
                 required
               />
-              {transferForm.product_id && transferForm.from_warehouse_id && parseInt(transferForm.quantity) > getAvailableStock(transferForm.product_id, transferForm.from_warehouse_id) && (
+              {transferForm.product_id && transferForm.from_warehouse_id && parseFloat(transferForm.quantity) > getAvailableStock(transferForm.product_id, transferForm.from_warehouse_id) && (
                 <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
                   <AlertCircle className="w-3 h-3" />
                   {t('quantity_exceeds_available') || "Miqdor mavjud zaxiradan oshib ketdi"}
@@ -678,8 +679,8 @@ export default function StockTransfers() {
                   !transferForm.from_warehouse_id ||
                   !transferForm.to_warehouse_id ||
                   !transferForm.quantity ||
-                  parseInt(transferForm.quantity) <= 0 ||
-                  parseInt(transferForm.quantity) > getAvailableStock(transferForm.product_id, transferForm.from_warehouse_id)
+                  parseFloat(transferForm.quantity) <= 0 ||
+                  parseFloat(transferForm.quantity) > getAvailableStock(transferForm.product_id, transferForm.from_warehouse_id)
                 }
               >
                 {isSaving ? (
