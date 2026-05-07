@@ -7543,10 +7543,28 @@ export const translations = {
     // (Call/Meeting/Email/Other) via the catalog's `translate` map.
     "notif_crm_activity_reminder_title": "Reminder: {activity_type}",
     "notif_crm_activity_reminder_body": "Lead: {lead_name}",
+    // Type-badge labels for the notifications page. Used by
+    // NotificationSettings.jsx — `t('notif_type_<type>')` falls back to
+    // a humanized form of the raw type when the key is missing, so
+    // adding new types is additive.
+    "notif_type_crm_activity_reminder": "CRM Reminder",
+    "notif_type_vendor_bill_overdue": "Vendor Bill Overdue",
+    "notif_type_material_reservation_request": "Material Reservation",
+    "notif_type_low_stock": "Low Stock",
+    "notif_type_invoice_sent": "Invoice Sent",
+    "notif_type_payment_recorded": "Payment Recorded",
+    "notif_type_purchase_order_approved": "PO Approved",
+    "notif_type_sales_order_confirmed": "Sales Order",
+    "notif_type_reconciliation_reminder": "Reconciliation Reminder",
+    "notif_type_step_timeout_blocked": "Step Timeout (Blocked)",
+    "notif_type_step_timeout_warning": "Step Timeout",
+    "notif_type_step_timeout_escalated": "Step Timeout (Escalated)",
     // API error templates — rendered at read time via apiErrors.js.
     // {placeholders} are interpolated from the backend error's `details` map.
     "error_insufficient_stock": "Insufficient stock. Available: {available}, Requested: {requested}",
     "error_tax_regime_conflict": "NDS (sales) and Turnover tax cannot both be active at the same time. Deactivate the {conflict} tax first before activating {applies_to}.",
+    "error_po_lines_locked_received": "Cannot edit lines on a purchase order that has been received against. Cancel the receipt first or create an amended PO.",
+    "error_po_lines_locked_billed": "Cannot edit lines on a purchase order that has been billed. Cancel the related bill(s) first, or create a new PO.",
     // TaxSummary page (TZ §10 — Umumiy soliq jamlanmasi)
     "tax_summary": "Tax Summary",
     "tax_summary_title": "Tax Summary",
@@ -15782,9 +15800,24 @@ export const translations = {
     // amal yorlig'iga (Qo'ng'iroq/Uchrashuv/Email/Boshqa) tarjima qilinadi.
     "notif_crm_activity_reminder_title": "Eslatma: {activity_type}",
     "notif_crm_activity_reminder_body": "Lid: {lead_name}",
+    // Tip nishonlari uchun yorliqlar — NotificationSettings.jsx ishlatadi.
+    "notif_type_crm_activity_reminder": "CRM eslatmasi",
+    "notif_type_vendor_bill_overdue": "Yetkazuvchi hisob-fakturasi muddati o'tdi",
+    "notif_type_material_reservation_request": "Material bron qilish",
+    "notif_type_low_stock": "Kam zaxira",
+    "notif_type_invoice_sent": "Hisob-faktura yuborildi",
+    "notif_type_payment_recorded": "To'lov ro'yxatga olindi",
+    "notif_type_purchase_order_approved": "Xarid buyurtmasi tasdiqlandi",
+    "notif_type_sales_order_confirmed": "Savdo buyurtmasi",
+    "notif_type_reconciliation_reminder": "Akt sverka eslatmasi",
+    "notif_type_step_timeout_blocked": "Bosqich vaqti tugadi (bloklandi)",
+    "notif_type_step_timeout_warning": "Bosqich vaqti tugadi",
+    "notif_type_step_timeout_escalated": "Bosqich vaqti tugadi (kuchaytirildi)",
     // API xatolik shablonlari — apiErrors.js orqali renderlanadi.
     "error_insufficient_stock": "Omborda yetarli emas. Mavjud: {available}, So'ralgan: {requested}",
     "error_tax_regime_conflict": "NDS (sotuvlar) va Aylanma solig'i bir vaqtda faol bo'lolmaydi. {applies_to} ni faollashtirishdan oldin {conflict} solig'ini o'chiring.",
+    "error_po_lines_locked_received": "Tovar qabul qilingan xarid buyurtmasining qatorlarini o'zgartirib bo'lmaydi. Avval qabulni bekor qiling yoki yangi tuzatish buyurtmasini yarating.",
+    "error_po_lines_locked_billed": "Hisob-faktura yaratilgan xarid buyurtmasining qatorlarini o'zgartirib bo'lmaydi. Avval tegishli hisob-fakturani bekor qiling yoki yangi xarid buyurtmasini yarating.",
     // Umumiy soliq jamlanmasi (TZ §10)
     "tax_summary": "Umumiy soliq jamlanmasi",
     "tax_summary_title": "Umumiy soliq jamlanmasi",
@@ -24100,9 +24133,24 @@ export const translations = {
     // карту `translate` каталога (Звонок/Встреча/Email/Другое).
     "notif_crm_activity_reminder_title": "Напоминание: {activity_type}",
     "notif_crm_activity_reminder_body": "Лид: {lead_name}",
+    // Подписи под уведомлениями для NotificationSettings.jsx.
+    "notif_type_crm_activity_reminder": "Напоминание CRM",
+    "notif_type_vendor_bill_overdue": "Просроченный счёт поставщика",
+    "notif_type_material_reservation_request": "Запрос на резервирование",
+    "notif_type_low_stock": "Низкий остаток",
+    "notif_type_invoice_sent": "Счёт отправлен",
+    "notif_type_payment_recorded": "Платёж зарегистрирован",
+    "notif_type_purchase_order_approved": "Заказ утверждён",
+    "notif_type_sales_order_confirmed": "Заказ продажи",
+    "notif_type_reconciliation_reminder": "Напоминание об акте сверки",
+    "notif_type_step_timeout_blocked": "Тайм-аут шага (заблокировано)",
+    "notif_type_step_timeout_warning": "Тайм-аут шага",
+    "notif_type_step_timeout_escalated": "Тайм-аут шага (эскалировано)",
     // Шаблоны ошибок API — рендерятся через apiErrors.js.
     "error_insufficient_stock": "Недостаточно на складе. Доступно: {available}, запрошено: {requested}",
     "error_tax_regime_conflict": "НДС (продажи) и налог с оборота не могут быть активны одновременно. Перед активацией {applies_to} отключите налог {conflict}.",
+    "error_po_lines_locked_received": "Невозможно редактировать строки заказа на поставку, по которому уже было оприходование. Сначала отмените приход или создайте корректирующий заказ.",
+    "error_po_lines_locked_billed": "Невозможно редактировать строки заказа на поставку, по которому выставлен счёт. Сначала отмените связанный счёт или создайте новый заказ.",
     // Сводка по налогам (ТЗ §10)
     "tax_summary": "Сводка по налогам",
     "tax_summary_title": "Сводка по налогам",

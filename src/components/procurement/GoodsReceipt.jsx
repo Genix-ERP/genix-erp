@@ -107,8 +107,18 @@ export default function GoodsReceipt() {
   const fetchReceipts = async () => {
     setLoading(true);
     try {
+      // procurementService.listGoodsReceipts already unwraps the
+      // axios envelope and returns the inner `data` payload — which
+      // is the array directly when there are receipts, or `null`
+      // when the table is empty (some Go handlers return null
+      // instead of an empty array). The previous code did
+      // `response.data || response || []` which crashes on null
+      // because `null.data` throws. Normalize defensively here.
       const response = await procurementService.listGoodsReceipts();
-      setReceipts(response.data || response || []);
+      const list = Array.isArray(response)
+        ? response
+        : (response && Array.isArray(response.data) ? response.data : []);
+      setReceipts(list);
     } catch (error) {
       console.error('Failed to fetch goods receipts:', error);
       setReceipts([]);

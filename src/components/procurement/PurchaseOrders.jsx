@@ -58,6 +58,7 @@ import { MODULES } from "@/config/permissions";
 import { procurementService } from '@/api/services/procurement';
 import { financeService } from '@/api/services/finance';
 import { useToast } from "@/components/ui/use-toast";
+import { formatApiError } from "@/utils/apiErrors";
 import { useAdminSettings } from '@/components/contexts/AdminSettingsContext';
 import { useFinancials } from '@/components/contexts/FinancialsContext';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
@@ -700,6 +701,13 @@ export default function PurchaseOrders() {
       order_date: po.order_date ? (typeof po.order_date === 'string' ? po.order_date.split('T')[0] : po.order_date) : '',
       lines: [{ product_id: '', product_name: '', quantity: 1, unit_price: 0, lead_time_days: 0 }],
       _linesLoading: true,
+      // Snapshot the status as it came from the server so the save
+      // handler can tell whether the user actually changed it. Some
+      // statuses ('received', 'partial') are only writable via
+      // dedicated endpoints — sending them through the generic PUT
+      // is rejected by the backend, so we skip the status field
+      // entirely when it hasn't changed.
+      _originalStatus: po.status || '',
     });
     setShowEditModal(true);
 
@@ -719,6 +727,23 @@ export default function PurchaseOrders() {
         has_delivery: l.has_delivery || false,
         delivery_price: l.delivery_price || 0,
       }));
+      // Derive tax_percent from the absolute tax/subtotal returned by
+      // the API. The backend stores tax_percent per-line, not on the
+      // header, so the GET response carries `tax_amount` and
+      // `subtotal` but no `tax_percent` field. Without this derivation
+      // the edit modal opens with Soliq=0 even when the PO has tax,
+      // and saving wipes the line tax to zero.
+      const apiSubtotal = parseFloat(fullOrder.subtotal) || 0;
+      const apiTaxAmount = parseFloat(fullOrder.tax_amount) || 0;
+      const derivedTaxPercent = apiSubtotal > 0
+        ? Math.round((apiTaxAmount / apiSubtotal) * 10000) / 100  // 2dp
+        : 0;
+      // Pull tax_id off the first line if any — the API doesn't expose
+      // a header-level tax_rate_id, but lines all share the same rate
+      // in the create flow, so we sample the first one.
+      const firstLineTaxID =
+        (fullOrder.lines || []).find(l => l.tax_id)?.tax_id || '';
+
       setEditPO(prev => prev ? {
         ...prev,
         ...fullOrder,
@@ -728,8 +753,8 @@ export default function PurchaseOrders() {
         warehouse_id: fullOrder.warehouse_id || prev.warehouse_id,
         vehicle_number: fullOrder.vehicle_number || prev.vehicle_number,
         requires_shipping: fullOrder.requires_shipping !== false,
-        tax_percent: fullOrder.tax_percent || prev.tax_percent,
-        tax_rate_id: fullOrder.tax_rate_id || prev.tax_rate_id,
+        tax_percent: fullOrder.tax_percent || derivedTaxPercent || prev.tax_percent || 0,
+        tax_rate_id: fullOrder.tax_rate_id || firstLineTaxID || prev.tax_rate_id || '',
         payment_terms: fullOrder.payment_terms || prev.payment_terms,
         order_date: fullOrder.order_date
           ? (typeof fullOrder.order_date === 'string' ? fullOrder.order_date.split('T')[0] : fullOrder.order_date)
@@ -737,6 +762,18 @@ export default function PurchaseOrders() {
         expected_delivery_date: fullOrder.expected_delivery_date || fullOrder.expected_date || prev.expected_delivery_date,
         lines: lines.length > 0 ? lines : prev.lines,
         _linesLoading: false,
+        // Refresh the snapshot from the authoritative server response
+        // (the list view's status can be stale; getOrder is canonical).
+        _originalStatus: fullOrder.status || prev._originalStatus || '',
+        // Snapshot the original lines so the save handler can detect
+        // whether the user actually changed anything. Without this,
+        // every save sends the lines payload and the backend's
+        // billed/received guards block edits even when the user only
+        // touched header fields like vehicle number.
+        _originalLines: lines.length > 0 ? JSON.stringify(lines.map(l => ({
+          id: l.id, product_id: l.product_id, quantity: l.quantity,
+          unit_price: l.unit_price, packaging_id: l.packaging_id, packaging_qty: l.packaging_qty,
+        }))) : '',
       } : prev);
     } catch (err) {
       console.warn('Failed to load PO details for edit:', err);
@@ -812,26 +849,53 @@ export default function PurchaseOrders() {
       if (editPO.payment_terms) updates.payment_terms = editPO.payment_terms;
       if (editPO.vehicle_number !== undefined) updates.vehicle_number = editPO.vehicle_number || '';
       if (editPO.requires_shipping !== undefined) updates.requires_shipping = !!editPO.requires_shipping;
-      if (editPO.status) updates.status = editPO.status;
+      // Status is only sent if the user explicitly changed it, AND the
+      // new status is one the generic PUT accepts. 'received' and
+      // 'partial' must go through the dedicated /receive endpoint —
+      // the backend's UpdatePurchaseOrder rejects them with:
+      //   "Status 'received' cannot be set via generic update."
+      // Without this guard, every save on a received PO 500s because
+      // the form preserves the existing 'received' value as-is.
+      const STATUS_BLOCKED_VIA_GENERIC = new Set(['received', 'partial']);
+      if (
+        editPO.status &&
+        editPO.status !== editPO._originalStatus &&
+        !STATUS_BLOCKED_VIA_GENERIC.has(editPO.status)
+      ) {
+        updates.status = editPO.status;
+      }
       if (editPO.notes !== undefined) updates.notes = editPO.notes;
       if (editPO.vendor_reference !== undefined) updates.vendor_reference = editPO.vendor_reference;
 
-      // Lines — only send if we actually loaded them and the user has at
-      // least one valid product line. Sending an empty array would wipe
-      // the order's lines.
+      // Lines — only send if we actually loaded them, the user has
+      // at least one valid product line, AND the lines actually
+      // changed compared to what was loaded. The diff check matters
+      // because the backend rejects line replacement on POs that
+      // have already been billed/received; if the user only edited
+      // the vehicle number we don't want to trip that guard.
       if (Array.isArray(editPO.lines) && editPO.lines.some(l => l.product_id)) {
-        updates.lines = editPO.lines
-          .filter(l => l.product_id && parseFloat(l.quantity) > 0)
-          .map(l => ({
-            product_id: l.product_id,
-            variant_id: l.variant_id || undefined,
-            quantity: parseFloat(l.quantity) || 0,
-            unit_price: parseFloat(l.unit_price) || 0,
-            description: l.product_name || l.description || '',
-            lead_time_days: parseInt(l.lead_time_days) || 0,
-            packaging_id: l.packaging_id || undefined,
-            packaging_qty: l.packaging_id ? (parseInt(l.packaging_qty) || 1) : undefined,
-          }));
+        const headerTaxPercent = parseFloat(editPO.tax_percent) || 0;
+        const currentLinesSnapshot = JSON.stringify(editPO.lines.map(l => ({
+          id: l.id, product_id: l.product_id, quantity: l.quantity,
+          unit_price: l.unit_price, packaging_id: l.packaging_id, packaging_qty: l.packaging_qty,
+        })));
+        const linesChanged = currentLinesSnapshot !== (editPO._originalLines || '');
+
+        if (linesChanged) {
+          updates.lines = editPO.lines
+            .filter(l => l.product_id && parseFloat(l.quantity) > 0)
+            .map(l => ({
+              product_id: l.product_id,
+              variant_id: l.variant_id || undefined,
+              quantity: parseFloat(l.quantity) || 0,
+              unit_price: parseFloat(l.unit_price) || 0,
+              description: l.product_name || l.description || '',
+              tax_percent: headerTaxPercent,
+              tax_id: editPO.tax_rate_id || undefined,
+              packaging_id: l.packaging_id || undefined,
+              packaging_qty: l.packaging_id ? (parseFloat(l.packaging_qty) || 1) : undefined,
+            }));
+        }
       }
 
       if (Object.keys(updates).length > 0) {
@@ -844,6 +908,20 @@ export default function PurchaseOrders() {
       setEditPO(null);
     } catch (error) {
       console.error('Error updating PO:', error);
+      // Run through formatApiError so structured backend error codes
+      // (PO_LINES_LOCKED_BILLED, etc.) get rendered in the user's
+      // current language via apiErrors.js's catalog. Falls back to
+      // the backend's English message if no translation exists yet.
+      const apiMessage = formatApiError(
+        error,
+        t,
+        t('failed_to_save') || 'Failed to save'
+      );
+      toast({
+        variant: 'destructive',
+        title: t('error') || 'Error',
+        description: apiMessage,
+      });
     } finally {
       setIsSubmitting(false);
     }
