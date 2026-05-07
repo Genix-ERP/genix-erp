@@ -274,6 +274,8 @@ export default function ShopFloorControl({ isActive }) {
   // Split output modal state
   const [showSplitModal, setShowSplitModal] = useState(false);
   const [splitPoId, setSplitPoId] = useState(null);
+  const [splitBulkQty, setSplitBulkQty] = useState(0);
+  const [splitBulkUnit, setSplitBulkUnit] = useState('');
   const [splitItems, setSplitItems] = useState([{ product_id: '', quantity: '', warehouse_id: '' }]);
   const [splitSubmitting, setSplitSubmitting] = useState(false);
 
@@ -481,6 +483,10 @@ export default function ShopFloorControl({ isActive }) {
           console.log('Split output check: PO status =', po?.status, 'has_split_output =', po?.has_split_output);
           if (po && (po.status === 'packaging' || (po.status === 'completed' && po.has_split_output))) {
             setSplitPoId(poId);
+            // Capture the bulk quantity that was produced — used to constrain split totals
+            const bulkQty = parseFloat(po.quantity_produced ?? po.quantity ?? produced) || 0;
+            setSplitBulkQty(bulkQty);
+            setSplitBulkUnit(po.unit_name || po.unit_code || '');
             setSplitItems([{ product_id: '', quantity: '', warehouse_id: '' }]);
             setShowSplitModal(true);
           }
@@ -499,6 +505,23 @@ export default function ShopFloorControl({ isActive }) {
   const handleSplitSubmit = async () => {
     const validItems = splitItems.filter(it => it.product_id && parseFloat(it.quantity) > 0);
     if (!validItems.length) return;
+
+    // Guard: prevent submitting more than what was produced
+    if (splitBulkQty > 0) {
+      const totalUsed = validItems.reduce((sum, it) => {
+        const product = (products || []).find(p => p.id === it.product_id);
+        const factor = parseFloat(product?.weight) || 1;
+        return sum + (parseFloat(it.quantity) || 0) * factor;
+      }, 0);
+      if (totalUsed > splitBulkQty + 1e-6) {
+        toast.error(language === 'uz'
+          ? `Ishlab chiqarilgan miqdordan oshib ketdi: ${totalUsed.toFixed(2)} / ${splitBulkQty} ${splitBulkUnit}`
+          : language === 'ru'
+          ? `Превышено произведённое количество: ${totalUsed.toFixed(2)} / ${splitBulkQty} ${splitBulkUnit}`
+          : `Exceeds produced quantity: ${totalUsed.toFixed(2)} / ${splitBulkQty} ${splitBulkUnit}`);
+        return;
+      }
+    }
 
     setSplitSubmitting(true);
     try {
@@ -523,6 +546,22 @@ export default function ShopFloorControl({ isActive }) {
   const addSplitItem = () => setSplitItems(prev => [...prev, { product_id: '', quantity: '', warehouse_id: '' }]);
   const removeSplitItem = (idx) => setSplitItems(prev => prev.filter((_, i) => i !== idx));
   const updateSplitItem = (idx, field, value) => setSplitItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: value } : it));
+
+  // Compute how much of the bulk has been allocated across split rows.
+  // Each output product's `weight` field is its size factor — meters per piece,
+  // kg per piece, etc. — relative to the bulk material's unit.
+  const splitUsage = useMemo(() => {
+    if (!splitBulkQty) return { used: 0, remaining: 0, over: false };
+    const used = splitItems.reduce((sum, it) => {
+      const qty = parseFloat(it.quantity) || 0;
+      if (!qty || !it.product_id) return sum;
+      const product = (products || []).find(p => p.id === it.product_id);
+      const factor = parseFloat(product?.weight) || 1;
+      return sum + qty * factor;
+    }, 0);
+    const remaining = splitBulkQty - used;
+    return { used, remaining, over: used > splitBulkQty + 1e-6 };
+  }, [splitItems, products, splitBulkQty]);
 
   // Materials handlers
   const handleOpenMaterials = async (workOrder) => {
@@ -1290,6 +1329,43 @@ export default function ShopFloorControl({ isActive }) {
                 : 'Enter how the bulk output is split into packaged products.'}
             </p>
 
+            {/* Running usage summary — total bulk vs used vs remaining */}
+            {splitBulkQty > 0 && (
+              <div className={`rounded-lg p-3 border text-sm flex items-center justify-between ${
+                splitUsage.over ? 'bg-red-50 border-red-200' : 'bg-blue-50 border-blue-200'
+              }`}>
+                <div className="flex items-center gap-4">
+                  <div>
+                    <div className="text-xs text-slate-500">{language === 'uz' ? 'Jami' : language === 'ru' ? 'Всего' : 'Total'}</div>
+                    <div className="font-semibold text-slate-900 tabular-nums">
+                      {splitBulkQty} {splitBulkUnit}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-slate-500">{language === 'uz' ? 'Ishlatilgan' : language === 'ru' ? 'Использовано' : 'Used'}</div>
+                    <div className={`font-semibold tabular-nums ${splitUsage.over ? 'text-red-600' : 'text-slate-900'}`}>
+                      {splitUsage.used.toFixed(2)} {splitBulkUnit}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-slate-500">{language === 'uz' ? 'Qoldi' : language === 'ru' ? 'Осталось' : 'Remaining'}</div>
+                    <div className={`font-semibold tabular-nums ${splitUsage.over ? 'text-red-600' : 'text-green-700'}`}>
+                      {splitUsage.remaining.toFixed(2)} {splitBulkUnit}
+                    </div>
+                  </div>
+                </div>
+                {splitUsage.over && (
+                  <div className="text-red-600 text-xs font-medium">
+                    {language === 'uz'
+                      ? 'Ishlab chiqarilgan miqdordan oshib ketdi!'
+                      : language === 'ru'
+                      ? 'Превышено произведённое количество!'
+                      : 'Exceeds produced quantity!'}
+                  </div>
+                )}
+              </div>
+            )}
+
             {splitItems.map((item, idx) => (
               <div key={idx} className="grid grid-cols-12 gap-2 items-end border border-slate-100 rounded-lg p-3">
                 <div className="col-span-5 space-y-1">
@@ -1301,7 +1377,9 @@ export default function ShopFloorControl({ isActive }) {
                   >
                     <option value="">— {language === 'uz' ? 'tanlang' : language === 'ru' ? 'выбрать' : 'select'} —</option>
                     {(products || []).filter(p => p.can_be_sold || p.is_sellable).map(p => (
-                      <option key={p.id} value={p.id}>{p.name} {p.weight ? `(${p.weight} kg)` : ''}</option>
+                      <option key={p.id} value={p.id}>
+                        {p.name}{p.weight ? ` (${p.weight} ${splitBulkUnit || 'kg'} / ${language === 'uz' ? 'dona' : language === 'ru' ? 'шт.' : 'pc'})` : ''}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -1349,7 +1427,7 @@ export default function ShopFloorControl({ isActive }) {
               </Button>
               <Button
                 onClick={handleSplitSubmit}
-                disabled={splitSubmitting || !splitItems.some(it => it.product_id && parseFloat(it.quantity) > 0)}
+                disabled={splitSubmitting || !splitItems.some(it => it.product_id && parseFloat(it.quantity) > 0) || splitUsage.over}
                 className="flex-1 bg-green-600 hover:bg-green-700"
               >
                 <CheckCircle className="w-4 h-4 mr-2" />
