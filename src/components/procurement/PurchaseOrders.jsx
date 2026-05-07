@@ -1001,7 +1001,7 @@ export default function PurchaseOrders() {
                               <Button size="sm" variant="ghost" onClick={(e) => handleViewPO(po, e)} title={t('view_details') || 'View Details'}>
                                 <Eye className="w-4 h-4" />
                               </Button>
-                              {canUpdate(MODULES.PURCHASES) && (
+                              {canUpdate(MODULES.PURCHASES) && (po.status === 'draft' || po.status === 'cancelled') && (
                                 <Button size="sm" variant="ghost" onClick={(e) => handleEditPO(po, e)} title={t('edit') || 'Edit'}>
                                   <Edit2 className="w-4 h-4" />
                                 </Button>
