@@ -13,7 +13,13 @@ import {
 } from "@/components/ui/command";
 import apiClient from "@/api/client";
 
-export default function ProductCombobox({ products: initialProducts = [], value, onValueChange, placeholder = "Mahsulot tanlang", t = (k) => k }) {
+// `valueLabel` (optional): pre-known display name for the current `value`.
+// Use this when the parent has the product's name in hand (e.g. fetched
+// alongside an order line) but the product itself isn't in `products` —
+// happens on edit screens where `products` is paginated or filtered by
+// org and may not include the line's product. Without this fallback
+// the combobox renders the placeholder even when a real id is selected.
+export default function ProductCombobox({ products: initialProducts = [], value, valueLabel, onValueChange, placeholder = "Mahsulot tanlang", t = (k) => k }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [searchResults, setSearchResults] = useState([]);
@@ -84,7 +90,7 @@ export default function ProductCombobox({ products: initialProducts = [], value,
               display: 'block',
             }}
           >
-            {selectedProduct ? selectedProduct.name : placeholder}
+            {selectedProduct ? selectedProduct.name : (value && valueLabel ? valueLabel : placeholder)}
           </span>
           <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
