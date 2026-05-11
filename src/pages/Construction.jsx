@@ -1535,6 +1535,21 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
   const handleBuildingFileUpload = async (e) => {
     const files = e.target.files;
     if (!files?.length || !buildingFilesTarget) return;
+
+    // Mirror the backend's STORAGE_MAX_FILE_SIZE default (100MB). Catching
+    // it here avoids a wasted multipart upload and gives the user an
+    // instant, translated error instead of a generic 400 from the API.
+    const MAX_FILE_BYTES = 100 * 1024 * 1024;
+    const oversized = Array.from(files).find((f) => f.size > MAX_FILE_BYTES);
+    if (oversized) {
+      const limitMB = Math.floor(MAX_FILE_BYTES / (1024 * 1024));
+      toast.error(
+        (t('file_too_large') || "Fayl hajmi {limit} MB dan oshmasligi kerak").replace('{limit}', limitMB)
+      );
+      e.target.value = '';
+      return;
+    }
+
     setUploadingBuildingFile(true);
     try {
       for (const file of files) {
@@ -1561,7 +1576,17 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
       toast.success(t('file_uploaded') || 'Fayl yuklandi');
     } catch (err) {
       console.error('Error uploading building file:', err);
-      toast.error(t('error_occurred') || 'Xatolik yuz berdi');
+      // Backend's size check may still trip if the env var is set lower
+      // than our local default — surface the same translated message.
+      const apiMsg = err?.response?.data?.message || err?.response?.data?.error || '';
+      if (/file size exceeds/i.test(apiMsg)) {
+        const limitMB = Math.floor(MAX_FILE_BYTES / (1024 * 1024));
+        toast.error(
+          (t('file_too_large') || "Fayl hajmi {limit} MB dan oshmasligi kerak").replace('{limit}', limitMB)
+        );
+      } else {
+        toast.error(t('error_occurred') || 'Xatolik yuz berdi');
+      }
     } finally {
       setUploadingBuildingFile(false);
       e.target.value = '';
