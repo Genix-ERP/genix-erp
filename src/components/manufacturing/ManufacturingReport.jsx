@@ -16,10 +16,10 @@ export default function ManufacturingReport() {
   const [viewMode, setViewMode] = useState('byProduct'); // 'byOrder' or 'byProduct'
 
   const l = {
-    en: { title: 'Manufacturing Report', subtitle: 'Production orders overview by category', all: 'All', order_code: 'Order Code', product: 'Product', qty_planned: 'Planned', qty_produced: 'Produced', good_qty: 'Good', reject_qty: 'Reject', loss: 'Loss', status: 'Status', total_produced: 'Total Produced', total_good: 'Total Good', total_reject: 'Total Reject', total_loss: 'Total Loss', no_orders: 'No production orders found', uncategorized: 'Uncategorized', by_order: 'By Order', by_product: 'By Product', orders_count: 'Orders', efficiency: 'Efficiency' },
-    uz: { title: 'Ishlab chiqarish hisoboti', subtitle: 'Kategoriya bo\'yicha ishlab chiqarish buyurtmalari', all: 'Barchasi', order_code: 'Buyurtma kodi', product: 'Mahsulot', qty_planned: 'Rejalashtirilgan', qty_produced: 'Ishlab chiqarilgan', good_qty: 'Yaxshi', reject_qty: 'Yaroqsiz', loss: 'Zarar', status: 'Holat', total_produced: 'Jami ishlab chiqarilgan', total_good: 'Jami yaxshi', total_reject: 'Jami yaroqsiz', total_loss: 'Jami zarar', no_orders: 'Ishlab chiqarish buyurtmalari topilmadi', uncategorized: 'Kategoriyasiz', by_order: 'Buyurtma bo\'yicha', by_product: 'Mahsulot bo\'yicha', orders_count: 'Buyurtmalar', efficiency: 'Samaradorlik' },
-    ru: { title: 'Отчёт производства', subtitle: 'Обзор производственных заказов по категориям', all: 'Все', order_code: 'Код заказа', product: 'Продукт', qty_planned: 'План', qty_produced: 'Произведено', good_qty: 'Годные', reject_qty: 'Брак', loss: 'Убыток', status: 'Статус', total_produced: 'Всего произведено', total_good: 'Всего годных', total_reject: 'Всего брак', total_loss: 'Всего убыток', no_orders: 'Производственные заказы не найдены', uncategorized: 'Без категории', by_order: 'По заказам', by_product: 'По продуктам', orders_count: 'Заказов', efficiency: 'Эффективность' },
-  }[language] || { title: 'Manufacturing Report', subtitle: 'Production orders overview by category', all: 'All', order_code: 'Order Code', product: 'Product', qty_planned: 'Planned', qty_produced: 'Produced', good_qty: 'Good', reject_qty: 'Reject', loss: 'Loss', status: 'Status', total_produced: 'Total Produced', total_good: 'Total Good', total_reject: 'Total Reject', total_loss: 'Total Loss', no_orders: 'No production orders found', uncategorized: 'Uncategorized' };
+    en: { title: 'Manufacturing Report', subtitle: 'Production orders overview by category', all: 'All', order_code: 'Order Code', product: 'Product', qty_planned: 'Planned', qty_produced: 'Produced', good_qty: 'Good', reject_qty: 'Reject', loss: 'Loss', status: 'Status', shortfall_reason: 'Shortfall Reason', total_produced: 'Total Produced', total_good: 'Total Good', total_reject: 'Total Reject', total_loss: 'Total Loss', no_orders: 'No production orders found', uncategorized: 'Uncategorized', by_order: 'By Order', by_product: 'By Product', orders_count: 'Orders', efficiency: 'Efficiency' },
+    uz: { title: 'Ishlab chiqarish hisoboti', subtitle: 'Kategoriya bo\'yicha ishlab chiqarish buyurtmalari', all: 'Barchasi', order_code: 'Buyurtma kodi', product: 'Mahsulot', qty_planned: 'Rejalashtirilgan', qty_produced: 'Ishlab chiqarilgan', good_qty: 'Yaxshi', reject_qty: 'Yaroqsiz', loss: 'Zarar', status: 'Holat', shortfall_reason: 'Kamomad sababi', total_produced: 'Jami ishlab chiqarilgan', total_good: 'Jami yaxshi', total_reject: 'Jami yaroqsiz', total_loss: 'Jami zarar', no_orders: 'Ishlab chiqarish buyurtmalari topilmadi', uncategorized: 'Kategoriyasiz', by_order: 'Buyurtma bo\'yicha', by_product: 'Mahsulot bo\'yicha', orders_count: 'Buyurtmalar', efficiency: 'Samaradorlik' },
+    ru: { title: 'Отчёт производства', subtitle: 'Обзор производственных заказов по категориям', all: 'Все', order_code: 'Код заказа', product: 'Продукт', qty_planned: 'План', qty_produced: 'Произведено', good_qty: 'Годные', reject_qty: 'Брак', loss: 'Убыток', status: 'Статус', shortfall_reason: 'Причина недостачи', total_produced: 'Всего произведено', total_good: 'Всего годных', total_reject: 'Всего брак', total_loss: 'Всего убыток', no_orders: 'Производственные заказы не найдены', uncategorized: 'Без категории', by_order: 'По заказам', by_product: 'По продуктам', orders_count: 'Заказов', efficiency: 'Эффективность' },
+  }[language] || { title: 'Manufacturing Report', subtitle: 'Production orders overview by category', all: 'All', order_code: 'Order Code', product: 'Product', qty_planned: 'Planned', qty_produced: 'Produced', good_qty: 'Good', reject_qty: 'Reject', loss: 'Loss', status: 'Status', shortfall_reason: 'Shortfall Reason', total_produced: 'Total Produced', total_good: 'Total Good', total_reject: 'Total Reject', total_loss: 'Total Loss', no_orders: 'No production orders found', uncategorized: 'Uncategorized' };
 
   const calcLoss = (order) => {
     const reject = order.reject_quantity || 0;
@@ -271,6 +271,7 @@ export default function ManufacturingReport() {
                   <TableHead className="text-right">{l.good_qty}</TableHead>
                   <TableHead className="text-right">{l.reject_qty}</TableHead>
                   <TableHead className="text-right">{l.loss}</TableHead>
+                  <TableHead>{l.shortfall_reason}</TableHead>
                   <TableHead>{l.status}</TableHead>
                 </TableRow>
               </TableHeader>
@@ -286,6 +287,9 @@ export default function ManufacturingReport() {
                       <TableCell className="text-right text-green-700 font-medium">{po.good_quantity || 0}</TableCell>
                       <TableCell className="text-right text-red-600 font-medium">{po.reject_quantity || 0}</TableCell>
                       <TableCell className="text-right text-amber-700 font-medium">{loss > 0 ? formatCurrency(loss) : '—'}</TableCell>
+                      <TableCell className="text-sm text-slate-600 max-w-[200px] truncate" title={po.shortfall_reason || ''}>
+                        {po.shortfall_reason || '—'}
+                      </TableCell>
                       <TableCell>
                         <Badge className={statusColors[po.status] || 'bg-gray-100 text-gray-700'}>
                           {statusLabels[po.status] || po.status}
