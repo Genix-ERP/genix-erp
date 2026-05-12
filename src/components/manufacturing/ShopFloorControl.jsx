@@ -458,10 +458,11 @@ export default function ShopFloorControl({ isActive }) {
     const produced = parseFloat(completionData.quantity_produced) || 0;
     const scrapped = parseFloat(completionData.quantity_scrapped) || 0;
     const notes = completionData.notes;
+    const shortfallReason = completionData.shortfall_reason || '';
 
     // Close the complete modal first to avoid overlap with split modal
     setShowCompleteModal(false);
-    setCompletionData({ quantity_produced: 0, quantity_scrapped: 0, notes: '' });
+    setCompletionData({ quantity_produced: 0, quantity_scrapped: 0, notes: '', shortfall_reason: '' });
 
     try {
       const timeSpent = calculateTimeSpent(activeWorkOrder);
@@ -471,6 +472,7 @@ export default function ShopFloorControl({ isActive }) {
         scrap_quantity: scrapped,
         actual_duration: timeSpent.totalMinutes,
         notes: notes,
+        ...(shortfallReason ? { shortfall_reason: shortfallReason } : {}),
       });
 
       refreshData();
@@ -1061,6 +1063,28 @@ export default function ShopFloorControl({ isActive }) {
               </div>
             </div>
 
+            {(() => {
+              const planned = activeWorkOrder?.quantity_to_produce || 0;
+              const alreadyProduced = activeWorkOrder?.quantity_produced || 0;
+              const remaining = planned - alreadyProduced;
+              const produced = parseFloat(completionData.quantity_produced) || 0;
+              const scrapped = parseFloat(completionData.quantity_scrapped) || 0;
+              const isShort = produced > 0 && (produced + scrapped) < remaining;
+              return isShort ? (
+                <div className="space-y-2">
+                  <Label className="text-amber-700">
+                    {language === 'uz' ? 'Kamomad sababi' : language === 'ru' ? 'Причина недостачи' : 'Shortfall Reason'} *
+                  </Label>
+                  <Textarea
+                    value={completionData.shortfall_reason || ''}
+                    onChange={e => setCompletionData({ ...completionData, shortfall_reason: e.target.value })}
+                    placeholder={language === 'uz' ? 'Nima uchun kamroq ishlab chiqarildi...' : language === 'ru' ? 'Укажите причину недостачи...' : 'Why was less produced...'}
+                    rows={2}
+                  />
+                </div>
+              ) : null;
+            })()}
+
             <div className="space-y-2">
               <Label>{language === 'uz' ? "Izohlar" : language === 'ru' ? "Примечания" : "Notes"}</Label>
               <Textarea
@@ -1077,7 +1101,14 @@ export default function ShopFloorControl({ isActive }) {
               </Button>
               <Button
                 onClick={confirmCompleteWorkOrder}
-                disabled={!completionData.quantity_produced || parseFloat(completionData.quantity_produced) <= 0}
+                disabled={!completionData.quantity_produced || parseFloat(completionData.quantity_produced) <= 0 || (() => {
+                  const planned = activeWorkOrder?.quantity_to_produce || 0;
+                  const alreadyProduced = activeWorkOrder?.quantity_produced || 0;
+                  const remaining = planned - alreadyProduced;
+                  const produced = parseFloat(completionData.quantity_produced) || 0;
+                  const scrapped = parseFloat(completionData.quantity_scrapped) || 0;
+                  return produced > 0 && (produced + scrapped) < remaining && !(completionData.shortfall_reason || '').trim();
+                })()}
                 className="bg-green-600 hover:bg-green-700"
               >
                 <CheckCircle className="w-4 h-4 mr-2" />
