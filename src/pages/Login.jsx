@@ -7,8 +7,10 @@ import LanguageSelector from '@/components/ui/language-selector';
 import GoogleSignInButton from '@/components/ui/GoogleSignInButton';
 import { Loader2, Mail, Lock, Phone, Building2, ArrowLeft } from 'lucide-react';
 import './Login.scss';
+import { readStoredBrandLogo, resolveBrandLogoUrl } from '@/utils/brandLogo';
 
 export default function Login() {
+  const [brandLogoUrl] = useState(() => resolveBrandLogoUrl(readStoredBrandLogo()));
   const [identifier, setIdentifier] = useState('');
   const [isPhone, setIsPhone] = useState(false);
   const [password, setPassword] = useState('');
@@ -132,8 +134,8 @@ export default function Login() {
         <div className="login-card">
           <div className="login-card__header">
             <img
-              src="/yuksalish-logo.png"
-              alt="Yuksalish Logo"
+              src={brandLogoUrl}
+              alt="Logo"
               className="login-card__logo"
             />
             <h1 className="login-card__title">{t('select_company')}</h1>
@@ -190,8 +192,8 @@ export default function Login() {
       <div className="login-card">
         <div className="login-card__header">
           <img
-            src="/yuksalish-logo.png"
-            alt="Yuksalish Logo"
+            src={brandLogoUrl}
+            alt="Logo"
             className="login-card__logo"
           />
           <h1 className="login-card__title">{t('welcome_back')}</h1>

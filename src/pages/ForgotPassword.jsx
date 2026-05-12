@@ -7,8 +7,10 @@ import { useTranslation } from '@/components/utils/translations';
 import LanguageSelector from '@/components/ui/language-selector';
 import { Loader2, Phone, ArrowLeft, CheckCircle2, Lock, KeyRound } from 'lucide-react';
 import './Login.scss';
+import { readStoredBrandLogo, resolveBrandLogoUrl } from '@/utils/brandLogo';
 
 export default function ForgotPassword() {
+  const [brandLogoUrl] = useState(() => resolveBrandLogoUrl(readStoredBrandLogo()));
   const [step, setStep] = useState('phone'); // phone -> otp -> password -> success
   const [phone, setPhone] = useState('+998');
   const [otpCode, setOtpCode] = useState('');
@@ -120,8 +122,8 @@ export default function ForgotPassword() {
       <div className="login-card">
         <div className="login-card__header">
           <img
-            src="/yuksalish-logo.png"
-            alt="Yuksalish Logo"
+            src={brandLogoUrl}
+            alt="Logo"
             className="login-card__logo"
           />
           <h1 className="login-card__title">{t('set_password') || "Parol o'rnatish"}</h1>
