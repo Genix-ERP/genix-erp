@@ -31,11 +31,13 @@ import {
   Crown,
   Zap,
   HardHat,
-  Receipt
+  Receipt,
+  Image as ImageIcon
 } from 'lucide-react';
 
 // Import settings components
 import GeneralSettings from '@/components/admin-settings/GeneralSettings';
+import BrandingSettings from '@/components/admin-settings/BrandingSettings';
 import CRMSettings from '@/components/admin-settings/CRMSettings';
 import SalesSettings from '@/components/admin-settings/SalesSettings';
 import InventorySettings from '@/components/admin-settings/InventorySettings';
@@ -54,6 +56,7 @@ import SubscriptionSettings from '@/components/settings/SubscriptionSettings';
 // 'general' is always shown, others depend on installed apps
 const SECTIONS = [
   { id: 'general', icon: Building2, label: 'general_settings', component: GeneralSettings, appIds: null }, // null = always show
+  { id: 'branding', icon: ImageIcon, label: 'branding_settings', component: BrandingSettings, appIds: null },
   { id: 'companies', icon: Building2, label: 'companies', component: CompanySettings, appIds: null },
   { id: 'subscription', icon: Crown, label: 'subscription', component: SubscriptionSettings, appIds: null },
   { id: 'crm', icon: Target, label: 'crm_settings', component: CRMSettings, appIds: ['crm'] },
@@ -317,7 +320,7 @@ export default function AdminSettings() {
                 onClick={resetAllSettings}
                 className="w-full text-slate-600 hover:text-red-600 hover:border-red-200"
               >
-                <RotateCcw className="w-4 h-4 mr-2" />
+                <RotateCcw className="w-4 h-4" />
                 {t('reset_all_defaults')}
               </Button>
             </div>

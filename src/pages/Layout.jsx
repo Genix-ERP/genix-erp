@@ -72,7 +72,8 @@ import { SalesProvider } from "@/components/contexts/SalesContext";
 import { ManufacturingProvider } from "@/components/contexts/ManufacturingContext";
 import { HRProvider } from "@/components/contexts/HRContext";
 import { ProjectsProvider } from "@/components/contexts/ProjectsContext";
-import { AdminSettingsProvider } from "@/components/contexts/AdminSettingsContext";
+import { AdminSettingsProvider, useAdminSettings } from "@/components/contexts/AdminSettingsContext";
+import { resolveBrandLogoUrl, readStoredBrandLogo } from "@/utils/brandLogo";
 import { CargoProvider } from "@/components/contexts/CargoContext";
 import { ConstructionProvider } from "@/components/contexts/ConstructionContext";
 import { useTranslation } from "@/components/utils/translations";
@@ -139,6 +140,12 @@ function LayoutContent({ children, currentPageName }) {
   const [recentNotifications, setRecentNotifications] = React.useState([]);
   const { user: currentUser, logout, isSiteAdmin, isOwner } = useAuth();
   const { canAccessModule, isAdmin } = useEmployeePermissions();
+  const { settings: adminSettings } = useAdminSettings();
+  // Always fall back to the public localStorage cache when settings don't
+  // (yet) have a logo. The cache is only updated after an authoritative
+  // backend response, so it doesn't get stale-cleared during initial mount.
+  const settingsLogo = adminSettings?.general?.company?.logo_url || null;
+  const brandLogoUrl = resolveBrandLogoUrl(settingsLogo || readStoredBrandLogo());
 
   // Set browser title based on language
   React.useEffect(() => {
@@ -479,8 +486,8 @@ function LayoutContent({ children, currentPageName }) {
           <SidebarHeader className="border-b border-slate-100 px-4 py-3">
             <div className="flex items-center justify-center w-full overflow-hidden">
               <img
-                src="/yuksalish-logo.png"
-                alt="Yuksalish"
+                src={brandLogoUrl}
+                alt="Logo"
                 className="w-full max-w-[96px] h-auto object-contain brand-logo-transparent"
               />
             </div>
