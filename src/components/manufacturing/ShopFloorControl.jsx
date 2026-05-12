@@ -384,7 +384,7 @@ export default function ShopFloorControl({ isActive }) {
       if (p !== 0) return p;
       return (a.po?.code || '').localeCompare(b.po?.code || '');
     });
-    return rows;
+    return rows.filter(row => !row.workOrders.every(w => w.status === 'completed' || w.status === 'done' || w.status === 'cancelled'));
   }, [filteredWorkOrders, productionOrders]);
 
   // Calculate time spent using backend actual_start / actual_duration_minutes
