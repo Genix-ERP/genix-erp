@@ -77,6 +77,7 @@ export default function WorkCenters() {
     electricity_rate: '',
     annual_maintenance: '',
     operator_monthly_salary: '',
+    labor_rate_type: 'monthly',
   });
   const [selectedEquipmentIds, setSelectedEquipmentIds] = useState([]);
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState([]);
@@ -136,13 +137,14 @@ export default function WorkCenters() {
     const monthlySalary = parseFloat(newWorkCenter.operator_monthly_salary) || 0;
     const overhead = parseFloat(newWorkCenter.overhead_cost) || 0;
 
-    // Monthly salary → hourly. Uzbek work schedule: 27 working days/month
-    // (6-day weeks), workingHours per day from the work center config.
-    const monthlyHours = workingHours * 27;
+    // Salary → hourly. Monthly: divide by 27 working days × hours/day.
+    // Daily: divide by hours/day only.
+    const isDaily = newWorkCenter.labor_rate_type === 'daily';
+    const salaryHours = isDaily ? workingHours : workingHours * 27;
     const depreciation = assetValue > 0 && usefulLife > 0 ? assetValue / usefulLife / annualHours : 0;
     const electricity = powerKw * elecRate;
     const maintenance = annualMaint > 0 ? annualMaint / annualHours : 0;
-    const labor = monthlySalary > 0 && monthlyHours > 0 ? monthlySalary / monthlyHours : 0;
+    const labor = monthlySalary > 0 && salaryHours > 0 ? monthlySalary / salaryHours : 0;
     const total = depreciation + electricity + maintenance + labor + overhead;
 
     return { depreciation, electricity, maintenance, labor, overhead, total };
@@ -198,6 +200,7 @@ export default function WorkCenters() {
         electricity_rate: parseFloat(newWorkCenter.electricity_rate) || 0,
         annual_maintenance: parseFloat(newWorkCenter.annual_maintenance) || 0,
         operator_monthly_salary: parseFloat(newWorkCenter.operator_monthly_salary) || 0,
+        labor_rate_type: newWorkCenter.labor_rate_type || 'monthly',
       };
 
       const createdWC = await createWorkCenter(wcData);
@@ -266,6 +269,7 @@ export default function WorkCenters() {
       electricity_rate: wc.electricity_rate || '',
       annual_maintenance: wc.annual_maintenance || '',
       operator_monthly_salary: wc.operator_monthly_salary || '',
+      labor_rate_type: wc.labor_rate_type || 'monthly',
     });
     // Load currently assigned equipment IDs
     const assignedIds = getEquipmentForWorkCenter(wc.id).map(eq => eq.id);
@@ -298,6 +302,7 @@ export default function WorkCenters() {
         electricity_rate: parseFloat(newWorkCenter.electricity_rate) || 0,
         annual_maintenance: parseFloat(newWorkCenter.annual_maintenance) || 0,
         operator_monthly_salary: parseFloat(newWorkCenter.operator_monthly_salary) || 0,
+        labor_rate_type: newWorkCenter.labor_rate_type || 'monthly',
       };
 
       await updateWorkCenter(selectedWorkCenter.id, wcData);
@@ -682,7 +687,13 @@ export default function WorkCenters() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <LabelWithHelp htmlFor="wc_operator_salary" label="Operator ish haqi (so'm/oy)" helpText="Operator oylik ish haqi. Soatlik tarifga oyiga 27 ish kuni × kunlik ish soatlari orqali aylantiriladi." />
+                  <div className="flex items-center justify-between">
+                    <LabelWithHelp htmlFor="wc_operator_salary" label={`Operator ish haqi (so'm/${newWorkCenter.labor_rate_type === 'daily' ? 'kun' : 'oy'})`} helpText={newWorkCenter.labor_rate_type === 'daily' ? "Operator kunlik ish haqi. Soatlik tarifga kunlik ish soatlari orqali aylantiriladi." : "Operator oylik ish haqi. Soatlik tarifga oyiga 27 ish kuni × kunlik ish soatlari orqali aylantiriladi."} />
+                    <div className="flex bg-slate-100 rounded-md p-0.5 text-xs">
+                      <button type="button" className={`px-2 py-1 rounded ${newWorkCenter.labor_rate_type === 'monthly' ? 'bg-white shadow text-blue-700 font-medium' : 'text-slate-500'}`} onClick={() => setNewWorkCenter({...newWorkCenter, labor_rate_type: 'monthly'})}>Oylik</button>
+                      <button type="button" className={`px-2 py-1 rounded ${newWorkCenter.labor_rate_type === 'daily' ? 'bg-white shadow text-blue-700 font-medium' : 'text-slate-500'}`} onClick={() => setNewWorkCenter({...newWorkCenter, labor_rate_type: 'daily'})}>Kunlik</button>
+                    </div>
+                  </div>
                   <Input
                     id="wc_operator_salary"
                     type="text"
@@ -1014,7 +1025,13 @@ export default function WorkCenters() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <LabelWithHelp htmlFor="edit_wc_operator_salary" label="Operator ish haqi (so'm/oy)" helpText="Operator oylik ish haqi. Soatlik tarifga oyiga 27 ish kuni × kunlik ish soatlari orqali aylantiriladi." />
+                  <div className="flex items-center justify-between">
+                    <LabelWithHelp htmlFor="edit_wc_operator_salary" label={`Operator ish haqi (so'm/${newWorkCenter.labor_rate_type === 'daily' ? 'kun' : 'oy'})`} helpText={newWorkCenter.labor_rate_type === 'daily' ? "Operator kunlik ish haqi. Soatlik tarifga kunlik ish soatlari orqali aylantiriladi." : "Operator oylik ish haqi. Soatlik tarifga oyiga 27 ish kuni × kunlik ish soatlari orqali aylantiriladi."} />
+                    <div className="flex bg-slate-100 rounded-md p-0.5 text-xs">
+                      <button type="button" className={`px-2 py-1 rounded ${newWorkCenter.labor_rate_type === 'monthly' ? 'bg-white shadow text-blue-700 font-medium' : 'text-slate-500'}`} onClick={() => setNewWorkCenter({...newWorkCenter, labor_rate_type: 'monthly'})}>Oylik</button>
+                      <button type="button" className={`px-2 py-1 rounded ${newWorkCenter.labor_rate_type === 'daily' ? 'bg-white shadow text-blue-700 font-medium' : 'text-slate-500'}`} onClick={() => setNewWorkCenter({...newWorkCenter, labor_rate_type: 'daily'})}>Kunlik</button>
+                    </div>
+                  </div>
                   <Input
                     id="edit_wc_operator_salary"
                     type="text"
