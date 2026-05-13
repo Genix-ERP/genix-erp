@@ -2875,7 +2875,7 @@ export default function Products() {
                       <ChevronDown className="w-4 h-4 ml-2 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-[--radix-popover-trigger-width] p-2" align="start">
+                  <PopoverContent noPortal className="w-[--radix-popover-trigger-width] p-2" align="start">
                     <div
                       className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-100 cursor-pointer"
                       onClick={() => {
