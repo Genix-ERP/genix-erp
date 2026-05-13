@@ -7586,6 +7586,7 @@ export const translations = {
     "error_tax_regime_conflict": "NDS (sales) and Turnover tax cannot both be active at the same time. Deactivate the {conflict} tax first before activating {applies_to}.",
     "error_po_lines_locked_received": "Cannot edit lines on a purchase order that has been received against. Cancel the receipt first or create an amended PO.",
     "error_po_lines_locked_billed": "Cannot edit lines on a purchase order that has been billed. Cancel the related bill(s) first, or create a new PO.",
+    "error_po_invalid_vendor": "Selected supplier is no longer valid. Pick another supplier and save again.",
     // TaxSummary page (TZ §10 — Umumiy soliq jamlanmasi)
     "tax_summary": "Tax Summary",
     "tax_summary_title": "Tax Summary",
@@ -15863,6 +15864,7 @@ export const translations = {
     "error_tax_regime_conflict": "NDS (sotuvlar) va Aylanma solig'i bir vaqtda faol bo'lolmaydi. {applies_to} ni faollashtirishdan oldin {conflict} solig'ini o'chiring.",
     "error_po_lines_locked_received": "Tovar qabul qilingan xarid buyurtmasining qatorlarini o'zgartirib bo'lmaydi. Avval qabulni bekor qiling yoki yangi tuzatish buyurtmasini yarating.",
     "error_po_lines_locked_billed": "Hisob-faktura yaratilgan xarid buyurtmasining qatorlarini o'zgartirib bo'lmaydi. Avval tegishli hisob-fakturani bekor qiling yoki yangi xarid buyurtmasini yarating.",
+    "error_po_invalid_vendor": "Tanlangan yetkazib beruvchi yaroqsiz. Boshqa yetkazib beruvchini tanlab, qaytadan saqlang.",
     // Umumiy soliq jamlanmasi (TZ §10)
     "tax_summary": "Umumiy soliq jamlanmasi",
     "tax_summary_title": "Umumiy soliq jamlanmasi",
@@ -24220,6 +24222,7 @@ export const translations = {
     "error_tax_regime_conflict": "НДС (продажи) и налог с оборота не могут быть активны одновременно. Перед активацией {applies_to} отключите налог {conflict}.",
     "error_po_lines_locked_received": "Невозможно редактировать строки заказа на поставку, по которому уже было оприходование. Сначала отмените приход или создайте корректирующий заказ.",
     "error_po_lines_locked_billed": "Невозможно редактировать строки заказа на поставку, по которому выставлен счёт. Сначала отмените связанный счёт или создайте новый заказ.",
+    "error_po_invalid_vendor": "Выбранный поставщик больше не действителен. Выберите другого поставщика и сохраните снова.",
     // Сводка по налогам (ТЗ §10)
     "tax_summary": "Сводка по налогам",
     "tax_summary_title": "Сводка по налогам",
