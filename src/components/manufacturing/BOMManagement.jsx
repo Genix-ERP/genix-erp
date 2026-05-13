@@ -637,6 +637,19 @@ export default function BOMManagement() {
               </div>
             </div>
 
+            <div className="flex items-center gap-2 py-2">
+              <input
+                type="checkbox"
+                id="bom_has_split_output"
+                checked={newBom.has_split_output || false}
+                onChange={(e) => setNewBom({...newBom, has_split_output: e.target.checked})}
+                className="w-4 h-4 accent-slate-700 cursor-pointer"
+              />
+              <label htmlFor="bom_has_split_output" className="text-sm font-medium cursor-pointer select-none">
+                {language === 'uz' ? "Bo'lib chiqarish (ommaviy → qadoqlangan mahsulotlar)" : language === 'ru' ? 'Разделённый выпуск (опт → упаковка)' : 'Split output (bulk → packaged products)'}
+              </label>
+            </div>
+
             {/* Tabs for Components and Operations */}
             <Tabs defaultValue="components" className="w-full">
               <TabsList className="grid w-full grid-cols-2">
@@ -910,6 +923,19 @@ export default function BOMManagement() {
                 </div>
               </div>
 
+              <div className="flex items-center gap-2 py-2">
+                <input
+                  type="checkbox"
+                  id="edit_bom_has_split_output"
+                  checked={editBom.has_split_output || false}
+                  onChange={(e) => setEditBom({...editBom, has_split_output: e.target.checked})}
+                  className="w-4 h-4 accent-slate-700 cursor-pointer"
+                />
+                <label htmlFor="edit_bom_has_split_output" className="text-sm font-medium cursor-pointer select-none">
+                  {language === 'uz' ? "Bo'lib chiqarish (ommaviy → qadoqlangan mahsulotlar)" : language === 'ru' ? 'Разделённый выпуск (опт → упаковка)' : 'Split output (bulk → packaged products)'}
+                </label>
+              </div>
+
               {/* Tabs for Components and Operations */}
               <Tabs defaultValue="components" className="w-full">
                 <TabsList className="grid w-full grid-cols-2">
@@ -1176,6 +1202,13 @@ export default function BOMManagement() {
                       || '-'}
                   </p>
                 </div>
+                {viewBom.has_split_output && (
+                  <div className="col-span-2">
+                    <Badge className="bg-purple-100 text-purple-700">
+                      {language === 'uz' ? "Bo'lib chiqarish" : language === 'ru' ? 'Разделённый выпуск' : 'Split output'}
+                    </Badge>
+                  </div>
+                )}
               </div>
 
               {/* Tabs for Components and Operations */}
