@@ -39,6 +39,10 @@ const ERROR_TEMPLATES = {
     titleKey: 'error_po_lines_locked_billed',
     fields: [],
   },
+  PO_INVALID_VENDOR: {
+    titleKey: 'error_po_invalid_vendor',
+    fields: [],
+  },
 };
 
 function interpolate(template, details) {
