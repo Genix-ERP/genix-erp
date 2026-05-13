@@ -928,19 +928,6 @@ export default function ProductionOrders() {
               </div>
             </div>
 
-            <div className="flex items-center gap-3 py-2">
-              <input
-                type="checkbox"
-                id="has_split_output"
-                checked={newOrder.has_split_output}
-                onChange={(e) => setNewOrder({...newOrder, has_split_output: e.target.checked})}
-                className="w-4 h-4 accent-slate-700 cursor-pointer"
-              />
-              <label htmlFor="has_split_output" className="text-sm font-medium cursor-pointer select-none">
-                {t('split_output') || 'Split output (bulk → packaged products)'}
-              </label>
-            </div>
-
             <div className="flex gap-3 pt-4">
               <Button variant="outline" onClick={() => setShowCreateModal(false)} className="flex-1">
                 {t('cancel') || 'Cancel'}
