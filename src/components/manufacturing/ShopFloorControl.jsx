@@ -31,6 +31,7 @@ import { useManufacturing } from '@/components/contexts/ManufacturingContext';
 import { useInventory } from '@/components/contexts/InventoryContext';
 import { workOrdersService, productionOrdersService } from '@/api/services/manufacturing';
 import { toast } from 'sonner';
+import apiClient from '@/api/client';
 import { format, differenceInMinutes, parseISO } from 'date-fns';
 
 const WORK_ORDER_STATUS = {
@@ -555,7 +556,23 @@ export default function ShopFloorControl({ isActive }) {
 
   const addSplitItem = () => setSplitItems(prev => [...prev, { product_id: '', quantity: '', warehouse_id: '', materials: [] }]);
   const removeSplitItem = (idx) => setSplitItems(prev => prev.filter((_, i) => i !== idx));
-  const updateSplitItem = (idx, field, value) => setSplitItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: value } : it));
+  const updateSplitItem = async (idx, field, value) => {
+    setSplitItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: value } : it));
+    if (field === 'product_id' && value) {
+      try {
+        const res = await apiClient.get(`/products/${value}/packaging-materials`);
+        const defaultMats = (res.data?.data || []).map(m => ({
+          product_id: m.material_id,
+          quantity_per_piece: m.quantity_per_piece.toString(),
+        }));
+        if (defaultMats.length > 0) {
+          setSplitItems(prev => prev.map((it, i) =>
+            i === idx && it.materials.length === 0 ? { ...it, materials: defaultMats } : it
+          ));
+        }
+      } catch (e) { /* ignore */ }
+    }
+  };
   const addSplitItemMaterial = (idx) => setSplitItems(prev => prev.map((it, i) => i === idx ? { ...it, materials: [...it.materials, { product_id: '', quantity_per_piece: '' }] } : it));
   const removeSplitItemMaterial = (itemIdx, matIdx) => setSplitItems(prev => prev.map((it, i) => i === itemIdx ? { ...it, materials: it.materials.filter((_, mi) => mi !== matIdx) } : it));
   const updateSplitItemMaterial = (itemIdx, matIdx, field, value) => setSplitItems(prev => prev.map((it, i) => i === itemIdx ? { ...it, materials: it.materials.map((m, mi) => mi === matIdx ? { ...m, [field]: value } : m) } : it));
@@ -1500,14 +1517,36 @@ export default function ShopFloorControl({ isActive }) {
                       ))}
                     </div>
                   )}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => addSplitItemMaterial(idx)}
-                    className="text-xs text-blue-600 hover:text-blue-800 px-1 h-auto mt-1"
-                  >
-                    + {language === 'uz' ? "Qo'shimcha materiallar" : language === 'ru' ? 'Доп. материалы' : 'Additional materials'}
-                  </Button>
+                  <div className="flex items-center gap-2 mt-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => addSplitItemMaterial(idx)}
+                      className="text-xs text-blue-600 hover:text-blue-800 px-1 h-auto"
+                    >
+                      + {language === 'uz' ? "Qo'shimcha materiallar" : language === 'ru' ? 'Доп. материалы' : 'Additional materials'}
+                    </Button>
+                    {item.materials.length > 0 && item.product_id && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-xs text-blue-600"
+                        onClick={async () => {
+                          const validMats = item.materials.filter(m => m.product_id && parseFloat(m.quantity_per_piece) > 0);
+                          if (validMats.length > 0) {
+                            try {
+                              await apiClient.post(`/products/${item.product_id}/packaging-materials`, {
+                                materials: validMats.map(m => ({ material_id: m.product_id, quantity_per_piece: parseFloat(m.quantity_per_piece) }))
+                              });
+                              toast.success(language === 'uz' ? 'Standart materiallar saqlandi' : language === 'ru' ? 'Стандартные материалы сохранены' : 'Default materials saved');
+                            } catch(e) { toast.error(language === 'uz' ? 'Xatolik' : 'Failed to save'); }
+                          }
+                        }}
+                      >
+                        {language === 'uz' ? 'Standart qilib saqlash' : language === 'ru' ? 'Сохранить как стандарт' : 'Save as default'}
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
