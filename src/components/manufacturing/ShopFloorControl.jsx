@@ -276,7 +276,7 @@ export default function ShopFloorControl({ isActive }) {
   const [splitPoId, setSplitPoId] = useState(null);
   const [splitBulkQty, setSplitBulkQty] = useState(0);
   const [splitBulkUnit, setSplitBulkUnit] = useState('');
-  const [splitItems, setSplitItems] = useState([{ product_id: '', quantity: '', warehouse_id: '' }]);
+  const [splitItems, setSplitItems] = useState([{ product_id: '', quantity: '', warehouse_id: '', materials: [] }]);
   const [splitSubmitting, setSplitSubmitting] = useState(false);
 
   // Load time logs from localStorage
@@ -489,7 +489,7 @@ export default function ShopFloorControl({ isActive }) {
             const bulkQty = parseFloat(po.quantity_produced ?? po.quantity ?? produced) || 0;
             setSplitBulkQty(bulkQty);
             setSplitBulkUnit(po.unit_name || po.unit_code || '');
-            setSplitItems([{ product_id: '', quantity: '', warehouse_id: '' }]);
+            setSplitItems([{ product_id: '', quantity: '', warehouse_id: '', materials: [] }]);
             setShowSplitModal(true);
           }
         } catch (splitErr) {
@@ -532,6 +532,14 @@ export default function ShopFloorControl({ isActive }) {
           product_id: it.product_id,
           quantity: parseFloat(it.quantity),
           ...(it.warehouse_id ? { warehouse_id: it.warehouse_id } : {}),
+          ...(it.materials && it.materials.length > 0 ? {
+            materials: it.materials
+              .filter(m => m.product_id && parseFloat(m.quantity_per_piece) > 0)
+              .map(m => ({
+                product_id: m.product_id,
+                quantity_per_piece: parseFloat(m.quantity_per_piece),
+              }))
+          } : {}),
         })),
       });
       toast.success(language === 'uz' ? 'Chiqish yakunlandi' : language === 'ru' ? 'Упаковка завершена' : 'Split output completed');
@@ -545,9 +553,12 @@ export default function ShopFloorControl({ isActive }) {
     setSplitSubmitting(false);
   };
 
-  const addSplitItem = () => setSplitItems(prev => [...prev, { product_id: '', quantity: '', warehouse_id: '' }]);
+  const addSplitItem = () => setSplitItems(prev => [...prev, { product_id: '', quantity: '', warehouse_id: '', materials: [] }]);
   const removeSplitItem = (idx) => setSplitItems(prev => prev.filter((_, i) => i !== idx));
   const updateSplitItem = (idx, field, value) => setSplitItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: value } : it));
+  const addSplitItemMaterial = (idx) => setSplitItems(prev => prev.map((it, i) => i === idx ? { ...it, materials: [...it.materials, { product_id: '', quantity_per_piece: '' }] } : it));
+  const removeSplitItemMaterial = (itemIdx, matIdx) => setSplitItems(prev => prev.map((it, i) => i === itemIdx ? { ...it, materials: it.materials.filter((_, mi) => mi !== matIdx) } : it));
+  const updateSplitItemMaterial = (itemIdx, matIdx, field, value) => setSplitItems(prev => prev.map((it, i) => i === itemIdx ? { ...it, materials: it.materials.map((m, mi) => mi === matIdx ? { ...m, [field]: value } : m) } : it));
 
   // Compute how much of the bulk has been allocated across split rows.
   // Each output product's `weight` field is its size factor — meters per piece,
@@ -1398,52 +1409,105 @@ export default function ShopFloorControl({ isActive }) {
             )}
 
             {splitItems.map((item, idx) => (
-              <div key={idx} className="grid grid-cols-12 gap-2 items-end border border-slate-100 rounded-lg p-3">
-                <div className="col-span-5 space-y-1">
-                  <Label className="text-xs">{language === 'uz' ? 'Mahsulot' : language === 'ru' ? 'Продукт' : 'Product'} *</Label>
-                  <select
-                    className="w-full border border-slate-200 rounded-md px-2 py-1.5 text-sm bg-white"
-                    value={item.product_id}
-                    onChange={(e) => updateSplitItem(idx, 'product_id', e.target.value)}
-                  >
-                    <option value="">— {language === 'uz' ? 'tanlang' : language === 'ru' ? 'выбрать' : 'select'} —</option>
-                    {(products || []).filter(p => p.can_be_sold || p.is_sellable).map(p => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}{p.weight ? ` (${p.weight} ${splitBulkUnit || 'kg'} / ${language === 'uz' ? 'dona' : language === 'ru' ? 'шт.' : 'pc'})` : ''}
-                      </option>
-                    ))}
-                  </select>
+              <div key={idx} className="border border-slate-100 rounded-lg p-3 space-y-2">
+                <div className="grid grid-cols-12 gap-2 items-end">
+                  <div className="col-span-5 space-y-1">
+                    <Label className="text-xs">{language === 'uz' ? 'Mahsulot' : language === 'ru' ? 'Продукт' : 'Product'} *</Label>
+                    <select
+                      className="w-full border border-slate-200 rounded-md px-2 py-1.5 text-sm bg-white"
+                      value={item.product_id}
+                      onChange={(e) => updateSplitItem(idx, 'product_id', e.target.value)}
+                    >
+                      <option value="">— {language === 'uz' ? 'tanlang' : language === 'ru' ? 'выбрать' : 'select'} —</option>
+                      {(products || []).filter(p => p.can_be_sold || p.is_sellable).map(p => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}{p.weight ? ` (${p.weight} ${splitBulkUnit || 'kg'} / ${language === 'uz' ? 'dona' : language === 'ru' ? 'шт.' : 'pc'})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="col-span-3 space-y-1">
+                    <Label className="text-xs">{language === 'uz' ? 'Dona soni' : language === 'ru' ? 'Кол-во шт.' : 'Quantity (pcs)'} *</Label>
+                    <Input
+                      type="number"
+                      min="0.0001"
+                      step="any"
+                      value={item.quantity}
+                      onChange={(e) => updateSplitItem(idx, 'quantity', e.target.value)}
+                      placeholder="0"
+                    />
+                  </div>
+                  <div className="col-span-3 space-y-1">
+                    <Label className="text-xs">{language === 'uz' ? 'Sklad' : language === 'ru' ? 'Склад' : 'Warehouse'}</Label>
+                    <select
+                      className="w-full border border-slate-200 rounded-md px-2 py-1.5 text-sm bg-white"
+                      value={item.warehouse_id}
+                      onChange={(e) => updateSplitItem(idx, 'warehouse_id', e.target.value)}
+                    >
+                      <option value="">{language === 'uz' ? 'Tanlang' : language === 'ru' ? 'Выбрать' : 'Select'}</option>
+                      {(warehouses || []).map(w => (
+                        <option key={w.id} value={w.id}>{w.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="col-span-1 flex justify-center">
+                    {splitItems.length > 1 && (
+                      <Button variant="ghost" size="sm" onClick={() => removeSplitItem(idx)} className="text-red-500 hover:text-red-700 p-1 h-auto">
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
-                <div className="col-span-3 space-y-1">
-                  <Label className="text-xs">{language === 'uz' ? 'Dona soni' : language === 'ru' ? 'Кол-во шт.' : 'Quantity (pcs)'} *</Label>
-                  <Input
-                    type="number"
-                    min="0.0001"
-                    step="any"
-                    value={item.quantity}
-                    onChange={(e) => updateSplitItem(idx, 'quantity', e.target.value)}
-                    placeholder="0"
-                  />
-                </div>
-                <div className="col-span-3 space-y-1">
-                  <Label className="text-xs">{language === 'uz' ? 'Sklad' : language === 'ru' ? 'Склад' : 'Warehouse'}</Label>
-                  <select
-                    className="w-full border border-slate-200 rounded-md px-2 py-1.5 text-sm bg-white"
-                    value={item.warehouse_id}
-                    onChange={(e) => updateSplitItem(idx, 'warehouse_id', e.target.value)}
-                  >
-                    <option value="">{language === 'uz' ? 'Tanlang' : language === 'ru' ? 'Выбрать' : 'Select'}</option>
-                    {(warehouses || []).map(w => (
-                      <option key={w.id} value={w.id}>{w.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="col-span-1 flex justify-center">
-                  {splitItems.length > 1 && (
-                    <Button variant="ghost" size="sm" onClick={() => removeSplitItem(idx)} className="text-red-500 hover:text-red-700 p-1 h-auto">
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+
+                {/* Additional materials per piece */}
+                <div className="pl-2">
+                  {item.materials.length > 0 && (
+                    <div className="space-y-1.5 mt-1">
+                      <Label className="text-xs text-slate-500">
+                        {language === 'uz' ? "Qo'shimcha materiallar (dona uchun)" : language === 'ru' ? 'Доп. материалы (на штуку)' : 'Additional materials (per piece)'}
+                      </Label>
+                      {item.materials.map((mat, matIdx) => (
+                        <div key={matIdx} className="grid grid-cols-12 gap-2 items-end">
+                          <div className="col-span-6">
+                            <select
+                              className="w-full border border-slate-200 rounded-md px-2 py-1.5 text-xs bg-white"
+                              value={mat.product_id}
+                              onChange={(e) => updateSplitItemMaterial(idx, matIdx, 'product_id', e.target.value)}
+                            >
+                              <option value="">— {language === 'uz' ? 'Material tanlang' : language === 'ru' ? 'Выбрать материал' : 'Select material'} —</option>
+                              {(products || []).map(p => (
+                                <option key={p.id} value={p.id}>{p.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="col-span-4">
+                            <Input
+                              type="number"
+                              min="0.0001"
+                              step="any"
+                              value={mat.quantity_per_piece}
+                              onChange={(e) => updateSplitItemMaterial(idx, matIdx, 'quantity_per_piece', e.target.value)}
+                              placeholder={language === 'uz' ? 'Dona uchun' : language === 'ru' ? 'На шт.' : 'Per piece'}
+                              className="text-xs h-8"
+                            />
+                          </div>
+                          <div className="col-span-2 flex justify-center">
+                            <Button variant="ghost" size="sm" onClick={() => removeSplitItemMaterial(idx, matIdx)} className="text-red-400 hover:text-red-600 p-0.5 h-auto">
+                              <X className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => addSplitItemMaterial(idx)}
+                    className="text-xs text-blue-600 hover:text-blue-800 px-1 h-auto mt-1"
+                  >
+                    + {language === 'uz' ? "Qo'shimcha materiallar" : language === 'ru' ? 'Доп. материалы' : 'Additional materials'}
+                  </Button>
                 </div>
               </div>
             ))}
