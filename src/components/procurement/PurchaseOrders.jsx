@@ -96,6 +96,7 @@ export default function PurchaseOrders() {
     receivePurchaseOrder,
     getSupplierById,
     isLoading,
+    refreshData,
   } = useProcurement();
   const { refreshData: refreshInventory } = useInventory();
   const { activeCompany } = useCompany();
@@ -809,20 +810,25 @@ export default function PurchaseOrders() {
     if (field === 'product_id' && value) {
       const product = products.find(p => p.id === value);
       if (product) {
-        newLines[index].product_name = product.name;
-        newLines[index].unit_name = product.unit || '';
-        // Look up vendor-specific price if a supplier is selected.
+        let unitPrice = product.purchase_price || product.cost_price || product.list_price || 0;
+        let leadTimeDays = product.lead_time_days || 0;
         if (editPO.supplier_id) {
           const vp = await lookupVendorPriceForProduct(editPO.supplier_id, value);
           if (vp) {
-            newLines[index].unit_price = vp.price;
-            newLines[index].lead_time_days = vp.lead_time_days || 0;
-          } else if (product.list_price) {
-            newLines[index].unit_price = product.list_price;
+            unitPrice = vp.price;
+            leadTimeDays = vp.lead_time_days || leadTimeDays;
           }
-        } else if (product.list_price) {
-          newLines[index].unit_price = product.list_price;
         }
+        newLines[index] = {
+          ...newLines[index],
+          product_name: product.name,
+          unit_id: product.purchase_unit_id || product.unit_id || null,
+          unit_name: product.purchase_unit_name || product.unit_name || '',
+          unit_price: unitPrice,
+          lead_time_days: leadTimeDays,
+          has_delivery: product.has_delivery || false,
+          delivery_price: parseFloat(product.delivery_price) || 0,
+        };
       }
     }
     setEditPO({
@@ -906,6 +912,7 @@ export default function PurchaseOrders() {
       }
       setShowEditModal(false);
       setEditPO(null);
+      await refreshData();
     } catch (error) {
       console.error('Error updating PO:', error);
       // Run through formatApiError so structured backend error codes
