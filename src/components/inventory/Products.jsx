@@ -2890,7 +2890,7 @@ export default function Products() {
                       <span className="text-sm font-medium">{t('select_all') || 'Select all'}</span>
                     </div>
                     <div className="border-t my-1" />
-                    <div className="max-h-60 overflow-y-auto">
+                    <div className="max-h-[min(60vh,20rem)] overflow-y-auto overscroll-contain">
                       {companies.map(company => {
                         const isActive = activeCompany?.id === company.id;
                         return (
