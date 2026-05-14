@@ -685,6 +685,7 @@ export default function ProductionOrders() {
                 <TableHeader>
                   <TableRow className="bg-slate-50">
                     <TableHead className="font-semibold">{t('order_code') || 'Order Code'}</TableHead>
+                    <TableHead className="font-semibold">{t('date') || 'Date'}</TableHead>
                     <TableHead className="font-semibold">{t('product') || 'Product'}</TableHead>
                     <TableHead className="font-semibold">{t('quantity') || 'Quantity'}</TableHead>
                     <TableHead className="font-semibold">{t('stage') || 'Stage'}</TableHead>
@@ -702,6 +703,9 @@ export default function ProductionOrders() {
                     return (
                       <TableRow key={order.id} className="hover:bg-slate-50">
                         <TableCell className="font-mono text-sm">{order.code}</TableCell>
+                        <TableCell className="text-xs text-slate-500 whitespace-nowrap">
+                          {order.created_at ? format(new Date(order.created_at), 'dd.MM.yyyy') : '-'}
+                        </TableCell>
                         <TableCell>
                           <div>
                             <p className="font-medium">{order.product_name || order.name}</p>

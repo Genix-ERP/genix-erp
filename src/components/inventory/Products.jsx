@@ -2131,7 +2131,14 @@ export default function Products() {
                               )}
                             </div>
                             <div>
-                              <p className="font-medium text-slate-900">{product.name}</p>
+                              <div className="flex items-center gap-1.5">
+                                <p className="font-medium text-slate-900">{product.name}</p>
+                                {product.track_inventory === false && (
+                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 bg-amber-50 text-amber-700 border-amber-200">
+                                    {language === 'uz' ? "Kuzatilmaydi" : language === 'ru' ? "Без учёта" : "Untracked"}
+                                  </Badge>
+                                )}
+                              </div>
                               {product.barcode && (
                                 <p className="text-xs text-slate-500 flex items-center gap-1">
                                   <Barcode className="w-3 h-3" /> {product.barcode}
@@ -3000,6 +3007,24 @@ export default function Products() {
             {formData.type === 'product' && (
               <div>
                 <h4 className="font-semibold text-slate-900 mb-3">{t('inventory_settings')}</h4>
+                <div className="flex items-center justify-between mb-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                  <div className="flex-1">
+                    <span className="text-sm font-medium text-slate-700">
+                      {language === 'uz' ? "Miqdorni kuzatish" : language === 'ru' ? "Отслеживать количество" : "Track Inventory"}
+                    </span>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {language === 'uz'
+                        ? "O'chirilganda miqdor omborda kamaytirilmaydi (suv, gaz kabi cheksiz ta'minotlar)"
+                        : language === 'ru'
+                        ? "При отключении количество не списывается со склада (вода, газ — бесконечное снабжение)"
+                        : "When off, quantity is never deducted from inventory (water, gas — infinite supply)"}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={formData.track_inventory !== false}
+                    onCheckedChange={(checked) => setFormData({...formData, track_inventory: checked})}
+                  />
+                </div>
                 <div className="grid grid-cols-3 gap-4">
                   <div>
                     <LabelWithHelp
