@@ -265,7 +265,7 @@ export function ManufacturingProvider({ children }) {
       if (isBackendAvailable) {
         // Load all manufacturing data from API
         const [wcData, poData, woData, bomData, statsData, catData] = await Promise.all([
-          workCentersService.list(companyId).catch(err => {
+          workCentersService.list(companyId, { limit: 200 }).catch(err => {
             console.error('Failed to load work centers:', err);
             return [];
           }),
@@ -277,7 +277,7 @@ export function ManufacturingProvider({ children }) {
             console.error('Failed to load work orders:', err);
             return [];
           }),
-          bomsService.list(companyId).catch(err => {
+          bomsService.list(companyId, { limit: 500 }).catch(err => {
             console.error('Failed to load BOMs:', err);
             return [];
           }),
