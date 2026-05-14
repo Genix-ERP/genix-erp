@@ -54,10 +54,14 @@ function KanbanCard({ wo, labels, language, workCenters, productionOrders, curre
     if ((wo.quantity_produced || 0) > 0 && totalQty > 0) {
       return Math.min(100, (wo.quantity_produced / totalQty) * 100);
     }
-    if (wo.status === 'in_progress' && wo.actual_start && (wo.expected_duration_minutes || 0) > 0) {
+    if (wo.status === 'in_progress' && wo.actual_start) {
       void currentTimer;
+      const expectedMin = (wo.expected_duration_minutes || 0)
+        || (wo.planned_duration_hours || 0) * 60
+        || (wo.planned_duration || 0) * 60
+        || 480; // default 8 hours if nothing set
       const elapsed = differenceInMinutes(new Date(), parseISO(wo.actual_start));
-      return Math.min(99, (elapsed / wo.expected_duration_minutes) * 100);
+      return Math.min(99, (elapsed / expectedMin) * 100);
     }
     return 0;
   })();
