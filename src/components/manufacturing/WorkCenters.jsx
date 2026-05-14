@@ -118,10 +118,12 @@ export default function WorkCenters() {
     const annualMaint = parseFloat(wc.annual_maintenance) || 0;
     const monthlySalary = parseFloat(wc.operator_monthly_salary) || 0;
     const overhead = parseFloat(wc.overhead_cost) || 0;
+    const isDaily = wc.labor_rate_type === 'daily';
+    const salaryHours = isDaily ? workingHours : workingHours * 27;
     const depreciation = assetValue > 0 && usefulLife > 0 ? assetValue / usefulLife / annualHours : 0;
     const electricity = powerKw * elecRate;
     const maintenance = annualMaint > 0 ? annualMaint / annualHours : 0;
-    const labor = monthlySalary > 0 && monthlyHours > 0 ? monthlySalary / monthlyHours : 0;
+    const labor = monthlySalary > 0 && salaryHours > 0 ? monthlySalary / salaryHours : 0;
     return depreciation + electricity + maintenance + labor + overhead;
   };
 
@@ -1308,12 +1310,12 @@ export default function WorkCenters() {
                 const monthlySalary = parseFloat(wc.operator_monthly_salary) || 0;
                 const overhead = parseFloat(wc.overhead_cost) || 0;
 
-                // 27 working days/month × configured hours per day.
-                const monthlyHours = workingHours * 27;
+                const isDaily = wc.labor_rate_type === 'daily';
+                const salaryHours = isDaily ? workingHours : workingHours * 27;
                 const depreciation = assetValue > 0 && usefulLife > 0 ? assetValue / usefulLife / annualHours : 0;
                 const electricity = powerKw * elecRate;
                 const maintenance = annualMaint > 0 ? annualMaint / annualHours : 0;
-                const labor = monthlySalary > 0 && monthlyHours > 0 ? monthlySalary / monthlyHours : 0;
+                const labor = monthlySalary > 0 && salaryHours > 0 ? monthlySalary / salaryHours : 0;
                 const total = depreciation + electricity + maintenance + labor + overhead;
 
                 if (total <= 0) return null;
