@@ -813,7 +813,12 @@ export default function Products() {
         'ulgurji narx': 'wholesale_price', // export: "Ulgurji narx" — import: "Ulgurji narxi"
         'kelib chiqish mamlakatiy': 'country_of_origin', // export label
         'og\'irlik': 'weight',
+        'uzunlik': 'length',                               // export: "Uzunlik" — import: "Uzunlik (cm)"
         'kenglik': 'width',
+        'balandlik': 'height',                             // export: "Balandlik" — import: "Balandlik (cm)"
+        'minimal zaxira': 'min_stock_level',               // export: "Minimal zaxira" — import: "Min qoldiq"
+        'yetkazib berish muddati (kun)': 'lead_time_days', // export: "Yetkazib berish muddati (kun)" — import: "Yetkazib berish kuni"
+        'saqlash sharoitlari': 'storage_conditions',       // export: plural — import: "Saqlash sharoiti" (singular)
       });
       // Strip the "*" required-marker, collapse whitespace, lowercase.
       // The downloaded template writes headers like "Nomi *" with the
