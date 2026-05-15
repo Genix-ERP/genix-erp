@@ -499,10 +499,13 @@ export default function Products() {
     { key: 'requires_lot_tracking', label: 'Partiya kuzatuvi', render: (v) => v ? 'Ha' : 'Yo\'q' },
     { key: 'requires_serial_tracking', label: 'Seriya kuzatuvi', render: (v) => v ? 'Ha' : 'Yo\'q' },
 
-    // Units of Measure
-    { key: 'inventory_uom', label: 'Inventar birligi' },
-    { key: 'sales_uom', label: 'Sotish birligi' },
-    { key: 'purchase_uom', label: 'Sotib olish birligi' },
+    // Units of Measure — keys match what the API returns in ProductResponse
+    // (unit_code / *_unit_name), not the form field names. The previous keys
+    // (inventory_uom / sales_uom / purchase_uom) only exist on the edit form
+    // state, so the export silently wrote empty cells.
+    { key: 'unit_code', label: 'Inventar birligi' },
+    { key: 'sales_unit_name', label: 'Sotish birligi' },
+    { key: 'purchase_unit_name', label: 'Sotib olish birligi' },
     { key: 'uom_conversion_factor', label: 'Birlik konvertatsiyasi' },
 
     // Expiration
