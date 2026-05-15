@@ -102,7 +102,11 @@ export default function ProductCombobox({ products: initialProducts = [], value,
             value={search}
             onValueChange={setSearch}
           />
-          <CommandList>
+          {/* Inline style (rather than className) so we beat cmdk's
+              default `max-h-[300px]` regardless of Tailwind class ordering.
+              className was getting silently overridden inside the dialog
+              and the list stayed un-scrollable past the first ~9 items. */}
+          <CommandList style={{ maxHeight: 340, overflowY: 'auto' }}>
             {isSearching ? (
               <div className="flex items-center justify-center py-6">
                 <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
@@ -115,6 +119,9 @@ export default function ProductCombobox({ products: initialProducts = [], value,
                   <CommandItem
                     key={product.id}
                     value={product.id}
+                    // Native HTML tooltip — reveals the full product name on
+                    // hover when the truncated label hides part of it.
+                    title={product.name}
                     onSelect={() => {
                       setLastSelected(product);
                       onValueChange(product.id, product);
