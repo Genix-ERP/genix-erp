@@ -1786,12 +1786,34 @@ export default function Products() {
     setShowDeleteCategoryModal(true);
   };
 
-  const handleDeleteCategory = () => {
+  const handleDeleteCategory = async () => {
     if (!selectedCategory) return;
 
-    deleteCategory(selectedCategory.id);
-    setSelectedCategory(null);
-    setShowDeleteCategoryModal(false);
+    try {
+      await deleteCategory(selectedCategory.id);
+      setSelectedCategory(null);
+      setShowDeleteCategoryModal(false);
+    } catch (err) {
+      // Map backend BadRequest messages to translated toasts. The backend
+      // refuses to delete a category that still has products or has child
+      // categories — without this surfacing, the user just sees a silent
+      // failure (toast title is generic, body lives in console).
+      const backendMsg = err?.response?.data?.error?.message || '';
+      let description = t('delete_category_failed') || 'Failed to delete category';
+      if (backendMsg.includes('associated products')) {
+        description = t('category_has_products')
+          || 'This category still has products. Move them to another category before deleting.';
+      } else if (backendMsg.includes('child categories')) {
+        description = t('category_has_subcategories')
+          || 'This category has sub-categories. Delete the sub-categories first.';
+      }
+      toast({
+        title: t('delete_category_failed') || 'Failed to delete category',
+        description,
+        variant: 'destructive',
+      });
+      setShowDeleteCategoryModal(false);
+    }
   };
 
   const getTypeColor = (type) => {
@@ -2366,7 +2388,13 @@ export default function Products() {
                     </TableHeader>
                     <TableBody>
                       {categories.map((category) => {
-                        const productCount = products.filter(p => p.category_id === category.id).length;
+                        // Use the backend-supplied tenant-wide count rather
+                        // than filtering the org-scoped `products` array.
+                        // The local count missed products in sibling orgs,
+                        // which made the delete-category guard refuse rows
+                        // the UI claimed had "0 mahsulotlar".
+                        const productCount = category.product_count
+                          ?? products.filter(p => p.category_id === category.id).length;
                         return (
                           <TableRow key={category.id} className="hover:bg-slate-50/50">
                             <TableCell className="font-medium text-slate-900">
