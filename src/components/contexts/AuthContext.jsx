@@ -1,43 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import authService from '@/api/services/auth';
-import { checkBackendHealth } from '@/config/dataMode';
 
 const AuthContext = createContext(null);
-
-// Demo users for local/offline authentication (fallback when backend unavailable)
-const DEMO_USERS = [
-  {
-    id: '1',
-    email: 'admin@genixerp.com',
-    password: 'admin123',
-    full_name: 'System Administrator',
-    first_name: 'System',
-    last_name: 'Administrator',
-    role: 'site_admin',
-    is_system_admin: true
-  },
-  {
-    id: '2',
-    email: 'owner@genixerp.com',
-    password: 'owner123',
-    full_name: 'Company Owner',
-    first_name: 'Company',
-    last_name: 'Owner',
-    role: 'owner'
-  },
-  {
-    id: '3',
-    email: 'user@genixerp.com',
-    password: 'user123',
-    full_name: 'Demo User',
-    first_name: 'Demo',
-    last_name: 'User',
-    role: 'user'
-  }
-];
-
-// Use shared cached health check instead of making duplicate /info calls
-const checkBackendAvailable = checkBackendHealth;
 
 // System role types
 const ROLE_TYPES = {
@@ -105,36 +69,15 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        // Check if backend is available
-        const isAvailable = await checkBackendAvailable();
-        setBackendAvailable(isAvailable);
-
-        if (isAvailable && authService.hasToken()) {
-          // Backend available and we have a token - fetch user from backend
+        if (authService.hasToken()) {
           try {
             await fetchUserFromBackend();
+            setBackendAvailable(true);
           } catch (err) {
-            // Token invalid - user needs to login again
-            // Token invalid - user needs to re-login
-            setIsAuthenticated(false);
-          }
-        } else if (!isAvailable) {
-          // Backend not available - check for demo mode session
-          const demoSession = localStorage.getItem('demo_session');
-          if (demoSession) {
-            try {
-              const userData = JSON.parse(demoSession);
-              setUser(userData);
-              setIsAuthenticated(true);
-            } catch (e) {
-              localStorage.removeItem('demo_session');
-              setIsAuthenticated(false);
-            }
-          } else {
+            // Token invalid/expired or backend unreachable — require re-login.
             setIsAuthenticated(false);
           }
         } else {
-          // No token
           setIsAuthenticated(false);
         }
       } catch (err) {
@@ -153,43 +96,14 @@ export function AuthProvider({ children }) {
     setError(null);
 
     try {
-      // Check if backend is available
-      const isAvailable = await checkBackendAvailable();
-      setBackendAvailable(isAvailable);
-
-      if (isAvailable) {
-        // Use real backend authentication
-        const data = await authService.login(email, password, tenantId, isPhone);
-        // Derive role from user data returned by login
-        const userData = { ...data.user, role: deriveRole(data.user) };
-        setUser(userData);
-        setIsAuthenticated(true);
-        localStorage.setItem('genixerp_user', JSON.stringify(userData));
-        return { success: true, data };
-      } else {
-        // Fallback to demo users when backend unavailable
-        const foundUser = DEMO_USERS.find(
-          u => u.email === email && u.password === password
-        );
-
-        if (foundUser) {
-          const userData = {
-            id: foundUser.id,
-            email: foundUser.email,
-            full_name: foundUser.full_name,
-            first_name: foundUser.first_name,
-            last_name: foundUser.last_name,
-            role: foundUser.role
-          };
-          setUser(userData);
-          setIsAuthenticated(true);
-          // Store demo session for persistence
-          localStorage.setItem('demo_session', JSON.stringify(userData));
-          return { success: true, demo: true };
-        }
-
-        throw new Error('Invalid email or password');
-      }
+      const data = await authService.login(email, password, tenantId, isPhone);
+      setBackendAvailable(true);
+      // Derive role from user data returned by login
+      const userData = { ...data.user, role: deriveRole(data.user) };
+      setUser(userData);
+      setIsAuthenticated(true);
+      localStorage.setItem('genixerp_user', JSON.stringify(userData));
+      return { success: true, data };
     } catch (err) {
       // Check if this is a tenant selection required error
       if (err.response?.status === 409 && err.response?.data?.data?.tenants) {
@@ -200,7 +114,16 @@ export function AuthProvider({ children }) {
           error: 'Please select a company to continue'
         };
       }
-      const message = err.response?.data?.error?.message || err.message || 'Login failed';
+      // Distinguish "no response from server" (network/proxy/CORS issue)
+      // from "server responded with an error" so the user sees an honest
+      // message and doesn't blame their password.
+      const isNetworkError = err.code === 'ERR_NETWORK'
+        || err.message === 'Network Error'
+        || (!err.response && err.request);
+      const message = err.response?.data?.error?.message
+        || (isNetworkError ? 'Cannot reach server. Check your connection and try again.' : null)
+        || err.message
+        || 'Login failed';
       setError(message);
       setIsAuthenticated(false);
       return { success: false, error: message };
@@ -214,33 +137,20 @@ export function AuthProvider({ children }) {
     setError(null);
 
     try {
-      const isAvailable = await checkBackendAvailable();
-      setBackendAvailable(isAvailable);
-
-      if (isAvailable) {
-        const result = await authService.register(data);
-        // Derive role from user data
-        const userData = { ...result.user, role: deriveRole(result.user) };
-        setUser(userData);
-        setIsAuthenticated(true);
-        return { success: true, data: result };
-      } else {
-        // Demo mode - create local user
-        const newUser = {
-          id: Date.now().toString(),
-          email: data.email,
-          full_name: `${data.firstName} ${data.lastName}`,
-          first_name: data.firstName,
-          last_name: data.lastName,
-          role: 'user'
-        };
-        setUser(newUser);
-        setIsAuthenticated(true);
-        localStorage.setItem('demo_session', JSON.stringify(newUser));
-        return { success: true, demo: true };
-      }
+      const result = await authService.register(data);
+      setBackendAvailable(true);
+      const userData = { ...result.user, role: deriveRole(result.user) };
+      setUser(userData);
+      setIsAuthenticated(true);
+      return { success: true, data: result };
     } catch (err) {
-      const message = err.response?.data?.error?.message || err.message || 'Registration failed';
+      const isNetworkError = err.code === 'ERR_NETWORK'
+        || err.message === 'Network Error'
+        || (!err.response && err.request);
+      const message = err.response?.data?.error?.message
+        || (isNetworkError ? 'Cannot reach server. Check your connection and try again.' : null)
+        || err.message
+        || 'Registration failed';
       setError(message);
       return { success: false, error: message };
     } finally {
@@ -253,33 +163,20 @@ export function AuthProvider({ children }) {
     setError(null);
 
     try {
-      const isAvailable = await checkBackendAvailable();
-      setBackendAvailable(isAvailable);
-
-      if (isAvailable) {
-        const result = await authService.registerWithOTP(data);
-        // Derive role from user data
-        const userData = { ...result.user, role: deriveRole(result.user) };
-        setUser(userData);
-        setIsAuthenticated(true);
-        return { success: true, data: result };
-      } else {
-        // Demo mode - create local user (skip OTP verification)
-        const newUser = {
-          id: Date.now().toString(),
-          email: data.email,
-          full_name: `${data.firstName} ${data.lastName}`,
-          first_name: data.firstName,
-          last_name: data.lastName,
-          role: 'owner'
-        };
-        setUser(newUser);
-        setIsAuthenticated(true);
-        localStorage.setItem('demo_session', JSON.stringify(newUser));
-        return { success: true, demo: true };
-      }
+      const result = await authService.registerWithOTP(data);
+      setBackendAvailable(true);
+      const userData = { ...result.user, role: deriveRole(result.user) };
+      setUser(userData);
+      setIsAuthenticated(true);
+      return { success: true, data: result };
     } catch (err) {
-      const message = err.response?.data?.error?.message || err.message || 'Registration failed';
+      const isNetworkError = err.code === 'ERR_NETWORK'
+        || err.message === 'Network Error'
+        || (!err.response && err.request);
+      const message = err.response?.data?.error?.message
+        || (isNetworkError ? 'Cannot reach server. Check your connection and try again.' : null)
+        || err.message
+        || 'Registration failed';
       setError(message);
       return { success: false, error: message };
     } finally {
@@ -292,14 +189,8 @@ export function AuthProvider({ children }) {
     setError(null);
 
     try {
-      const isAvailable = await checkBackendAvailable();
-      setBackendAvailable(isAvailable);
-
-      if (!isAvailable) {
-        throw new Error('Backend is not available for Google authentication');
-      }
-
       const data = await authService.googleAuth(credential, tenantId, companyName);
+      setBackendAvailable(true);
 
       // If needs_completion, return so frontend can show company name form
       if (data.needs_completion) {
@@ -321,7 +212,13 @@ export function AuthProvider({ children }) {
           error: 'Please select a company to continue'
         };
       }
-      const message = err.response?.data?.error?.message || err.message || 'Google authentication failed';
+      const isNetworkError = err.code === 'ERR_NETWORK'
+        || err.message === 'Network Error'
+        || (!err.response && err.request);
+      const message = err.response?.data?.error?.message
+        || (isNetworkError ? 'Cannot reach server. Check your connection and try again.' : null)
+        || err.message
+        || 'Google authentication failed';
       setError(message);
       setIsAuthenticated(false);
       return { success: false, error: message };
@@ -378,18 +275,10 @@ export function AuthProvider({ children }) {
     setIsLoading(true);
     setError(null);
     try {
-      if (backendAvailable) {
-        const updatedUser = await authService.updateCurrentUser(data);
-        const userData = { ...updatedUser, role: deriveRole(updatedUser) };
-        setUser(userData);
-        return { success: true, user: userData };
-      } else {
-        // Demo mode - update local user
-        const updatedUser = { ...user, ...data };
-        setUser(updatedUser);
-        localStorage.setItem('demo_session', JSON.stringify(updatedUser));
-        return { success: true, user: updatedUser };
-      }
+      const updatedUser = await authService.updateCurrentUser(data);
+      const userData = { ...updatedUser, role: deriveRole(updatedUser) };
+      setUser(userData);
+      return { success: true, user: userData };
     } catch (err) {
       const message = err.response?.data?.error?.message || 'Update failed';
       setError(message);
@@ -397,19 +286,14 @@ export function AuthProvider({ children }) {
     } finally {
       setIsLoading(false);
     }
-  }, [backendAvailable, user]);
+  }, []);
 
   const changePassword = useCallback(async (currentPassword, newPassword) => {
     setIsLoading(true);
     setError(null);
     try {
-      if (backendAvailable) {
-        await authService.changePassword(currentPassword, newPassword);
-        return { success: true };
-      } else {
-        // Demo mode - just pretend it worked
-        return { success: true, demo: true };
-      }
+      await authService.changePassword(currentPassword, newPassword);
+      return { success: true };
     } catch (err) {
       const message = err.response?.data?.error?.message || 'Password change failed';
       setError(message);
@@ -417,7 +301,7 @@ export function AuthProvider({ children }) {
     } finally {
       setIsLoading(false);
     }
-  }, [backendAvailable]);
+  }, []);
 
   const forgotPassword = useCallback(async (email) => {
     setIsLoading(true);
