@@ -1706,7 +1706,9 @@ export default function Products() {
       fetchProducts();
     } catch (error) {
       console.error('Error updating product:', error);
-      toast({ title: t('error'), description: error?.response?.data?.error || error.message || t('update_failed') || 'Yangilashda xatolik', variant: 'destructive' });
+      const errData = error?.response?.data?.error;
+      const errMsg = typeof errData === 'string' ? errData : errData?.message || error?.response?.data?.message || error.message || t('update_failed');
+      toast({ title: t('error'), description: errMsg, variant: 'destructive' });
     } finally {
       setIsSaving(false);
     }
