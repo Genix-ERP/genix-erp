@@ -5,13 +5,14 @@ import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import LanguageSelector from '@/components/ui/language-selector';
 import GoogleSignInButton from '@/components/ui/GoogleSignInButton';
-import { Loader2, Mail, Lock, Phone, Building2, ArrowLeft } from 'lucide-react';
+import { Loader2, Mail, Lock, Phone, Building2, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import './Login.scss';
 
 export default function Login() {
   const [identifier, setIdentifier] = useState('');
   const [isPhone, setIsPhone] = useState(false);
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [tenants, setTenants] = useState(null);
@@ -52,9 +53,10 @@ export default function Login() {
     if (domPassword !== password) setPassword(domPassword);
 
     const cleanIdentifier = domIdentifier.replace(/\s/g, '');
+    const cleanPassword = domPassword.trim();
     // Auto-detect phone from input shape: starts with + or all digits, no @ sign
     const looksLikePhone = /^[\+\d]/.test(cleanIdentifier) && !cleanIdentifier.includes('@');
-    const result = await login(cleanIdentifier, domPassword, selectedTenantId, looksLikePhone);
+    const result = await login(cleanIdentifier, cleanPassword, selectedTenantId, looksLikePhone);
 
     if (result.success) {
       setShouldNavigate(true);
@@ -257,7 +259,7 @@ export default function Login() {
                 <input
                   id="password"
                   name="password"
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   autoComplete="current-password"
                   placeholder={t('enter_password')}
                   value={password}
@@ -265,6 +267,14 @@ export default function Login() {
                   className="login-form__input"
                   required
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: '#94a3b8', display: 'flex', alignItems: 'center' }}
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
               </div>
             </div>
 
