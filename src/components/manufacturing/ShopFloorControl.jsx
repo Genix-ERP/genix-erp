@@ -413,12 +413,44 @@ export default function ShopFloorControl({ isActive }) {
   };
 
   // Handle start work order - directly starts without modal
+  const [showOperatorModal, setShowOperatorModal] = useState(false);
+  const [operatorWO, setOperatorWO] = useState(null);
+  const [wcEmployees, setWcEmployees] = useState([]);
+  const [selectedOperator, setSelectedOperator] = useState('');
+
   const handleStartWorkOrder = async (workOrder) => {
+    // Check if the work center requires an operator
+    const wc = workCenters.find(w => w.id === workOrder.work_center_id);
+    if (wc?.require_operator) {
+      setOperatorWO(workOrder);
+      setSelectedOperator('');
+      try {
+        const res = await apiClient.get(`/work-centers/${wc.id}/employees`);
+        setWcEmployees(res.data?.data || []);
+      } catch (e) { setWcEmployees([]); }
+      setShowOperatorModal(true);
+      return;
+    }
     try {
       await startWorkOrder(workOrder.id);
-      refreshData(); // sync with backend (backend may auto-start next WO)
+      refreshData();
     } catch (error) {
       console.error('Failed to start work order:', error);
+    }
+  };
+
+  const confirmStartWithOperator = async () => {
+    if (!operatorWO || !selectedOperator) return;
+    try {
+      await startWorkOrder(operatorWO.id, { operator_id: selectedOperator });
+      // Update work order with operator
+      await apiClient.put(`/work-orders/${operatorWO.id}`, { operator_id: selectedOperator });
+      setShowOperatorModal(false);
+      setOperatorWO(null);
+      refreshData();
+    } catch (error) {
+      console.error('Failed to start work order:', error);
+      toast.error(language === 'uz' ? 'Xatolik' : 'Failed to start');
     }
   };
 
@@ -1145,6 +1177,38 @@ export default function ShopFloorControl({ isActive }) {
               >
                 <CheckCircle className="w-4 h-4 mr-2" />
                 {language === 'uz' ? "Ishni tugatish" : language === 'ru' ? "Завершить" : "Complete"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Operator Selection Modal */}
+      <Dialog open={showOperatorModal} onOpenChange={setShowOperatorModal}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{language === 'uz' ? 'Operatorni tanlang' : language === 'ru' ? 'Выберите оператора' : 'Select Operator'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Select value={selectedOperator} onValueChange={setSelectedOperator}>
+              <SelectTrigger>
+                <SelectValue placeholder={language === 'uz' ? 'Xodimni tanlang...' : language === 'ru' ? 'Выберите сотрудника...' : 'Select employee...'} />
+              </SelectTrigger>
+              <SelectContent>
+                {wcEmployees.map(emp => (
+                  <SelectItem key={emp.employee_id || emp.id} value={emp.employee_id || emp.id}>
+                    {emp.employee_name || emp.name || emp.employee_id}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setShowOperatorModal(false)}>
+                {language === 'uz' ? 'Bekor qilish' : language === 'ru' ? 'Отмена' : 'Cancel'}
+              </Button>
+              <Button onClick={confirmStartWithOperator} disabled={!selectedOperator} className="bg-green-600 hover:bg-green-700">
+                <Play className="w-4 h-4 mr-1" />
+                {language === 'uz' ? 'Boshlash' : language === 'ru' ? 'Начать' : 'Start'}
               </Button>
             </div>
           </div>

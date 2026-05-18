@@ -79,6 +79,7 @@ export default function WorkCenters() {
     operator_monthly_salary: '',
     labor_rate_type: 'monthly',
     cost_method: 'capacity',
+    require_operator: false,
   });
   const [selectedEquipmentIds, setSelectedEquipmentIds] = useState([]);
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState([]);
@@ -205,6 +206,7 @@ export default function WorkCenters() {
         operator_monthly_salary: parseFloat(newWorkCenter.operator_monthly_salary) || 0,
         labor_rate_type: newWorkCenter.labor_rate_type || 'monthly',
         cost_method: newWorkCenter.cost_method || 'capacity',
+        require_operator: newWorkCenter.require_operator || false,
       };
 
       const createdWC = await createWorkCenter(wcData);
@@ -275,6 +277,7 @@ export default function WorkCenters() {
       operator_monthly_salary: wc.operator_monthly_salary || '',
       labor_rate_type: wc.labor_rate_type || 'monthly',
       cost_method: wc.cost_method || 'capacity',
+      require_operator: wc.require_operator || false,
     });
     // Load currently assigned equipment IDs
     const assignedIds = getEquipmentForWorkCenter(wc.id).map(eq => eq.id);
@@ -309,6 +312,7 @@ export default function WorkCenters() {
         operator_monthly_salary: parseFloat(newWorkCenter.operator_monthly_salary) || 0,
         labor_rate_type: newWorkCenter.labor_rate_type || 'monthly',
         cost_method: newWorkCenter.cost_method || 'capacity',
+        require_operator: newWorkCenter.require_operator || false,
       };
 
       await updateWorkCenter(selectedWorkCenter.id, wcData);
@@ -586,6 +590,10 @@ export default function WorkCenters() {
               <div className="flex bg-slate-100 rounded-md p-0.5 text-xs">
                 <button type="button" className={`px-3 py-1 rounded ${newWorkCenter.cost_method !== 'time' ? 'bg-white shadow text-blue-700 font-medium' : 'text-slate-500'}`} onClick={() => setNewWorkCenter({...newWorkCenter, cost_method: 'capacity'})}>{language === 'uz' ? 'Quvvat bo\'yicha' : language === 'ru' ? 'По мощности' : 'By Capacity'}</button>
                 <button type="button" className={`px-3 py-1 rounded ${newWorkCenter.cost_method === 'time' ? 'bg-white shadow text-blue-700 font-medium' : 'text-slate-500'}`} onClick={() => setNewWorkCenter({...newWorkCenter, cost_method: 'time'})}>{language === 'uz' ? 'Vaqt bo\'yicha' : language === 'ru' ? 'По времени' : 'By Time'}</button>
+              </div>
+              <div className="flex items-center gap-2 ml-4">
+                <input type="checkbox" id="wc_require_operator" checked={newWorkCenter.require_operator || false} onChange={(e) => setNewWorkCenter({...newWorkCenter, require_operator: e.target.checked})} className="w-4 h-4 accent-slate-700 cursor-pointer" />
+                <label htmlFor="wc_require_operator" className="text-sm font-medium cursor-pointer select-none">{language === 'uz' ? "Operatorni tanlash majburiy" : language === 'ru' ? "Требовать оператора" : "Require Operator"}</label>
               </div>
             </div>
 
@@ -933,6 +941,10 @@ export default function WorkCenters() {
               <div className="flex bg-slate-100 rounded-md p-0.5 text-xs">
                 <button type="button" className={`px-3 py-1 rounded ${newWorkCenter.cost_method !== 'time' ? 'bg-white shadow text-blue-700 font-medium' : 'text-slate-500'}`} onClick={() => setNewWorkCenter({...newWorkCenter, cost_method: 'capacity'})}>{language === 'uz' ? 'Quvvat bo\'yicha' : language === 'ru' ? 'По мощности' : 'By Capacity'}</button>
                 <button type="button" className={`px-3 py-1 rounded ${newWorkCenter.cost_method === 'time' ? 'bg-white shadow text-blue-700 font-medium' : 'text-slate-500'}`} onClick={() => setNewWorkCenter({...newWorkCenter, cost_method: 'time'})}>{language === 'uz' ? 'Vaqt bo\'yicha' : language === 'ru' ? 'По времени' : 'By Time'}</button>
+              </div>
+              <div className="flex items-center gap-2 ml-4">
+                <input type="checkbox" id="edit_wc_require_operator" checked={newWorkCenter.require_operator || false} onChange={(e) => setNewWorkCenter({...newWorkCenter, require_operator: e.target.checked})} className="w-4 h-4 accent-slate-700 cursor-pointer" />
+                <label htmlFor="edit_wc_require_operator" className="text-sm font-medium cursor-pointer select-none">{language === 'uz' ? "Operatorni tanlash majburiy" : language === 'ru' ? "Требовать оператора" : "Require Operator"}</label>
               </div>
             </div>
 
