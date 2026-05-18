@@ -1699,12 +1699,14 @@ export default function Products() {
       };
 
       await updateProduct(selectedProduct.id, productData);
+      toast({ title: t('success'), description: t('product_updated') || 'Mahsulot yangilandi' });
       resetForm();
       setSelectedProduct(null);
       setShowEditModal(false);
       fetchProducts();
     } catch (error) {
       console.error('Error updating product:', error);
+      toast({ title: t('error'), description: error?.response?.data?.error || error.message || t('update_failed') || 'Yangilashda xatolik', variant: 'destructive' });
     } finally {
       setIsSaving(false);
     }
