@@ -872,6 +872,12 @@ export default function SalesOrders() {
       setShowEditModal(false);
       setEditingOrder(null);
       addAuditLog('update', editingOrder.id, editingOrder.order_number);
+      // Refresh from the server so the list reflects the updated customer
+      // / lines / totals. updateSalesOrder() already merges the API
+      // response into local state, but the merge only covers fields the
+      // single-order endpoint returns — a full reload is the safest way
+      // to pick up joined fields (customer name, warehouse name, etc).
+      try { await refreshModulesData?.(); } catch { /* non-blocking */ }
     } catch (error) {
       console.error('Error updating sales order:', error);
     }
