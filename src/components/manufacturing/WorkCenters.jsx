@@ -78,6 +78,7 @@ export default function WorkCenters() {
     annual_maintenance: '',
     operator_monthly_salary: '',
     labor_rate_type: 'monthly',
+    cost_method: 'capacity',
   });
   const [selectedEquipmentIds, setSelectedEquipmentIds] = useState([]);
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState([]);
@@ -203,6 +204,7 @@ export default function WorkCenters() {
         annual_maintenance: parseFloat(newWorkCenter.annual_maintenance) || 0,
         operator_monthly_salary: parseFloat(newWorkCenter.operator_monthly_salary) || 0,
         labor_rate_type: newWorkCenter.labor_rate_type || 'monthly',
+        cost_method: newWorkCenter.cost_method || 'capacity',
       };
 
       const createdWC = await createWorkCenter(wcData);
@@ -272,6 +274,7 @@ export default function WorkCenters() {
       annual_maintenance: wc.annual_maintenance || '',
       operator_monthly_salary: wc.operator_monthly_salary || '',
       labor_rate_type: wc.labor_rate_type || 'monthly',
+      cost_method: wc.cost_method || 'capacity',
     });
     // Load currently assigned equipment IDs
     const assignedIds = getEquipmentForWorkCenter(wc.id).map(eq => eq.id);
@@ -305,6 +308,7 @@ export default function WorkCenters() {
         annual_maintenance: parseFloat(newWorkCenter.annual_maintenance) || 0,
         operator_monthly_salary: parseFloat(newWorkCenter.operator_monthly_salary) || 0,
         labor_rate_type: newWorkCenter.labor_rate_type || 'monthly',
+        cost_method: newWorkCenter.cost_method || 'capacity',
       };
 
       await updateWorkCenter(selectedWorkCenter.id, wcData);
@@ -577,15 +581,24 @@ export default function WorkCenters() {
               </div>
             </div>
 
+            <div className="flex items-center gap-3 py-1">
+              <span className="text-sm font-medium">{language === 'uz' ? 'Xarajat usuli' : language === 'ru' ? 'Метод расчёта' : 'Cost Method'}:</span>
+              <div className="flex bg-slate-100 rounded-md p-0.5 text-xs">
+                <button type="button" className={`px-3 py-1 rounded ${newWorkCenter.cost_method !== 'time' ? 'bg-white shadow text-blue-700 font-medium' : 'text-slate-500'}`} onClick={() => setNewWorkCenter({...newWorkCenter, cost_method: 'capacity'})}>{language === 'uz' ? 'Quvvat bo\'yicha' : language === 'ru' ? 'По мощности' : 'By Capacity'}</button>
+                <button type="button" className={`px-3 py-1 rounded ${newWorkCenter.cost_method === 'time' ? 'bg-white shadow text-blue-700 font-medium' : 'text-slate-500'}`} onClick={() => setNewWorkCenter({...newWorkCenter, cost_method: 'time'})}>{language === 'uz' ? 'Vaqt bo\'yicha' : language === 'ru' ? 'По времени' : 'By Time'}</button>
+              </div>
+            </div>
+
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <LabelWithHelp htmlFor="wc_capacity" label={t('capacity_per_hour')} helpText={t('help_workcenter_capacity')} />
+                <LabelWithHelp htmlFor="wc_capacity" label={t('capacity_per_hour')} helpText={newWorkCenter.cost_method === 'time' ? (language === 'uz' ? 'Vaqt usulida ishlatilmaydi — xarajat haqiqiy vaqtga asoslanadi' : 'Not used in time mode — cost based on actual hours') : t('help_workcenter_capacity')} />
                 <Input
                   id="wc_capacity"
                   type="number"
                   placeholder="1"
                   value={newWorkCenter.capacity_per_hour || ''}
                   onChange={(e) => setNewWorkCenter({...newWorkCenter, capacity_per_hour: e.target.value})}
+                  disabled={newWorkCenter.cost_method === 'time'}
                 />
               </div>
               <div className="space-y-2">
@@ -915,15 +928,24 @@ export default function WorkCenters() {
               </div>
             </div>
 
+            <div className="flex items-center gap-3 py-1">
+              <span className="text-sm font-medium">{language === 'uz' ? 'Xarajat usuli' : language === 'ru' ? 'Метод расчёта' : 'Cost Method'}:</span>
+              <div className="flex bg-slate-100 rounded-md p-0.5 text-xs">
+                <button type="button" className={`px-3 py-1 rounded ${newWorkCenter.cost_method !== 'time' ? 'bg-white shadow text-blue-700 font-medium' : 'text-slate-500'}`} onClick={() => setNewWorkCenter({...newWorkCenter, cost_method: 'capacity'})}>{language === 'uz' ? 'Quvvat bo\'yicha' : language === 'ru' ? 'По мощности' : 'By Capacity'}</button>
+                <button type="button" className={`px-3 py-1 rounded ${newWorkCenter.cost_method === 'time' ? 'bg-white shadow text-blue-700 font-medium' : 'text-slate-500'}`} onClick={() => setNewWorkCenter({...newWorkCenter, cost_method: 'time'})}>{language === 'uz' ? 'Vaqt bo\'yicha' : language === 'ru' ? 'По времени' : 'By Time'}</button>
+              </div>
+            </div>
+
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <LabelWithHelp htmlFor="edit_wc_capacity" label={t('capacity_per_hour')} helpText={t('help_workcenter_capacity')} />
+                <LabelWithHelp htmlFor="edit_wc_capacity" label={t('capacity_per_hour')} helpText={newWorkCenter.cost_method === 'time' ? (language === 'uz' ? 'Vaqt usulida ishlatilmaydi — xarajat haqiqiy vaqtga asoslanadi' : 'Not used in time mode — cost based on actual hours') : t('help_workcenter_capacity')} />
                 <Input
                   id="edit_wc_capacity"
                   type="number"
                   placeholder="1"
                   value={newWorkCenter.capacity_per_hour || ''}
                   onChange={(e) => setNewWorkCenter({...newWorkCenter, capacity_per_hour: e.target.value})}
+                  disabled={newWorkCenter.cost_method === 'time'}
                 />
               </div>
               <div className="space-y-2">
