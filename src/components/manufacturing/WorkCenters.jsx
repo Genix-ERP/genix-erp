@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import apiClient from '@/api/client';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -165,6 +166,25 @@ export default function WorkCenters() {
   };
 
   // Save equipment assignments via API
+  const saveEmployeeAssignments = async (workCenterId, employeeIds) => {
+    try {
+      // First remove all existing employees for this work center
+      const existing = await apiClient.get(`/work-centers/${workCenterId}/employees`).then(r => r.data?.data || []).catch(() => []);
+      const existingIds = (Array.isArray(existing) ? existing : []).map(e => e.employee_id || e.id);
+      // Remove employees no longer selected
+      for (const eid of existingIds) {
+        if (!employeeIds.includes(eid)) {
+          await apiClient.delete(`/work-centers/${workCenterId}/employees/${eid}`).catch(() => {});
+        }
+      }
+      // Add newly selected employees
+      const newIds = employeeIds.filter(eid => !existingIds.includes(eid));
+      if (newIds.length > 0) {
+        await apiClient.post(`/work-centers/${workCenterId}/employees`, { employee_ids: newIds, role: 'operator' }).catch(() => {});
+      }
+    } catch (e) { console.error('Failed to save employee assignments:', e); }
+  };
+
   const saveEquipmentAssignments = async (workCenterId, equipmentIds) => {
     const promises = equipment
       .filter(eq => equipmentIds.includes(eq.id) || eq.work_center_id === workCenterId)
@@ -211,9 +231,12 @@ export default function WorkCenters() {
 
       const createdWC = await createWorkCenter(wcData);
 
-      // Save equipment assignments if any were selected
+      // Save equipment and employee assignments
       if (selectedEquipmentIds.length > 0 && createdWC?.id) {
         await saveEquipmentAssignments(createdWC.id, selectedEquipmentIds);
+      }
+      if (selectedEmployeeIds.length > 0 && createdWC?.id) {
+        await saveEmployeeAssignments(createdWC.id, selectedEmployeeIds);
       }
 
       setShowCreateModal(false);
@@ -249,8 +272,13 @@ export default function WorkCenters() {
     setSelectedEquipmentIds([]);
   };
 
+  const [viewEmployees, setViewEmployees] = useState([]);
   const handleViewWorkCenter = (wc) => {
     setSelectedWorkCenter(wc);
+    apiClient.get(`/work-centers/${wc.id}/employees`).then(r => {
+      const emps = r.data?.data;
+      setViewEmployees(Array.isArray(emps) ? emps : []);
+    }).catch(() => setViewEmployees([]));
     setShowViewModal(true);
   };
 
@@ -282,6 +310,11 @@ export default function WorkCenters() {
     // Load currently assigned equipment IDs
     const assignedIds = getEquipmentForWorkCenter(wc.id).map(eq => eq.id);
     setSelectedEquipmentIds(assignedIds);
+    // Load currently assigned employee IDs
+    apiClient.get(`/work-centers/${wc.id}/employees`).then(r => {
+      const emps = r.data?.data;
+      setSelectedEmployeeIds((Array.isArray(emps) ? emps : []).map(e => e.employee_id || e.id));
+    }).catch(() => setSelectedEmployeeIds([]));
     setShowEditModal(true);
   };
 
@@ -317,8 +350,9 @@ export default function WorkCenters() {
 
       await updateWorkCenter(selectedWorkCenter.id, wcData);
 
-      // Update equipment assignments
+      // Update equipment and employee assignments
       await saveEquipmentAssignments(selectedWorkCenter.id, selectedEquipmentIds);
+      await saveEmployeeAssignments(selectedWorkCenter.id, selectedEmployeeIds);
 
       setShowEditModal(false);
       setSelectedWorkCenter(null);
@@ -1456,6 +1490,30 @@ export default function WorkCenters() {
               </div>
 
               <div className="flex gap-3 pt-4">
+              {/* Assigned Employees */}
+              <div className="space-y-3 pt-4 border-t border-slate-100">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium flex items-center gap-2">
+                    <Users className="w-4 h-4" />
+                    {language === 'uz' ? 'Tayinlangan xodimlar' : language === 'ru' ? 'Назначенные сотрудники' : 'Assigned Employees'}
+                  </p>
+                  <Badge variant="outline">{viewEmployees.length}</Badge>
+                </div>
+                {viewEmployees.length > 0 ? (
+                  <div className="space-y-2">
+                    {viewEmployees.map(emp => (
+                      <div key={emp.employee_id || emp.id} className="flex items-center gap-2 p-2 bg-slate-50 rounded">
+                        <Users className="w-4 h-4 text-slate-400" />
+                        <span className="text-sm font-medium">{emp.employee_name || emp.name}</span>
+                        <span className="text-xs text-slate-400">{emp.employee_number || emp.employee_id}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-400 text-center py-3">{language === 'uz' ? 'Xodimlar tayinlanmagan' : 'No employees assigned'}</p>
+                )}
+              </div>
+
                 <Button variant="outline" onClick={() => { setShowViewModal(false); setSelectedWorkCenter(null); }} className="flex-1">
                   {t('close')}
                 </Button>
