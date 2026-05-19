@@ -150,7 +150,7 @@ export default function CostCalculation() {
 
   async function loadProducts() {
     try {
-      const data = await inventoryService.listProducts();
+      const data = await inventoryService.listProducts({ limit: 5000 });
       setProducts(data || []);
     } catch (e) { /* silent */ }
   }
