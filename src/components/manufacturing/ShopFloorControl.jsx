@@ -426,7 +426,8 @@ export default function ShopFloorControl({ isActive }) {
       setSelectedOperator('');
       try {
         const res = await apiClient.get(`/work-centers/${wc.id}/employees`);
-        setWcEmployees(res.data?.data || []);
+        const emps = res.data?.data;
+        setWcEmployees(Array.isArray(emps) ? emps : []);
       } catch (e) { setWcEmployees([]); }
       setShowOperatorModal(true);
       return;
@@ -1195,7 +1196,7 @@ export default function ShopFloorControl({ isActive }) {
                 <SelectValue placeholder={language === 'uz' ? 'Xodimni tanlang...' : language === 'ru' ? 'Выберите сотрудника...' : 'Select employee...'} />
               </SelectTrigger>
               <SelectContent>
-                {wcEmployees.map(emp => (
+                {(Array.isArray(wcEmployees) ? wcEmployees : []).map(emp => (
                   <SelectItem key={emp.employee_id || emp.id} value={emp.employee_id || emp.id}>
                     {emp.employee_name || emp.name || emp.employee_id}
                   </SelectItem>
