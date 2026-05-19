@@ -169,7 +169,7 @@ export default function WorkCenters() {
   const saveEmployeeAssignments = async (workCenterId, employeeIds) => {
     try {
       // First remove all existing employees for this work center
-      const existing = await apiClient.get(`/work-centers/${workCenterId}/employees`).then(r => r.data?.data || []).catch(() => []);
+      const existing = await apiClient.get(`/work-centers/${workCenterId}/employees`).then(r => r.data?.data?.employees || r.data?.data || []).catch(() => []);
       const existingIds = (Array.isArray(existing) ? existing : []).map(e => e.employee_id || e.id);
       // Remove employees no longer selected
       for (const eid of existingIds) {
@@ -276,7 +276,7 @@ export default function WorkCenters() {
   const handleViewWorkCenter = (wc) => {
     setSelectedWorkCenter(wc);
     apiClient.get(`/work-centers/${wc.id}/employees`).then(r => {
-      const emps = r.data?.data;
+      const emps = r.data?.data?.employees || r.data?.data || [];
       setViewEmployees(Array.isArray(emps) ? emps : []);
     }).catch(() => setViewEmployees([]));
     setShowViewModal(true);
@@ -312,7 +312,7 @@ export default function WorkCenters() {
     setSelectedEquipmentIds(assignedIds);
     // Load currently assigned employee IDs
     apiClient.get(`/work-centers/${wc.id}/employees`).then(r => {
-      const emps = r.data?.data;
+      const emps = r.data?.data?.employees || r.data?.data || [];
       setSelectedEmployeeIds((Array.isArray(emps) ? emps : []).map(e => e.employee_id || e.id));
     }).catch(() => setSelectedEmployeeIds([]));
     setShowEditModal(true);

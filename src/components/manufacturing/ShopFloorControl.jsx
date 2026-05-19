@@ -426,7 +426,7 @@ export default function ShopFloorControl({ isActive }) {
       setSelectedOperator('');
       try {
         const res = await apiClient.get(`/work-centers/${wc.id}/employees`);
-        const emps = res.data?.data;
+        const emps = res.data?.data?.employees || res.data?.data || [];
         setWcEmployees(Array.isArray(emps) ? emps : []);
       } catch (e) { setWcEmployees([]); }
       setShowOperatorModal(true);
