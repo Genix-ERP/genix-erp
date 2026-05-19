@@ -1191,27 +1191,41 @@ export default function ShopFloorControl({ isActive }) {
             <DialogTitle>{language === 'uz' ? 'Operatorni tanlang' : language === 'ru' ? 'Выберите оператора' : 'Select Operator'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            <Select value={selectedOperator} onValueChange={setSelectedOperator}>
-              <SelectTrigger>
-                <SelectValue placeholder={language === 'uz' ? 'Xodimni tanlang...' : language === 'ru' ? 'Выберите сотрудника...' : 'Select employee...'} />
-              </SelectTrigger>
-              <SelectContent>
-                {(Array.isArray(wcEmployees) ? wcEmployees : []).map(emp => (
-                  <SelectItem key={emp.employee_id || emp.id} value={emp.employee_id || emp.id}>
-                    {emp.employee_name || emp.name || emp.employee_id}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setShowOperatorModal(false)}>
-                {language === 'uz' ? 'Bekor qilish' : language === 'ru' ? 'Отмена' : 'Cancel'}
-              </Button>
-              <Button onClick={confirmStartWithOperator} disabled={!selectedOperator} className="bg-green-600 hover:bg-green-700">
-                <Play className="w-4 h-4 mr-1" />
-                {language === 'uz' ? 'Boshlash' : language === 'ru' ? 'Начать' : 'Start'}
-              </Button>
-            </div>
+            {(Array.isArray(wcEmployees) ? wcEmployees : []).length === 0 ? (
+              <div className="text-center py-4">
+                <AlertTriangle className="w-8 h-8 text-amber-500 mx-auto mb-2" />
+                <p className="text-sm text-slate-600">
+                  {language === 'uz' ? "Bu ish markaziga xodimlar tayinlanmagan. Avval Resurslar → ish markazini tahrirlash → xodimlarni tayinlang." : language === 'ru' ? "К этому рабочему центру не привязаны сотрудники. Назначьте их в Ресурсы → редактирование." : "No employees assigned to this work center. Assign them in Resources → Edit work center."}
+                </p>
+                <Button variant="outline" className="mt-3" onClick={() => setShowOperatorModal(false)}>
+                  {language === 'uz' ? 'Tushundim' : 'OK'}
+                </Button>
+              </div>
+            ) : (
+              <>
+                <Select value={selectedOperator} onValueChange={setSelectedOperator}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={language === 'uz' ? 'Xodimni tanlang...' : language === 'ru' ? 'Выберите сотрудника...' : 'Select employee...'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(Array.isArray(wcEmployees) ? wcEmployees : []).map(emp => (
+                      <SelectItem key={emp.employee_id || emp.id} value={emp.employee_id || emp.id}>
+                        {emp.employee_name || emp.name || emp.employee_id}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setShowOperatorModal(false)}>
+                    {language === 'uz' ? 'Bekor qilish' : language === 'ru' ? 'Отмена' : 'Cancel'}
+                  </Button>
+                  <Button onClick={confirmStartWithOperator} disabled={!selectedOperator} className="bg-green-600 hover:bg-green-700">
+                    <Play className="w-4 h-4 mr-1" />
+                    {language === 'uz' ? 'Boshlash' : language === 'ru' ? 'Начать' : 'Start'}
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
         </DialogContent>
       </Dialog>
