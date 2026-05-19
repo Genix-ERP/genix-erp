@@ -987,12 +987,18 @@ export default function ProductionOrders() {
 
           {selectedOrder && (
             <div className="space-y-6 py-4">
-              {/* Order Summary. Auto-grow from 3 columns to 4 when this
-                  production order was spawned from a sales order so the
-                  operator can trace what they're building for. The 4th
-                  tile is omitted entirely for ad-hoc production orders
-                  to keep the layout clean. */}
-              <div className={`grid ${selectedOrder.sales_order_number ? 'grid-cols-4' : 'grid-cols-3'} gap-4 p-4 bg-slate-50 rounded-lg`}>
+              {/* Order Details */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-slate-50 rounded-lg">
+                <div>
+                  <p className="text-xs text-slate-500">{t('order_code') || 'Order Code'}</p>
+                  <p className="font-semibold">{selectedOrder.code}</p>
+                </div>
+                {selectedOrder.name && (
+                  <div>
+                    <p className="text-xs text-slate-500">{t('order_name') || 'Order Name'}</p>
+                    <p className="font-semibold">{selectedOrder.name}</p>
+                  </div>
+                )}
                 <div>
                   <p className="text-xs text-slate-500">{t('product') || 'Product'}</p>
                   <p className="font-semibold">{selectedOrder.product_name}</p>
@@ -1002,13 +1008,37 @@ export default function ProductionOrders() {
                   <p className="font-semibold">{selectedOrder.quantity_planned} {getUnitLabel(selectedOrder.uom)}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-500">{t('shift') || 'Shift'}</p>
-                  <p className="font-semibold">{getShiftLabel(selectedOrder.shift)}</p>
+                  <p className="text-xs text-slate-500">{t('status') || 'Status'}</p>
+                  <Badge className={getStatusColor(selectedOrder.status)}>{getStatusLabel(selectedOrder.status)}</Badge>
                 </div>
+                <div>
+                  <p className="text-xs text-slate-500">{t('shift') || 'Shift'}</p>
+                  <p className="font-semibold">{getShiftLabel(selectedOrder.shift) || '-'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500">{t('scheduled_start') || 'Start Date'}</p>
+                  <p className="font-semibold">{selectedOrder.scheduled_start ? format(new Date(selectedOrder.scheduled_start), 'dd.MM.yyyy') : '-'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500">{t('priority') || 'Priority'}</p>
+                  <p className="font-semibold">{getPriorityLabel(selectedOrder.priority)?.label || '-'}</p>
+                </div>
+                {selectedOrder.bom_name && (
+                  <div>
+                    <p className="text-xs text-slate-500">{t('bom') || 'BOM'}</p>
+                    <p className="font-semibold">{selectedOrder.bom_name}</p>
+                  </div>
+                )}
                 {selectedOrder.sales_order_number && (
                   <div>
                     <p className="text-xs text-slate-500">{t('sales_order') || 'Sales Order'}</p>
                     <p className="font-semibold text-blue-700">{selectedOrder.sales_order_number}</p>
+                  </div>
+                )}
+                {selectedOrder.notes && (
+                  <div className="col-span-2">
+                    <p className="text-xs text-slate-500">{t('notes') || 'Notes'}</p>
+                    <p className="text-sm">{selectedOrder.notes}</p>
                   </div>
                 )}
               </div>
