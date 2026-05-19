@@ -506,33 +506,18 @@ export default function WorkCenters() {
                   </div>
 
                   {/* Action buttons */}
-                  <div className="flex gap-2 pt-3 border-t border-slate-100">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleViewWorkCenter(wc)}
-                      className="flex-1"
-                    >
-                      <Eye className="w-4 h-4 mr-1" /> {t('view')}
+                  <div className="flex justify-center gap-2 pt-3 border-t border-slate-100">
+                    <Button variant="outline" size="sm" onClick={() => handleViewWorkCenter(wc)} title={t('view')}>
+                      <Eye className="w-4 h-4" />
                     </Button>
                     {canUpdate(MODULES.MANUFACTURING) && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleEditWorkCenter(wc)}
-                        className="flex-1"
-                      >
-                        <Pencil className="w-4 h-4 mr-1" /> {t('edit')}
+                      <Button variant="outline" size="sm" onClick={() => handleEditWorkCenter(wc)} title={t('edit')}>
+                        <Pencil className="w-4 h-4" />
                       </Button>
                     )}
                     {canDelete(MODULES.MANUFACTURING) && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDeleteWorkCenter(wc)}
-                        className="flex-1 text-red-600 hover:bg-red-50"
-                      >
-                        <Trash2 className="w-4 h-4 mr-1" /> {t('delete')}
+                      <Button variant="outline" size="sm" onClick={() => handleDeleteWorkCenter(wc)} title={t('delete')} className="text-red-600 hover:bg-red-50">
+                        <Trash2 className="w-4 h-4" />
                       </Button>
                     )}
                   </div>
