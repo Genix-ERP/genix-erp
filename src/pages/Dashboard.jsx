@@ -28,6 +28,7 @@ import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { useCustomers } from "@/components/contexts/CustomersContext";
 import { useModules } from "@/components/contexts/ModulesContext";
 import { useCurrencyFormatter } from "@/hooks/useCurrencyFormatter";
+import { financeService } from "@/api/services/finance";
 
 import {
   analyzeSales,
@@ -59,6 +60,14 @@ export default function Dashboard() {
 
   const [isLoading, setIsLoading] = useState(true);
 
+  // Year-to-date accrual totals from the trial balance.
+  // The dashboard's revenue/expense metrics were derived from cash payments only —
+  // so COGS journal entries (debits on class-9 accounts like 9110) never showed
+  // up in "Xarajatlar". We fetch the trial balance turnover and use the
+  // accrual figures whenever they exist, so the dashboard matches what
+  // Buxgalteriya / Forma-2 reports.
+  const [accrualTotals, setAccrualTotals] = useState({ revenue: 0, expenses: 0, byMonth: {} });
+
   useEffect(() => {
     refreshInventory();
     refreshFinancials();
@@ -66,6 +75,34 @@ export default function Dashboard() {
     refreshModules();
     const timer = setTimeout(() => setIsLoading(false), 400);
     return () => clearTimeout(timer);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    // Pull YTD trial balance turnover and roll it up into a single
+    // revenue / expense pair we can use on the metrics card.
+    const loadAccruals = async () => {
+      try {
+        const now = new Date();
+        const periodFrom = `${now.getFullYear()}-01-01`;
+        const periodTo = now.toISOString().slice(0, 10);
+        const tb = await financeService.getTrialBalanceWithTurnover({ period_from: periodFrom, period_to: periodTo });
+        const rows = tb?.rows || tb?.accounts || [];
+        let revenue = 0;
+        let expenses = 0;
+        for (const r of rows) {
+          const category = (r.category || '').toLowerCase();
+          if (category === 'revenue') {
+            revenue += Number(r.turnover_credit || 0) - Number(r.turnover_debit || 0);
+          } else if (category === 'expense') {
+            expenses += Number(r.turnover_debit || 0) - Number(r.turnover_credit || 0);
+          }
+        }
+        setAccrualTotals({ revenue: Math.max(revenue, 0), expenses: Math.max(expenses, 0), byMonth: {} });
+      } catch {
+        // Silent — fall back to payment-derived numbers.
+      }
+    };
+    loadAccruals();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // AI analyses
@@ -81,13 +118,19 @@ export default function Dashboard() {
 
   // Metrics
   const metrics = useMemo(() => {
-    const totalRevenue = financialTransactions
+    const paymentRevenue = financialTransactions
       .filter((tx) => tx.transaction_type === "income")
       .reduce((sum, tx) => sum + (tx.amount || 0), 0);
 
-    const totalExpenses = financialTransactions
+    const paymentExpenses = financialTransactions
       .filter((tx) => tx.transaction_type === "expense")
       .reduce((sum, tx) => sum + (tx.amount || 0), 0);
+
+    // Prefer accrual numbers from the trial balance (includes COGS / 9xxx
+    // expenses that never appear as cash payments). Fall back to payment
+    // totals only when the trial balance is empty.
+    const totalRevenue = accrualTotals.revenue > 0 ? accrualTotals.revenue : paymentRevenue;
+    const totalExpenses = accrualTotals.expenses > 0 ? accrualTotals.expenses : paymentExpenses;
 
     const netProfit = totalRevenue - totalExpenses;
 
@@ -117,7 +160,7 @@ export default function Dashboard() {
       overdueTotal,
       lowStockItems: inventory.filter((item) => item.current_stock <= (item.reorder_level || 10)).length,
     };
-  }, [financialTransactions, inventory, customers, customerInvoices]);
+  }, [financialTransactions, inventory, customers, customerInvoices, accrualTotals]);
 
   // Revenue vs Expenses chart data (monthly)
   const revenueExpenseData = useMemo(() => {
