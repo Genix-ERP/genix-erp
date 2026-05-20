@@ -33,6 +33,7 @@ import { workOrdersService, productionOrdersService } from '@/api/services/manuf
 import { toast } from 'sonner';
 import apiClient from '@/api/client';
 import { format, differenceInMinutes, parseISO } from 'date-fns';
+import { parseSpreadsheetFile } from '@/components/shared/ImportExport';
 
 const WORK_ORDER_STATUS = {
   pending: { color: 'bg-slate-100 text-slate-700 border-slate-200', icon: Clock },
@@ -268,6 +269,7 @@ export default function ShopFloorControl({ isActive }) {
   const [newMaterial, setNewMaterial] = useState({ product_id: '', quantity: '', unit_cost: '', notes: '' });
   const [productSearch, setProductSearch] = useState('');
   const [productSearchFocused, setProductSearchFocused] = useState(false);
+  const [bulkUploading, setBulkUploading] = useState(false);
 
   // Attachments modal state
   const [showAttachmentsModal, setShowAttachmentsModal] = useState(false);
@@ -665,6 +667,100 @@ export default function ShopFloorControl({ isActive }) {
     } catch (err) {
       toast.error('Failed to add material: ' + (err.response?.data?.error || err.message));
     }
+  };
+
+  // Bulk-add materials via Excel upload.
+  // Expected columns (first row is the header, case-insensitive, language-tolerant):
+  //   product_name | mahsulot | название    -> product name to look up
+  //   quantity     | miqdor   | кол-во      -> numeric quantity
+  // Anything else is ignored, so the user can keep extra columns.
+  const handleBulkUploadMaterials = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !materialsWorkOrder) return;
+
+    setBulkUploading(true);
+    try {
+      const { rows } = await parseSpreadsheetFile(file);
+
+      // Normalise header keys: keep first matching value among the aliases per row.
+      const nameAliases = ['product_name', 'product', 'name', 'mahsulot', 'mahsulot_nomi', 'название', 'продукт'];
+      const qtyAliases  = ['quantity', 'qty', 'miqdor', 'soni', 'количество', 'кол-во'];
+
+      const pick = (row, aliases) => {
+        for (const key of Object.keys(row)) {
+          const norm = String(key).trim().toLowerCase();
+          if (aliases.includes(norm)) return row[key];
+        }
+        return undefined;
+      };
+
+      let added = 0;
+      const errors = [];
+      const productsList = products || [];
+
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i];
+        const rawName = pick(r, nameAliases);
+        const rawQty  = pick(r, qtyAliases);
+        if (!rawName && !rawQty) continue; // skip empty rows
+        const name = String(rawName || '').trim();
+        const qty = parseFloat(rawQty);
+
+        if (!name) { errors.push(`Row ${i + 2}: missing product name`); continue; }
+        if (!qty || qty <= 0) { errors.push(`Row ${i + 2} (${name}): invalid quantity`); continue; }
+
+        const lower = name.toLowerCase();
+        const product = productsList.find(p =>
+          (p.name || '').toLowerCase() === lower
+          || (p.sku || '').toLowerCase() === lower
+          || (p.barcode || '').toLowerCase() === lower
+        ) || productsList.find(p => (p.name || '').toLowerCase().includes(lower));
+
+        if (!product) { errors.push(`Row ${i + 2}: product "${name}" not found`); continue; }
+
+        try {
+          await workOrdersService.addMaterial(materialsWorkOrder.id, {
+            product_id: product.id,
+            quantity: qty,
+            unit_cost: parseFloat(product.cost_price) || parseFloat(product.price) || 0,
+            notes: 'Excel upload',
+          });
+          added++;
+        } catch (err) {
+          errors.push(`Row ${i + 2} (${name}): ${err.response?.data?.error || err.message}`);
+        }
+      }
+
+      // Refresh list once at the end
+      const data = await workOrdersService.getMaterials(materialsWorkOrder.id);
+      setWoMaterials(data?.materials || []);
+      setWoMaterialsTotalCost(data?.total_cost || 0);
+
+      if (added > 0) {
+        toast.success(
+          language === 'uz' ? `${added} ta material qo'shildi` :
+          language === 'ru' ? `Добавлено ${added} материалов` :
+          `Added ${added} materials`
+        );
+      }
+      if (errors.length > 0) {
+        // Show first few errors so the toast is readable
+        const preview = errors.slice(0, 5).join('\n');
+        const more = errors.length > 5 ? `\n…+${errors.length - 5} more` : '';
+        toast.error(preview + more, { duration: 8000 });
+      }
+      if (added === 0 && errors.length === 0) {
+        toast.error(
+          language === 'uz' ? 'Excelda mos satrlar topilmadi' :
+          language === 'ru' ? 'В Excel нет подходящих строк' :
+          'No usable rows in Excel'
+        );
+      }
+    } catch (err) {
+      toast.error('Failed to read Excel: ' + (err.message || err));
+    }
+    setBulkUploading(false);
   };
 
   const handleRemoveMaterial = async (materialId) => {
@@ -1297,6 +1393,39 @@ export default function ShopFloorControl({ isActive }) {
                 </p>
               </div>
             )}
+
+            {/* Bulk upload from Excel — adds many materials in one go */}
+            <div className="border rounded-lg p-3 bg-blue-50 border-blue-200">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="text-sm">
+                  <p className="font-medium text-blue-900">
+                    {language === 'uz' ? 'Excel orqali ko\'p material qo\'shish' :
+                     language === 'ru' ? 'Массовое добавление через Excel' :
+                     'Bulk add from Excel'}
+                  </p>
+                  <p className="text-xs text-blue-700">
+                    {language === 'uz' ? 'Ustunlar: mahsulot nomi, miqdor' :
+                     language === 'ru' ? 'Колонки: название, кол-во' :
+                     'Columns: product_name, quantity'}
+                  </p>
+                </div>
+                <label className="inline-block">
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    className="hidden"
+                    onChange={handleBulkUploadMaterials}
+                    disabled={bulkUploading}
+                  />
+                  <span className={`inline-flex items-center gap-2 px-3 py-2 rounded-md cursor-pointer text-sm font-medium border ${bulkUploading ? 'bg-slate-100 text-slate-400 border-slate-200' : 'bg-blue-600 text-white border-blue-700 hover:bg-blue-700'}`}>
+                    <Upload className="w-4 h-4" />
+                    {bulkUploading
+                      ? (language === 'uz' ? 'Yuklanmoqda…' : language === 'ru' ? 'Загрузка…' : 'Uploading…')
+                      : (language === 'uz' ? 'Excel yuklash' : language === 'ru' ? 'Загрузить Excel' : 'Upload Excel')}
+                  </span>
+                </label>
+              </div>
+            </div>
 
             {/* Add new material form */}
             <div className="border rounded-lg p-4 space-y-3 bg-slate-50">
