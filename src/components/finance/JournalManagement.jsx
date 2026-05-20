@@ -41,16 +41,38 @@ export default function JournalManagement() {
 
   const tPM = (code, fallbackName) => t(PM_CODE_TO_KEY[code]) || fallbackName || code;
 
-  // Pick the localized journal name based on the user's current
-  // language. The backend stores three columns: `name` (legacy /
-  // Russian for migration-278-seeded rows, English for runtime-
-  // seeded rows), `name_uz`, `name_en`. Without this helper the UI
-  // shows whatever happened to be in `name` regardless of the user's
-  // language — Russian shown in Uzbek mode, etc.
+  // Code-based translation map. The backend stores name_uz/name_en
+  // columns but they're NULL on legacy journals created before the
+  // seeder learned to write them. Without this map a tenant with old
+  // journals shows "Bank Journal" / "Cash Journal" in Uzbek mode
+  // because the only populated column is `name` (English). Keying off
+  // the immutable `code` field is reliable in any DB state.
+  const DEFAULT_JOURNAL_I18N = {
+    GEN:           { uz: 'Bosh jurnal',                en: 'General Journal',         ru: 'Главный журнал' },
+    SAL:           { uz: 'Sotish jurnali',             en: 'Sales Journal',           ru: 'Журнал продаж' },
+    PUR:           { uz: 'Xarid jurnali',              en: 'Purchase Journal',        ru: 'Журнал закупок' },
+    CASH:          { uz: 'Kassa jurnali',              en: 'Cash Journal',            ru: 'Кассовый журнал' },
+    BANK:          { uz: 'Bank jurnali',               en: 'Bank Journal',            ru: 'Банковский журнал' },
+    MISC:          { uz: 'Boshqa operatsiyalar jurnali', en: 'Miscellaneous Journal', ru: 'Прочие операции' },
+    STOCK:         { uz: 'Ombor jurnali',              en: 'Stock Journal',           ru: 'Складской журнал' },
+    ASSET:         { uz: 'Asosiy vositalar jurnali',   en: 'Fixed Assets Journal',    ru: 'Журнал основных средств' },
+    PAYROLL:       { uz: 'Ish haqi jurnali',           en: 'Payroll Journal',         ru: 'Журнал зарплаты' },
+    CONST:         { uz: 'Qurilish jurnali',           en: 'Construction Journal',    ru: 'Строительный журнал' },
+  };
+
+  // Pick the localized journal name. Strategy:
+  //   1. Use the backend's localized column if populated (preferred —
+  //      respects user renames of default journals).
+  //   2. Fall back to the DEFAULT_JOURNAL_I18N map keyed by `code` —
+  //      covers legacy rows where name_uz / name_en are NULL.
+  //   3. Fall back to any populated name column.
+  //   4. Final fallback: the code itself.
   const journalDisplayName = (j) => {
     if (!j) return '';
     if (language === 'uz' && j.name_uz) return j.name_uz;
     if (language === 'en' && j.name_en) return j.name_en;
+    const i18n = DEFAULT_JOURNAL_I18N[j.code];
+    if (i18n && i18n[language]) return i18n[language];
     return j.name || j.name_uz || j.name_en || j.code || '';
   };
   const {
