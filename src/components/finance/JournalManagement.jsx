@@ -40,6 +40,19 @@ export default function JournalManagement() {
   const { t } = useTranslation(language);
 
   const tPM = (code, fallbackName) => t(PM_CODE_TO_KEY[code]) || fallbackName || code;
+
+  // Pick the localized journal name based on the user's current
+  // language. The backend stores three columns: `name` (legacy /
+  // Russian for migration-278-seeded rows, English for runtime-
+  // seeded rows), `name_uz`, `name_en`. Without this helper the UI
+  // shows whatever happened to be in `name` regardless of the user's
+  // language — Russian shown in Uzbek mode, etc.
+  const journalDisplayName = (j) => {
+    if (!j) return '';
+    if (language === 'uz' && j.name_uz) return j.name_uz;
+    if (language === 'en' && j.name_en) return j.name_en;
+    return j.name || j.name_uz || j.name_en || j.code || '';
+  };
   const {
     journals,
     accounts,
@@ -93,9 +106,16 @@ export default function JournalManagement() {
   useEffect(() => {
     let filtered = journals;
     if (searchQuery) {
+      const q = searchQuery.toLowerCase();
       filtered = filtered.filter(j =>
-        j.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        j.code?.toLowerCase().includes(searchQuery.toLowerCase())
+        // Search matches against the localized display name so a user
+        // typing in Uzbek finds Uzbek-labeled journals even when the
+        // underlying `name` column is Russian.
+        journalDisplayName(j).toLowerCase().includes(q) ||
+        j.name?.toLowerCase().includes(q) ||
+        j.name_uz?.toLowerCase().includes(q) ||
+        j.name_en?.toLowerCase().includes(q) ||
+        j.code?.toLowerCase().includes(q)
       );
     }
     if (typeFilter !== "all") {
@@ -1113,7 +1133,7 @@ export default function JournalManagement() {
                         </TableCell>
                         <TableCell>
                           <div>
-                            <p className="font-medium text-slate-900">{journal.name}</p>
+                            <p className="font-medium text-slate-900">{journalDisplayName(journal)}</p>
                             {journal.description && (
                               <p className="text-xs text-slate-500 mt-0.5">{journal.description}</p>
                             )}
@@ -1279,7 +1299,7 @@ export default function JournalManagement() {
           <div className="py-4">
             <p className="text-slate-600 mb-4">
               {t('confirm_delete_journal')}{' '}
-              <span className="font-semibold text-slate-900">"{selectedForDelete?.name}"</span>?
+              <span className="font-semibold text-slate-900">"{journalDisplayName(selectedForDelete)}"</span>?
             </p>
             <div className="p-3 bg-red-50 border border-red-200 rounded-lg mb-4">
               <div className="flex items-start gap-2">
