@@ -54,8 +54,14 @@ export default function FinanceDashboard() {
           const cogsTotal = cogsItems.reduce((s, a) => s + Math.abs(a.amount || 0), 0);
           const opexTotal = opexItems.reduce((s, a) => s + Math.abs(a.amount || 0), 0);
           const otherExpTotal = otherExpItems.reduce((s, a) => s + Math.abs(a.amount || 0), 0);
-          const totalExpenses = opexTotal + otherExpTotal;
-          const netProfit = data.net_income ?? (totalIncome - cogsTotal - totalExpenses);
+          // Jami xarajat must include COGS too — the income statement reports
+          // them in a separate bucket from operating expenses, but from the
+          // dashboard user's perspective Cost of Goods Sold is still an expense
+          // and should be reflected here. Previously this card silently hid
+          // COGS so the dashboard displayed "Jami xarajat 0 so'm" even when
+          // 9110 had real amounts.
+          const totalExpenses = cogsTotal + opexTotal + otherExpTotal;
+          const netProfit = data.net_income ?? (totalIncome - totalExpenses);
           const profitMargin = totalIncome > 0 ? (netProfit / totalIncome) * 100 : 0;
           setMetrics({ totalIncome, totalExpenses, netProfit, profitMargin });
 
