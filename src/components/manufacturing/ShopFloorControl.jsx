@@ -335,7 +335,28 @@ export default function ShopFloorControl({ isActive }) {
     );
   }, [filteredWorkOrders]);
 
-  // Timer effect — tick every second and auto-complete when planned duration is reached
+  // Build a map of "last work order id per PO" so the timer effect can skip
+  // auto-completion for the final stage — the operator should always be
+  // forced to confirm output manually via the Tugatish button + Final Output
+  // modal so good/scrap and shortfall reason are captured.
+  const lastWoIdsByPO = useMemo(() => {
+    const byPo = new Map(); // poId -> wo with max sequence
+    (availableWorkOrders || []).forEach(wo => {
+      const poId = wo.production_order_id;
+      if (!poId) return;
+      const cur = byPo.get(poId);
+      if (!cur || (wo.sequence || 0) > (cur.sequence || 0)) {
+        byPo.set(poId, wo);
+      }
+    });
+    return new Set(Array.from(byPo.values()).map(wo => wo.id));
+  }, [availableWorkOrders]);
+
+  // Timer effect — tick every second and auto-complete when planned duration is reached.
+  // Intentionally skips the LAST work order of each MO: the user wants to
+  // press Tugatish manually for the final stage so they can enter actual
+  // good / scrap quantities and a shortfall reason. Non-final stages still
+  // auto-complete on time so the line keeps flowing.
   useEffect(() => {
     const hasInProgress = availableWorkOrders.some(wo => wo.status === 'in_progress');
     if (!hasInProgress) return;
@@ -346,6 +367,7 @@ export default function ShopFloorControl({ isActive }) {
       availableWorkOrders.forEach(wo => {
         if (wo.status !== 'in_progress' || !wo.actual_start || !wo.expected_duration_minutes) return;
         if (autoCompletedRef.current.has(wo.id)) return;
+        if (lastWoIdsByPO.has(wo.id)) return; // last stage: wait for manual Tugatish
         const elapsed = differenceInMinutes(new Date(), parseISO(wo.actual_start));
         if (elapsed >= wo.expected_duration_minutes) {
           autoCompletedRef.current.add(wo.id);
@@ -361,7 +383,7 @@ export default function ShopFloorControl({ isActive }) {
       });
     }, 1000);
     return () => clearInterval(interval);
-  }, [availableWorkOrders, completeWorkOrder, refreshData]);
+  }, [availableWorkOrders, completeWorkOrder, refreshData, lastWoIdsByPO]);
 
   // Rows: group all work orders (including completed) by production order, sorted by sequence
   // Each row = one manufacturing order, steps shown horizontally in order
