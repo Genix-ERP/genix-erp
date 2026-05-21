@@ -1195,7 +1195,14 @@ export default function PurchaseOrders() {
           });
         }
       }}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        {/* Prevent accidental dismissal via outside-click or Escape so
+            users don't lose half-filled forms. Closing requires the X
+            button or Cancel button. */}
+        <DialogContent
+          className="max-w-4xl max-h-[90vh] overflow-y-auto"
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>{t('new_purchase_order') || 'New Purchase Order'}</DialogTitle>
           </DialogHeader>
@@ -1646,7 +1653,11 @@ export default function PurchaseOrders() {
           tax, payment terms, and status without recreating the order.
           Backend's UpdatePurchaseOrderInput supports all of these. */}
       <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent
+          className="max-w-4xl max-h-[90vh] overflow-y-auto"
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>{t('edit_order') || 'Edit Order'}</DialogTitle>
           </DialogHeader>

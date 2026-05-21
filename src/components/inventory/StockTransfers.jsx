@@ -22,6 +22,7 @@ import { format } from "date-fns";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
+import ProductCombobox from "@/components/shared/ProductCombobox";
 import { usePermissions } from "@/hooks/usePermissions";
 import { toast } from 'sonner';
 
@@ -511,21 +512,16 @@ export default function StockTransfers() {
                 required
                 helpText={t('help_transfer_product') || "Ko'chirmoqchi bo'lgan mahsulotni tanlang"}
               />
-              <Select
+              {/* Use the shared combobox so users can search by name/code
+                  and see the full product name on hover (the old Select
+                  truncated long names with no way to read them). */}
+              <ProductCombobox
+                products={products.filter(p => p.is_stockable)}
                 value={transferForm.product_id}
                 onValueChange={(value) => setTransferForm({...transferForm, product_id: value})}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={t('select_product')} />
-                </SelectTrigger>
-                <SelectContent>
-                  {products.filter(p => p.is_stockable).map(product => (
-                    <SelectItem key={product.id} value={product.id}>
-                      {product.name} ({product.code})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                placeholder={t('select_product')}
+                t={t}
+              />
             </div>
 
             {/* From Warehouse */}

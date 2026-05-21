@@ -95,7 +95,16 @@ export default function ProductCombobox({ products: initialProducts = [], value,
           <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[300px] p-0" align="start">
+      {/* noPortal=true: ProductCombobox is almost always used inside a
+          Radix Dialog (sales order modal, purchase order modal, stock
+          transfer modal, ...). When the popover renders through the
+          default Portal, it lands outside the Dialog tree where
+          react-remove-scroll (used by Radix Dialog) blocks wheel
+          events — the list looks scrollable but mouse wheel does
+          nothing. Rendering inline keeps it as a descendant of the
+          Dialog so wheel events flow through.
+          See popover.jsx for the noPortal escape hatch. */}
+      <PopoverContent noPortal className="w-[320px] p-0" align="start">
         <Command shouldFilter={false}>
           <CommandInput
             placeholder={t('search') || "Qidirish..."}
@@ -122,6 +131,17 @@ export default function ProductCombobox({ products: initialProducts = [], value,
                     // Native HTML tooltip — reveals the full product name on
                     // hover when the truncated label hides part of it.
                     title={product.name}
+                    // Inline styles so the row clips inside the popover
+                    // width and the child span actually truncates. Without
+                    // overflow:hidden + min-width:0 on a flex child, the
+                    // text just extends past the container and Tailwind's
+                    // `truncate` becomes a no-op.
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      overflow: 'hidden',
+                      minWidth: 0,
+                    }}
                     onSelect={() => {
                       setLastSelected(product);
                       onValueChange(product.id, product);
@@ -131,11 +151,22 @@ export default function ProductCombobox({ products: initialProducts = [], value,
                   >
                     <Check
                       className={cn(
-                        "mr-2 h-4 w-4",
+                        "mr-2 h-4 w-4 shrink-0",
                         value === product.id ? "opacity-100" : "opacity-0"
                       )}
                     />
-                    <span className="truncate">{product.name}</span>
+                    <span
+                      style={{
+                        minWidth: 0,
+                        flex: '1 1 0%',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        display: 'block',
+                      }}
+                    >
+                      {product.name}
+                    </span>
                   </CommandItem>
                 ))}
               </CommandGroup>

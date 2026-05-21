@@ -45,7 +45,18 @@ export default function FinanceDashboard() {
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        const data = await financeService.getIncomeStatement();
+        // Use an all-time period so the Jami kirim / Jami xarajat cards
+        // match Buxgalteriya's DAROMAD/XARAJAT (which sum every posting on
+        // revenue/expense accounts since opening). Without these params
+        // the backend defaults to the current month only (reports.go:331),
+        // which makes the cards read 0 in any month with no new postings
+        // while the GL summary stays at its lifetime total — confusing
+        // because both labels say "Jami" but they measured different
+        // windows.
+        const data = await financeService.getIncomeStatement({
+          period_from: '2000-01-01',
+          period_to: '2099-12-31',
+        });
         if (data) {
           const totalIncome = data.total_revenue || 0;
           const cogsItems = data.cost_of_sales || [];
@@ -171,7 +182,7 @@ export default function FinanceDashboard() {
                 <TrendingUp className="w-6 h-6 text-green-600" />
               </div>
               <div className="px-2.5 py-1 bg-green-100 rounded-full">
-                <span className="text-xs font-semibold text-green-700">+12%</span>
+                <span className="text-xs font-semibold text-green-700">{t('total_badge') || 'Total'}</span>
               </div>
             </div>
             <div>
@@ -179,7 +190,7 @@ export default function FinanceDashboard() {
               <p className="text-3xl font-bold text-green-600 tabular-nums">
                 {formatCurrency(metrics.totalIncome)}
               </p>
-              <p className="text-xs text-slate-500 mt-2">{t('vs_last_month')}</p>
+              <p className="text-xs text-slate-500 mt-2">{t('all_time') || 'All time'}</p>
             </div>
             <div className="absolute bottom-0 right-0 w-24 h-24 bg-green-500/5 rounded-tl-full"></div>
           </CardContent>
@@ -193,7 +204,7 @@ export default function FinanceDashboard() {
                 <TrendingDown className="w-6 h-6 text-red-600" />
               </div>
               <div className="px-2.5 py-1 bg-red-100 rounded-full">
-                <span className="text-xs font-semibold text-red-700">+8%</span>
+                <span className="text-xs font-semibold text-red-700">{t('total_badge') || 'Total'}</span>
               </div>
             </div>
             <div>
@@ -201,7 +212,7 @@ export default function FinanceDashboard() {
               <p className="text-3xl font-bold text-red-600 tabular-nums">
                 {formatCurrency(metrics.totalExpenses)}
               </p>
-              <p className="text-xs text-slate-500 mt-2">{t('vs_last_month')}</p>
+              <p className="text-xs text-slate-500 mt-2">{t('all_time') || 'All time'}</p>
             </div>
             <div className="absolute bottom-0 right-0 w-24 h-24 bg-red-500/5 rounded-tl-full"></div>
           </CardContent>
@@ -216,7 +227,7 @@ export default function FinanceDashboard() {
               </div>
               {metrics.netProfit >= 0 && (
                 <div className="px-2.5 py-1 bg-emerald-100 rounded-full">
-                  <span className="text-xs font-semibold text-emerald-700">+15%</span>
+                  <span className="text-xs font-semibold text-emerald-700">{t('total_badge') || 'Total'}</span>
                 </div>
               )}
             </div>
