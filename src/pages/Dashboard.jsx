@@ -79,7 +79,11 @@ export default function Dashboard() {
 
   useEffect(() => {
     // Pull YTD trial balance turnover and roll it up into a single
-    // revenue / expense pair we can use on the metrics card.
+    // revenue / expense pair we can use on the metrics card. Then loop the
+    // last 12 months of the income statement so the Revenue Trends and Cash
+    // Flow charts have data — they were empty because they only saw the
+    // payment-derived financialTransactions, while real activity (sales,
+    // COGS, purchases) lives in journal entries.
     const loadAccruals = async () => {
       try {
         const now = new Date();
@@ -97,7 +101,35 @@ export default function Dashboard() {
             expenses += Number(r.turnover_debit || 0) - Number(r.turnover_credit || 0);
           }
         }
-        setAccrualTotals({ revenue: Math.max(revenue, 0), expenses: Math.max(expenses, 0), byMonth: {} });
+
+        // Monthly buckets — fetch income statement for each of the last 12
+        // months. byMonth[0..11] keyed by month index (Jan=0).
+        const byMonth = {};
+        const nowYear = now.getFullYear();
+        const monthlyPromises = [];
+        for (let m = 0; m <= now.getMonth(); m++) {
+          const from = `${nowYear}-${String(m + 1).padStart(2, '0')}-01`;
+          const lastDay = new Date(nowYear, m + 1, 0).getDate();
+          const to = `${nowYear}-${String(m + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+          monthlyPromises.push(
+            financeService.getIncomeStatement({ period_from: from, period_to: to })
+              .then((d) => {
+                const inc = Number(d?.total_revenue || 0);
+                const cogs = (d?.cost_of_sales || []).reduce((s, a) => s + Math.abs(Number(a.amount) || 0), 0);
+                const opex = (d?.operating_expenses || []).reduce((s, a) => s + Math.abs(Number(a.amount) || 0), 0);
+                const other = (d?.other_expenses || []).reduce((s, a) => s + Math.abs(Number(a.amount) || 0), 0);
+                byMonth[m] = { revenue: inc, expenses: cogs + opex + other };
+              })
+              .catch(() => { byMonth[m] = { revenue: 0, expenses: 0 }; })
+          );
+        }
+        await Promise.all(monthlyPromises);
+
+        setAccrualTotals({
+          revenue: Math.max(revenue, 0),
+          expenses: Math.max(expenses, 0),
+          byMonth,
+        });
       } catch {
         // Silent — fall back to payment-derived numbers.
       }
@@ -162,15 +194,19 @@ export default function Dashboard() {
     };
   }, [financialTransactions, inventory, customers, customerInvoices, accrualTotals]);
 
-  // Revenue vs Expenses chart data (monthly)
+  // Revenue vs Expenses chart data (monthly).
+  // Prefers accrual buckets from accrualTotals.byMonth (sourced from the
+  // monthly income statement); falls back to payment-derived buckets so the
+  // chart still renders something on tenants with no journal entries yet.
   const revenueExpenseData = useMemo(() => {
     const monthKeys = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
     const months = monthKeys.map(k => t(k) || k);
     const monthMap = {};
-    months.forEach((m) => {
-      monthMap[m] = { month: m, revenue: 0, expenses: 0, profit: 0 };
+    months.forEach((m, idx) => {
+      monthMap[m] = { month: m, monthIndex: idx, revenue: 0, expenses: 0, profit: 0 };
     });
 
+    // 1. Start from payment-derived (cash basis)
     financialTransactions.forEach((tx) => {
       const d = new Date(tx.date);
       const monthIndex = d.getMonth();
@@ -183,6 +219,16 @@ export default function Dashboard() {
       }
     });
 
+    // 2. Overlay accrual numbers (preferred) where they exist
+    const byMonth = accrualTotals?.byMonth || {};
+    Object.entries(byMonth).forEach(([idxStr, bucket]) => {
+      const idx = Number(idxStr);
+      const m = months[idx];
+      if (!m) return;
+      if (bucket.revenue > 0) monthMap[m].revenue = bucket.revenue;
+      if (bucket.expenses > 0) monthMap[m].expenses = bucket.expenses;
+    });
+
     Object.values(monthMap).forEach((entry) => {
       entry.profit = entry.revenue - entry.expenses;
       entry.revenue = Math.round(entry.revenue);
@@ -191,7 +237,7 @@ export default function Dashboard() {
     });
 
     return Object.values(monthMap);
-  }, [financialTransactions]);
+  }, [financialTransactions, accrualTotals, t]);
 
   // Sparkline data for metrics
   const revenueSparkline = useMemo(() => {
