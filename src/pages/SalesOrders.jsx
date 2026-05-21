@@ -1634,7 +1634,14 @@ export default function SalesOrders() {
 
         {/* Create Order Modal */}
         <Dialog open={showCreateModal} onOpenChange={(open) => { setShowCreateModal(open); if (!open) resetOrderForm(); }}>
-          <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+          {/* Prevent accidental dismissal via outside-click or Escape so
+              users don't lose half-filled forms. Closing requires the X
+              button or Cancel button. */}
+          <DialogContent
+            className="max-w-6xl max-h-[90vh] overflow-y-auto"
+            onPointerDownOutside={(e) => e.preventDefault()}
+            onEscapeKeyDown={(e) => e.preventDefault()}
+          >
             <DialogHeader>
               <DialogTitle>{t('create_new_order')}</DialogTitle>
             </DialogHeader>
@@ -2428,7 +2435,11 @@ export default function SalesOrders() {
         {/* Edit Order Modal */}
         {editingOrder && (
           <Dialog open={showEditModal} onOpenChange={(open) => { setShowEditModal(open); if (!open) { setEditingOrder(null); setIsEditDeliveryDateManual(false); } }}>
-            <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+            <DialogContent
+              className="max-w-6xl max-h-[90vh] overflow-y-auto"
+              onPointerDownOutside={(e) => e.preventDefault()}
+              onEscapeKeyDown={(e) => e.preventDefault()}
+            >
               <DialogHeader>
                 <DialogTitle>{t('edit_order')} - {editingOrder.order_number}</DialogTitle>
               </DialogHeader>

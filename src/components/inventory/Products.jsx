@@ -1233,16 +1233,11 @@ export default function Products() {
     }
   };
 
-  // Summary calculations — use totalProducts from paginated API for total count
-  const summaryStats = {
-    totalProducts: totalProducts,
-    activeProducts: products.filter(p => p.is_active).length,
-    stockableProducts: products.filter(p => p.is_stockable).length,
-    lowStockProducts: products.filter(p => {
-      const stock = items.filter(i => i.product_id === p.id).reduce((s, i) => s + (i.current_stock || 0), 0);
-      return p.min_stock_level > 0 && stock <= p.min_stock_level;
-    }).length
-  };
+  // NOTE: Summary calculations were here but have been moved further down,
+  // after accessibleWarehouseIds is declared, so the "Omborda" card can
+  // count products that actually have stock in an accessible warehouse
+  // (rather than just counting products with the is_stockable attribute,
+  // which was a misleading proxy that ignored real stock levels).
 
   // Fetch the entire filtered product set (across all pages) and open
   // the Export modal once the data is in hand. Uses the same filters
@@ -1255,17 +1250,14 @@ export default function Products() {
       if (searchQuery) params.search = searchQuery;
       if (categoryFilter !== "all") params.category_id = categoryFilter;
       if (inventoryTypeFilter !== "all") params.inventory_type = inventoryTypeFilter;
+      if (warehouseFilter !== "all") params.warehouse_id = warehouseFilter;
       if (statusFilter === "inactive") params.include_inactive = "true";
       const result = await inventoryService.listProductsPaginated(params);
       let items = result?.data || [];
       // Same client-side filters as fetchProducts so the export
-      // matches what the user sees on screen.
-      if (warehouseFilter !== "all") {
-        const productIdsInWarehouse = new Set(
-          inventory.filter(i => i.warehouse_id === warehouseFilter).map(i => i.product_id)
-        );
-        items = items.filter(product => productIdsInWarehouse.has(product.id));
-      }
+      // matches what the user sees on screen. Warehouse filter is now
+      // server-side; only the inactive filter still needs client filtering
+      // because the backend returns active+inactive when include_inactive=true.
       if (statusFilter === "inactive") {
         items = items.filter(product => !product.is_active);
       }
@@ -1281,9 +1273,14 @@ export default function Products() {
     } finally {
       setIsPreparingExport(false);
     }
-  }, [searchQuery, categoryFilter, warehouseFilter, statusFilter, inventoryTypeFilter, inventory, toast, t]);
+  }, [searchQuery, categoryFilter, warehouseFilter, statusFilter, inventoryTypeFilter, toast, t]);
 
-  // Server-side fetch for products with pagination
+  // Server-side fetch for products with pagination.
+  // Warehouse filter is now sent to the backend (ListProducts accepts a
+  // `warehouse_id` param that filters via EXISTS on the inventory table).
+  // Previously the warehouse filter was applied client-side over the current
+  // 20-row page, which silently dropped any matching product that lived on
+  // any other page — making the filter look like it only worked for one item.
   const fetchProducts = useCallback(async () => {
     setProductsLoading(true);
     try {
@@ -1291,16 +1288,10 @@ export default function Products() {
       if (searchQuery) params.search = searchQuery;
       if (categoryFilter !== "all") params.category_id = categoryFilter;
       if (inventoryTypeFilter !== "all") params.inventory_type = inventoryTypeFilter;
+      if (warehouseFilter !== "all") params.warehouse_id = warehouseFilter;
       if (statusFilter === "inactive") params.include_inactive = "true";
       const result = await inventoryService.listProductsPaginated(params);
       let items = result?.data || [];
-      // Warehouse filter is client-side (not supported by backend)
-      if (warehouseFilter !== "all") {
-        const productIdsInWarehouse = new Set(
-          inventory.filter(i => i.warehouse_id === warehouseFilter).map(i => i.product_id)
-        );
-        items = items.filter(product => productIdsInWarehouse.has(product.id));
-      }
       // For inactive filter, backend returns all — filter client-side
       if (statusFilter === "inactive") {
         items = items.filter(product => !product.is_active);
@@ -1314,7 +1305,7 @@ export default function Products() {
     } finally {
       setProductsLoading(false);
     }
-  }, [currentPage, searchQuery, categoryFilter, warehouseFilter, statusFilter, inventoryTypeFilter, inventory]);
+  }, [currentPage, searchQuery, categoryFilter, warehouseFilter, statusFilter, inventoryTypeFilter]);
 
   useEffect(() => {
     fetchProducts();
@@ -1334,6 +1325,39 @@ export default function Products() {
       (warehouses || []).filter(w => w.organization_id === activeCompany.id).map(w => w.id)
     );
   }, [warehouses, activeCompany]);
+
+  // Summary stat cards above the product table. Two notes for future-self:
+  //   • totalProducts comes from the paginated API meta so it reflects the
+  //     full filtered set, not just the current page.
+  //   • activeProducts / inStockProducts / lowStockProducts are computed
+  //     from the local `products` and `inventory` arrays. The inventory
+  //     context fetches products with limit=5000 and inventory with
+  //     limit=10000, so for tenants beyond those caps these stats can
+  //     undercount — switch to a dedicated /products/stats endpoint if
+  //     that ever becomes a real problem.
+  //   • "inStockProducts" replaces the previous `stockableProducts`
+  //     metric (count of products with is_stockable=true). is_stockable
+  //     was a product attribute, not a measurement of real stock, which
+  //     made the "Omborda" card disagree with the warehouse totals.
+  const summaryStats = useMemo(() => {
+    const inStockProductIds = new Set();
+    for (const inv of inventory || []) {
+      const qty = inv.quantity_on_hand ?? inv.quantity ?? 0;
+      if (qty <= 0) continue;
+      if (inv.warehouse_type === 'scrap') continue;
+      if (!accessibleWarehouseIds.has(inv.warehouse_id)) continue;
+      if (inv.product_id) inStockProductIds.add(inv.product_id);
+    }
+    return {
+      totalProducts: totalProducts,
+      activeProducts: products.filter(p => p.is_active).length,
+      inStockProducts: inStockProductIds.size,
+      lowStockProducts: products.filter(p => {
+        const stock = items.filter(i => i.product_id === p.id).reduce((s, i) => s + (i.current_stock || 0), 0);
+        return p.min_stock_level > 0 && stock <= p.min_stock_level;
+      }).length,
+    };
+  }, [totalProducts, products, inventory, items, accessibleWarehouseIds]);
 
   const getProductStock = (productId) => {
     let stockItems = inventory.filter(i => i.product_id === productId && i.warehouse_type !== 'scrap' && accessibleWarehouseIds.has(i.warehouse_id));
@@ -1958,9 +1982,9 @@ export default function Products() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">{t('stockable')}</p>
+                <p className="text-sm text-slate-500">{t('products_in_stock') || 'In Stock'}</p>
                 <p className="text-2xl font-bold text-blue-600">
-                  {summaryStats.stockableProducts}
+                  {summaryStats.inStockProducts}
                 </p>
               </div>
               <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
