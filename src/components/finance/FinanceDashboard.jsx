@@ -287,7 +287,7 @@ export default function FinanceDashboard() {
 
         <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
           <CardHeader>
-            <CardTitle className="text-base md:text-lg">{t('expenses_by_category')}</CardTitle>
+            <CardTitle className="text-base md:text-lg">{t('expenses_by_account')}</CardTitle>
           </CardHeader>
           <CardContent>
             {expensesByCategory.length > 0 ? (

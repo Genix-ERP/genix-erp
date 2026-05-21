@@ -451,7 +451,7 @@ export default function Expenses() {
         {chartData.length > 0 && (
           <Card className="bg-white/80 backdrop-blur-sm">
             <CardHeader>
-              <CardTitle>{t('expenses_by_category')}</CardTitle>
+              <CardTitle>{t('expense_claims_by_category')}</CardTitle>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={280}>
