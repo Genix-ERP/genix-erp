@@ -10,6 +10,7 @@ import {
 import { toast } from 'sonner';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useAuth } from '@/components/contexts/AuthContext';
+import { useEmployeePermissions } from '@/components/contexts/EmployeePermissionsContext';
 import { useTranslation } from '@/components/utils/translations';
 import { constructionService } from '@/api/services/construction';
 import { formatApiError } from '@/utils/apiErrors';
@@ -148,6 +149,12 @@ export default function SmetaManagementTab({ project }) {
   // can still open / close individual sections + cards by clicking
   // their headers — only the bulk shortcuts go away.
   const canBulkAdmin = isSiteAdmin?.() || isOwner?.();
+  // Permission gating for the section / sub-section delete buttons.
+  // The hook returns true for tenant admins/owners/site-admins, so they
+  // see the trash icons by default. Regular employees only see them
+  // when their role grants `construction.delete`.
+  const { canDelete: canDeletePermFn } = useEmployeePermissions();
+  const canDeleteConstruction = canDeletePermFn('construction');
 
   const [estimates, setEstimates] = useState([]);
   // Block-level selector. Each option in the dropdown represents a building
@@ -253,6 +260,13 @@ export default function SmetaManagementTab({ project }) {
     () => manualSectionRows.map((s) => String(s.name || '').trim()).filter(Boolean),
     [manualSectionRows],
   );
+
+  // Section names the user added via "+ Bo'lim qo'shish" THIS session.
+  // The sections useMemo bubbles only these to the top of the list, in
+  // newest-first order. Auto-imported sections (created during єdinich
+  // import) and all other backend rows keep their natural order. Cleared
+  // on full page reload — after refresh the natural order applies again.
+  const [recentlyAddedSectionNames, setRecentlyAddedSectionNames] = useState([]);
   const [addSectionModal, setAddSectionModal] = useState(null);     // { name } | null
   const [addSectionBusy, setAddSectionBusy] = useState(false);
   const [sectionRefreshTick, setSectionRefreshTick] = useState(0);
@@ -265,6 +279,12 @@ export default function SmetaManagementTab({ project }) {
   // record). Shape: { sectionName, name, uom, code } | null.
   const [addWorkModal, setAddWorkModal] = useState(null);
   const [addWorkBusy, setAddWorkBusy] = useState(false);
+
+  // "+ Sub-bosqich qo'shish" target — when set, opens the AddSubWorkModal
+  // in parentSection mode (same rich form as "Yangi qo'shimcha etap":
+  // code / name / uom / qty). The created line nests as a sub-stage
+  // under this section via parent_item_number = `${sectionName} › name`.
+  const [addSubBosqichSection, setAddSubBosqichSection] = useState(null);
 
   // ── Load estimates ─────────────────────────────────────────────────
   useEffect(() => {
@@ -403,11 +423,12 @@ export default function SmetaManagementTab({ project }) {
         const scoped = (buildingId && buildingId !== '0')
           ? list.filter((s) => Number(s.building_id) === Number(buildingId))
           : list.filter((s) => !s.building_id);
-        // Sort by id DESC so the newest-added section is at index 0 —
-        // the sections useMemo below preserves that order when it
-        // inserts these at the top of the rendered list.
-        const sorted = [...scoped].sort((a, b) => Number(b.id || 0) - Number(a.id || 0));
-        setManualSectionRows(sorted);
+        // No sort — preserve the backend's natural order. The
+        // recentlyAddedSectionNames set (populated by the modal save
+        // handler) is what bubbles freshly-added sections to the top
+        // of the list, leaving everything else (including stages
+        // auto-created during єdinich import) in place.
+        setManualSectionRows(scoped);
       })
       .catch(() => { if (!cancelled) setManualSectionRows([]); });
     return () => { cancelled = true; };
@@ -673,18 +694,21 @@ export default function SmetaManagementTab({ project }) {
 
     const sectionMap = new Map();
 
-    // Pre-seed the map with manually-created TOP-LEVEL sections so they
-    // sort FIRST in the rendered list. Map preserves insertion order, so
-    // anything we add here lands above imported sections (added below).
-    // Multi-level manual sections ("PARENT › CHILD") are skipped here —
-    // they get attached as subSections on their parent in the merge pass
-    // further down, not as top-level entries. Manual sections that
-    // ALREADY have works (rare: the user created the section then
-    // imported a sheet that happened to use the same name) get the work
-    // lines appended into the same entry by the imported loop below.
+    // Pre-seed the map with sections the user just added this session
+    // (recentlyAddedSectionNames). These float to the very top of the
+    // rendered list because Map preserves insertion order — anything
+    // added here lands before the imported-line entries appended below.
+    // Skips sub-section names ("PARENT › CHILD"); those attach as
+    // subSections on their parent further down. Auto-imported stages
+    // (created during єdinich import → not in this session set) are
+    // NOT pre-seeded here, so they keep their natural file order.
     const DELIM_PRE = ' › ';
-    for (const name of manualSectionNames) {
+    const sessionAdded = new Set(recentlyAddedSectionNames);
+    // Newest first within the recent group.
+    for (let i = recentlyAddedSectionNames.length - 1; i >= 0; i--) {
+      const name = recentlyAddedSectionNames[i];
       if (!name || name.includes(DELIM_PRE)) continue;
+      if (!manualSectionNames.includes(name)) continue; // not in current scope
       if (sectionFilter && sectionFilter !== name) continue;
       if (search) {
         if (!name.toLowerCase().includes(search.toLowerCase())) continue;
@@ -704,14 +728,27 @@ export default function SmetaManagementTab({ project }) {
       }
       const cur = sectionMap.get(secKey) || { name: secKey, lines: [], total: 0 };
       cur.lines.push(ln);
-      // Once a manual section gets its first imported work, it's no
-      // longer "empty"; clear the flag so the empty-section affordances
-      // don't keep showing on a populated card.
-      if (cur.is_empty_manual) cur.is_empty_manual = false;
       const eff = effByParent.get(Number(ln.id));
       cur.total += eff != null ? eff : (Number(ln.total_amount) || 0);
       sectionMap.set(secKey, cur);
     }
+    // Append empty manual TOP-LEVEL sections that weren't added this
+    // session — older user-typed sections without imported lines, plus
+    // any auto-imported stage rows whose єdinich isn't currently loaded.
+    // These render at the END of the list in natural backend order so
+    // they're visible but don't disrupt the imported file's ordering.
+    for (const name of manualSectionNames) {
+      if (!name) continue;
+      if (name.includes(DELIM_PRE)) continue;
+      if (sectionMap.has(name)) continue; // already in (recent or imported)
+      if (sessionAdded.has(name)) continue; // already handled in pre-seed
+      if (sectionFilter && sectionFilter !== name) continue;
+      if (search) {
+        if (!name.toLowerCase().includes(search.toLowerCase())) continue;
+      }
+      sectionMap.set(name, { name, lines: [], total: 0, is_empty_manual: true });
+    }
+
     // Attach manually-created SUB-sections ("PARENT › CHILD") onto their
     // parents as subSections[]. Top-level manual sections were already
     // pre-seeded into sectionMap above (before the imported-lines pass)
@@ -750,7 +787,7 @@ export default function SmetaManagementTab({ project }) {
       });
     }
     return Array.from(sectionMap.values());
-  }, [lines, search, sectionFilter, t, manualSectionNames]);
+  }, [lines, search, sectionFilter, t, manualSectionNames, recentlyAddedSectionNames]);
 
   // ── Mutations ─────────────────────────────────────────────────────
   // Each line carries its own line.estimate_id, so we route mutations
@@ -831,6 +868,67 @@ export default function SmetaManagementTab({ project }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [estimateId, t]);
+
+  // Cascade-delete an entire section (or sub-section) by name. Removes:
+  //   • All estimate lines whose parent_item_number === sectionName,
+  //     and any nested ones starting with `${sectionName} › `, plus
+  //     their sub-lines (sub-line parents fall under the same delete
+  //     loop because deleteEstimateLine on a parent typically cascades
+  //     server-side, but we filter sub-lines out of the iteration so
+  //     we don't double-delete).
+  //   • The construction_stages row(s) whose name === sectionName or
+  //     starts with `${sectionName} › ` (if any). Failures here are
+  //     swallowed because the row may not exist (purely-imported
+  //     section that never got a stage row).
+  // Triggered from the trash icon on each section header.
+  const removeSection = useCallback(async (sectionName) => {
+    if (!sectionName) return;
+    const matchingLines = lines.filter((ln) => {
+      const isSub = ln.parent_line_id != null && Number(ln.parent_line_id) > 0;
+      if (isSub) return false; // sub-lines cascade with their parent
+      const pin = String(ln.parent_item_number || '');
+      return pin === sectionName || pin.startsWith(`${sectionName} › `);
+    });
+    const matchingStages = manualSectionRows.filter((s) => {
+      const n = String(s.name || '');
+      return n === sectionName || n.startsWith(`${sectionName} › `);
+    });
+    setConfirmModal({
+      tone: 'red',
+      title: t('delete_section') || "Bo'limni o'chirish",
+      body: (t('confirm_delete_section_body')
+        || "\"{section}\" bo'limini va undagi {n} ta ishni o'chirmoqchimisiz?\n\nBu amalni qaytarib bo'lmaydi.")
+        .replace('{section}', sectionName)
+        .replace('{n}', String(matchingLines.length)),
+      confirmLabel: t('delete') || "O'chirish",
+      onConfirm: async () => {
+        try {
+          // Delete lines first so the section disappears from the
+          // derived list even if the construction_stages cleanup below
+          // fails. Individual failures are caught so a partial cleanup
+          // still proceeds.
+          for (const ln of matchingLines) {
+            try {
+              await constructionService.deleteEstimateLine(lineEst(ln), ln.id);
+            } catch (e) {
+              console.error('Failed to delete line', ln.id, e);
+            }
+          }
+          for (const s of matchingStages) {
+            try { await constructionService.deleteStage(s.id); } catch {
+              /* row may have been deleted server-side already; ignore */
+            }
+          }
+          loadLines(activeEstimateIds);
+          setSectionRefreshTick((n) => n + 1);
+          toast.success(t('deleted') || "O'chirildi");
+        } catch (e) {
+          toast.error(formatApiError(e, t, 'Xatolik'));
+        }
+      },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lines, manualSectionRows, activeEstimateIds, t]);
 
   // Bulk-zero every work qty across every Единич smeta of the selected
   // block. Confirmation required because this is destructive. Cascades
@@ -1392,7 +1490,12 @@ export default function SmetaManagementTab({ project }) {
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setAddSectionModal({ name: '', parent: sec.name });
+                          if (!estimateId) {
+                            toast.error(t('no_estimate_for_work')
+                              || "Bu blok uchun єдинич smeta topilmadi");
+                            return;
+                          }
+                          setAddSubBosqichSection(sec.name);
                         }}
                         className="ml-1 px-2.5 py-1.5 rounded-md text-[11px] font-medium flex items-center gap-1 transition"
                         style={{
@@ -1404,6 +1507,30 @@ export default function SmetaManagementTab({ project }) {
                         <span className="text-[13px] leading-none font-bold">+</span>
                         {t('substage_short') || "Sub-bosqich"}
                       </button>
+                      {/* Section delete — cascades through every estimate
+                         line and construction_stages row that lives under
+                         this section name. Confirmation in removeSection
+                         shows how many works are about to disappear.
+                         Permission gated: only users with
+                         `construction.delete` (or tenant admins/owners)
+                         see the trash icon. */}
+                      {canDeleteConstruction && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeSection(sec.name);
+                          }}
+                          className="ml-1 p-1.5 rounded-md flex items-center justify-center transition"
+                          style={{
+                            background: 'rgba(220,38,38,0.06)', color: C.red,
+                            border: '1px solid rgba(220,38,38,0.25)',
+                          }}
+                          title={t('delete_section') || "Bo'limni o'chirish"}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      )}
                     </div>
 
                     {!collapsed && sec.lines.map((ln) => {
@@ -1501,7 +1628,14 @@ export default function SmetaManagementTab({ project }) {
                         </button>
                         <button
                           type="button"
-                          onClick={() => setAddSectionModal({ name: '', parent: sub.fullName })}
+                          onClick={() => {
+                            if (!estimateId) {
+                              toast.error(t('no_estimate_for_work')
+                                || "Bu blok uchun єдинич smeta topilmadi");
+                              return;
+                            }
+                            setAddSubBosqichSection(sub.fullName);
+                          }}
                           className="px-2 py-1 rounded text-[10.5px] font-medium flex items-center gap-1"
                           style={{
                             background: C.card, color: C.muted,
@@ -1512,6 +1646,20 @@ export default function SmetaManagementTab({ project }) {
                           <span className="text-[12px] leading-none font-bold">+</span>
                           {t('substage_short') || "Sub-bosqich"}
                         </button>
+                        {canDeleteConstruction && (
+                          <button
+                            type="button"
+                            onClick={() => removeSection(sub.fullName)}
+                            className="p-1 rounded flex items-center justify-center"
+                            style={{
+                              background: 'rgba(220,38,38,0.06)', color: C.red,
+                              border: '1px solid rgba(220,38,38,0.25)',
+                            }}
+                            title={t('delete_substage') || "Sub-bosqichni o'chirish"}
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -1586,6 +1734,24 @@ export default function SmetaManagementTab({ project }) {
         parent={addTarget}
         nextSeq={addTarget ? nextSeqFor(addTarget.id) : 1}
         onSaved={() => loadLines(activeEstimateIds)}
+      />
+
+      {/* Second mount of the same modal in parentSection mode — handles
+         the "+ Sub-bosqich" click on a section card. Creates a new
+         estimate line with parent_item_number = `${section} › ${name}`
+         so it groups as a sub-stage under the chosen section. Same form
+         the user sees on the work-level "Yangi qo'shimcha etap" flow,
+         so the two add-affordances feel identical. */}
+      <AddSubWorkModal
+        open={!!addSubBosqichSection}
+        onClose={() => setAddSubBosqichSection(null)}
+        projectId={project?.id}
+        estimateId={Number(estimateId)}
+        parentSection={addSubBosqichSection || ''}
+        onSaved={() => {
+          setAddSubBosqichSection(null);
+          loadLines(activeEstimateIds);
+        }}
       />
 
       {/* Material consolidation modal — opened from the topbar button. */}
@@ -1779,6 +1945,10 @@ export default function SmetaManagementTab({ project }) {
                   ? Number(buildingId)
                   : 0,
               });
+              // Remember the new section name so the `sections` useMemo
+              // can float just this one to the top — without disturbing
+              // imported / auto-stage rows.
+              setRecentlyAddedSectionNames((prev) => [...prev, fullName]);
               setAddSectionModal(null);
               setSectionRefreshTick((n) => n + 1);
               toast.success(t('section_added') || "Seksiya qo'shildi");
