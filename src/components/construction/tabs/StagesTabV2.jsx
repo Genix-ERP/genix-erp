@@ -483,6 +483,20 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
   const [loading, setLoading] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0); // bump to force a reload
   const [buildingStageCounts, setBuildingStageCounts] = useState({}); // buildingId → stage count
+
+  // Manually-added stages — rows from construction_stages that don't have
+  // any works yet under their name. The Bosqichlar list is normally derived
+  // from estimate-work parent paths (deriveStages below), so a stage with
+  // zero works wouldn't render at all. We fetch listStages for the active
+  // building and merge any whose name isn't already represented by derived
+  // stages, rendered as empty cards (0 works, 0%, pending status).
+  const [manualStages, setManualStages] = useState([]); // [{id, name, building_id, ...}]
+
+  // "+ Bosqich qo'shish" modal state. null = closed; { name } = open with a
+  // draft name field. Submission calls createStage on the server, then
+  // bumps refreshTick so the merged list pulls the new row in.
+  const [addStageModal, setAddStageModal] = useState(null);
+  const [addStageBusy, setAddStageBusy] = useState(false);
   // ВОР Miqdor lookup for the active building. Bosqichlar drives its
   // works off the Единич estimate (which is now imported in template
   // mode with quantity=0), but the user-visible REJA column wants the
@@ -728,8 +742,64 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
 
   const reload = () => setRefreshTick((n) => n + 1);
 
+  // ── Fetch manually-created stages for the active building ────────
+  // Stages are stored in construction_stages (migration 333 made them
+  // building-scoped). Most of them are auto-created on import from the
+  // Единич "СЕКЦИЯ" headers, but the user can also add them via the
+  // "+ Bosqich qo'shish" button below — and those won't show up in the
+  // path-derived list because they have no works yet.
+  useEffect(() => {
+    if (!project?.id) return;
+    let cancelled = false;
+    const opts = activeBuildingId ? { buildingId: activeBuildingId } : undefined;
+    constructionService.listStages(project.id, opts)
+      .then((rows) => {
+        if (cancelled) return;
+        const list = Array.isArray(rows) ? rows : (rows?.data || rows?.items || []);
+        // Scope to the active building. listStages with a buildingId arg
+        // already filters server-side; the local filter is a belt-and-
+        // braces guard for the "Hammasi" case (no filter passed).
+        setManualStages(
+          activeBuildingId
+            ? list.filter((s) => Number(s.building_id) === Number(activeBuildingId))
+            : list,
+        );
+      })
+      .catch(() => { if (!cancelled) setManualStages([]); });
+    return () => { cancelled = true; };
+  }, [project?.id, activeBuildingId, refreshTick]);
+
   // ── Derived data ─────────────────────────────────────────────────
-  const stages = useMemo(() => deriveStages(lines), [lines]);
+  // Path-derived stages (work-driven). These carry the actual progress,
+  // cost, and approval state visible on each card.
+  const derivedStages = useMemo(() => deriveStages(lines), [lines]);
+  // Merge in manually-created empty stages — those whose name isn't
+  // already represented by a derived stage. Empty stages render with
+  // 0 works / 0% progress / "pending" status, which the existing
+  // stage-card code path handles cleanly (stageStatus returns
+  // 'pending' for ws.length === 0, progressFromWorks returns 0).
+  // Once the user adds works under such a stage via Smeta boshqaruvi,
+  // the derived stage takes over and the entry is no longer "empty".
+  const stages = useMemo(() => {
+    const derivedNames = new Set(
+      derivedStages.map((s) => String(s.name || '').trim().toLowerCase()),
+    );
+    const extras = [];
+    for (const ms of manualStages) {
+      const key = String(ms.name || '').trim().toLowerCase();
+      if (!key) continue;
+      if (derivedNames.has(key)) continue;
+      extras.push({
+        name: ms.name,
+        works: [],
+        subStages: [],
+        // Keep a marker so the renderer can show a small "yangi" hint
+        // and so the delete-stage action knows the backing stage id.
+        manual_stage_id: ms.id,
+      });
+    }
+    return [...derivedStages, ...extras];
+  }, [derivedStages, manualStages]);
   // Plan-quantity resolver for progress aggregations: prefer the ВОР
   // Miqdor for the work's name; fall back to its own quantity for any
   // work that isn't in the ВОР map (custom-added rows, or projects
@@ -1081,6 +1151,22 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
       <div className="rounded-xl border border-slate-200 bg-white p-4">
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <h2 className="text-base font-bold text-slate-900">📐 {t('blocks_section')}</h2>
+          {/* "+ Bosqich qo'shish" — opens the create-stage modal. Disabled
+             when no building is active because construction_stages rows
+             must be scoped to a building (migration 333). Foremen don't
+             see this button — only the supervisor/engineer/admin roles
+             can manage the stage list, matching the existing role gating
+             on bulk approval actions further down. */}
+          {activeBuildingId && viewRole !== 'foreman' && (
+            <button
+              type="button"
+              onClick={() => setAddStageModal({ name: '' })}
+              className="px-3 py-1.5 rounded-lg text-[12px] font-semibold border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition inline-flex items-center gap-1.5"
+            >
+              <span className="text-[14px] leading-none">+</span>
+              {t('add_stage') || "Bosqich qo'shish"}
+            </button>
+          )}
         </div>
         <div className="flex gap-2 flex-wrap">
           {buildings.length === 0 ? (
@@ -1232,6 +1318,25 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
                    carry a hierarchical layer, flat works table otherwise. */}
                 {expanded && (
                   <div className="border-t border-slate-100 bg-slate-50 px-5 py-4">
+                    {/* "+ Sub-bosqich" — adds a sub-stage under THIS stage.
+                       Pre-fills the add-stage modal with this stage's name
+                       as the fixed parent, so the composed entry is saved
+                       as "PARENT › CHILD" and groups under here in the
+                       section list. Hidden from foremen — same role gate
+                       as the top-level "+ Bosqich qo'shish" button. */}
+                    {viewRole !== 'foreman' && (
+                      <div className="flex justify-end mb-3">
+                        <button
+                          type="button"
+                          onClick={() => setAddStageModal({ name: '', parent: stage.name })}
+                          className="px-3 py-1.5 rounded-md text-[11px] font-medium border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 inline-flex items-center gap-1"
+                        >
+                          <span className="text-[13px] leading-none font-bold">+</span>
+                          {t('add_substage') || "Sub-bosqich qo'shish"}
+                        </button>
+                      </div>
+                    )}
+
                     <StageBody
                       stage={stage}
                       canSeeCost={canSeeCost}
@@ -1312,6 +1417,143 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
           reload();
         }}
       />
+
+      {/* Add-stage modal — manually create a stage for the active
+         block. POSTs to construction_stages via createStage; once the
+         list reload fires, the new (empty) stage shows up as a card on
+         this tab because the manualStages → stages merge above adds
+         zero-work stages whose name isn't already covered by a
+         derived stage.
+
+         When a parent stage is picked from the dropdown, the new
+         stage's name is composed as "PARENT › CHILD" using the same
+         " › " delimiter the importer uses. The hierarchical name is
+         what other tabs (Smeta boshqaruvi) need to render the entry
+         as a nested sub-stage. */}
+      {addStageModal && (
+        <AddStageModal
+          value={addStageModal.name}
+          parent={addStageModal.parent || ''}
+          onChange={(name) => setAddStageModal((m) => ({ ...m, name }))}
+          busy={addStageBusy}
+          onCancel={() => { if (!addStageBusy) setAddStageModal(null); }}
+          onConfirm={async () => {
+            const rawName = (addStageModal.name || '').trim();
+            if (!rawName) return;
+            const parent = (addStageModal.parent || '').trim();
+            const fullName = parent ? `${parent} › ${rawName}` : rawName;
+            setAddStageBusy(true);
+            try {
+              await constructionService.createStage(project.id, {
+                name: fullName,
+                status: 'not_started',
+                planned_budget: 0,
+                // Migration 333: stages are building-scoped. The button is
+                // disabled when activeBuildingId is null so we can safely
+                // pass it here without a guard.
+                building_id: Number(activeBuildingId),
+              });
+              setAddStageModal(null);
+              reload();
+              toast.success(t('stage_added') || "Bosqich qo'shildi");
+            } catch (e) {
+              toast.error(formatApiError(e, t, 'Xatolik'));
+            } finally {
+              setAddStageBusy(false);
+            }
+          }}
+          t={t}
+        />
+      )}
+    </div>
+  );
+}
+
+// =====================================================================
+// ADD STAGE MODAL — two modes driven by the `parent` prop:
+//
+//   • parent empty → "Bosqich qo'shish" creates a top-level stage.
+//   • parent set   → "Sub-bosqich qo'shish" with a fixed-parent badge
+//     (no dropdown — the caller's expanded stage card already picked it).
+//
+// The composed name "PARENT › CHILD" is what the section-grouping logic
+// elsewhere uses to nest the entry under its parent.
+// =====================================================================
+function AddStageModal({
+  value, onChange,
+  parent,
+  busy, onCancel, onConfirm, t,
+}) {
+  const isSub = !!(parent && String(parent).trim());
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center"
+         style={{ background: 'rgba(15,23,42,0.5)' }}
+         onClick={onCancel}>
+      <div className="bg-white rounded-2xl p-6 max-w-[480px] w-[90%] shadow-2xl"
+           onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-base font-bold text-slate-900 mb-1">
+          {isSub
+            ? (t('add_substage') || "Sub-bosqich qo'shish")
+            : (t('add_stage') || "Bosqich qo'shish")}
+        </h3>
+        <p className="text-[12px] text-slate-500 mb-4">
+          {isSub
+            ? (t('add_substage_hint') || "Yangi sub-bosqich nomi")
+            : (t('add_stage_hint') || "Yangi bosqich nomi (masalan: \"Pardozlash\", \"Elektrika\")")}
+        </p>
+
+        {/* Parent breadcrumb pill — sub-stage mode only. The parent is
+           fixed by the entry point (the "+ Sub-bosqich" button on the
+           expanded stage card), so we show it read-only. */}
+        {isSub && (
+          <div className="mb-4 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-[12px] text-emerald-700">
+            <span className="text-emerald-500 mr-1">{t('parent_section_label') || "Asosiy:"}</span>
+            <span className="font-medium">{parent}</span>
+          </div>
+        )}
+
+        <label className="block text-[11px] uppercase tracking-wider font-semibold text-slate-500 mb-1.5">
+          {isSub
+            ? (t('substage_name') || "Sub-bosqich nomi")
+            : (t('stage_name') || "Bosqich nomi")}
+        </label>
+        <input
+          type="text"
+          value={value || ''}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') onConfirm();
+            if (e.key === 'Escape') onCancel();
+          }}
+          placeholder={isSub
+            ? (t('substage_name_placeholder') || "Sub-bosqich nomi")
+            : (t('stage_name_placeholder') || "Poydevor, Karkos, Pardozlash")}
+          className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 mb-5"
+          autoFocus
+          disabled={busy}
+        />
+
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="px-4 py-2 rounded-lg text-xs font-semibold bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+          >
+            {t('cancel') || 'Bekor qilish'}
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={busy || !(value || '').trim()}
+            className="px-4 py-2 rounded-lg text-xs font-semibold bg-emerald-700 hover:bg-emerald-800 text-white inline-flex items-center gap-1.5 disabled:opacity-50 disabled:hover:bg-emerald-700"
+          >
+            {busy
+              ? (<><Loader2 className="w-3.5 h-3.5 animate-spin" /> {t('saving') || "Saqlanmoqda..."}</>)
+              : (t('add') || "Qo'shish")}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

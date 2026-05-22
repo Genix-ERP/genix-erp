@@ -1128,18 +1128,31 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                             </td>
                                             <td className="py-2 px-2 text-right text-xs text-slate-600 whitespace-nowrap">{line.uom}</td>
                                             {est.source_type !== 'resurs' && (
-                                              // Show the imported file quantity (original_quantity, the
-                                              // immutable anchor) rather than the live `quantity` ledger.
-                                              // For Единич imports we deliberately zero `quantity` at
-                                              // import time so FAKT in Smeta boshqaruvi starts at 0 and
-                                              // the foreman fills it in — but the user still wants to
-                                              // SEE the planned file quantity here in the Smetalar list.
-                                              // Falls back to `quantity` for legacy rows that predate
-                                              // the original_quantity anchor (migration 349).
+                                              // Show the file's "по проектным данным" value (col F on
+                                              // the Единич sheet) when available. This is what fills
+                                              // in the Miqdori column for BOTH parents and child
+                                              // resources — without it, Единич sub-rows displayed "0"
+                                              // because templateMode zeroes the live `quantity` ledger.
+                                              //
+                                              // Fallback chain (most specific → least):
+                                              //   1. imported_quantity — file's literal value, captured
+                                              //      by the Единич parser into norma_quantity and
+                                              //      persisted via migration 413. DISPLAY-ONLY: no
+                                              //      cascade, NORMA pill, ledger, or budget path reads
+                                              //      it. Set for both parent works and child resources
+                                              //      after migration 413.
+                                              //   2. original_quantity — the parent-only anchor from
+                                              //      migration 349. Present on older rows that predate
+                                              //      413; on those rows children still render 0 because
+                                              //      the legacy parser dropped col F for children.
+                                              //   3. live `quantity` — last-ditch fallback for
+                                              //      pre-migration-349 rows.
                                               <td className="py-2 px-2 text-right text-xs whitespace-nowrap">
-                                                {Number(line.original_quantity) > 0
-                                                  ? line.original_quantity
-                                                  : line.quantity}
+                                                {line.imported_quantity != null && Number(line.imported_quantity) > 0
+                                                  ? Number(line.imported_quantity)
+                                                  : (Number(line.original_quantity) > 0
+                                                      ? line.original_quantity
+                                                      : line.quantity)}
                                               </td>
                                             )}
                                             {est.source_type === 'resurs' && (
