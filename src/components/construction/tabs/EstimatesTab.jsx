@@ -686,9 +686,16 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
         />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      {/* Smaller fixed-width sidebar so the right-hand smeta table gets
+         the lion's share of the row. Previously this was a 1:2 split
+         (lg:grid-cols-3 + col-span-1/col-span-2) which gave the building
+         list 33 % of the width even on wide monitors — that's far more
+         than it needs (it just lists block names) and squeezed the
+         smeta table into the remaining 66 %. Pinning the sidebar at
+         240 px gives the table everything else. */}
+      <div className="grid gap-6" style={{ gridTemplateColumns: '240px 1fr' }}>
       {/* Left: Buildings List */}
-      <Card className="lg:col-span-1">
+      <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base">{t('buildings_blocks') || 'Binolar / Bloklar'}</CardTitle>
         </CardHeader>
@@ -771,8 +778,11 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
         </CardContent>
       </Card>
 
-      {/* Right: Estimates with expandable lines */}
-      <Card className="lg:col-span-2">
+      {/* Right: Estimates with expandable lines. min-w-0 so the card
+         can shrink below its natural content size, which lets the
+         table inside use overflow-x-auto correctly instead of forcing
+         the grid to grow beyond the viewport. */}
+      <Card className="min-w-0">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base">
             {selectedBuilding === 'project'
@@ -969,7 +979,15 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                   Shifr / Nomi / O'lchov / Miqdor layout. */}
                               <div className="overflow-x-auto">
                                 <table
-                                  className={`w-full text-sm table-fixed ${est.source_type === 'resurs' ? 'min-w-[1000px]' : 'min-w-[1100px]'}`}
+                                  // No fixed min-width — the table now fills
+                                  // the card's content width. The overflow-x-auto
+                                  // wrapper around it (above) still catches the
+                                  // edge case where the column widths legitimately
+                                  // exceed the viewport (e.g. very long Russian
+                                  // section names), but on normal screens the
+                                  // table no longer leaves blank space to the
+                                  // right of the last column.
+                                  className="w-full text-sm table-fixed"
                                 >
                                   <colgroup>
                                     {/* Column widths sized to fit the longest expected content
@@ -984,6 +1002,14 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                     {est.source_type !== 'resurs' && <col style={{ width: '200px' }} />}
                                     <col />{/* Nomi — absorbs remaining width */}
                                     <col style={{ width: '110px' }} />
+                                    {/* Edinich / ВОР trailing columns:
+                                          Norma (per-unit, "на. ед. измерения" = Excel col E)
+                                          Miqdor (project total, "по проектным данным" = col F)
+                                       Norma was previously only shown as an inline (Norma X.XX)
+                                       label next to the resource name — small enough to miss.
+                                       Promoting it to a real column keeps the Excel sheet's
+                                       layout familiar. Display-only, mirrors norm_rate. */}
+                                    {est.source_type !== 'resurs' && <col style={{ width: '110px' }} />}
                                     {est.source_type !== 'resurs' && <col style={{ width: '120px' }} />}
                                     {est.source_type === 'resurs' && (
                                       <>
@@ -1007,7 +1033,10 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                       <th className="text-left py-2 px-2 text-xs font-medium text-slate-500">{t('name') || 'Nomi'}</th>
                                       <th className="text-right py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">{t('unit') || "O'lchov"}</th>
                                       {est.source_type !== 'resurs' && (
-                                        <th className="text-right py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">{t('quantity') || 'Miqdor'}</th>
+                                        <>
+                                          <th className="text-right py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">{t('norm') || 'Norma'}</th>
+                                          <th className="text-right py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">{t('quantity') || 'Miqdor'}</th>
+                                        </>
                                       )}
                                       {est.source_type === 'resurs' && (
                                         <>
@@ -1120,13 +1149,26 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                                 }`} />
                                               )}
                                               {line.name}
-                                              {isSubline && Number(line.norm_rate) > 0 && (
-                                                <span className="text-[10px] text-emerald-700/70 ml-2">
-                                                  ({t('norm') || 'Norma'} {line.norm_rate})
-                                                </span>
-                                              )}
+                                              {/* Inline "(Norma X.XX)" label removed —
+                                                 the per-unit norm now has its own
+                                                 dedicated column (Norma) for non-resurs
+                                                 estimates, so the inline label was
+                                                 redundant and easy to miss. */}
                                             </td>
                                             <td className="py-2 px-2 text-right text-xs text-slate-600 whitespace-nowrap">{line.uom}</td>
+                                            {est.source_type !== 'resurs' && (
+                                              // Norma (per-unit, Excel col E) — DISPLAY-ONLY.
+                                              // Sourced from norm_rate, which the Edinich
+                                              // parser populates from "на. ед. измерения".
+                                              // Empty for parent works (the norm only
+                                              // applies to child resources), and rendered
+                                              // as an em-dash when zero.
+                                              <td className="py-2 px-2 text-right text-xs whitespace-nowrap">
+                                                {isSubline && Number(line.norm_rate) > 0
+                                                  ? <span className="text-emerald-700/80 font-medium">{Number(line.norm_rate)}</span>
+                                                  : <span className="text-slate-300">—</span>}
+                                              </td>
+                                            )}
                                             {est.source_type !== 'resurs' && (
                                               // Show the file's "по проектным данным" value (col F on
                                               // the Единич sheet) when available. This is what fills
