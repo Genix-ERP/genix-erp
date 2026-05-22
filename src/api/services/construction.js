@@ -760,6 +760,14 @@ export const constructionService = {
     // construction_estimate.budget_total (migration 369) so the
     // Reja vs Fakt page can display the imported budget verbatim
     // instead of computing it from per-line plan totals.
+    // Per-request timeout override. The global axios timeout is 30s which
+    // is fine for normal CRUD, but a real-world resurs/единич import can be
+    // 2–3 MB of JSON with 3000+ lines — on a slow connection the upload
+    // alone exceeds 30s and aborts before the server even sees the request.
+    // Backend processing itself is fast (~15 ms for ~400 lines per the
+    // logs), so the long timeout is purely a network-upload allowance.
+    // 5 minutes covers very slow connections without leaving hung
+    // requests open indefinitely if the connection truly dies.
     const response = await apiClient.post(`/construction/estimates/${estimateId}/lines/bulk`, {
       lines,
       replace,
@@ -768,6 +776,8 @@ export const constructionService = {
       budget_total: budgetTotal,
       material_budget: materialBudget,
       transport_budget: transportBudget,
+    }, {
+      timeout: 300000,
     });
     return response.data.data;
   },
