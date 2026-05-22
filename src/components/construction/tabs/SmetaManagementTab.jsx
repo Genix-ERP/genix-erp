@@ -235,6 +235,28 @@ export default function SmetaManagementTab({ project }) {
   //   { title, body, confirmLabel, tone: 'amber'|'red'|'teal', onConfirm }
   const [confirmModal, setConfirmModal] = useState(null);
 
+  // Manually-added top-level sections. The `sections` useMemo below builds
+  // section cards from each line's `parent_item_number`, so a section with
+  // ZERO lines won't show at all. To let the user create a new section
+  // (e.g. "ОТДЕЛКА") before they've added any work to it, we fetch the
+  // construction_stages table — those names are merged into the section
+  // list as empty cards. The names persist across reloads (they live in
+  // the stages table), and Bosqichlar's "+ Bosqich qo'shish" populates the
+  // same store, so the two tabs stay in sync.
+  const [manualSectionNames, setManualSectionNames] = useState([]); // string[]
+  const [addSectionModal, setAddSectionModal] = useState(null);     // { name } | null
+  const [addSectionBusy, setAddSectionBusy] = useState(false);
+  const [sectionRefreshTick, setSectionRefreshTick] = useState(0);
+
+  // "+ Ish qo'shish" modal — creates a top-level estimate line whose
+  // parent_item_number is the section's name, so the new work appears
+  // INSIDE the section's expanded list and behaves identically to any
+  // imported work (resource breakdowns, approval workflow, FAKT input,
+  // top-ups, Forma 2 rollup — all of them key off the same estimate-line
+  // record). Shape: { sectionName, name, uom, code } | null.
+  const [addWorkModal, setAddWorkModal] = useState(null);
+  const [addWorkBusy, setAddWorkBusy] = useState(false);
+
   // ── Load estimates ─────────────────────────────────────────────────
   useEffect(() => {
     if (!project?.id) return;
@@ -346,6 +368,39 @@ export default function SmetaManagementTab({ project }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => { loadLines(activeEstimateIds); }, [activeEstimateIds, loadLines]);
+
+  // ── Manually-added sections (construction_stages) ─────────────────
+  // Fetched whenever the active block changes or "+ Yangi seksiya" was
+  // just used. Names with no matching parent_item_number on any line
+  // are merged into the rendered section list as empty cards — see the
+  // `sections` useMemo below.
+  useEffect(() => {
+    if (!project?.id) {
+      setManualSectionNames([]);
+      return;
+    }
+    let cancelled = false;
+    const opts = (buildingId && buildingId !== '0')
+      ? { buildingId: Number(buildingId) }
+      : undefined;
+    constructionService.listStages(project.id, opts)
+      .then((rows) => {
+        if (cancelled) return;
+        const list = Array.isArray(rows) ? rows : (rows?.data || rows?.items || []);
+        // Scope: the listStages endpoint already filters by building when
+        // we pass the param; we also defensively re-filter so the
+        // "Butun loyiha" case (buildingId === '0' / unset) doesn't pull in
+        // building-specific stages from other blocks.
+        const scoped = (buildingId && buildingId !== '0')
+          ? list.filter((s) => Number(s.building_id) === Number(buildingId))
+          : list.filter((s) => !s.building_id);
+        setManualSectionNames(
+          scoped.map((s) => String(s.name || '').trim()).filter(Boolean),
+        );
+      })
+      .catch(() => { if (!cancelled) setManualSectionNames([]); });
+    return () => { cancelled = true; };
+  }, [project?.id, buildingId, sectionRefreshTick]);
 
   // ── Changed-prices badge ──────────────────────────────────────────
   // Refreshed any time the underlying lines change (we don't poll — the
@@ -503,8 +558,15 @@ export default function SmetaManagementTab({ project }) {
       if (isSub) continue;
       set.add(ln.parent_item_number || (t('uncategorized') || 'Boshqalar'));
     }
+    // Include manually-created sections (construction_stages rows) so the
+    // user can filter by an empty section they just added — without this,
+    // a brand-new section would only appear in the main list but be
+    // absent from the dropdown.
+    for (const name of manualSectionNames) {
+      if (name) set.add(name);
+    }
     return Array.from(set);
-  }, [lines, t]);
+  }, [lines, t, manualSectionNames]);
 
   // KPIs — sum across resource sub-lines (one level deep is enough
   // for the top KPI; sub-stage internals roll up via their own resources).
@@ -615,8 +677,84 @@ export default function SmetaManagementTab({ project }) {
       cur.total += eff != null ? eff : (Number(ln.total_amount) || 0);
       sectionMap.set(secKey, cur);
     }
+    // Merge manually-created empty sections (construction_stages rows
+    // whose name doesn't yet match any work's parent_item_number).
+    //
+    // Two outcomes depending on the name shape:
+    //
+    //   • "PARENT › CHILD" AND a parent section with name "PARENT"
+    //     already exists in the map → attach as a nested entry on the
+    //     PARENT section (subSections[]) rather than rendering as its
+    //     own top-level card. This is what the "+ Sub-bosqich" button
+    //     on an expanded section creates, and the user expects the
+    //     new entry to live INSIDE its parent.
+    //
+    //   • Anything else (no delimiter, or delimiter present but the
+    //     prefix doesn't match any existing section) → render as its
+    //     own top-level card, same as before.
+    //
+    // Filtered by search/sectionFilter the same way work-bearing
+    // sections are: a name that doesn't match the active filter is
+    // hidden. For sub-sections we also let the filter match the
+    // parent's name so filtering by "PARENT" still surfaces nested
+    // children of that parent.
+    const DELIM = ' › ';
+    // Sort short names first so a section's parent is processed before
+    // its potential child — otherwise a child written before its parent
+    // in the listStages response would miss the nest-attach pass and end
+    // up as a top-level card.
+    const sortedManual = [...manualSectionNames].sort((a, b) =>
+      String(a).length - String(b).length,
+    );
+    for (const name of sortedManual) {
+      if (!name) continue;
+      if (sectionMap.has(name)) continue;
+
+      // Try to split off a parent prefix. We look for the LAST " › " so
+      // multi-level paths like "A › B › C" attach to "A › B" (most-specific
+      // match first), falling back to shorter prefixes if no exact match
+      // exists. This mirrors how the StagesTabV2 derives sub-stage names.
+      let attachedAsSub = false;
+      if (name.includes(DELIM)) {
+        const lastIdx = name.lastIndexOf(DELIM);
+        const parent = name.slice(0, lastIdx);
+        const child  = name.slice(lastIdx + DELIM.length);
+        if (sectionMap.has(parent)) {
+          // Filter: if a section filter is active, only attach when the
+          // filter targets the parent OR the full nested name. We don't
+          // want a stray sub-section to leak into an unrelated filter.
+          if (sectionFilter && sectionFilter !== parent && sectionFilter !== name) {
+            continue;
+          }
+          if (search) {
+            const q = search.toLowerCase();
+            if (!name.toLowerCase().includes(q) && !child.toLowerCase().includes(q)) {
+              continue;
+            }
+          }
+          const par = sectionMap.get(parent);
+          if (!par.subSections) par.subSections = [];
+          par.subSections.push({
+            name: child,
+            fullName: name,         // PARENT › CHILD — keys back to construction_stages.name
+            lines: [],
+            total: 0,
+            is_empty_manual: true,
+          });
+          attachedAsSub = true;
+        }
+      }
+      if (attachedAsSub) continue;
+
+      // Top-level path — same as before.
+      if (sectionFilter && sectionFilter !== name) continue;
+      if (search) {
+        if (!name.toLowerCase().includes(search.toLowerCase())) continue;
+      }
+      sectionMap.set(name, { name, lines: [], total: 0, is_empty_manual: true });
+    }
     return Array.from(sectionMap.values());
-  }, [lines, search, sectionFilter, t]);
+  }, [lines, search, sectionFilter, t, manualSectionNames]);
 
   // ── Mutations ─────────────────────────────────────────────────────
   // Each line carries its own line.estimate_id, so we route mutations
@@ -964,6 +1102,22 @@ export default function SmetaManagementTab({ project }) {
             {loadingLines ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
             {t('refresh') || 'Yangilash'}
           </button>
+          {/* "+ Bo'lim qo'shish" — promoted from the toolbar to the topbar
+             so it sits alongside the other primary actions (Forma 2 /
+             Material yig'indisi). Same teal accent as the toolbar version,
+             same modal flow on click. Admin/owner only — gated by
+             canBulkAdmin further below, matching the toolbar button. */}
+          {canBulkAdmin && (
+            <button
+              onClick={() => setAddSectionModal({ name: '' })}
+              className="px-3.5 py-2.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition"
+              style={{ background: C.sec, color: C.teal, border: '1px solid rgba(13,148,136,0.3)' }}
+              title={t('add_section_hint') || "Yangi bo'lim qo'shish"}
+            >
+              <span className="text-[14px] leading-none font-bold">+</span>
+              {t('add_section') || "Bo'lim qo'shish"}
+            </button>
+          )}
           {selectedEstimate && (
             <button
               onClick={() => setForm2Open(true)}
@@ -1091,6 +1245,9 @@ export default function SmetaManagementTab({ project }) {
                   <option key={s} value={s} style={{ background: C.card, color: C.text }}>{s}</option>
                 ))}
               </select>
+              {/* The "+ Bo'lim qo'shish" button has been moved up to the
+                 sticky topbar (next to Forma 2 / Material yig'indisi) so
+                 the affordance is more prominent. No duplicate here. */}
               {/* Section accordion toggle — opens/closes the dark section
                  strips themselves. Distinct from the work-card bulk
                  buttons next to it. */}
@@ -1177,30 +1334,63 @@ export default function SmetaManagementTab({ project }) {
                 const collapsed = !!collapsedSections[sec.name];
                 return (
                   <div key={sec.name} className="mb-6">
-                    <button
-                      type="button"
-                      onClick={() => toggleSection(sec.name)}
-                      className="w-full flex items-center gap-2.5 px-4 py-3 rounded-lg mb-2 transition"
+                    {/* Section header — flex row instead of a single button
+                       so the chevron toggle and the "+ Sub-bosqich" action
+                       button can sit side by side without nesting buttons.
+                       The clickable area for toggling the section now
+                       excludes the trailing action area, so clicking the
+                       "+" doesn't collapse the section underneath it. */}
+                    <div
+                      className="w-full flex items-center gap-2.5 px-4 py-3 rounded-lg mb-2"
                       style={{ background: C.sec, border: `1px solid ${C.border2}` }}
                     >
-                      <ChevronDown
-                        className="w-3.5 h-3.5 transition"
-                        style={{
-                          color: C.muted,
-                          transform: collapsed ? 'rotate(-90deg)' : 'rotate(0)',
-                        }}
-                      />
-                      <span className="flex-1 text-left font-semibold text-[13px] tracking-[0.02em]">{sec.name}</span>
-                      <span
-                        className="text-[11px] font-mono px-2 py-0.5 rounded"
-                        style={{ background: C.inset, color: C.muted }}
+                      <button
+                        type="button"
+                        onClick={() => toggleSection(sec.name)}
+                        className="flex-1 flex items-center gap-2.5 text-left"
                       >
-                        {sec.lines.length} {t('works_count_suffix') || 'ish'}
-                      </span>
-                      <span className="text-[13px] font-mono font-semibold" style={{ color: C.amber }}>
-                        {fmt(sec.total)} {t('currency_som') || "so'm"}
-                      </span>
-                    </button>
+                        <ChevronDown
+                          className="w-3.5 h-3.5 transition"
+                          style={{
+                            color: C.muted,
+                            transform: collapsed ? 'rotate(-90deg)' : 'rotate(0)',
+                          }}
+                        />
+                        <span className="flex-1 text-left font-semibold text-[13px] tracking-[0.02em]">{sec.name}</span>
+                        <span
+                          className="text-[11px] font-mono px-2 py-0.5 rounded"
+                          style={{ background: C.inset, color: C.muted }}
+                        >
+                          {sec.lines.length} {t('works_count_suffix') || 'ish'}
+                        </span>
+                        <span className="text-[13px] font-mono font-semibold" style={{ color: C.amber }}>
+                          {fmt(sec.total)} {t('currency_som') || "so'm"}
+                        </span>
+                      </button>
+                      {/* "+ Ish" — add a real work line to this section.
+                         The sub-stage button used to live here too but was
+                         removed: adding a work is the only useful action
+                         on a section card; nested sections are created
+                         from the topbar's section flow instead. */}
+                      {canBulkAdmin && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setAddWorkModal({ sectionName: sec.name, name: '', uom: '', code: '' });
+                          }}
+                          className="ml-1 px-2.5 py-1.5 rounded-md text-[11px] font-medium flex items-center gap-1 transition"
+                          style={{
+                            background: 'rgba(13,148,136,0.1)', color: C.teal,
+                            border: '1px solid rgba(13,148,136,0.3)',
+                          }}
+                          title={t('add_work') || "Ish qo'shish"}
+                        >
+                          <span className="text-[13px] leading-none font-bold">+</span>
+                          {t('add_work_short') || "Ish"}
+                        </button>
+                      )}
+                    </div>
 
                     {!collapsed && sec.lines.map((ln) => {
                       const subs = subByParent.get(Number(ln.id)) || [];
@@ -1253,6 +1443,52 @@ export default function SmetaManagementTab({ project }) {
                         </React.Fragment>
                       );
                     })}
+
+                    {/* Manually-created sub-sections — empty cards nested
+                       inside the parent. Each is a placeholder for a
+                       hierarchy the user defined via the "+ Sub-bosqich"
+                       button. Indented with a left border accent so it
+                       reads as nested instead of as a sibling section.
+                       Carries its own "+ Sub-bosqich" so the user can
+                       add a deeper level (PARENT › CHILD › GRANDCHILD). */}
+                    {!collapsed && Array.isArray(sec.subSections) && sec.subSections.map((sub) => (
+                      <div
+                        key={sub.fullName}
+                        className="ml-6 mb-2 rounded-lg px-4 py-3 flex items-center gap-2.5 border-l-2"
+                        style={{
+                          background: C.inset,
+                          border: `1px dashed ${C.border2}`,
+                          borderLeftColor: C.teal,
+                          borderLeftWidth: 3,
+                        }}
+                      >
+                        <span className="text-[12px] text-slate-400">└</span>
+                        <span className="flex-1 text-left font-medium text-[12.5px] text-slate-700">{sub.name}</span>
+                        <span
+                          className="text-[10.5px] font-mono px-2 py-0.5 rounded"
+                          style={{ background: C.card, color: C.muted }}
+                        >
+                          {sub.lines.length} {t('works_count_suffix') || 'ish'}
+                        </span>
+                        {canBulkAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => setAddWorkModal({
+                              sectionName: sub.fullName, name: '', uom: '', code: '',
+                            })}
+                            className="px-2 py-1 rounded text-[10.5px] font-medium flex items-center gap-1"
+                            style={{
+                              background: 'rgba(13,148,136,0.08)', color: C.teal,
+                              border: '1px solid rgba(13,148,136,0.25)',
+                            }}
+                            title={t('add_work') || "Ish qo'shish"}
+                          >
+                            <span className="text-[12px] leading-none font-bold">+</span>
+                            {t('add_work_short') || "Ish"}
+                          </button>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 );
               })
@@ -1416,6 +1652,209 @@ export default function SmetaManagementTab({ project }) {
           t={t}
         />
       )}
+
+      {/* Add-section modal — POSTs to construction_stages via createStage
+         so the section persists across reloads + shows on Bosqichlar too.
+         Once saved, the listStages effect picks it up and the section
+         renders as an empty card with the standard "+ ish" affordance,
+         letting the user populate it via the existing add-work flow.
+
+         Parent dropdown: when the user picks an existing section as the
+         parent, the new section's name is stored as
+         "PARENT › CHILD" (using the same " › " delimiter the importer
+         uses). The grouping logic in `sections` keys by parent_item_number
+         verbatim, so each hierarchical name becomes its own card with
+         the breadcrumb visible in the header — mirroring how imported
+         multi-level sections ("СЕКЦИЯ №1 › ПОЛЫ › КУХНЯ") already
+         display. */}
+      {/* Add-work modal — creates a top-level estimate line whose
+         parent_item_number is the chosen section name. The resulting
+         row becomes a normal work in that section's list with full
+         access to the existing flows: + resurs, + sub-stage on the
+         WorkCard, FAKT input, approval pipeline, Forma 2 rollup.
+         Requires at least one єdinich estimate in the active block;
+         the button is hidden otherwise (estimateId === ''). */}
+      {addWorkModal && (
+        <SmetaAddWorkModal
+          sectionName={addWorkModal.sectionName}
+          name={addWorkModal.name}
+          uom={addWorkModal.uom}
+          code={addWorkModal.code}
+          onChange={(patch) => setAddWorkModal((m) => ({ ...m, ...patch }))}
+          busy={addWorkBusy}
+          hasEstimate={!!estimateId}
+          onCancel={() => { if (!addWorkBusy) setAddWorkModal(null); }}
+          onConfirm={async () => {
+            const name = (addWorkModal.name || '').trim();
+            const uom = (addWorkModal.uom || '').trim();
+            if (!name || !uom) return;
+            if (!estimateId) {
+              toast.error(t('no_estimate_for_work') || "Smeta yo'q — avval єдинич smeta yarating");
+              return;
+            }
+            setAddWorkBusy(true);
+            try {
+              await constructionService.createEstimateLine(Number(estimateId), {
+                // No parent line — this is a top-level work (a "ish"),
+                // not a sub-line. parent_item_number carries the section
+                // grouping (= section's name).
+                parent_line_id: 0,
+                parent_item_number: addWorkModal.sectionName,
+                name,
+                uom,
+                code: (addWorkModal.code || '').trim() || undefined,
+                // Template-mode defaults: quantity starts at 0 so the
+                // foreman fills BAJARILDI. quantity_override=true so the
+                // value the foreman types isn't re-derived from a
+                // (non-existent) parent's cascade.
+                quantity: 0,
+                quantity_override: true,
+                resource_type: '',
+                material_rate: 0,
+                labor_rate: 0,
+                equipment_rate: 0,
+                norm_rate: 0,
+                unit_price: 0,
+              });
+              setAddWorkModal(null);
+              loadLines(activeEstimateIds);
+              toast.success(t('work_added') || "Ish qo'shildi");
+            } catch (e) {
+              toast.error(formatApiError(e, t, 'Xatolik'));
+            } finally {
+              setAddWorkBusy(false);
+            }
+          }}
+          t={t}
+        />
+      )}
+
+      {addSectionModal && (
+        <SmetaAddSectionModal
+          value={addSectionModal.name}
+          parent={addSectionModal.parent || ''}
+          onChange={(name) => setAddSectionModal((m) => ({ ...m, name }))}
+          busy={addSectionBusy}
+          onCancel={() => { if (!addSectionBusy) setAddSectionModal(null); }}
+          onConfirm={async () => {
+            const rawName = (addSectionModal.name || '').trim();
+            if (!rawName) return;
+            // Compose the full hierarchical name. If the user picked a
+            // parent section, prefix it so the new entry slots in as a
+            // sub-stage; otherwise it's a top-level section.
+            const parent = (addSectionModal.parent || '').trim();
+            const fullName = parent ? `${parent} › ${rawName}` : rawName;
+            setAddSectionBusy(true);
+            try {
+              await constructionService.createStage(project.id, {
+                name: fullName,
+                status: 'not_started',
+                planned_budget: 0,
+                building_id: (buildingId && buildingId !== '0')
+                  ? Number(buildingId)
+                  : 0,
+              });
+              setAddSectionModal(null);
+              setSectionRefreshTick((n) => n + 1);
+              toast.success(t('section_added') || "Seksiya qo'shildi");
+            } catch (e) {
+              toast.error(formatApiError(e, t, 'Xatolik'));
+            } finally {
+              setAddSectionBusy(false);
+            }
+          }}
+          t={t}
+        />
+      )}
+    </div>
+  );
+}
+
+// =====================================================================
+// SmetaAddSectionModal — single-input dialog. Behaves in TWO modes:
+//
+//   • No `parent` → "Bo'lim qo'shish" creates a top-level section.
+//   • `parent` set → "Sub-bosqich qo'shish": shown with a read-only
+//     "asosiy: PARENT" pill so the user knows the new entry will be
+//     nested. The composed name is saved as "PARENT › CHILD" so it
+//     groups under the parent in the section list. The parent name
+//     itself is decided by the caller (the "+ Sub-bosqich" button on
+//     the expanded section header passes it in), so there's no
+//     dropdown to confuse the user.
+// =====================================================================
+function SmetaAddSectionModal({
+  value, onChange,
+  parent,
+  busy, onCancel, onConfirm, t,
+}) {
+  const isSub = !!(parent && String(parent).trim());
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center"
+         style={{ background: 'rgba(15,23,42,0.5)' }}
+         onClick={onCancel}>
+      <div className="bg-white rounded-2xl p-6 max-w-[480px] w-[90%] shadow-2xl"
+           onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-base font-bold text-slate-900 mb-1">
+          {isSub
+            ? (t('add_substage') || "Sub-bosqich qo'shish")
+            : (t('add_section') || "Bo'lim qo'shish")}
+        </h3>
+        <p className="text-[12px] text-slate-500 mb-4">
+          {isSub
+            ? (t('add_substage_hint') || "Yangi sub-bosqich nomi")
+            : (t('add_section_hint_long') || "Yangi bo'lim nomi (masalan: \"Pardozlash\", \"Poydevorlar\")")}
+        </p>
+
+        {/* Parent breadcrumb pill — appears only in sub-stage mode so the
+           user sees exactly which section they're adding under. No
+           dropdown: the parent is fixed by the entry point. */}
+        {isSub && (
+          <div className="mb-4 px-3 py-2 rounded-lg bg-teal-50 border border-teal-200 text-[12px] text-teal-700">
+            <span className="text-teal-500 mr-1">{t('parent_section_label') || "Asosiy:"}</span>
+            <span className="font-medium">{parent}</span>
+          </div>
+        )}
+
+        <label className="block text-[11px] uppercase tracking-wider font-semibold text-slate-500 mb-1.5">
+          {isSub
+            ? (t('substage_name') || "Sub-bosqich nomi")
+            : (t('section_name') || "Bo'lim nomi")}
+        </label>
+        <input
+          type="text"
+          value={value || ''}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') onConfirm();
+            if (e.key === 'Escape') onCancel();
+          }}
+          placeholder={isSub
+            ? (t('substage_name_placeholder') || "Sub-bosqich nomi")
+            : (t('section_name_placeholder') || "Bo'lim nomi")}
+          className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/40 focus:border-teal-500 mb-5"
+          autoFocus
+          disabled={busy}
+        />
+
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="px-4 py-2 rounded-lg text-xs font-semibold bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+          >
+            {t('cancel') || 'Bekor qilish'}
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={busy || !(value || '').trim()}
+            className="px-4 py-2 rounded-lg text-xs font-semibold bg-teal-700 hover:bg-teal-800 text-white disabled:opacity-50 disabled:hover:bg-teal-700"
+          >
+            {busy ? (t('saving') || "Saqlanmoqda...") : (t('add') || "Qo'shish")}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1614,6 +2053,122 @@ function ResourceTopupModal({ resource, onSubmit, onCancel, t }) {
 // button: amber for "destructive but reversible" (qty reset), red for
 // "collapse all", teal for "expand all". Click outside / Esc cancels.
 // =====================================================================
+// =====================================================================
+// SmetaAddWorkModal — "+ Ish qo'shish" dialog for empty / new sections.
+//
+// Three fields:
+//   • Name (required) — what the work is called.
+//   • UoM  (required) — measurement unit; the existing import uses
+//     Cyrillic forms like "ЧЕЛ.-Ч" / "1000 М3 ГРУНТА" — we accept any
+//     free-text so the user can match the imported convention without
+//     a hard-coded dropdown.
+//   • Code (optional) — the shifr (e.g. "E0601-110-07") that appears
+//     alongside the work in the section list. Useful when the user is
+//     mirroring a printed Goskomarkhitektstroy norma.
+//
+// On confirm, the parent component calls createEstimateLine with
+// parent_item_number = sectionName so the new row groups under the
+// expected section in the rendered list.
+// =====================================================================
+function SmetaAddWorkModal({
+  sectionName, name, uom, code,
+  onChange, busy, hasEstimate, onCancel, onConfirm, t,
+}) {
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center"
+         style={{ background: 'rgba(15,23,42,0.5)' }}
+         onClick={onCancel}>
+      <div className="bg-white rounded-2xl p-6 max-w-[520px] w-[90%] shadow-2xl"
+           onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-base font-bold text-slate-900 mb-1">
+          {t('add_work') || "Ish qo'shish"}
+        </h3>
+        <p className="text-[12px] text-slate-500 mb-4">
+          {t('add_work_hint') || "Bo'limga yangi ish qo'shing — keyin u uchun resurslar, FAKT, va Forma 2 ishlatish mumkin."}
+        </p>
+
+        {/* Section breadcrumb pill — fixed by the caller, so read-only. */}
+        <div className="mb-4 px-3 py-2 rounded-lg bg-teal-50 border border-teal-200 text-[12px] text-teal-700">
+          <span className="text-teal-500 mr-1">{t('parent_section_label') || "Asosiy:"}</span>
+          <span className="font-medium">{sectionName}</span>
+        </div>
+
+        {!hasEstimate && (
+          <div className="mb-4 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-[11.5px] text-amber-700">
+            {t('no_estimate_for_work_warn')
+              || "Bu blok uchun єдинич smeta topilmadi. Avval Smeta boshqaruvi → smeta yarating yoki import qiling."}
+          </div>
+        )}
+
+        <label className="block text-[11px] uppercase tracking-wider font-semibold text-slate-500 mb-1.5">
+          {t('work_name') || "Ish nomi"} <span className="text-red-500">*</span>
+        </label>
+        <input
+          type="text"
+          value={name || ''}
+          onChange={(e) => onChange({ name: e.target.value })}
+          onKeyDown={(e) => { if (e.key === 'Escape') onCancel(); }}
+          placeholder={t('work_name_placeholder') || "Masalan: РАЗРАБОТКА ГРУНТА..."}
+          className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/40 focus:border-teal-500 mb-3"
+          autoFocus
+          disabled={busy}
+        />
+
+        <div className="grid grid-cols-[1fr_1fr] gap-3 mb-5">
+          <div>
+            <label className="block text-[11px] uppercase tracking-wider font-semibold text-slate-500 mb-1.5">
+              {t('unit') || "O'lchov"} <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={uom || ''}
+              onChange={(e) => onChange({ uom: e.target.value })}
+              onKeyDown={(e) => { if (e.key === 'Escape') onCancel(); }}
+              placeholder="М3, ЧЕЛ.-Ч, КГ, ..."
+              className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/40 focus:border-teal-500"
+              disabled={busy}
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] uppercase tracking-wider font-semibold text-slate-500 mb-1.5">
+              {t('code') || "Shifr"}
+              <span className="ml-1 text-slate-400 normal-case font-normal">({t('optional_short') || 'ixtiyoriy'})</span>
+            </label>
+            <input
+              type="text"
+              value={code || ''}
+              onChange={(e) => onChange({ code: e.target.value })}
+              onKeyDown={(e) => { if (e.key === 'Escape') onCancel(); }}
+              placeholder="E0601-110-07"
+              className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/40 focus:border-teal-500"
+              disabled={busy}
+            />
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="px-4 py-2 rounded-lg text-xs font-semibold bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+          >
+            {t('cancel') || 'Bekor qilish'}
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={busy || !hasEstimate || !(name || '').trim() || !(uom || '').trim()}
+            className="px-4 py-2 rounded-lg text-xs font-semibold bg-teal-700 hover:bg-teal-800 text-white disabled:opacity-50 disabled:hover:bg-teal-700"
+          >
+            {busy ? (t('saving') || "Saqlanmoqda...") : (t('add') || "Qo'shish")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SmetaConfirmModal({ tone = 'amber', title, body, confirmLabel, onConfirm, onCancel, t }) {
   const palette = {
     amber: { bg: 'bg-amber-600 hover:bg-amber-700' },

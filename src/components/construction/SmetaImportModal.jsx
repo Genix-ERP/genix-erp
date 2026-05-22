@@ -401,20 +401,27 @@ function parseEdinich(workbook) {
       const parentNum = dottedMatch ? dottedMatch[1] : lastParentNumber;
 
       // TEMPLATE MODE for child resources: only the per-unit norm
-      // (column E "на. ед. измерения") is captured. Column F's "по
+      // (column E "на. ед. измерения") is used by the cascade math
+      // (child.quantity = parent.quantity × norm). Column F's "по
       // проектным данным" — the file's pre-computed total for THIS
-      // particular project — is intentionally discarded; the project
-      // total in this system is derived live from
-      //   child.quantity = parent.quantity × norm
-      // so child.quantity starts at 0 and the user types parent qty
-      // (Bajarildi) to drive the consumption math. Storing the file
-      // value would mean a stale, parallel total alongside the cascade.
+      // particular project — is captured into `norma_quantity` as a
+      // DISPLAY-ONLY anchor. It is NOT used in any calculation; the
+      // live cascade still drives child.quantity from parent qty +
+      // norm_rate. We just want the user to be able to see what the
+      // source file said for each resource row in the Smetalar list,
+      // alongside the parent's project total. Without this, sub-rows
+      // in the Единич table display "0" because templateMode zeroes
+      // the live `quantity` ledger.
       currentSection.items.push({
         item_number: dottedMatch ? colA : '', // keep "1.1" so it round-trips
         code: dottedMatch ? colB : '',         // resource normative code
         name: colC,
         uom: colD,
         quantity: 0,
+        // Display-only: file's project total for this resource row
+        // (e.g. 300.1696 ЧЕЛ-Ч for a 25.035 × 1000 М3 work). Passed
+        // through to the backend as imported_quantity (migration 413).
+        norma_quantity: isNaN(colF) ? 0 : colF,
         quantity_per_unit: isNaN(colE) ? 0 : colE,
         is_parent: false,
         resource_type: resourceType,
@@ -1442,20 +1449,37 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
     for (const section of result.sections || []) {
       if (!section.items || section.items.length === 0) continue;
       const sectionPath = section.name || '';
-      // Display-only "imported" capture (migration 400). Only carry these
-      // for the Ресурс sheet — that's the only place where Количество and
-      // total cost are meaningful as standalone figures from the source
-      // file. Единич's quantity becomes a per-block volume and ВОР's is
-      // already preserved in the live `quantity` ledger, so neither needs
-      // a parallel display field. `undefined` ⇒ backend stores NULL.
+      // Display-only "imported" capture (migration 413). Two sources:
+      //   • Ресурс sheet — item.quantity (Количество) + item.total_price
+      //     (Сметная стоимость в базисном уровне) are the file's verbatim
+      //     numbers and ARE the headline columns the user wants to see.
+      //   • Единич sheet — item.norma_quantity (column F "по проектным
+      //     данным") is the file's per-row project total. For parent
+      //     works it's the work volume (e.g. 25.035 × 1000 М3); for child
+      //     resources it's the resource consumption (e.g. 300.1696 ЧЕЛ-Ч).
+      //     Without this, Единич sub-rows display "0" in the Smetalar
+      //     list because templateMode zeroes the live `quantity` ledger.
+      // ВОР keeps its quantity in the live ledger, so it doesn't need a
+      // parallel display field — but inheriting `norma_quantity` if the
+      // parser ever sets it costs nothing.
       const isResurs = String(type || '').toLowerCase() === 'resurs';
       for (const item of section.items) {
         sortIdx++;
         const unitPrice = item.unit_price || 0;
         const rt = item.resource_type || '';
-        const importedQuantity = isResurs && item.quantity != null
-          ? Number(item.quantity) || 0
-          : undefined;
+        // Resurs: file Количество. Other sheets: norma_quantity (Единич's
+        // colF). undefined ⇒ NULL in DB; the UI falls back to
+        // original_quantity / live quantity for legacy rows.
+        let importedQuantity;
+        if (isResurs && item.quantity != null) {
+          importedQuantity = Number(item.quantity) || 0;
+        } else if (item.norma_quantity != null && Number(item.norma_quantity) > 0) {
+          importedQuantity = Number(item.norma_quantity);
+        } else {
+          importedQuantity = undefined;
+        }
+        // Total cost is Resurs-only — Единич/ВОР have no per-row cost
+        // total in their source sheets.
         const importedTotal = isResurs && item.total_price != null
           ? Number(item.total_price) || 0
           : undefined;
