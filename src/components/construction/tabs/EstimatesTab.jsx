@@ -969,16 +969,34 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                   Shifr / Nomi / O'lchov / Miqdor layout. */}
                               <div className="overflow-x-auto">
                                 <table
-                                  className={`w-full text-sm table-fixed ${est.source_type === 'resurs' ? 'min-w-[640px]' : 'min-w-[900px]'}`}
+                                  className={`w-full text-sm table-fixed ${est.source_type === 'resurs' ? 'min-w-[1000px]' : 'min-w-[1100px]'}`}
                                 >
                                   <colgroup>
+                                    {/* Column widths sized to fit the longest expected content
+                                       without crowding the neighbouring column. Earlier sizing
+                                       (Kod 120 / Resurs trailing 110+140+160 with min-w 640)
+                                       squeezed the Nom column on real data — long Russian work
+                                       names wrapped into 5+ lines and the Shifr text bled
+                                       visually into Nom. Bumping the fixed widths and the
+                                       table's overall min-width lets the user horizontally
+                                       scroll instead of seeing crowded text. */}
                                     <col style={{ width: '56px' }} />
-                                    {est.source_type !== 'resurs' && <col style={{ width: '120px' }} />}
+                                    {est.source_type !== 'resurs' && <col style={{ width: '200px' }} />}
                                     <col />{/* Nomi — absorbs remaining width */}
                                     <col style={{ width: '110px' }} />
-                                    {est.source_type !== 'resurs' && <col style={{ width: '100px' }} />}
+                                    {est.source_type !== 'resurs' && <col style={{ width: '120px' }} />}
                                     {est.source_type === 'resurs' && (
-                                      <col style={{ width: '140px' }} />
+                                      <>
+                                        {/* Miqdor + Birlik narxi + Jami. The Miqdor (imported_quantity)
+                                           and Jami (imported_total) columns are populated from the
+                                           Ресурс XLSX "Количество" and "Сметная стоимость в базисном
+                                           уровне" fields verbatim. They're DISPLAY-ONLY (migration
+                                           413) — no cost, cascade, ledger, or budget code reads
+                                           them. */}
+                                        <col style={{ width: '140px' }} />
+                                        <col style={{ width: '160px' }} />
+                                        <col style={{ width: '180px' }} />
+                                      </>
                                     )}
                                     {est.state === 'draft' && <col style={{ width: '96px' }} />}
                                   </colgroup>
@@ -992,7 +1010,11 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                         <th className="text-right py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">{t('quantity') || 'Miqdor'}</th>
                                       )}
                                       {est.source_type === 'resurs' && (
-                                        <th className="text-right py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">{t('unit_rate') || 'Birlik narxi'}</th>
+                                        <>
+                                          <th className="text-right py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">{t('quantity') || 'Miqdor'}</th>
+                                          <th className="text-right py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">{t('unit_rate') || 'Birlik narxi'}</th>
+                                          <th className="text-right py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">{t('total') || 'Jami'}</th>
+                                        </>
                                       )}
                                       {/* Inline +/edit/trash row actions removed — line editing is
                                          now done from the dedicated Smeta boshqaruvi tab so this
@@ -1052,16 +1074,18 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                       const rows = [];
                                       // Subtotal row uses (colSpan - 2) for the content cell
                                       // which sits between the leftmost empty(es) and the
-                                      // rightmost value cell. Total visible cols after the
-                                      // resurs column-hide change:
-                                      //   resurs:  №, Nomi, O'lchov, Birlik narxi          → 4
-                                      //   other:   №, Shifr, Nomi, O'lchov, Miqdor          → 5
-                                      // resurs subtotal layout: [empty №] + content (cs-2) + [value]
-                                      //   ⇒ 1 + (cs-2) + 1 = 4  ⇒  cs = 4
-                                      // non-resurs subtotal layout: [empty №] + [empty Shifr] + content (cs-2) + [value]
-                                      //   ⇒ 1 + 1 + (cs-2) + 1 = 5  ⇒  cs = 4 also (the extra
-                                      //   empty Shifr td makes up for the lost width)
-                                      const colSpan = 4;
+                                      // rightmost value cell. Visible cols per type:
+                                      //   resurs:  №, Nomi, O'lchov, Miqdor, Birlik narxi, Jami → 6
+                                      //   other:   №, Shifr, Nomi, O'lchov, Miqdor              → 5
+                                      // The subtotal row is only rendered for resurs (see the
+                                      // `est.source_type === 'resurs'` guard below), so we size
+                                      // colSpan for that case:
+                                      //   layout: [empty №] + content (cs-2) + [value under Jami]
+                                      //   ⇒ 1 + (cs-2) + 1 = 6  ⇒  cs = 6
+                                      // Migration 400 added the Miqdor / Jami columns; the old
+                                      // value of 4 left the subtotal text leaking past the
+                                      // intended Birlik narxi column.
+                                      const colSpan = 6;
 
                                       const renderLine = (line, isSubline, parent) => {
                                         // Sub-lines (podkator) get a green tint + left accent border so they're
@@ -1076,8 +1100,18 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                                 ? <span className="pl-6 font-mono text-emerald-700 whitespace-nowrap">{line.item_number}</span>
                                                 : <span className="font-medium text-slate-500 whitespace-nowrap">{line.item_number}</span>}
                                             </td>
-                                            {est.source_type !== 'resurs' && <td className={`py-2 px-2 text-xs ${isSubline ? 'text-emerald-700/80' : 'text-slate-500'}`}>{line.code}</td>}
-                                            <td className={`py-2 px-2 text-xs ${isSubline ? 'text-emerald-900' : ''}`}>
+                                            {est.source_type !== 'resurs' && (
+                                              // break-words lets a long shifr that still doesn't
+                                              // fit in the wider 200px column break inside the
+                                              // cell instead of leaking into the Nom column. The
+                                              // text comes from imported XLSX where line breaks
+                                              // get flattened into a single string ("E0101-197-14
+                                              // ДОП. 11 ГОСАРХИТЕКТСТРОЙ РУЗ ПР. № 429 ОТ
+                                              // 15.12.17 Г.") so we need word-level breaks for
+                                              // wrapping to look right.
+                                              <td className={`py-2 px-2 text-xs break-words ${isSubline ? 'text-emerald-700/80' : 'text-slate-500'}`}>{line.code}</td>
+                                            )}
+                                            <td className={`py-2 px-2 text-xs break-words ${isSubline ? 'text-emerald-900' : ''}`}>
                                               {isSubline && (
                                                 <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${
                                                   line.resource_type === 'labor' ? 'bg-blue-500' :
@@ -1109,7 +1143,36 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                               </td>
                                             )}
                                             {est.source_type === 'resurs' && (
-                                              <td className="py-2 px-2 text-right text-xs font-medium whitespace-nowrap">{formatCurrency(line.unit_rate)}</td>
+                                              <>
+                                                {/* Miqdor — show the file's "Количество" verbatim.
+                                                   Falls back to original_quantity / live quantity for
+                                                   rows imported before migration 400 so older data
+                                                   doesn't render as em-dashes.
+
+                                                   imported_quantity is DISPLAY-ONLY: it never feeds
+                                                   the cost cascade, NORMA pill, FAKT ledger, or Reja
+                                                   vs Fakt budget. The user wanted the file figure
+                                                   visible without altering any computed behaviour. */}
+                                                <td className="py-2 px-2 text-right text-xs text-slate-700 whitespace-nowrap">
+                                                  {line.imported_quantity != null
+                                                    ? Number(line.imported_quantity)
+                                                    : (Number(line.original_quantity) > 0
+                                                        ? line.original_quantity
+                                                        : (Number(line.quantity) > 0 ? line.quantity : '—'))}
+                                                </td>
+                                                <td className="py-2 px-2 text-right text-xs font-medium whitespace-nowrap">{formatCurrency(line.unit_rate)}</td>
+                                                {/* Jami — show the file's "Сметная стоимость в базисном
+                                                   уровне" verbatim. Same display-only contract as
+                                                   Miqdor. Falls back to the computed total_amount so
+                                                   pre-migration rows still render a useful figure. */}
+                                                <td className="py-2 px-2 text-right text-xs font-semibold whitespace-nowrap">
+                                                  {line.imported_total != null
+                                                    ? formatCurrency(Number(line.imported_total))
+                                                    : (Number(line.total_amount) > 0
+                                                        ? formatCurrency(line.total_amount)
+                                                        : '—')}
+                                                </td>
+                                              </>
                                             )}
                                             {/* Per-row +/edit/trash actions removed — Smeta boshqaruvi tab
                                                is the single editing surface for estimate lines. */}
@@ -1149,11 +1212,13 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                   </tbody>
                                   {est.source_type === 'resurs' && (
                                     <tfoot>
-                                      {/* resurs visible cols after hide: №, Nomi, O'lchov, Birlik narxi
-                                          (+ optional Actions). Label cell spans the first 3, value cell
-                                          fills col 4, draft puts an empty cell at col 5. */}
+                                      {/* resurs visible cols (post-migration 400):
+                                          №, Nomi, O'lchov, Miqdor, Birlik narxi, Jami
+                                          (+ optional Actions in draft state).
+                                          Label cell spans cols 1–5, value cell sits in col 6
+                                          (Jami), and the draft state appends an extra empty td. */}
                                       <tr className="font-semibold bg-white">
-                                        <td colSpan={3} className="py-2 px-2 text-right text-xs">{t('direct_cost') || "To'g'ridan-to'g'ri xarajat"}:</td>
+                                        <td colSpan={5} className="py-2 px-2 text-right text-xs">{t('direct_cost') || "To'g'ridan-to'g'ri xarajat"}:</td>
                                         <td className="py-2 px-2 text-right text-xs">{formatCurrency(est.amount_direct || 0)}</td>
                                         {est.state === 'draft' && <td></td>}
                                       </tr>

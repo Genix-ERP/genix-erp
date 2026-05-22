@@ -1442,10 +1442,23 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
     for (const section of result.sections || []) {
       if (!section.items || section.items.length === 0) continue;
       const sectionPath = section.name || '';
+      // Display-only "imported" capture (migration 400). Only carry these
+      // for the Ресурс sheet — that's the only place where Количество and
+      // total cost are meaningful as standalone figures from the source
+      // file. Единич's quantity becomes a per-block volume and ВОР's is
+      // already preserved in the live `quantity` ledger, so neither needs
+      // a parallel display field. `undefined` ⇒ backend stores NULL.
+      const isResurs = String(type || '').toLowerCase() === 'resurs';
       for (const item of section.items) {
         sortIdx++;
         const unitPrice = item.unit_price || 0;
         const rt = item.resource_type || '';
+        const importedQuantity = isResurs && item.quantity != null
+          ? Number(item.quantity) || 0
+          : undefined;
+        const importedTotal = isResurs && item.total_price != null
+          ? Number(item.total_price) || 0
+          : undefined;
         allLines.push({
           name: item.name,
           uom: item.uom || 'шт',
@@ -1453,6 +1466,12 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
           // the cascade). ВОР → keep the file's Miqdor so the planned
           // project volume survives the round-trip.
           quantity: templateMode ? 0 : Number(item.quantity || 0),
+          // Migration 400 — file values preserved verbatim for display
+          // only. NEVER consumed by any cost / cascade / ledger code
+          // path; rendered alongside the live columns in EstimatesTab so
+          // the user can see what the source file said.
+          imported_quantity: importedQuantity,
+          imported_total: importedTotal,
           // Norma anchor (migration 349). Parents in template mode keep
           // the file's planned project quantity (colF) as the
           // original_quantity even though the live quantity is 0; the
