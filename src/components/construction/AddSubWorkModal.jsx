@@ -29,9 +29,23 @@ const UOMS_BY_CATEGORY = {
   material: ['M3', 'M2', 'KG', 'TN', 'DONA', 'POG.M', 'L', 'KOMPL', '1000 M3 GRUNTA', '100 M3', 'M3 GRUNTA'],
 };
 
-export default function AddSubWorkModal({ open, onClose, projectId, estimateId, parent, nextSeq, onSaved }) {
+export default function AddSubWorkModal({
+  open, onClose, projectId, estimateId,
+  parent, nextSeq, onSaved,
+  // Sub-section mode — when `parentSection` is a non-empty string the
+  // modal switches semantics: instead of attaching the new line to a
+  // parent WORK via parent_line_id (the original use case), it creates
+  // a top-level work whose `parent_item_number` is
+  // "PARENT_SECTION › NEW_NAME". The grouping logic in
+  // StagesTabV2.deriveStages / SmetaManagementTab.sections renders
+  // that as a new sub-stage under PARENT_SECTION containing this one
+  // work. Callers pass either `parent` OR `parentSection`, never both.
+  parentSection,
+}) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+
+  const isSection = !!(parentSection && String(parentSection).trim());
 
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
@@ -55,23 +69,45 @@ export default function AddSubWorkModal({ open, onClose, projectId, estimateId, 
     const q = Number(String(qty).replace(/\s/g, '').replace(',', '.').replace(/[^\d.\-]/g, '')) || 0;
     setSaving(true);
     try {
-      const parentNum = parent?.item_number || String(parent?.id || '');
-      await constructionService.createEstimateLine(estimateId, {
-        parent_line_id: parent?.id,
-        // `code` is the optional shifr (e.g. "1A", "2-3", "K-1") the user
-        // can pin on a stage so it lines up with their printed Forma 2
-        // numbering. Backend (CreateEstimateLineInput) accepts it as
-        // `code` and stores it on construction_estimate_line.code.
-        code: code.trim() || undefined,
-        name: name.trim(),
-        uom,
-        resource_type: '',
-        norm_rate: 0,
-        unit_price: 0,
-        quantity_override: true,
-        quantity: q,
-        item_number: parentNum ? `${parentNum}-${nextSeq || 1}` : undefined,
-      });
+      if (isSection) {
+        // Sub-section / sub-stage mode — top-level line under a section
+        // path. parent_item_number = "PARENT › NEW_NAME" so the
+        // hierarchical grouping treats this as a new sub-stage under
+        // the parent stage.
+        await constructionService.createEstimateLine(estimateId, {
+          parent_line_id: 0,
+          parent_item_number: `${parentSection} › ${name.trim()}`,
+          code: code.trim() || undefined,
+          name: name.trim(),
+          uom,
+          resource_type: '',
+          norm_rate: 0,
+          unit_price: 0,
+          quantity_override: true,
+          quantity: q,
+          material_rate: 0,
+          labor_rate: 0,
+          equipment_rate: 0,
+        });
+      } else {
+        const parentNum = parent?.item_number || String(parent?.id || '');
+        await constructionService.createEstimateLine(estimateId, {
+          parent_line_id: parent?.id,
+          // `code` is the optional shifr (e.g. "1A", "2-3", "K-1") the user
+          // can pin on a stage so it lines up with their printed Forma 2
+          // numbering. Backend (CreateEstimateLineInput) accepts it as
+          // `code` and stores it on construction_estimate_line.code.
+          code: code.trim() || undefined,
+          name: name.trim(),
+          uom,
+          resource_type: '',
+          norm_rate: 0,
+          unit_price: 0,
+          quantity_override: true,
+          quantity: q,
+          item_number: parentNum ? `${parentNum}-${nextSeq || 1}` : undefined,
+        });
+      }
       toast.success(t('stage_created') || 'Etap yaratildi');
       onSaved?.();
       onClose?.();
@@ -82,8 +118,10 @@ export default function AddSubWorkModal({ open, onClose, projectId, estimateId, 
     }
   };
 
-  if (!parent) return null;
-  const parentLabel = `#${parent.item_number || parent.id} · ${(parent.name || '').slice(0, 60)}`;
+  if (!isSection && !parent) return null;
+  const parentLabel = isSection
+    ? parentSection
+    : `#${parent.item_number || parent.id} · ${(parent.name || '').slice(0, 60)}`;
 
   return (
     <DialogPrimitive.Root open={open} onOpenChange={(o) => !o && onClose?.()}>
