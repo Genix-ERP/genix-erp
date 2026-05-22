@@ -759,11 +759,14 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
         // Scope to the active building. listStages with a buildingId arg
         // already filters server-side; the local filter is a belt-and-
         // braces guard for the "Hammasi" case (no filter passed).
-        setManualStages(
-          activeBuildingId
-            ? list.filter((s) => Number(s.building_id) === Number(activeBuildingId))
-            : list,
-        );
+        const scoped = activeBuildingId
+          ? list.filter((s) => Number(s.building_id) === Number(activeBuildingId))
+          : list;
+        // Sort by id DESC so the newest-added stage is first in the
+        // array — the stages useMemo below prepends manualStages to the
+        // derived list, which puts that newest entry at the top of the
+        // rendered cards.
+        setManualStages([...scoped].sort((a, b) => Number(b.id || 0) - Number(a.id || 0)));
       })
       .catch(() => { if (!cancelled) setManualStages([]); });
     return () => { cancelled = true; };
@@ -798,7 +801,11 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
         manual_stage_id: ms.id,
       });
     }
-    return [...derivedStages, ...extras];
+    // Manual stages come FIRST so a newly-added stage floats to the top
+    // of the list. `extras` is already sorted by id DESC in the
+    // listStages effect above, so within the manual block the newest
+    // also sorts first.
+    return [...extras, ...derivedStages];
   }, [derivedStages, manualStages]);
   // Plan-quantity resolver for progress aggregations: prefer the ВОР
   // Miqdor for the work's name; fall back to its own quantity for any
@@ -1153,11 +1160,10 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
           <h2 className="text-base font-bold text-slate-900">📐 {t('blocks_section')}</h2>
           {/* "+ Bosqich qo'shish" — opens the create-stage modal. Disabled
              when no building is active because construction_stages rows
-             must be scoped to a building (migration 333). Foremen don't
-             see this button — only the supervisor/engineer/admin roles
-             can manage the stage list, matching the existing role gating
-             on bulk approval actions further down. */}
-          {activeBuildingId && viewRole !== 'foreman' && (
+             must be scoped to a building (migration 333). Visible to any
+             role with tab access; backend createStage still validates the
+             user's project permissions. */}
+          {activeBuildingId && (
             <button
               type="button"
               onClick={() => setAddStageModal({ name: '' })}
@@ -1318,24 +1324,23 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
                    carry a hierarchical layer, flat works table otherwise. */}
                 {expanded && (
                   <div className="border-t border-slate-100 bg-slate-50 px-5 py-4">
-                    {/* "+ Sub-bosqich" — adds a sub-stage under THIS stage.
-                       Pre-fills the add-stage modal with this stage's name
-                       as the fixed parent, so the composed entry is saved
-                       as "PARENT › CHILD" and groups under here in the
-                       section list. Hidden from foremen — same role gate
-                       as the top-level "+ Bosqich qo'shish" button. */}
-                    {viewRole !== 'foreman' && (
-                      <div className="flex justify-end mb-3">
-                        <button
-                          type="button"
-                          onClick={() => setAddStageModal({ name: '', parent: stage.name })}
-                          className="px-3 py-1.5 rounded-md text-[11px] font-medium border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 inline-flex items-center gap-1"
-                        >
-                          <span className="text-[13px] leading-none font-bold">+</span>
-                          {t('add_substage') || "Sub-bosqich qo'shish"}
-                        </button>
-                      </div>
-                    )}
+                    {/* "+ Sub-bosqich" — adds a sub-stage under THIS
+                       stage. Pre-fills the add-stage modal with this
+                       stage's name as the fixed parent, so the composed
+                       entry is saved as "PARENT › CHILD" and groups
+                       under here in the section list. Visible to any
+                       role with tab access; the backend createStage
+                       endpoint still enforces project permissions. */}
+                    <div className="flex justify-end mb-3">
+                      <button
+                        type="button"
+                        onClick={() => setAddStageModal({ name: '', parent: stage.name })}
+                        className="px-3 py-1.5 rounded-md text-[11px] font-medium border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 inline-flex items-center gap-1"
+                      >
+                        <span className="text-[13px] leading-none font-bold">+</span>
+                        {t('add_substage') || "Sub-bosqich qo'shish"}
+                      </button>
+                    </div>
 
                     <StageBody
                       stage={stage}
