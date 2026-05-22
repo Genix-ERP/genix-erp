@@ -1220,10 +1220,16 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
   const [uploadingBuildingFile, setUploadingBuildingFile] = useState(false);
 
   // Forms
+  // commercial_units_count was always on the backend (entity.go:329 —
+  // ConstructionBuilding.CommercialUnitsCount) but the form never carried
+  // it. With the new "residential_non_residential" building type the
+  // apartments field splits into TWO inputs, one for residential
+  // apartments (apartments_count) and one for non-residential units
+  // (commercial_units_count), so we now thread the second field through.
   const [buildingForm, setBuildingForm] = useState({
     name: '', code: '', description: '', building_type: '', building_purpose: '',
-    floors_count: '', total_area: '', apartments_count: '', estimated_cost: '',
-    status: 'draft'
+    floors_count: '', total_area: '', apartments_count: '', commercial_units_count: '',
+    estimated_cost: '', status: 'draft'
   });
   const [teamForm, setTeamForm] = useState({ employee_id: '', role: '', responsibilities: '', start_date: '' });
   const [materialRequestForm, setMaterialRequestForm] = useState({
@@ -1446,6 +1452,17 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
       toast.error(t('invalid_apartments_count') || "Xonadonlar soni noto'g'ri");
       return;
     }
+    // commercial_units_count — only relevant for the residential_non_residential
+    // type, but parsed unconditionally so the value round-trips on edits where
+    // the user later switched the type back to something else.
+    const commercialUnits = buildingForm.commercial_units_count
+      ? parseInt(buildingForm.commercial_units_count, 10)
+      : 0;
+    if (buildingForm.commercial_units_count
+        && (!Number.isFinite(commercialUnits) || commercialUnits < 0)) {
+      toast.error(t('invalid_commercial_units_count') || "Noturar xonalar soni noto'g'ri");
+      return;
+    }
     const estCost = buildingForm.estimated_cost ? parseFloat(buildingForm.estimated_cost) : 0;
     if (buildingForm.estimated_cost && (!Number.isFinite(estCost) || estCost < 0)) {
       toast.error(t('invalid_estimated_cost') || "Taxminiy qiymat noto'g'ri");
@@ -1490,6 +1507,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
         floors_count: floors,
         total_area: area,
         apartments_count: apartments,
+        commercial_units_count: commercialUnits,
         estimated_cost: estCost,
       };
 
@@ -1506,8 +1524,8 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
       setShowBuildingModal(false);
       setBuildingForm({
         name: '', code: '', description: '', building_type: '', building_purpose: '',
-        floors_count: '', total_area: '', apartments_count: '', estimated_cost: '',
-        status: 'draft'
+        floors_count: '', total_area: '', apartments_count: '', commercial_units_count: '',
+        estimated_cost: '', status: 'draft'
       });
     } catch (error) {
       console.error('Error saving building:', error);
@@ -2509,6 +2527,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                                     floors_count: building.floors_count || '',
                                     total_area: building.total_area || '',
                                     apartments_count: building.apartments_count || '',
+                                    commercial_units_count: building.commercial_units_count || '',
                                     estimated_cost: building.estimated_cost || '',
                                     status: building.status || 'draft'
                                   });
@@ -3242,6 +3261,8 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="residential">{t('residential') || 'Turar-joy'}</SelectItem>
+                    <SelectItem value="non_residential">{t('non_residential') || 'Noturar'}</SelectItem>
+                    <SelectItem value="residential_non_residential">{t('residential_non_residential') || 'Turar/noturar'}</SelectItem>
                     <SelectItem value="commercial">{t('commercial') || 'Tijorat'}</SelectItem>
                     <SelectItem value="parking">{t('parking') || 'Avtoturargoh'}</SelectItem>
                     <SelectItem value="mixed">{t('mixed') || 'Aralash'}</SelectItem>
@@ -3273,17 +3294,71 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                   placeholder="5000"
                 />
               </div>
-              <div>
-                <Label htmlFor="bld-apts">{t('apartments_count') || 'Xonadonlar soni'}</Label>
-                <NumberInput
-                  id="bld-apts"
-                  allowDecimal={false}
-                  value={buildingForm.apartments_count}
-                  onChange={(raw) => setBuildingForm({ ...buildingForm, apartments_count: raw })}
-                  placeholder="64"
-                />
-              </div>
+              {/* Units field — shape depends on building_type:
+                    • non_residential                → single "Noturar xonalar" input
+                      (mapped to commercial_units_count on the backend).
+                    • residential_non_residential    → row collapses, two inputs are
+                      rendered below in a separate grid: "Turar xonadonlar"
+                      (apartments_count) + "Noturar xonalar"
+                      (commercial_units_count).
+                    • everything else (incl. blank)  → single "Xonadonlar soni"
+                      input (apartments_count), original behaviour. */}
+              {buildingForm.building_type === 'non_residential' ? (
+                <div>
+                  <Label htmlFor="bld-non-res-units">{t('non_residential_units') || 'Noturar xonalar'}</Label>
+                  <NumberInput
+                    id="bld-non-res-units"
+                    allowDecimal={false}
+                    value={buildingForm.commercial_units_count}
+                    onChange={(raw) => setBuildingForm({ ...buildingForm, commercial_units_count: raw })}
+                    placeholder="32"
+                  />
+                </div>
+              ) : buildingForm.building_type === 'residential_non_residential' ? (
+                // Placeholder to keep the 2-col grid balanced; the real
+                // inputs live in the next grid below where both sit on
+                // their own row, side by side, with full width each.
+                <div />
+              ) : (
+                <div>
+                  <Label htmlFor="bld-apts">{t('apartments_count') || 'Xonadonlar soni'}</Label>
+                  <NumberInput
+                    id="bld-apts"
+                    allowDecimal={false}
+                    value={buildingForm.apartments_count}
+                    onChange={(raw) => setBuildingForm({ ...buildingForm, apartments_count: raw })}
+                    placeholder="64"
+                  />
+                </div>
+              )}
             </div>
+            {/* When building is mixed residential + non-residential, give
+               each unit-count input its own labelled cell on a dedicated
+               row so both numbers are equally prominent. */}
+            {buildingForm.building_type === 'residential_non_residential' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="bld-res-units">{t('residential_units') || 'Turar xonadonlar'}</Label>
+                  <NumberInput
+                    id="bld-res-units"
+                    allowDecimal={false}
+                    value={buildingForm.apartments_count}
+                    onChange={(raw) => setBuildingForm({ ...buildingForm, apartments_count: raw })}
+                    placeholder="64"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="bld-non-res-units-mix">{t('non_residential_units') || 'Noturar xonalar'}</Label>
+                  <NumberInput
+                    id="bld-non-res-units-mix"
+                    allowDecimal={false}
+                    value={buildingForm.commercial_units_count}
+                    onChange={(raw) => setBuildingForm({ ...buildingForm, commercial_units_count: raw })}
+                    placeholder="12"
+                  />
+                </div>
+              </div>
+            )}
             {buildingForm.id && (
               <div>
                 <Label>{t('status') || 'Holat'}</Label>
