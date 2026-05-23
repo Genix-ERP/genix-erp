@@ -894,39 +894,33 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
     const derivedNames = new Set(
       derivedStages.map((s) => String(s.name || '').trim().toLowerCase()),
     );
-    // Build the "extras" list of manual stages whose name doesn't match
-    // any derived stage — these are stages whose works aren't currently
-    // loaded (truly empty user adds, plus auto-stages from other єдинич
-    // imports of the same block).
-    const extras = [];
+    // Only stages whose id is in the localStorage-tracked "user
+    // explicitly added" set show up as empty extras at the TOP. Other
+    // construction_stages rows that have no loaded lines (e.g.
+    // auto-import ghosts from a re-imported єdinich whose lines aren't
+    // the active єdinich) are intentionally HIDDEN — they would
+    // otherwise flood the Bosqichlar list with 0-ish entries that the
+    // user has no way to act on. Stages with works are rendered by the
+    // derivedStages list regardless.
+    const userAddedSet = new Set(recentlyAddedStageIds.map(Number));
+    const userAdded = [];
     for (const ms of manualStages) {
+      if (!userAddedSet.has(Number(ms.id))) continue;
       const key = String(ms.name || '').trim().toLowerCase();
       if (!key) continue;
-      if (derivedNames.has(key)) continue;
-      extras.push({
+      if (derivedNames.has(key)) continue; // already in derived (has works)
+      userAdded.push({
         name: ms.name,
         works: [],
         subStages: [],
         manual_stage_id: ms.id,
       });
     }
-    // Split the extras: stages whose id is in the localStorage-tracked
-    // "user-clicked-create" set go to the TOP (newest first); everything
-    // else keeps its natural backend order at the bottom of the extras
-    // block. Derived (work-bearing) stages stay in their imported file
-    // order, after all extras.
-    const userAddedSet = new Set(recentlyAddedStageIds.map(Number));
-    const userAdded = [];
-    const otherExtras = [];
-    for (const e of extras) {
-      if (userAddedSet.has(Number(e.manual_stage_id))) userAdded.push(e);
-      else otherExtras.push(e);
-    }
     // Newest user-add first (highest id).
     userAdded.sort((a, b) =>
       Number(b.manual_stage_id || 0) - Number(a.manual_stage_id || 0),
     );
-    return [...userAdded, ...otherExtras, ...derivedStages];
+    return [...userAdded, ...derivedStages];
   }, [derivedStages, manualStages, recentlyAddedStageIds]);
   // Plan-quantity resolver for progress aggregations: prefer the ВОР
   // Miqdor for the work's name; fall back to its own quantity for any
