@@ -261,12 +261,31 @@ export default function SmetaManagementTab({ project }) {
     [manualSectionRows],
   );
 
-  // Section names the user added via "+ Bo'lim qo'shish" THIS session.
-  // The sections useMemo bubbles only these to the top of the list, in
-  // newest-first order. Auto-imported sections (created during єdinich
-  // import) and all other backend rows keep their natural order. Cleared
-  // on full page reload — after refresh the natural order applies again.
-  const [recentlyAddedSectionNames, setRecentlyAddedSectionNames] = useState([]);
+  // IDs of construction_stages rows the user added via "+ Bo'lim qo'shish".
+  //
+  // Persisted in localStorage (per project) so the "user-added at top"
+  // ordering survives page reloads. We can't infer this from the
+  // backend alone because construction_stages has no `is_user_created`
+  // flag — both manual and auto-import paths use createStage with
+  // identical payloads. Multiple єdinich imports of the same block
+  // also produce many auto-stage rows; without this marker any
+  // unloaded import's stages would outrank truly user-added ones in an
+  // id-DESC sort. Tagging explicitly keeps the ordering deterministic.
+  const manualIdsStorageKey = project?.id ? `manualSectionIds:${project.id}` : '';
+  const [recentlyAddedSectionIds, setRecentlyAddedSectionIds] = useState(() => {
+    if (!project?.id) return [];
+    try {
+      const raw = window.localStorage.getItem(`manualSectionIds:${project.id}`);
+      if (!raw) return [];
+      const arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr.map(Number).filter(Number.isFinite) : [];
+    } catch { return []; }
+  });
+  const persistManualIds = useCallback((ids) => {
+    if (!manualIdsStorageKey) return;
+    try { window.localStorage.setItem(manualIdsStorageKey, JSON.stringify(ids)); }
+    catch { /* quota / disabled — ignore */ }
+  }, [manualIdsStorageKey]);
   const [addSectionModal, setAddSectionModal] = useState(null);     // { name } | null
   const [addSectionBusy, setAddSectionBusy] = useState(false);
   const [sectionRefreshTick, setSectionRefreshTick] = useState(0);
@@ -705,24 +724,30 @@ export default function SmetaManagementTab({ project }) {
 
     const sectionMap = new Map();
 
-    // Pre-seed with TOP-LEVEL manual sections that have NO imported
-    // lines (so they wouldn't otherwise render at all). Sorted by id
-    // DESC so the newest manual addition is at the very top. This
-    // ordering is PERSISTENT across page reloads — it comes from the
-    // construction_stages rows in manualSectionRows, not from session
-    // state. Imported sections, whether or not they also have a stage
-    // row, are NOT in this pass — they get added by the imported-lines
-    // loop below in their natural file order.
+    // Pre-seed with TOP-LEVEL sections the user explicitly added via
+    // "+ Bo'lim qo'shish" (tracked by id in localStorage). Sorted by id
+    // DESC so the newest addition lands at the very top. This is the
+    // persistent equivalent of "what I just created" — it survives
+    // page reloads and isn't fooled by auto-import stages from other
+    // єдинич imports of the same block (which would otherwise appear
+    // in extras and outrank the user's own additions in a naive
+    // id-DESC sort).
+    //
+    // Multi-level paths ("PARENT › CHILD") are skipped here; those
+    // attach as subSections on their parent further down. Imported
+    // sections (the bulk of the list) are NOT in this pass — they get
+    // added by the imported-lines loop below in natural file order.
     const DELIM_PRE = ' › ';
-    const emptyManualTop = [...manualSectionRows]
+    const userAddedSet = new Set(recentlyAddedSectionIds.map(Number));
+    const userAddedTop = [...manualSectionRows]
       .filter((s) => {
         const name = String(s.name || '').trim();
         if (!name) return false;
-        if (name.includes(DELIM_PRE)) return false; // sub-sections handled later
-        return !linesSectionNames.has(name);
+        if (name.includes(DELIM_PRE)) return false;
+        return userAddedSet.has(Number(s.id));
       })
       .sort((a, b) => Number(b.id || 0) - Number(a.id || 0));
-    for (const s of emptyManualTop) {
+    for (const s of userAddedTop) {
       const name = String(s.name || '').trim();
       if (sectionFilter && sectionFilter !== name) continue;
       if (search) {
@@ -786,7 +811,7 @@ export default function SmetaManagementTab({ project }) {
       });
     }
     return Array.from(sectionMap.values());
-  }, [lines, search, sectionFilter, t, manualSectionNames, manualSectionRows]);
+  }, [lines, search, sectionFilter, t, manualSectionNames, manualSectionRows, recentlyAddedSectionIds]);
 
   // ── Mutations ─────────────────────────────────────────────────────
   // Each line carries its own line.estimate_id, so we route mutations
@@ -913,10 +938,23 @@ export default function SmetaManagementTab({ project }) {
               console.error('Failed to delete line', ln.id, e);
             }
           }
+          const deletedIds = new Set();
           for (const s of matchingStages) {
-            try { await constructionService.deleteStage(s.id); } catch {
+            try {
+              await constructionService.deleteStage(s.id);
+              deletedIds.add(Number(s.id));
+            } catch {
               /* row may have been deleted server-side already; ignore */
             }
+          }
+          // Prune the deleted IDs from the localStorage-tracked user-add
+          // set so it doesn't accumulate stale references over time.
+          if (deletedIds.size > 0) {
+            setRecentlyAddedSectionIds((prev) => {
+              const next = prev.filter((id) => !deletedIds.has(Number(id)));
+              persistManualIds(next);
+              return next;
+            });
           }
           loadLines(activeEstimateIds);
           setSectionRefreshTick((n) => n + 1);
@@ -1936,7 +1974,7 @@ export default function SmetaManagementTab({ project }) {
             const fullName = parent ? `${parent} › ${rawName}` : rawName;
             setAddSectionBusy(true);
             try {
-              await constructionService.createStage(project.id, {
+              const created = await constructionService.createStage(project.id, {
                 name: fullName,
                 status: 'not_started',
                 planned_budget: 0,
@@ -1944,10 +1982,16 @@ export default function SmetaManagementTab({ project }) {
                   ? Number(buildingId)
                   : 0,
               });
-              // Remember the new section name so the `sections` useMemo
-              // can float just this one to the top — without disturbing
-              // imported / auto-stage rows.
-              setRecentlyAddedSectionNames((prev) => [...prev, fullName]);
+              // Track the new id in localStorage so the sections useMemo
+              // can pin it to the top of the list across page reloads
+              // (without disturbing imported / auto-stage rows).
+              if (created && created.id != null) {
+                setRecentlyAddedSectionIds((prev) => {
+                  const next = [...prev, Number(created.id)];
+                  persistManualIds(next);
+                  return next;
+                });
+              }
               setAddSectionModal(null);
               setSectionRefreshTick((n) => n + 1);
               toast.success(t('section_added') || "Seksiya qo'shildi");

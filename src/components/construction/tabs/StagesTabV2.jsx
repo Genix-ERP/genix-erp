@@ -505,15 +505,35 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
   const [addStageModal, setAddStageModal] = useState(null);
   const [addStageBusy, setAddStageBusy] = useState(false);
 
-  // IDs of stages the user added via "+ Bosqich qo'shish" in this
-  // session. Items whose `manual_stage_id` is in this set bubble to the
-  // TOP of the rendered list so the user sees their new entry
-  // immediately. Cleared on full page reload (which is the right
-  // behaviour — after reload the user will navigate by name like
-  // everything else, and the natural backend order applies). Newest
-  // additions get appended last; iterating in reverse puts the very
-  // latest at index 0.
-  const [recentlyAddedStageIds, setRecentlyAddedStageIds] = useState([]);
+  // IDs of stages the user added via "+ Bosqich qo'shish".
+  //
+  // Persisted in localStorage (per project) so the "user-added at top"
+  // ordering survives page reloads. We can't infer this from the
+  // backend alone because:
+  //   • construction_stages has no `is_user_created` flag — both manual
+  //     and auto-import paths use the same createStage endpoint.
+  //   • Multiple єдинич estimates in a block produce many auto-stage
+  //     rows; only ONE єдинич is loaded into `lines` at a time, so the
+  //     other імports' stages appear "empty" and would otherwise outrank
+  //     the user's own stage in an id-DESC sort.
+  // Marking explicitly is the cleanest discriminator without a backend
+  // change. Modal save handler below pushes the new id; the stages
+  // useMemo filters by Set membership.
+  const manualIdsStorageKey = project?.id ? `manualStageIds:${project.id}` : '';
+  const [recentlyAddedStageIds, setRecentlyAddedStageIds] = useState(() => {
+    if (!project?.id) return [];
+    try {
+      const raw = window.localStorage.getItem(`manualStageIds:${project.id}`);
+      if (!raw) return [];
+      const arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr.map(Number).filter(Number.isFinite) : [];
+    } catch { return []; }
+  });
+  const persistManualIds = useCallback((ids) => {
+    if (!manualIdsStorageKey) return;
+    try { window.localStorage.setItem(manualIdsStorageKey, JSON.stringify(ids)); }
+    catch { /* quota / disabled — ignore, in-memory state still works */ }
+  }, [manualIdsStorageKey]);
 
   // Parent stage name for the "+ Sub-bosqich" modal. When set, the
   // AddSubWorkModal opens in section mode and creates a new sub-stage
@@ -802,10 +822,23 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
             console.error('Failed to delete line', ln.id, e);
           }
         }
+        const deletedIds = new Set();
         for (const s of matchingStages) {
-          try { await constructionService.deleteStage(s.id); } catch {
+          try {
+            await constructionService.deleteStage(s.id);
+            deletedIds.add(Number(s.id));
+          } catch {
             /* already gone server-side; ignore */
           }
+        }
+        // Prune deleted IDs from the localStorage-tracked manual list
+        // so it doesn't accumulate stale references over time.
+        if (deletedIds.size > 0) {
+          setRecentlyAddedStageIds((prev) => {
+            const next = prev.filter((id) => !deletedIds.has(Number(id)));
+            persistManualIds(next);
+            return next;
+          });
         }
         reload();
         toast.success(t('deleted') || "O'chirildi");
@@ -813,7 +846,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
         toast.error(formatApiError(e, t, 'Xatolik'));
       }
     }, t('delete') || "O'chirish");
-  }, [lines, manualStages, activeEstimateId, t, askConfirm]);
+  }, [lines, manualStages, activeEstimateId, t, askConfirm, persistManualIds]);
 
   // ── Fetch manually-created stages for the active building ────────
   // Stages are stored in construction_stages (migration 333 made them
@@ -862,12 +895,9 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
       derivedStages.map((s) => String(s.name || '').trim().toLowerCase()),
     );
     // Build the "extras" list of manual stages whose name doesn't match
-    // any derived stage — these are TRULY empty user-added stages that
-    // wouldn't render otherwise. Sort by id DESC so the most recently
-    // created one sits at the top, persistently across page reloads
-    // (the order comes from construction_stages.id, not session state).
-    // Derived stages (auto-imported, with works) keep their natural
-    // imported file order untouched.
+    // any derived stage — these are stages whose works aren't currently
+    // loaded (truly empty user adds, plus auto-stages from other єдинич
+    // imports of the same block).
     const extras = [];
     for (const ms of manualStages) {
       const key = String(ms.name || '').trim().toLowerCase();
@@ -880,9 +910,24 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
         manual_stage_id: ms.id,
       });
     }
-    extras.sort((a, b) => Number(b.manual_stage_id || 0) - Number(a.manual_stage_id || 0));
-    return [...extras, ...derivedStages];
-  }, [derivedStages, manualStages]);
+    // Split the extras: stages whose id is in the localStorage-tracked
+    // "user-clicked-create" set go to the TOP (newest first); everything
+    // else keeps its natural backend order at the bottom of the extras
+    // block. Derived (work-bearing) stages stay in their imported file
+    // order, after all extras.
+    const userAddedSet = new Set(recentlyAddedStageIds.map(Number));
+    const userAdded = [];
+    const otherExtras = [];
+    for (const e of extras) {
+      if (userAddedSet.has(Number(e.manual_stage_id))) userAdded.push(e);
+      else otherExtras.push(e);
+    }
+    // Newest user-add first (highest id).
+    userAdded.sort((a, b) =>
+      Number(b.manual_stage_id || 0) - Number(a.manual_stage_id || 0),
+    );
+    return [...userAdded, ...otherExtras, ...derivedStages];
+  }, [derivedStages, manualStages, recentlyAddedStageIds]);
   // Plan-quantity resolver for progress aggregations: prefer the ВОР
   // Miqdor for the work's name; fall back to its own quantity for any
   // work that isn't in the ВОР map (custom-added rows, or projects
@@ -1590,8 +1635,13 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
               });
               // Remember the new id so the stages useMemo can pin it to
               // the top of the list once listStages re-fetches.
+              // Persisted to localStorage so the ordering survives reloads.
               if (created && created.id != null) {
-                setRecentlyAddedStageIds((prev) => [...prev, Number(created.id)]);
+                setRecentlyAddedStageIds((prev) => {
+                  const next = [...prev, Number(created.id)];
+                  persistManualIds(next);
+                  return next;
+                });
               }
               setAddStageModal(null);
               reload();
