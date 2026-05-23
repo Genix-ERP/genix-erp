@@ -9,7 +9,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Camera, Plus, Trash2, Upload, X, Loader2, Calendar, Search } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Camera, Plus, Trash2, Upload, X, Loader2, Calendar, Search, Building2 } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { toast } from 'sonner';
@@ -32,12 +33,24 @@ const PhotoReportsTab = ({ project }) => {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
+  // Buildings for selector
+  const [buildings, setBuildings] = useState([]);
+  const [selectedBuildingId, setSelectedBuildingId] = useState('');
+
   // Upload form
   const [description, setDescription] = useState('');
   const [uploadFiles, setUploadFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef(null);
+
+  // Load buildings
+  useEffect(() => {
+    if (!project?.id) return;
+    constructionService.listBuildings(project.id).then(data => {
+      setBuildings(data || []);
+    }).catch(() => setBuildings([]));
+  }, [project?.id]);
 
   const loadPhotos = useCallback(async () => {
     if (!project?.id) return;
@@ -62,6 +75,7 @@ const PhotoReportsTab = ({ project }) => {
 
   const openCreate = () => {
     setDescription('');
+    setSelectedBuildingId('');
     setUploadFiles([]);
     setError(null);
     setShowModal(true);
@@ -112,6 +126,7 @@ const PhotoReportsTab = ({ project }) => {
           photos: [{ url: fileUrl, filename: file.name }],
           description: description || '',
           report_date: new Date().toISOString().split('T')[0],
+          ...(selectedBuildingId ? { section_id: parseInt(selectedBuildingId) } : {}),
         });
       }
       setShowModal(false);
@@ -339,6 +354,27 @@ const PhotoReportsTab = ({ project }) => {
               </div>
             )}
 
+            {buildings.length > 0 && (
+              <div>
+                <Label className="flex items-center gap-1">
+                  <Building2 className="w-3.5 h-3.5" />
+                  {language === 'uz' ? 'Bino / Blok' : language === 'ru' ? 'Здание / Блок' : 'Building / Block'} *
+                </Label>
+                <Select value={selectedBuildingId} onValueChange={setSelectedBuildingId}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder={language === 'uz' ? 'Blokni tanlang...' : language === 'ru' ? 'Выберите блок...' : 'Select building...'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {buildings.map(b => (
+                      <SelectItem key={b.id} value={String(b.id)}>
+                        {b.name} {b.building_type ? `(${b.building_type})` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             <div>
               <Label>{t('description') || 'Tavsif'}</Label>
               <Textarea
@@ -351,7 +387,7 @@ const PhotoReportsTab = ({ project }) => {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowModal(false)}>{t('cancel') || 'Bekor qilish'}</Button>
-            <Button onClick={handleSave} disabled={saving || uploadFiles.length === 0}>
+            <Button onClick={handleSave} disabled={saving || uploadFiles.length === 0 || (buildings.length > 0 && !selectedBuildingId)}>
               {saving ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (

@@ -118,6 +118,7 @@ import { ImportModal, ExportModal, ImportExportButtons } from '@/components/shar
 import { ReportGenerator } from '@/components/construction/ReportGenerator';
 import { ProjectKanban } from '@/components/construction/ProjectKanban';
 import { UZ_REGIONS, citiesForRegion } from '@/components/construction/uzRegions';
+import CRMLinkPanel from '@/components/construction/CRMLinkPanel';
 import {
   ProgressWidget,
   TimelineWidget,
@@ -4693,6 +4694,19 @@ export default function Construction() {
 
       if (editingProject) {
         await updateProject(editingProject.id, formData);
+        // Sync the CRM link as a separate PUT (the main update endpoint
+        // doesn't know about crm_project_id; the dedicated /crm-link route
+        // owns that field so the regular form stays small and stable).
+        if (projectForm.crm_project_id !== editingProject.crm_project_id) {
+          try {
+            await constructionService.setProjectCRMLink(editingProject.id, projectForm.crm_project_id);
+          } catch (e) {
+            // Non-fatal — the project itself saved; surface the CRM error
+            // to the user but don't block the save.
+            console.warn('Failed to update CRM link:', e);
+            toast.error(t('crm_link_failed') || 'CRM bog\'lash xatosi');
+          }
+        }
         toast.success(t('project_updated') || 'Loyiha yangilandi');
       } else {
         await createProject(formData);
@@ -5528,6 +5542,20 @@ export default function Construction() {
                       </SelectContent>
                     </Select>
                   </div>
+                </section>
+
+                {/* CRM linkage — only shown when editing an existing project
+                    because we need its server-side id to PUT /crm-link.
+                    The save handler below picks up projectForm.crm_project_id
+                    and forwards it via constructionService.setProjectCRMLink. */}
+                <Separator />
+                <section>
+                  <CRMLinkPanel
+                    mode="project"
+                    value={projectForm.crm_project_id}
+                    onChange={(crmId) => setProjectForm({ ...projectForm, crm_project_id: crmId })}
+                    language={language}
+                  />
                 </section>
               </>
             )}
