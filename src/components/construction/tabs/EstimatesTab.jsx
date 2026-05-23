@@ -903,9 +903,13 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                             {est.is_current && <Badge className="bg-blue-500 text-white text-xs">{t('current') || 'Faol'}</Badge>}
                           </div>
                           <div className="flex items-center gap-2">
-                            <Badge className={`text-xs ${getStateColor(est.state)}`}>
-                              {getStateLabel(est.state)}
-                            </Badge>
+                            {/* State badge ("Qoralama" / draft, etc.) removed
+                               per product feedback — the source-type pills
+                               (ВОР / Единич / Ресурс) on the left convey
+                               enough; the draft/confirmed distinction is
+                               more relevant on the editing surfaces
+                               (Smeta boshqaruvi, Bosqichlar), not in this
+                               read-only list. */}
                             {/* Per-estimate delete button — visible only when:
                                  (1) the user has construction.estimate.delete
                                      permission (admins/owners auto-pass), AND

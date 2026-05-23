@@ -909,6 +909,7 @@ const OverviewTabContent = React.memo(function OverviewTabContent({
   sections,
   team,
   vendors,
+  acts,
   t,
   setActiveGroup,
   setActiveTab,
@@ -1096,6 +1097,7 @@ const OverviewTabContent = React.memo(function OverviewTabContent({
         }}
         sections={sections}
         vendors={vendors}
+        acts={acts}
       />
     </div>
   );
@@ -1191,6 +1193,11 @@ const ProjectDetailView = ({
   const [buildings, setBuildings] = useState([]);
   const [selectedBuilding, setSelectedBuilding] = useState(null);
   const [sections, setSections] = useState([]);
+  // Acts list for the Umumiy ko'rinish alerts widget — surfaces any
+  // construction_act whose period_to deadline is within the next 5 days
+  // and not already approved/cancelled. Loaded alongside the other
+  // overview data in the activeTab='overview' branch below.
+  const [acts, setActs] = useState([]);
   const [team, setTeam] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [vendors, setVendors] = useState([]);
@@ -1331,16 +1338,22 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
         switch (activeTab) {
           case 'overview':
             try {
-              const [buildingsData, overviewSectionsData, overviewTeamData, overviewVendorsData] = await Promise.all([
+              // Acts are pulled alongside the other overview data so the
+              // AlertsWidget can flag deadlines within 5 days. .catch on
+              // the acts promise so a permissions hiccup on /acts doesn't
+              // crater the rest of the overview load.
+              const [buildingsData, overviewSectionsData, overviewTeamData, overviewVendorsData, overviewActsData] = await Promise.all([
                 constructionService.listBuildings(project.id),
                 constructionService.listSections(project.id),
                 constructionService.listTeamMembers(project.id),
-                constructionService.listProjectVendors(project.id)
+                constructionService.listProjectVendors(project.id),
+                constructionService.listActs(project.id).catch(() => []),
               ]);
               setBuildings(sortBuildings(buildingsData));
               setSections(overviewSectionsData || []);
               setTeam(overviewTeamData || []);
               setVendors(overviewVendorsData || []);
+              setActs(Array.isArray(overviewActsData) ? overviewActsData : (overviewActsData?.data || []));
             } catch (e) {
               console.error('Error loading overview data:', e);
             }
@@ -2409,6 +2422,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
             sections={sections}
             team={team}
             vendors={vendors}
+            acts={acts}
             t={t}
             setActiveGroup={setActiveGroup}
             setActiveTab={setActiveTab}
