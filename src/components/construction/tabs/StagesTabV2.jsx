@@ -669,16 +669,27 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
         // because that would put fake stages back on the page.
         const sameBuilding = list.filter((e) =>
           activeBuildingId ? Number(e.building_id) === Number(activeBuildingId) : !e.building_id);
-        let matchedEst = sameBuilding.find(
-          (e) => String(e.source_type || '').toLowerCase() === 'edinich'
-        ) || null;
+        // Pick the LATEST єdinich for this block (highest id) when the
+        // block has been re-imported multiple times. `find()` used to
+        // pick whatever came first in the API order, which is typically
+        // id ASC — so old imports without `original_quantity` (column
+        // added by migration 349) would win, leaving REJA stuck at 0
+        // even after the user reimported a fresh file. Sorting DESC by
+        // id makes the most recent import authoritative.
+        const sortedEdinich = sameBuilding
+          .filter((e) => String(e.source_type || '').toLowerCase() === 'edinich')
+          .sort((a, b) => Number(b.id || 0) - Number(a.id || 0));
+        let matchedEst = sortedEdinich[0] || null;
         // ВОР side-fetch — same building. Used only to source the user-
         // facing REJA quantity for each work; the actual stage tree
         // still comes from единич. Done in parallel with the единич
         // line fetch below to avoid a serial round-trip.
-        const vorEst = sameBuilding.find(
-          (e) => String(e.source_type || '').toLowerCase() === 'vor'
-        ) || null;
+        // Same "latest wins" rule for ВОР as for єдинич — old ВОР
+        // imports may not match the current єдинич's section structure.
+        const sortedVor = sameBuilding
+          .filter((e) => String(e.source_type || '').toLowerCase() === 'vor')
+          .sort((a, b) => Number(b.id || 0) - Number(a.id || 0));
+        const vorEst = sortedVor[0] || null;
         if (!matchedEst) {
           setLines([]);
           setActiveEstimateId(null);
@@ -922,15 +933,21 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
     );
     return [...userAdded, ...derivedStages];
   }, [derivedStages, manualStages, recentlyAddedStageIds]);
-  // Plan-quantity resolver for progress aggregations: prefer the ВОР
-  // Miqdor for the work's name; fall back to its own quantity for any
-  // work that isn't in the ВОР map (custom-added rows, or projects
-  // without a ВОР sheet). Stable identity is fine across renders.
+  // Plan-quantity resolver for progress aggregations. Fallback chain:
+  //   1. ВОР Miqdor (strict key: section + name + uom).
+  //   2. ВОР Miqdor (loose: name only) — rescues files where section
+  //      labels differ between Единич and ВОР.
+  //   3. The Единич row's `original_quantity` (col F "по проектным
+  //      данным", anchored at import via migration 349). This is the
+  //      important fallback for projects with NO ВОР sheet: template-mode
+  //      Единич imports zero out the live `quantity` ledger so the
+  //      foreman can type FAKT, which made REJA render as 0 here without
+  //      this fallback. original_quantity preserves the file value.
+  //   4. The work's own live `quantity` — last-ditch fallback for
+  //      legacy rows that predate the original_quantity anchor or for
+  //      custom-added rows the user entered a value on.
   const resolveWorkQty = useCallback((w) => {
     if (!w) return 0;
-    // vorPlanByName is now { strict, loose } — try strict (section +
-    // name + uom) first so duplicates in different sections of the
-    // same ВОР sheet stay separated, then fall back to name-only.
     const strict = vorPlanByName?.strict;
     const loose = vorPlanByName?.loose;
     if (strict) {
@@ -942,6 +959,8 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
       const v = loose.get(normName(w.name)) || 0;
       if (v > 0) return v;
     }
+    const origQty = Number(w.original_quantity || 0);
+    if (origQty > 0) return origQty;
     return Number(w.quantity || 0);
   }, [vorPlanByName]);
   const blockProg = useMemo(() => blockProgress(stages, resolveWorkQty), [stages, resolveWorkQty]);
@@ -2018,8 +2037,15 @@ function WorksTable({
             if (vorQty <= 0 && vorPlanByName?.loose) {
               vorQty = Number(vorPlanByName.loose.get(normName(w.name)) || 0);
             }
+            // Fall back to the Единич row's `original_quantity` (col F
+            // "по проектным данным", anchored at import) BEFORE the
+            // live quantity ledger — see resolveWorkQty above for the
+            // rationale. Without this, projects without a ВОР sheet
+            // render REJA as 0 because template-mode Единич imports
+            // zero `quantity` to let the foreman fill FAKT.
+            const origQty = Number(w.original_quantity || 0);
             const ownQty = Number(w.quantity || 0);
-            const planQty = vorQty > 0 ? vorQty : ownQty;
+            const planQty = vorQty > 0 ? vorQty : (origQty > 0 ? origQty : ownQty);
             const doneQty = Number(w.done_quantity || 0);
             const pct = planQty > 0 ? Math.min((doneQty / planQty) * 100, 100) : 0;
             const stMeta = STATUS_META[w.approval_status] || STATUS_META.pending;

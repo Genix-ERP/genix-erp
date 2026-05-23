@@ -76,6 +76,27 @@ function isTopSectionHeader(name) {
   return TOP_SECTION_PATTERNS.some((re) => re.test(name));
 }
 
+// Robust cell-to-number converter. The Excel imports here are
+// Russian-locale files where decimal numbers display with a COMMA
+// ("10,272" = 10.272). If a cell is text-formatted (common when
+// users hand-edit XLSX), sheet_to_json returns it as a string, and
+// the raw parseFloat truncates at the comma — "10,272" becomes 10,
+// and "0,618" becomes 0. That's exactly how original_quantity could
+// end up at 0 on the єдинич side and REJA renders 0 in Bosqichlar.
+//
+// This helper handles all three observed shapes:
+//   • JS number cell                         → returned as-is.
+//   • string "10,272" or "10 272,5"          → comma→dot, whitespace
+//                                              stripped, parseFloat.
+//   • null / undefined / empty / "—"         → 0.
+function toNum(v) {
+  if (v == null || v === '') return 0;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+  const s = String(v).replace(/[\s ]/g, '').replace(',', '.');
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : 0;
+}
+
 function parseVOR(workbook) {
   // Find ВОР sheet
   const sheetName = workbook.SheetNames.find(
@@ -164,7 +185,8 @@ function parseVOR(workbook) {
     const colB = row[1] != null ? String(row[1]).trim() : '';
     const colC = row[2] != null ? String(row[2]).trim() : '';
     const colD = row[3] != null ? String(row[3]).trim() : '';
-    const colE = row[4] != null ? parseFloat(row[4]) : 0;
+    // toNum handles Russian comma-decimal text cells safely.
+    const colE = toNum(row[4]);
 
     // Skip empty description rows
     if (!colC) continue;
@@ -327,8 +349,13 @@ function parseEdinich(workbook) {
     const colB = row[1] != null ? String(row[1]).trim() : '';
     const colC = row[2] != null ? String(row[2]).trim() : '';
     const colD = row[3] != null ? String(row[3]).trim() : '';
-    const colE = row[4] != null ? parseFloat(row[4]) : 0;
-    const colF = row[5] != null ? parseFloat(row[5]) : 0;
+    // toNum handles Russian comma-decimal cells and text-formatted
+    // numbers — raw parseFloat would truncate "10,272" to 10 and
+    // ultimately store original_quantity = 0, which is the root cause
+    // of REJA showing 0 in Bosqichlar for files imported from
+    // Russian-locale Excel.
+    const colE = toNum(row[4]);
+    const colF = toNum(row[5]);
 
     if (!colC) continue;
     if (colC.toUpperCase().includes('ИТОГО')) continue;
@@ -336,7 +363,7 @@ function parseEdinich(workbook) {
     // Section headers: merged cells (C spans into D+) with no item number,
     // OR numbered rows with no UOM/quantity and uppercase text
     const isMergedHeader = mergedSectionRows.has(i) && !colA;
-    const isNumberedHeader = colA && /^\d+$/.test(colA) && !colD && (colE === 0 || isNaN(colE)) && colC.length > 5 && colC === colC.toUpperCase() && !/\d{2,}/.test(colC);
+    const isNumberedHeader = colA && /^\d+$/.test(colA) && !colD && (colE === 0) && colC.length > 5 && colC === colC.toUpperCase() && !/\d{2,}/.test(colC);
     if (isMergedHeader || isNumberedHeader) {
       if (isTopSectionHeader(colC)) {
         currentTopSection = colC;
@@ -374,7 +401,11 @@ function parseEdinich(workbook) {
         name: colC,
         uom: colD,
         quantity: 0,
-        norma_quantity: isNaN(colF) ? 0 : colF,
+        // colF is already a clean number via toNum (handles comma-
+        // decimal). Old code used `isNaN(colF) ? 0 : colF` which was
+        // a workaround for parseFloat's NaN on bad input; toNum
+        // already guarantees a finite number.
+        norma_quantity: colF,
         quantity_per_unit: 0,
         is_parent: hasCode,
         resource_type: '',
@@ -421,8 +452,9 @@ function parseEdinich(workbook) {
         // Display-only: file's project total for this resource row
         // (e.g. 300.1696 ЧЕЛ-Ч for a 25.035 × 1000 М3 work). Passed
         // through to the backend as imported_quantity (migration 413).
-        norma_quantity: isNaN(colF) ? 0 : colF,
-        quantity_per_unit: isNaN(colE) ? 0 : colE,
+        // colE/colF already cleaned by toNum.
+        norma_quantity: colF,
+        quantity_per_unit: colE,
         is_parent: false,
         resource_type: resourceType,
         parent_item_number: parentNum,
@@ -433,6 +465,40 @@ function parseEdinich(workbook) {
 
   if (currentSection.items.length > 0) {
     sections.push(currentSection);
+  }
+
+  // Post-pass: derive any missing parent `norma_quantity` from its
+  // children. In some Russian Excel templates the parent row's col F
+  // (по проектным данным) is left blank — only the child resource rows
+  // carry their project totals. Without this fallback REJA / Miqdor on
+  // the parent renders as 0 for those files.
+  //
+  // Math: for a child resource, the file relation is
+  //   child.colF (project total) = parent.qty × child.colE (per-unit norm)
+  // so parent.qty = child.colF / child.colE. We pick the first child
+  // whose colE > 0 to do the inversion (children with empty norms can't
+  // help). If no usable child exists we leave the parent at 0 — there's
+  // no way to derive it from the data we have.
+  for (const sec of sections) {
+    if (!Array.isArray(sec.items)) continue;
+    for (let i = 0; i < sec.items.length; i++) {
+      const it = sec.items[i];
+      // Only parents whose own col F was empty/zero get patched.
+      if (it.is_parent !== undefined && !it.is_parent) continue;
+      if (Number(it.norma_quantity) > 0) continue;
+      const parentNumStr = String(it.item_number || '').trim();
+      if (!parentNumStr) continue;
+      for (let j = i + 1; j < sec.items.length; j++) {
+        const child = sec.items[j];
+        if (String(child.parent_item_number || '') !== parentNumStr) break;
+        const childTotal = Number(child.norma_quantity || 0);
+        const perUnit    = Number(child.quantity_per_unit || 0);
+        if (childTotal > 0 && perUnit > 0) {
+          it.norma_quantity = childTotal / perUnit;
+          break;
+        }
+      }
+    }
   }
 
   return { sections, objectName };
@@ -572,9 +638,10 @@ function parseResurs(workbook) {
     const colB = row[1] != null ? String(row[1]).trim() : '';
     const colC = row[2] != null ? String(row[2]).trim() : '';
     const colD = row[3] != null ? String(row[3]).trim() : '';
-    const colE = row[4] != null ? parseFloat(row[4]) : 0;
-    const colF = row[5] != null ? parseFloat(row[5]) : 0;
-    const colG = row[6] != null ? parseFloat(row[6]) : 0;
+    // toNum handles Russian comma-decimal text cells safely.
+    const colE = toNum(row[4]);
+    const colF = toNum(row[5]);
+    const colG = toNum(row[6]);
 
     // Skip empty description
     if (!colC && !colB) continue;
