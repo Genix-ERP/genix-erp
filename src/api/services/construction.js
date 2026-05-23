@@ -29,6 +29,55 @@ export const constructionService = {
     await apiClient.delete(`/construction/projects/${id}`);
   },
 
+  // =====================================================
+  // CRM LINKAGE — wires Genix construction to Yuksalish CRM
+  // =====================================================
+
+  // Fetches the CRM's project list (via Genix backend proxy so the browser
+  // never holds the CRM token). Returns { configured: bool, projects: [] }.
+  async listCRMProjects() {
+    const response = await apiClient.get('/construction/crm/projects');
+    return response.data.data;
+  },
+
+  // Fetches the blocks of a CRM project. crmProjectId is the CRM-side id.
+  async listCRMBlocks(crmProjectId) {
+    const response = await apiClient.get('/construction/crm/blocks', {
+      params: { crm_project_id: crmProjectId },
+    });
+    return response.data.data;
+  },
+
+  // Sets (or clears with null/0) crm_project_id on a Genix construction
+  // project. Called from the project edit form's "CRM" section.
+  async setProjectCRMLink(genixProjectId, crmProjectId) {
+    const response = await apiClient.put(
+      `/construction/projects/${genixProjectId}/crm-link`,
+      { crm_project_id: crmProjectId || null }
+    );
+    return response.data.data;
+  },
+
+  // Sets per-building crm_block_id + current stage + auto-sync toggle.
+  async setBuildingCRMLink(projectId, buildingId, { crmBlockId, currentStage, autoSync }) {
+    const body = {};
+    if (crmBlockId !== undefined) body.crm_block_id = crmBlockId || null;
+    if (currentStage !== undefined) body.current_crm_stage = currentStage;
+    if (autoSync !== undefined) body.crm_auto_sync = autoSync;
+    const response = await apiClient.put(
+      `/construction/projects/${projectId}/buildings/${buildingId}/crm-link`,
+      body
+    );
+    return response.data.data;
+  },
+
+  // Manual re-sync of a photo report (for "Re-send to CRM" buttons after
+  // a failure or link change).
+  async resyncPhotoReportToCRM(reportId) {
+    const response = await apiClient.post(`/construction/photo-reports/${reportId}/resync-crm`);
+    return response.data.data;
+  },
+
   async getProjectDashboard(id) {
     const response = await apiClient.get(`/construction/projects/${id}/dashboard`);
     return response.data.data;
