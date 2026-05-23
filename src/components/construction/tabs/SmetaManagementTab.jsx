@@ -692,23 +692,38 @@ export default function SmetaManagementTab({ project }) {
       effByParent.set(pid, (effByParent.get(pid) || 0) + c);
     }
 
+    // Names that have at least one imported estimate line — i.e. they
+    // belong to the imported file's natural ordering and should NOT
+    // float to the top.
+    const linesSectionNames = new Set();
+    for (const ln of lines) {
+      const isSub = ln.parent_line_id != null && Number(ln.parent_line_id) > 0;
+      if (isSub) continue;
+      const k = ln.parent_item_number || (t('uncategorized') || 'Boshqalar');
+      if (k) linesSectionNames.add(k);
+    }
+
     const sectionMap = new Map();
 
-    // Pre-seed the map with sections the user just added this session
-    // (recentlyAddedSectionNames). These float to the very top of the
-    // rendered list because Map preserves insertion order — anything
-    // added here lands before the imported-line entries appended below.
-    // Skips sub-section names ("PARENT › CHILD"); those attach as
-    // subSections on their parent further down. Auto-imported stages
-    // (created during єdinich import → not in this session set) are
-    // NOT pre-seeded here, so they keep their natural file order.
+    // Pre-seed with TOP-LEVEL manual sections that have NO imported
+    // lines (so they wouldn't otherwise render at all). Sorted by id
+    // DESC so the newest manual addition is at the very top. This
+    // ordering is PERSISTENT across page reloads — it comes from the
+    // construction_stages rows in manualSectionRows, not from session
+    // state. Imported sections, whether or not they also have a stage
+    // row, are NOT in this pass — they get added by the imported-lines
+    // loop below in their natural file order.
     const DELIM_PRE = ' › ';
-    const sessionAdded = new Set(recentlyAddedSectionNames);
-    // Newest first within the recent group.
-    for (let i = recentlyAddedSectionNames.length - 1; i >= 0; i--) {
-      const name = recentlyAddedSectionNames[i];
-      if (!name || name.includes(DELIM_PRE)) continue;
-      if (!manualSectionNames.includes(name)) continue; // not in current scope
+    const emptyManualTop = [...manualSectionRows]
+      .filter((s) => {
+        const name = String(s.name || '').trim();
+        if (!name) return false;
+        if (name.includes(DELIM_PRE)) return false; // sub-sections handled later
+        return !linesSectionNames.has(name);
+      })
+      .sort((a, b) => Number(b.id || 0) - Number(a.id || 0));
+    for (const s of emptyManualTop) {
+      const name = String(s.name || '').trim();
       if (sectionFilter && sectionFilter !== name) continue;
       if (search) {
         if (!name.toLowerCase().includes(search.toLowerCase())) continue;
@@ -731,22 +746,6 @@ export default function SmetaManagementTab({ project }) {
       const eff = effByParent.get(Number(ln.id));
       cur.total += eff != null ? eff : (Number(ln.total_amount) || 0);
       sectionMap.set(secKey, cur);
-    }
-    // Append empty manual TOP-LEVEL sections that weren't added this
-    // session — older user-typed sections without imported lines, plus
-    // any auto-imported stage rows whose єdinich isn't currently loaded.
-    // These render at the END of the list in natural backend order so
-    // they're visible but don't disrupt the imported file's ordering.
-    for (const name of manualSectionNames) {
-      if (!name) continue;
-      if (name.includes(DELIM_PRE)) continue;
-      if (sectionMap.has(name)) continue; // already in (recent or imported)
-      if (sessionAdded.has(name)) continue; // already handled in pre-seed
-      if (sectionFilter && sectionFilter !== name) continue;
-      if (search) {
-        if (!name.toLowerCase().includes(search.toLowerCase())) continue;
-      }
-      sectionMap.set(name, { name, lines: [], total: 0, is_empty_manual: true });
     }
 
     // Attach manually-created SUB-sections ("PARENT › CHILD") onto their
@@ -787,7 +786,7 @@ export default function SmetaManagementTab({ project }) {
       });
     }
     return Array.from(sectionMap.values());
-  }, [lines, search, sectionFilter, t, manualSectionNames, recentlyAddedSectionNames]);
+  }, [lines, search, sectionFilter, t, manualSectionNames, manualSectionRows]);
 
   // ── Mutations ─────────────────────────────────────────────────────
   // Each line carries its own line.estimate_id, so we route mutations

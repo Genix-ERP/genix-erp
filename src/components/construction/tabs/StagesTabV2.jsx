@@ -861,6 +861,13 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
     const derivedNames = new Set(
       derivedStages.map((s) => String(s.name || '').trim().toLowerCase()),
     );
+    // Build the "extras" list of manual stages whose name doesn't match
+    // any derived stage — these are TRULY empty user-added stages that
+    // wouldn't render otherwise. Sort by id DESC so the most recently
+    // created one sits at the top, persistently across page reloads
+    // (the order comes from construction_stages.id, not session state).
+    // Derived stages (auto-imported, with works) keep their natural
+    // imported file order untouched.
     const extras = [];
     for (const ms of manualStages) {
       const key = String(ms.name || '').trim().toLowerCase();
@@ -870,41 +877,12 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
         name: ms.name,
         works: [],
         subStages: [],
-        // Keep a marker so the renderer can show a small "yangi" hint
-        // and so the delete-stage action knows the backing stage id.
         manual_stage_id: ms.id,
       });
     }
-
-    // Merge order:
-    //   1. Stages the user added via "+ Bosqich qo'shish" THIS session
-    //      (newest insertion first), so they're immediately visible.
-    //   2. The rest of the manual extras in their natural backend order.
-    //   3. Derived (work-bearing) stages in their imported file order.
-    // No global sort — auto-imported stages (created during єдинич
-    // import) stay where the backend places them.
-    const merged = [...extras, ...derivedStages];
-    if (recentlyAddedStageIds.length === 0) return merged;
-    const recentSet = new Set(recentlyAddedStageIds.map(Number));
-    const recent = [];
-    const rest = [];
-    for (const s of merged) {
-      if (s.manual_stage_id != null && recentSet.has(Number(s.manual_stage_id))) {
-        recent.push(s);
-      } else {
-        rest.push(s);
-      }
-    }
-    // Sort recent by insertion order DESC so the very latest add is
-    // first. Map id → recency index for the comparator.
-    const recencyIdx = new Map();
-    recentlyAddedStageIds.forEach((id, i) => recencyIdx.set(Number(id), i));
-    recent.sort((a, b) =>
-      (recencyIdx.get(Number(b.manual_stage_id)) || 0)
-      - (recencyIdx.get(Number(a.manual_stage_id)) || 0),
-    );
-    return [...recent, ...rest];
-  }, [derivedStages, manualStages, recentlyAddedStageIds]);
+    extras.sort((a, b) => Number(b.manual_stage_id || 0) - Number(a.manual_stage_id || 0));
+    return [...extras, ...derivedStages];
+  }, [derivedStages, manualStages]);
   // Plan-quantity resolver for progress aggregations: prefer the ВОР
   // Miqdor for the work's name; fall back to its own quantity for any
   // work that isn't in the ВОР map (custom-added rows, or projects
