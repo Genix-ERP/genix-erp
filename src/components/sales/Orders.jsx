@@ -23,7 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Plus, Search, ShoppingBag, Package, Truck,
   CheckCircle, FileText, Receipt, RotateCcw, Upload, Download, Eye, Printer, X,
-  ClipboardList, MessageSquareWarning, CreditCard, ChevronLeft, ChevronRight
+  ClipboardList, MessageSquareWarning, CreditCard, ChevronLeft, ChevronRight, Pencil
 } from 'lucide-react';
 import apiClient from '@/api/client';
 import { format } from 'date-fns';
@@ -316,7 +316,7 @@ export default function Orders({
                                   onClick={() => onEditOrder(order)}
                                   title={t('edit') || 'Edit'}
                                 >
-                                  <FileText className="w-4 h-4" />
+                                  <Pencil className="w-4 h-4" />
                                 </Button>
                               )}
                               {canDelete(MODULES.SALES) && !['cancelled', 'shipped', 'delivered'].includes(order.status) && (

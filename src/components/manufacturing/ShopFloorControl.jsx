@@ -31,7 +31,9 @@ import { useManufacturing } from '@/components/contexts/ManufacturingContext';
 import { useInventory } from '@/components/contexts/InventoryContext';
 import { workOrdersService, productionOrdersService } from '@/api/services/manufacturing';
 import { toast } from 'sonner';
+import apiClient from '@/api/client';
 import { format, differenceInMinutes, parseISO } from 'date-fns';
+import { parseSpreadsheetFile } from '@/components/shared/ImportExport';
 
 const WORK_ORDER_STATUS = {
   pending: { color: 'bg-slate-100 text-slate-700 border-slate-200', icon: Clock },
@@ -53,10 +55,14 @@ function KanbanCard({ wo, labels, language, workCenters, productionOrders, curre
     if ((wo.quantity_produced || 0) > 0 && totalQty > 0) {
       return Math.min(100, (wo.quantity_produced / totalQty) * 100);
     }
-    if (wo.status === 'in_progress' && wo.actual_start && (wo.expected_duration_minutes || 0) > 0) {
+    if (wo.status === 'in_progress' && wo.actual_start) {
       void currentTimer;
+      const expectedMin = (wo.expected_duration_minutes || 0)
+        || (wo.planned_duration_hours || 0) * 60
+        || (wo.planned_duration || 0) * 60
+        || 480; // default 8 hours if nothing set
       const elapsed = differenceInMinutes(new Date(), parseISO(wo.actual_start));
-      return Math.min(99, (elapsed / wo.expected_duration_minutes) * 100);
+      return Math.min(99, (elapsed / expectedMin) * 100);
     }
     return 0;
   })();
@@ -263,6 +269,7 @@ export default function ShopFloorControl({ isActive }) {
   const [newMaterial, setNewMaterial] = useState({ product_id: '', quantity: '', unit_cost: '', notes: '' });
   const [productSearch, setProductSearch] = useState('');
   const [productSearchFocused, setProductSearchFocused] = useState(false);
+  const [bulkUploading, setBulkUploading] = useState(false);
 
   // Attachments modal state
   const [showAttachmentsModal, setShowAttachmentsModal] = useState(false);
@@ -276,7 +283,7 @@ export default function ShopFloorControl({ isActive }) {
   const [splitPoId, setSplitPoId] = useState(null);
   const [splitBulkQty, setSplitBulkQty] = useState(0);
   const [splitBulkUnit, setSplitBulkUnit] = useState('');
-  const [splitItems, setSplitItems] = useState([{ product_id: '', quantity: '', warehouse_id: '' }]);
+  const [splitItems, setSplitItems] = useState([{ product_id: '', quantity: '', warehouse_id: '', materials: [] }]);
   const [splitSubmitting, setSplitSubmitting] = useState(false);
 
   // Load time logs from localStorage
@@ -328,7 +335,28 @@ export default function ShopFloorControl({ isActive }) {
     );
   }, [filteredWorkOrders]);
 
-  // Timer effect — tick every second and auto-complete when planned duration is reached
+  // Build a map of "last work order id per PO" so the timer effect can skip
+  // auto-completion for the final stage — the operator should always be
+  // forced to confirm output manually via the Tugatish button + Final Output
+  // modal so good/scrap and shortfall reason are captured.
+  const lastWoIdsByPO = useMemo(() => {
+    const byPo = new Map(); // poId -> wo with max sequence
+    (availableWorkOrders || []).forEach(wo => {
+      const poId = wo.production_order_id;
+      if (!poId) return;
+      const cur = byPo.get(poId);
+      if (!cur || (wo.sequence || 0) > (cur.sequence || 0)) {
+        byPo.set(poId, wo);
+      }
+    });
+    return new Set(Array.from(byPo.values()).map(wo => wo.id));
+  }, [availableWorkOrders]);
+
+  // Timer effect — tick every second and auto-complete when planned duration is reached.
+  // Intentionally skips the LAST work order of each MO: the user wants to
+  // press Tugatish manually for the final stage so they can enter actual
+  // good / scrap quantities and a shortfall reason. Non-final stages still
+  // auto-complete on time so the line keeps flowing.
   useEffect(() => {
     const hasInProgress = availableWorkOrders.some(wo => wo.status === 'in_progress');
     if (!hasInProgress) return;
@@ -339,6 +367,7 @@ export default function ShopFloorControl({ isActive }) {
       availableWorkOrders.forEach(wo => {
         if (wo.status !== 'in_progress' || !wo.actual_start || !wo.expected_duration_minutes) return;
         if (autoCompletedRef.current.has(wo.id)) return;
+        if (lastWoIdsByPO.has(wo.id)) return; // last stage: wait for manual Tugatish
         const elapsed = differenceInMinutes(new Date(), parseISO(wo.actual_start));
         if (elapsed >= wo.expected_duration_minutes) {
           autoCompletedRef.current.add(wo.id);
@@ -354,7 +383,7 @@ export default function ShopFloorControl({ isActive }) {
       });
     }, 1000);
     return () => clearInterval(interval);
-  }, [availableWorkOrders, completeWorkOrder, refreshData]);
+  }, [availableWorkOrders, completeWorkOrder, refreshData, lastWoIdsByPO]);
 
   // Rows: group all work orders (including completed) by production order, sorted by sequence
   // Each row = one manufacturing order, steps shown horizontally in order
@@ -384,7 +413,7 @@ export default function ShopFloorControl({ isActive }) {
       if (p !== 0) return p;
       return (a.po?.code || '').localeCompare(b.po?.code || '');
     });
-    return rows;
+    return rows.filter(row => !row.workOrders.every(w => w.status === 'completed' || w.status === 'done' || w.status === 'cancelled'));
   }, [filteredWorkOrders, productionOrders]);
 
   // Calculate time spent using backend actual_start / actual_duration_minutes
@@ -408,12 +437,45 @@ export default function ShopFloorControl({ isActive }) {
   };
 
   // Handle start work order - directly starts without modal
+  const [showOperatorModal, setShowOperatorModal] = useState(false);
+  const [operatorWO, setOperatorWO] = useState(null);
+  const [wcEmployees, setWcEmployees] = useState([]);
+  const [selectedOperator, setSelectedOperator] = useState('');
+
   const handleStartWorkOrder = async (workOrder) => {
+    // Check if the work center requires an operator
+    const wc = workCenters.find(w => w.id === workOrder.work_center_id);
+    if (wc?.require_operator) {
+      setOperatorWO(workOrder);
+      setSelectedOperator('');
+      try {
+        const res = await apiClient.get(`/work-centers/${wc.id}/employees`);
+        const emps = res.data?.data?.employees || res.data?.data || [];
+        setWcEmployees(Array.isArray(emps) ? emps : []);
+      } catch (e) { setWcEmployees([]); }
+      setShowOperatorModal(true);
+      return;
+    }
     try {
       await startWorkOrder(workOrder.id);
-      refreshData(); // sync with backend (backend may auto-start next WO)
+      refreshData();
     } catch (error) {
       console.error('Failed to start work order:', error);
+    }
+  };
+
+  const confirmStartWithOperator = async () => {
+    if (!operatorWO || !selectedOperator) return;
+    try {
+      await startWorkOrder(operatorWO.id, { operator_id: selectedOperator });
+      // Update work order with operator
+      await apiClient.put(`/work-orders/${operatorWO.id}`, { operator_id: selectedOperator });
+      setShowOperatorModal(false);
+      setOperatorWO(null);
+      refreshData();
+    } catch (error) {
+      console.error('Failed to start work order:', error);
+      toast.error(language === 'uz' ? 'Xatolik' : 'Failed to start');
     }
   };
 
@@ -458,10 +520,11 @@ export default function ShopFloorControl({ isActive }) {
     const produced = parseFloat(completionData.quantity_produced) || 0;
     const scrapped = parseFloat(completionData.quantity_scrapped) || 0;
     const notes = completionData.notes;
+    const shortfallReason = completionData.shortfall_reason || '';
 
     // Close the complete modal first to avoid overlap with split modal
     setShowCompleteModal(false);
-    setCompletionData({ quantity_produced: 0, quantity_scrapped: 0, notes: '' });
+    setCompletionData({ quantity_produced: 0, quantity_scrapped: 0, notes: '', shortfall_reason: '' });
 
     try {
       const timeSpent = calculateTimeSpent(activeWorkOrder);
@@ -471,6 +534,7 @@ export default function ShopFloorControl({ isActive }) {
         scrap_quantity: scrapped,
         actual_duration: timeSpent.totalMinutes,
         notes: notes,
+        ...(shortfallReason ? { shortfall_reason: shortfallReason } : {}),
       });
 
       refreshData();
@@ -487,7 +551,7 @@ export default function ShopFloorControl({ isActive }) {
             const bulkQty = parseFloat(po.quantity_produced ?? po.quantity ?? produced) || 0;
             setSplitBulkQty(bulkQty);
             setSplitBulkUnit(po.unit_name || po.unit_code || '');
-            setSplitItems([{ product_id: '', quantity: '', warehouse_id: '' }]);
+            setSplitItems([{ product_id: '', quantity: '', warehouse_id: '', materials: [] }]);
             setShowSplitModal(true);
           }
         } catch (splitErr) {
@@ -530,6 +594,14 @@ export default function ShopFloorControl({ isActive }) {
           product_id: it.product_id,
           quantity: parseFloat(it.quantity),
           ...(it.warehouse_id ? { warehouse_id: it.warehouse_id } : {}),
+          ...(it.materials && it.materials.length > 0 ? {
+            materials: it.materials
+              .filter(m => m.product_id && parseFloat(m.quantity_per_piece) > 0)
+              .map(m => ({
+                product_id: m.product_id,
+                quantity_per_piece: parseFloat(m.quantity_per_piece),
+              }))
+          } : {}),
         })),
       });
       toast.success(language === 'uz' ? 'Chiqish yakunlandi' : language === 'ru' ? 'Упаковка завершена' : 'Split output completed');
@@ -543,9 +615,28 @@ export default function ShopFloorControl({ isActive }) {
     setSplitSubmitting(false);
   };
 
-  const addSplitItem = () => setSplitItems(prev => [...prev, { product_id: '', quantity: '', warehouse_id: '' }]);
+  const addSplitItem = () => setSplitItems(prev => [...prev, { product_id: '', quantity: '', warehouse_id: '', materials: [] }]);
   const removeSplitItem = (idx) => setSplitItems(prev => prev.filter((_, i) => i !== idx));
-  const updateSplitItem = (idx, field, value) => setSplitItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: value } : it));
+  const updateSplitItem = async (idx, field, value) => {
+    setSplitItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: value } : it));
+    if (field === 'product_id' && value) {
+      try {
+        const res = await apiClient.get(`/products/${value}/packaging-materials`);
+        const defaultMats = (res.data?.data || []).map(m => ({
+          product_id: m.material_id,
+          quantity_per_piece: m.quantity_per_piece.toString(),
+        }));
+        if (defaultMats.length > 0) {
+          setSplitItems(prev => prev.map((it, i) =>
+            i === idx && it.materials.length === 0 ? { ...it, materials: defaultMats } : it
+          ));
+        }
+      } catch (e) { /* ignore */ }
+    }
+  };
+  const addSplitItemMaterial = (idx) => setSplitItems(prev => prev.map((it, i) => i === idx ? { ...it, materials: [...it.materials, { product_id: '', quantity_per_piece: '' }] } : it));
+  const removeSplitItemMaterial = (itemIdx, matIdx) => setSplitItems(prev => prev.map((it, i) => i === itemIdx ? { ...it, materials: it.materials.filter((_, mi) => mi !== matIdx) } : it));
+  const updateSplitItemMaterial = (itemIdx, matIdx, field, value) => setSplitItems(prev => prev.map((it, i) => i === itemIdx ? { ...it, materials: it.materials.map((m, mi) => mi === matIdx ? { ...m, [field]: value } : m) } : it));
 
   // Compute how much of the bulk has been allocated across split rows.
   // Each output product's `weight` field is its size factor — meters per piece,
@@ -598,6 +689,100 @@ export default function ShopFloorControl({ isActive }) {
     } catch (err) {
       toast.error('Failed to add material: ' + (err.response?.data?.error || err.message));
     }
+  };
+
+  // Bulk-add materials via Excel upload.
+  // Expected columns (first row is the header, case-insensitive, language-tolerant):
+  //   product_name | mahsulot | название    -> product name to look up
+  //   quantity     | miqdor   | кол-во      -> numeric quantity
+  // Anything else is ignored, so the user can keep extra columns.
+  const handleBulkUploadMaterials = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !materialsWorkOrder) return;
+
+    setBulkUploading(true);
+    try {
+      const { rows } = await parseSpreadsheetFile(file);
+
+      // Normalise header keys: keep first matching value among the aliases per row.
+      const nameAliases = ['product_name', 'product', 'name', 'mahsulot', 'mahsulot_nomi', 'название', 'продукт'];
+      const qtyAliases  = ['quantity', 'qty', 'miqdor', 'soni', 'количество', 'кол-во'];
+
+      const pick = (row, aliases) => {
+        for (const key of Object.keys(row)) {
+          const norm = String(key).trim().toLowerCase();
+          if (aliases.includes(norm)) return row[key];
+        }
+        return undefined;
+      };
+
+      let added = 0;
+      const errors = [];
+      const productsList = products || [];
+
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i];
+        const rawName = pick(r, nameAliases);
+        const rawQty  = pick(r, qtyAliases);
+        if (!rawName && !rawQty) continue; // skip empty rows
+        const name = String(rawName || '').trim();
+        const qty = parseFloat(rawQty);
+
+        if (!name) { errors.push(`Row ${i + 2}: missing product name`); continue; }
+        if (!qty || qty <= 0) { errors.push(`Row ${i + 2} (${name}): invalid quantity`); continue; }
+
+        const lower = name.toLowerCase();
+        const product = productsList.find(p =>
+          (p.name || '').toLowerCase() === lower
+          || (p.sku || '').toLowerCase() === lower
+          || (p.barcode || '').toLowerCase() === lower
+        ) || productsList.find(p => (p.name || '').toLowerCase().includes(lower));
+
+        if (!product) { errors.push(`Row ${i + 2}: product "${name}" not found`); continue; }
+
+        try {
+          await workOrdersService.addMaterial(materialsWorkOrder.id, {
+            product_id: product.id,
+            quantity: qty,
+            unit_cost: parseFloat(product.cost_price) || parseFloat(product.price) || 0,
+            notes: 'Excel upload',
+          });
+          added++;
+        } catch (err) {
+          errors.push(`Row ${i + 2} (${name}): ${err.response?.data?.error || err.message}`);
+        }
+      }
+
+      // Refresh list once at the end
+      const data = await workOrdersService.getMaterials(materialsWorkOrder.id);
+      setWoMaterials(data?.materials || []);
+      setWoMaterialsTotalCost(data?.total_cost || 0);
+
+      if (added > 0) {
+        toast.success(
+          language === 'uz' ? `${added} ta material qo'shildi` :
+          language === 'ru' ? `Добавлено ${added} материалов` :
+          `Added ${added} materials`
+        );
+      }
+      if (errors.length > 0) {
+        // Show first few errors so the toast is readable
+        const preview = errors.slice(0, 5).join('\n');
+        const more = errors.length > 5 ? `\n…+${errors.length - 5} more` : '';
+        toast.error(preview + more, { duration: 8000 });
+      }
+      if (added === 0 && errors.length === 0) {
+        toast.error(
+          language === 'uz' ? 'Excelda mos satrlar topilmadi' :
+          language === 'ru' ? 'В Excel нет подходящих строк' :
+          'No usable rows in Excel'
+        );
+      }
+    } catch (err) {
+      toast.error('Failed to read Excel: ' + (err.message || err));
+    }
+    setBulkUploading(false);
   };
 
   const handleRemoveMaterial = async (materialId) => {
@@ -1061,6 +1246,28 @@ export default function ShopFloorControl({ isActive }) {
               </div>
             </div>
 
+            {(() => {
+              const planned = activeWorkOrder?.quantity_to_produce || 0;
+              const alreadyProduced = activeWorkOrder?.quantity_produced || 0;
+              const remaining = planned - alreadyProduced;
+              const produced = parseFloat(completionData.quantity_produced) || 0;
+              const scrapped = parseFloat(completionData.quantity_scrapped) || 0;
+              const isShort = produced > 0 && (produced + scrapped) < remaining;
+              return isShort ? (
+                <div className="space-y-2">
+                  <Label className="text-amber-700">
+                    {language === 'uz' ? 'Kamomad sababi' : language === 'ru' ? 'Причина недостачи' : 'Shortfall Reason'} *
+                  </Label>
+                  <Textarea
+                    value={completionData.shortfall_reason || ''}
+                    onChange={e => setCompletionData({ ...completionData, shortfall_reason: e.target.value })}
+                    placeholder={language === 'uz' ? 'Nima uchun kamroq ishlab chiqarildi...' : language === 'ru' ? 'Укажите причину недостачи...' : 'Why was less produced...'}
+                    rows={2}
+                  />
+                </div>
+              ) : null;
+            })()}
+
             <div className="space-y-2">
               <Label>{language === 'uz' ? "Izohlar" : language === 'ru' ? "Примечания" : "Notes"}</Label>
               <Textarea
@@ -1077,13 +1284,66 @@ export default function ShopFloorControl({ isActive }) {
               </Button>
               <Button
                 onClick={confirmCompleteWorkOrder}
-                disabled={!completionData.quantity_produced || parseFloat(completionData.quantity_produced) <= 0}
+                disabled={!completionData.quantity_produced || parseFloat(completionData.quantity_produced) <= 0 || (() => {
+                  const planned = activeWorkOrder?.quantity_to_produce || 0;
+                  const alreadyProduced = activeWorkOrder?.quantity_produced || 0;
+                  const remaining = planned - alreadyProduced;
+                  const produced = parseFloat(completionData.quantity_produced) || 0;
+                  const scrapped = parseFloat(completionData.quantity_scrapped) || 0;
+                  return produced > 0 && (produced + scrapped) < remaining && !(completionData.shortfall_reason || '').trim();
+                })()}
                 className="bg-green-600 hover:bg-green-700"
               >
                 <CheckCircle className="w-4 h-4 mr-2" />
                 {language === 'uz' ? "Ishni tugatish" : language === 'ru' ? "Завершить" : "Complete"}
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Operator Selection Modal */}
+      <Dialog open={showOperatorModal} onOpenChange={setShowOperatorModal}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{language === 'uz' ? 'Operatorni tanlang' : language === 'ru' ? 'Выберите оператора' : 'Select Operator'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {(Array.isArray(wcEmployees) ? wcEmployees : []).length === 0 ? (
+              <div className="text-center py-4">
+                <AlertTriangle className="w-8 h-8 text-amber-500 mx-auto mb-2" />
+                <p className="text-sm text-slate-600">
+                  {language === 'uz' ? "Bu ish markaziga xodimlar tayinlanmagan. Avval Resurslar → ish markazini tahrirlash → xodimlarni tayinlang." : language === 'ru' ? "К этому рабочему центру не привязаны сотрудники. Назначьте их в Ресурсы → редактирование." : "No employees assigned to this work center. Assign them in Resources → Edit work center."}
+                </p>
+                <Button variant="outline" className="mt-3" onClick={() => setShowOperatorModal(false)}>
+                  {language === 'uz' ? 'Tushundim' : 'OK'}
+                </Button>
+              </div>
+            ) : (
+              <>
+                <Select value={selectedOperator} onValueChange={setSelectedOperator}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={language === 'uz' ? 'Xodimni tanlang...' : language === 'ru' ? 'Выберите сотрудника...' : 'Select employee...'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(Array.isArray(wcEmployees) ? wcEmployees : []).map(emp => (
+                      <SelectItem key={emp.employee_id || emp.id} value={emp.employee_id || emp.id}>
+                        {emp.employee_name || emp.name || emp.employee_id}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setShowOperatorModal(false)}>
+                    {language === 'uz' ? 'Bekor qilish' : language === 'ru' ? 'Отмена' : 'Cancel'}
+                  </Button>
+                  <Button onClick={confirmStartWithOperator} disabled={!selectedOperator} className="bg-green-600 hover:bg-green-700">
+                    <Play className="w-4 h-4 mr-1" />
+                    {language === 'uz' ? 'Boshlash' : language === 'ru' ? 'Начать' : 'Start'}
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
         </DialogContent>
       </Dialog>
@@ -1155,6 +1415,39 @@ export default function ShopFloorControl({ isActive }) {
                 </p>
               </div>
             )}
+
+            {/* Bulk upload from Excel — adds many materials in one go */}
+            <div className="border rounded-lg p-3 bg-blue-50 border-blue-200">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="text-sm">
+                  <p className="font-medium text-blue-900">
+                    {language === 'uz' ? 'Excel orqali ko\'p material qo\'shish' :
+                     language === 'ru' ? 'Массовое добавление через Excel' :
+                     'Bulk add from Excel'}
+                  </p>
+                  <p className="text-xs text-blue-700">
+                    {language === 'uz' ? 'Ustunlar: mahsulot nomi, miqdor' :
+                     language === 'ru' ? 'Колонки: название, кол-во' :
+                     'Columns: product_name, quantity'}
+                  </p>
+                </div>
+                <label className="inline-block">
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    className="hidden"
+                    onChange={handleBulkUploadMaterials}
+                    disabled={bulkUploading}
+                  />
+                  <span className={`inline-flex items-center gap-2 px-3 py-2 rounded-md cursor-pointer text-sm font-medium border ${bulkUploading ? 'bg-slate-100 text-slate-400 border-slate-200' : 'bg-blue-600 text-white border-blue-700 hover:bg-blue-700'}`}>
+                    <Upload className="w-4 h-4" />
+                    {bulkUploading
+                      ? (language === 'uz' ? 'Yuklanmoqda…' : language === 'ru' ? 'Загрузка…' : 'Uploading…')
+                      : (language === 'uz' ? 'Excel yuklash' : language === 'ru' ? 'Загрузить Excel' : 'Upload Excel')}
+                  </span>
+                </label>
+              </div>
+            </div>
 
             {/* Add new material form */}
             <div className="border rounded-lg p-4 space-y-3 bg-slate-50">
@@ -1367,52 +1660,127 @@ export default function ShopFloorControl({ isActive }) {
             )}
 
             {splitItems.map((item, idx) => (
-              <div key={idx} className="grid grid-cols-12 gap-2 items-end border border-slate-100 rounded-lg p-3">
-                <div className="col-span-5 space-y-1">
-                  <Label className="text-xs">{language === 'uz' ? 'Mahsulot' : language === 'ru' ? 'Продукт' : 'Product'} *</Label>
-                  <select
-                    className="w-full border border-slate-200 rounded-md px-2 py-1.5 text-sm bg-white"
-                    value={item.product_id}
-                    onChange={(e) => updateSplitItem(idx, 'product_id', e.target.value)}
-                  >
-                    <option value="">— {language === 'uz' ? 'tanlang' : language === 'ru' ? 'выбрать' : 'select'} —</option>
-                    {(products || []).filter(p => p.can_be_sold || p.is_sellable).map(p => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}{p.weight ? ` (${p.weight} ${splitBulkUnit || 'kg'} / ${language === 'uz' ? 'dona' : language === 'ru' ? 'шт.' : 'pc'})` : ''}
-                      </option>
-                    ))}
-                  </select>
+              <div key={idx} className="border border-slate-100 rounded-lg p-3 space-y-2">
+                <div className="grid grid-cols-12 gap-2 items-end">
+                  <div className="col-span-5 space-y-1">
+                    <Label className="text-xs">{language === 'uz' ? 'Mahsulot' : language === 'ru' ? 'Продукт' : 'Product'} *</Label>
+                    <select
+                      className="w-full border border-slate-200 rounded-md px-2 py-1.5 text-sm bg-white"
+                      value={item.product_id}
+                      onChange={(e) => updateSplitItem(idx, 'product_id', e.target.value)}
+                    >
+                      <option value="">— {language === 'uz' ? 'tanlang' : language === 'ru' ? 'выбрать' : 'select'} —</option>
+                      {(products || []).filter(p => p.can_be_sold || p.is_sellable).map(p => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}{p.weight ? ` (${p.weight} ${splitBulkUnit || 'kg'} / ${language === 'uz' ? 'dona' : language === 'ru' ? 'шт.' : 'pc'})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="col-span-3 space-y-1">
+                    <Label className="text-xs">{language === 'uz' ? 'Dona soni' : language === 'ru' ? 'Кол-во шт.' : 'Quantity (pcs)'} *</Label>
+                    <Input
+                      type="number"
+                      min="0.0001"
+                      step="any"
+                      value={item.quantity}
+                      onChange={(e) => updateSplitItem(idx, 'quantity', e.target.value)}
+                      placeholder="0"
+                    />
+                  </div>
+                  <div className="col-span-3 space-y-1">
+                    <Label className="text-xs">{language === 'uz' ? 'Sklad' : language === 'ru' ? 'Склад' : 'Warehouse'}</Label>
+                    <select
+                      className="w-full border border-slate-200 rounded-md px-2 py-1.5 text-sm bg-white"
+                      value={item.warehouse_id}
+                      onChange={(e) => updateSplitItem(idx, 'warehouse_id', e.target.value)}
+                    >
+                      <option value="">{language === 'uz' ? 'Tanlang' : language === 'ru' ? 'Выбрать' : 'Select'}</option>
+                      {(warehouses || []).map(w => (
+                        <option key={w.id} value={w.id}>{w.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="col-span-1 flex justify-center">
+                    {splitItems.length > 1 && (
+                      <Button variant="ghost" size="sm" onClick={() => removeSplitItem(idx)} className="text-red-500 hover:text-red-700 p-1 h-auto">
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
-                <div className="col-span-3 space-y-1">
-                  <Label className="text-xs">{language === 'uz' ? 'Dona soni' : language === 'ru' ? 'Кол-во шт.' : 'Quantity (pcs)'} *</Label>
-                  <Input
-                    type="number"
-                    min="0.0001"
-                    step="any"
-                    value={item.quantity}
-                    onChange={(e) => updateSplitItem(idx, 'quantity', e.target.value)}
-                    placeholder="0"
-                  />
-                </div>
-                <div className="col-span-3 space-y-1">
-                  <Label className="text-xs">{language === 'uz' ? 'Sklad' : language === 'ru' ? 'Склад' : 'Warehouse'}</Label>
-                  <select
-                    className="w-full border border-slate-200 rounded-md px-2 py-1.5 text-sm bg-white"
-                    value={item.warehouse_id}
-                    onChange={(e) => updateSplitItem(idx, 'warehouse_id', e.target.value)}
-                  >
-                    <option value="">{language === 'uz' ? 'Tanlang' : language === 'ru' ? 'Выбрать' : 'Select'}</option>
-                    {(warehouses || []).map(w => (
-                      <option key={w.id} value={w.id}>{w.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="col-span-1 flex justify-center">
-                  {splitItems.length > 1 && (
-                    <Button variant="ghost" size="sm" onClick={() => removeSplitItem(idx)} className="text-red-500 hover:text-red-700 p-1 h-auto">
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+
+                {/* Additional materials per piece */}
+                <div className="pl-2">
+                  {item.materials.length > 0 && (
+                    <div className="space-y-1.5 mt-1">
+                      <Label className="text-xs text-slate-500">
+                        {language === 'uz' ? "Qo'shimcha materiallar (dona uchun)" : language === 'ru' ? 'Доп. материалы (на штуку)' : 'Additional materials (per piece)'}
+                      </Label>
+                      {item.materials.map((mat, matIdx) => (
+                        <div key={matIdx} className="grid grid-cols-12 gap-2 items-end">
+                          <div className="col-span-6">
+                            <select
+                              className="w-full border border-slate-200 rounded-md px-2 py-1.5 text-xs bg-white"
+                              value={mat.product_id}
+                              onChange={(e) => updateSplitItemMaterial(idx, matIdx, 'product_id', e.target.value)}
+                            >
+                              <option value="">— {language === 'uz' ? 'Material tanlang' : language === 'ru' ? 'Выбрать материал' : 'Select material'} —</option>
+                              {(products || []).map(p => (
+                                <option key={p.id} value={p.id}>{p.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="col-span-4">
+                            <Input
+                              type="number"
+                              min="0.0001"
+                              step="any"
+                              value={mat.quantity_per_piece}
+                              onChange={(e) => updateSplitItemMaterial(idx, matIdx, 'quantity_per_piece', e.target.value)}
+                              placeholder={language === 'uz' ? 'Dona uchun' : language === 'ru' ? 'На шт.' : 'Per piece'}
+                              className="text-xs h-8"
+                            />
+                          </div>
+                          <div className="col-span-2 flex justify-center">
+                            <Button variant="ghost" size="sm" onClick={() => removeSplitItemMaterial(idx, matIdx)} className="text-red-400 hover:text-red-600 p-0.5 h-auto">
+                              <X className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   )}
+                  <div className="flex items-center gap-2 mt-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => addSplitItemMaterial(idx)}
+                      className="text-xs text-blue-600 hover:text-blue-800 px-1 h-auto"
+                    >
+                      + {language === 'uz' ? "Qo'shimcha materiallar" : language === 'ru' ? 'Доп. материалы' : 'Additional materials'}
+                    </Button>
+                    {item.materials.length > 0 && item.product_id && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-xs text-blue-600"
+                        onClick={async () => {
+                          const validMats = item.materials.filter(m => m.product_id && parseFloat(m.quantity_per_piece) > 0);
+                          if (validMats.length > 0) {
+                            try {
+                              await apiClient.post(`/products/${item.product_id}/packaging-materials`, {
+                                materials: validMats.map(m => ({ material_id: m.product_id, quantity_per_piece: parseFloat(m.quantity_per_piece) }))
+                              });
+                              toast.success(language === 'uz' ? 'Standart materiallar saqlandi' : language === 'ru' ? 'Стандартные материалы сохранены' : 'Default materials saved');
+                            } catch(e) { toast.error(language === 'uz' ? 'Xatolik' : 'Failed to save'); }
+                          }
+                        }}
+                      >
+                        {language === 'uz' ? 'Standart qilib saqlash' : language === 'ru' ? 'Сохранить как стандарт' : 'Save as default'}
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}

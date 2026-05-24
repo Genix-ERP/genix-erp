@@ -24,8 +24,9 @@ export default function ManufacturingDashboard() {
     workCenters,
     loading,
     activeProductionOrders,
+    activeProductionOrdersCount,
     completedToday,
-    averageOEE,
+    averageUtilization,
   } = useManufacturing();
 
   const [productionData, setProductionData] = useState([]);
@@ -38,15 +39,36 @@ export default function ManufacturingDashboard() {
 
   useEffect(() => {
     if (!loading) {
-      // Production trend data
-      const productionByDay = {};
+      // Production trend — build 30 day buckets (today and the 29 preceding
+      // days), then fill in quantity_produced from any production order
+      // whose actual_end falls inside the window. 30 days is wide enough
+      // to actually show activity for low-volume factories (a 7-day window
+      // is almost always empty if production is monthly), but still narrow
+      // enough that the bars are meaningful and don't flatten under a
+      // single huge spike from a year ago.
+      const DAYS_WINDOW = 30;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const windowStart = new Date(today);
+      windowStart.setDate(windowStart.getDate() - (DAYS_WINDOW - 1)); // inclusive of today
+      const dayKey = (d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+      const buckets = [];
+      for (let i = 0; i < DAYS_WINDOW; i++) {
+        const d = new Date(windowStart);
+        d.setDate(windowStart.getDate() + i);
+        buckets.push({ day: dayKey(d), quantity: 0 });
+      }
       productionOrders.forEach(order => {
-        if (order.actual_end) {
-          const day = new Date(order.actual_end).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-          productionByDay[day] = (productionByDay[day] || 0) + (order.quantity_produced || 0);
-        }
+        if (!order.actual_end) return;
+        const endDate = new Date(order.actual_end);
+        endDate.setHours(0, 0, 0, 0);
+        if (endDate < windowStart || endDate > today) return;
+        const key = dayKey(endDate);
+        const bucket = buckets.find(b => b.day === key);
+        if (bucket) bucket.quantity += (order.quantity_produced || 0);
       });
-      setProductionData(Object.entries(productionByDay).map(([day, quantity]) => ({ day, quantity })).slice(-7));
+      setProductionData(buckets);
 
       // Work center utilization
       const utilization = workCenters.map(wc => ({
@@ -97,7 +119,7 @@ export default function ManufacturingDashboard() {
       <div className="flex items-center justify-center py-16">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-slate-800 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-slate-600">Loading manufacturing data...</p>
+          <p className="text-slate-600">{t('loading_manufacturing_data') || 'Loading manufacturing data...'}</p>
         </div>
       </div>
     );
@@ -116,7 +138,13 @@ export default function ManufacturingDashboard() {
               </div>
               <Badge className="bg-blue-50 text-blue-700 border-blue-200">Active</Badge>
             </div>
-            <p className="text-3xl font-bold text-slate-900 mb-1">{activeProductionOrders?.length || 0}</p>
+            <p className="text-3xl font-bold text-slate-900 mb-1">
+              {/* Prefer the stats-driven count (covers tenants with >1000 orders);
+                  fall back to the local list length when stats aren't available. */}
+              {typeof activeProductionOrdersCount === 'number'
+                ? activeProductionOrdersCount
+                : (activeProductionOrders?.length || 0)}
+            </p>
             <p className="text-sm text-slate-600">{t('production_orders') || 'Production Orders'}</p>
           </CardContent>
         </Card>
@@ -130,7 +158,7 @@ export default function ManufacturingDashboard() {
               <Badge className="bg-green-50 text-green-700 border-green-200">{t('today') || 'Today'}</Badge>
             </div>
             <p className="text-3xl font-bold text-slate-900 mb-1">{completedToday?.length || 0}</p>
-            <p className="text-sm text-slate-600">{t('orders_completed') || 'Orders Completed'}</p>
+            <p className="text-sm text-slate-600">{t('completed_today') || 'Completed Today'}</p>
           </CardContent>
         </Card>
 
@@ -140,10 +168,10 @@ export default function ManufacturingDashboard() {
               <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
                 <Cog className="w-6 h-6 text-purple-600" />
               </div>
-              <Badge className="bg-purple-50 text-purple-700 border-purple-200">OEE</Badge>
+              <Badge className="bg-purple-50 text-purple-700 border-purple-200">{t('utilization') || 'Utilization'}</Badge>
             </div>
-            <p className="text-3xl font-bold text-slate-900 mb-1">{Math.round(averageOEE || 0)}%</p>
-            <p className="text-sm text-slate-600">{t('avg_equipment_efficiency') || 'Avg Equipment Efficiency'}</p>
+            <p className="text-3xl font-bold text-slate-900 mb-1">{Math.round(averageUtilization || 0)}%</p>
+            <p className="text-sm text-slate-600">{t('avg_work_center_utilization') || 'Avg Work Center Utilization'}</p>
           </CardContent>
         </Card>
 
@@ -157,7 +185,7 @@ export default function ManufacturingDashboard() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-blue-600" />
-              {t('production_trend_last_7_days') || 'Production Trend (Last 7 Days)'}
+              {t('production_trend_last_30_days') || 'Production Trend (Last 30 Days)'}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -165,10 +193,18 @@ export default function ManufacturingDashboard() {
               <ResponsiveContainer width="100%" height={250}>
                 <LineChart data={productionData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="day" stroke="#64748b" fontSize={12} />
+                  {/* interval=4 → show every 5th label so 30 daily ticks fit cleanly */}
+                  <XAxis dataKey="day" stroke="#64748b" fontSize={12} interval={4} />
                   <YAxis stroke="#64748b" fontSize={12} />
                   <Tooltip />
-                  <Line type="monotone" dataKey="quantity" stroke="#0ea5e9" strokeWidth={2} dot={{ fill: '#0ea5e9' }} />
+                  <Line
+                    type="monotone"
+                    dataKey="quantity"
+                    name={t('quantity') || 'Quantity'}
+                    stroke="#0ea5e9"
+                    strokeWidth={2}
+                    dot={{ fill: '#0ea5e9' }}
+                  />
                 </LineChart>
               </ResponsiveContainer>
             ) : (
@@ -196,8 +232,8 @@ export default function ManufacturingDashboard() {
                   <YAxis stroke="#64748b" fontSize={12} />
                   <Tooltip />
                   <Legend />
-                  <Bar dataKey="utilization" fill="#8b5cf6" name="Utilization %" radius={[8, 8, 0, 0]} />
-                  <Bar dataKey="oee" fill="#0ea5e9" name="OEE %" radius={[8, 8, 0, 0]} />
+                  <Bar dataKey="utilization" fill="#8b5cf6" name={t('utilization_percent') || 'Utilization %'} radius={[8, 8, 0, 0]} />
+                  <Bar dataKey="oee" fill="#0ea5e9" name={t('oee_percent') || 'OEE %'} radius={[8, 8, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -214,8 +250,8 @@ export default function ManufacturingDashboard() {
         <div>
           <div className="flex items-center gap-2 mb-4">
             <Brain className="w-6 h-6 text-purple-600" />
-            <h3 className="text-xl font-bold text-slate-900">AI Manufacturing Insights</h3>
-            <Badge className="bg-purple-50 text-purple-700 border-purple-200">Live Analysis</Badge>
+            <h3 className="text-xl font-bold text-slate-900">{t('ai_manufacturing_insights') || 'AI Manufacturing Insights'}</h3>
+            <Badge className="bg-purple-50 text-purple-700 border-purple-200">{t('live_analysis') || 'Live Analysis'}</Badge>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {aiInsights.map((insight, index) => (
@@ -224,18 +260,18 @@ export default function ManufacturingDashboard() {
                   <div className="flex items-start justify-between mb-2">
                     <CardTitle className="text-base font-bold text-slate-900">{insight.title}</CardTitle>
                     <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                      {Math.round(insight.confidence * 100)}% confident
+                      {Math.round(insight.confidence * 100)}{t('percent_confident') || '% confident'}
                     </Badge>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <p className="text-sm text-slate-600 leading-relaxed">{insight.description}</p>
                   <div className="p-3 bg-blue-50 rounded-lg border border-blue-100">
-                    <p className="text-xs font-semibold text-blue-900 mb-1">Impact</p>
+                    <p className="text-xs font-semibold text-blue-900 mb-1">{t('impact') || 'Impact'}</p>
                     <p className="text-sm text-blue-700">{insight.impact}</p>
                   </div>
                   <div className="p-3 bg-purple-50 rounded-lg border border-purple-100">
-                    <p className="text-xs font-semibold text-purple-900 mb-1">Recommended Action</p>
+                    <p className="text-xs font-semibold text-purple-900 mb-1">{t('recommended_action') || 'Recommended Action'}</p>
                     <p className="text-sm text-purple-700">{insight.action}</p>
                   </div>
                 </CardContent>

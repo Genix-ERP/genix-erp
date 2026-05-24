@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { X, Printer, FileDown, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -48,6 +49,10 @@ const T = {
   save_success:    { uz: 'Hujjatlarga saqlandi',            ru: 'Сохранено в документах',          en: 'Saved to project files' },
   save_failed:     { uz: "Saqlab bo'lmadi",                 ru: 'Не удалось сохранить',            en: 'Save failed' },
   load_failed:     { uz: "Hisobotni yuklab bo'lmadi",       ru: 'Не удалось загрузить отчет',      en: 'Failed to load report' },
+  all_blocks:      { uz: 'Hamma bloklar',                   ru: 'Все блоки',                       en: 'All blocks' },
+  all_blocks_hint: { uz: 'Bloklar bo\'yicha bo\'linmasdan, bitta jadvalda ko\'rsatish',
+                     ru: 'Показать всё в одной таблице без разделения по блокам',
+                     en: 'Show everything in a single table instead of splitting by block' },
 };
 const tt = (key, lang) => T[key]?.[lang] || T[key]?.uz || key;
 
@@ -75,6 +80,11 @@ export default function MaterialConsolidationModal({
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
   const [saving, setSaving] = useState(false);
+  // When true, hide the per-block tables and show ONLY the project-wide
+  // consolidated table. The backend already returns `data.total.groups`
+  // pre-merged across blocks, so the toggle is a render-side switch
+  // with no extra fetch.
+  const [allBlocks, setAllBlocks] = useState(false);
 
   useEffect(() => {
     if (!open || !projectId) return;
@@ -100,6 +110,72 @@ export default function MaterialConsolidationModal({
       sum += Number(blk.total_amount) || 0;
     }
     return sum;
+  }, [data]);
+
+  // "All blocks" view: keep same material at the SAME price as one row
+  // (sum quantities across blocks), but DIFFERENT prices stay as a
+  // hierarchical breakdown — the row with the largest quantity at its
+  // price becomes the "main" line, every other (name, UOM, price)
+  // variant is demoted into a topup-style indented sub-row beneath it.
+  // Any explicit backend topups are carried over so the hierarchy
+  // mirrors the per-block view: one main row per material, with each
+  // distinct purchase price visible underneath.
+  const mergedTotalGroups = useMemo(() => {
+    const src = data?.total?.groups || [];
+    if (src.length === 0) return [];
+
+    const keyOf = (name, uom) =>
+      `${String(name || '').trim().toLowerCase()}|${String(uom || '').trim().toLowerCase()}`;
+
+    // Bucket source groups by (name, UOM) so different-price variants
+    // of the same material land together.
+    const byKey = new Map();
+    for (const g of src) {
+      const k = keyOf(g.name, g.uom);
+      if (!byKey.has(k)) byKey.set(k, []);
+      byKey.get(k).push(g);
+    }
+
+    const result = [];
+    for (const list of byKey.values()) {
+      if (list.length === 1) {
+        // Single price variant — keep the backend row exactly as is so
+        // its own topups (e.g. real top-up purchases) still render.
+        result.push(list[0]);
+        continue;
+      }
+      // Multiple price variants — pick the largest-quantity row as
+      // the main line. The rest become topup-style sub-rows so the
+      // user still sees each distinct price under the parent.
+      const sorted = [...list].sort(
+        (a, b) => (Number(b.fakt_quantity) || 0) - (Number(a.fakt_quantity) || 0)
+      );
+      const main = sorted[0];
+      const extraTopups = [];
+      for (let i = 1; i < sorted.length; i++) {
+        const r = sorted[i];
+        extraTopups.push({
+          extra_quantity: r.fakt_quantity,
+          new_price:      r.unit_rate,
+          amount:         r.fakt_amount,
+          note:           '',
+          ordered_at:     null,
+        });
+        // Preserve r's own topups too, so nothing in the hierarchy is
+        // lost when the variant is demoted under `main`.
+        for (const tp of r.topups || []) extraTopups.push(tp);
+      }
+      result.push({
+        ...main,
+        topups: [...(main.topups || []), ...extraTopups],
+      });
+    }
+
+    // Stable alphabetical order for a tidy report.
+    result.sort((a, b) =>
+      String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' })
+    );
+    return result;
   }, [data]);
 
   // ─────────────── Exports ───────────────
@@ -208,13 +284,22 @@ export default function MaterialConsolidationModal({
       row += 2;
     };
 
-    (data.blocks || []).forEach((blk) => {
-      writeBlock(`${tt('block_name', language)}: ${blk.name}`, blk.groups || [], blk.total_amount);
-    });
-
-    // Project total
-    if (data.total) {
-      writeBlock(tt('total_project', language), data.total.groups || [], data.total.total_amount);
+    // Match the on-screen toggle: when "All blocks" is on, the Excel
+    // file mirrors the UI and contains ONLY the consolidated project
+    // table — with same material merged across blocks AND price
+    // variations. When off, it includes the per-block breakdown
+    // followed by the (price-distinguished) project total.
+    if (allBlocks) {
+      if (mergedTotalGroups.length > 0) {
+        writeBlock(tt('total_project', language), mergedTotalGroups, projectTotal);
+      }
+    } else {
+      (data.blocks || []).forEach((blk) => {
+        writeBlock(`${tt('block_name', language)}: ${blk.name}`, blk.groups || [], blk.total_amount);
+      });
+      if (data.total) {
+        writeBlock(tt('total_project', language), data.total.groups || [], data.total.total_amount);
+      }
     }
 
     ws.getColumn(1).width = 50;
@@ -325,6 +410,16 @@ export default function MaterialConsolidationModal({
             <Button variant="ghost" size="sm" onClick={onClose}>
               <X className="w-4 h-4 mr-1" /> {t('close') || 'Yopish'}
             </Button>
+            <label
+              className="inline-flex items-center gap-2 ml-2 px-2.5 py-1.5 rounded-md border border-slate-200 cursor-pointer hover:bg-slate-50"
+              title={tt('all_blocks_hint', language)}
+            >
+              <Checkbox
+                checked={allBlocks}
+                onCheckedChange={(v) => setAllBlocks(v === true)}
+              />
+              <span className="text-sm text-slate-700">{tt('all_blocks', language)}</span>
+            </label>
             <div className="flex-1" />
             <Button variant="outline" size="sm" onClick={handlePrint}>
               <Printer className="w-4 h-4 mr-1" /> {tt('print_btn', language)}
@@ -362,34 +457,54 @@ export default function MaterialConsolidationModal({
                   {tt('subtitle', language)}
                 </div>
 
-                {/* Per-block sections */}
-                {blocks.length === 0 ? (
-                  <div className="text-center text-sm text-slate-500 py-8">{tt('no_materials', language)}</div>
-                ) : (
-                  blocks.map((blk) => (
+                {/* When "All blocks" is OFF: per-block sections + project total
+                    underneath (current behaviour). When ON: render ONLY the
+                    project-wide consolidated table — same name+UOM+price merged
+                    across every block, presented as one report. */}
+                {allBlocks ? (
+                  mergedTotalGroups.length === 0 ? (
+                    <div className="text-center text-sm text-slate-500 py-8">{tt('no_materials', language)}</div>
+                  ) : (
                     <BlockSection
-                      key={blk.id}
-                      label={`${tt('block_name', language)}: ${blk.name}`}
-                      groups={blk.groups || []}
-                      totalAmount={blk.total_amount}
+                      label={tt('total_project', language)}
+                      groups={mergedTotalGroups}
+                      totalAmount={projectTotal}
                       language={language}
-                      totalLabel={tt('total_block', language)}
+                      totalLabel={tt('total_project', language)}
+                      isProjectTotal
                     />
-                  ))
-                )}
+                  )
+                ) : (
+                  <>
+                    {blocks.length === 0 ? (
+                      <div className="text-center text-sm text-slate-500 py-8">{tt('no_materials', language)}</div>
+                    ) : (
+                      blocks.map((blk) => (
+                        <BlockSection
+                          key={blk.id}
+                          label={`${tt('block_name', language)}: ${blk.name}`}
+                          groups={blk.groups || []}
+                          totalAmount={blk.total_amount}
+                          language={language}
+                          totalLabel={tt('total_block', language)}
+                        />
+                      ))
+                    )}
 
-                {/* Project-wide total section — combines same name+UOM+price
-                    across blocks, so the user gets ONE consolidated row per
-                    distinct material/price tuple at the bottom. */}
-                {totalGroups.length > 0 && (
-                  <BlockSection
-                    label={tt('total_project', language)}
-                    groups={totalGroups}
-                    totalAmount={projectTotal}
-                    language={language}
-                    totalLabel={tt('total_project', language)}
-                    isProjectTotal
-                  />
+                    {/* Project-wide total section — combines same name+UOM+price
+                        across blocks, so the user gets ONE consolidated row per
+                        distinct material/price tuple at the bottom. */}
+                    {totalGroups.length > 0 && (
+                      <BlockSection
+                        label={tt('total_project', language)}
+                        groups={totalGroups}
+                        totalAmount={projectTotal}
+                        language={language}
+                        totalLabel={tt('total_project', language)}
+                        isProjectTotal
+                      />
+                    )}
+                  </>
                 )}
               </div>
             )}

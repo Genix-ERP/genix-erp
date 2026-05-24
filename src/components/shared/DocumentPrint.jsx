@@ -172,31 +172,31 @@ export const generateDocumentPDF = (config) => {
   }
 
   // Company name - top left
-  doc.setFontSize(16);
+  doc.setFontSize(20);
   doc.setFont(fontFamily, "bold");
   doc.setTextColor(15, 23, 42);
   doc.text(company.name, margins.left, yPos + 6);
 
   // Document number - top right, colored
   if (documentNumber) {
-    doc.setFontSize(12);
+    doc.setFontSize(16);
     doc.setFont(fontFamily, "bold");
     doc.setTextColor(37, 99, 235);
     doc.text(documentNumber, pageWidth - margins.right, yPos + 6, { align: "right" });
   }
 
   // Company details - second line
-  doc.setFontSize(8);
+  doc.setFontSize(10);
   doc.setFont(fontFamily, "normal");
   doc.setTextColor(100, 116, 139);
   const companyDetails = [company.address, `info@genix.uz`, `INN: ${company.inn}`].filter(Boolean).join("  |  ");
-  doc.text(companyDetails, margins.left, yPos + 12);
+  doc.text(companyDetails, margins.left, yPos + 13);
 
   // Date - right side under doc number
   if (documentDate) {
-    doc.setFontSize(9);
+    doc.setFontSize(12);
     doc.setTextColor(100, 116, 139);
-    doc.text(documentDate, pageWidth - margins.right, yPos + 12, { align: "right" });
+    doc.text(documentDate, pageWidth - margins.right, yPos + 13, { align: "right" });
   }
 
   yPos += 20;
@@ -204,13 +204,13 @@ export const generateDocumentPDF = (config) => {
   // ═══════════════════════════════════════════
   // BLUE TITLE BAR
   // ═══════════════════════════════════════════
-  const barHeight = 10;
+  const barHeight = 12;
   doc.setFillColor(37, 99, 235);
   doc.rect(margins.left, yPos, contentWidth, barHeight, 'F');
-  doc.setFontSize(12);
+  doc.setFontSize(14);
   doc.setFont(fontFamily, "bold");
   doc.setTextColor(255, 255, 255);
-  doc.text(title || templateConfig.title, pageWidth / 2, yPos + 7, { align: "center" });
+  doc.text(title || templateConfig.title, pageWidth / 2, yPos + 8.5, { align: "center" });
 
   yPos += barHeight + 6;
 
@@ -218,7 +218,7 @@ export const generateDocumentPDF = (config) => {
   // HEADER FIELDS (2 columns, clean layout)
   // ═══════════════════════════════════════════
   if (headerFields.length > 0) {
-    doc.setFontSize(9);
+    doc.setFontSize(11);
     const colWidth = contentWidth / 2;
     const rows = Math.ceil(headerFields.length / 2);
 
@@ -228,20 +228,22 @@ export const generateDocumentPDF = (config) => {
         if (idx >= headerFields.length) continue;
         const field = headerFields[idx];
         const x = margins.left + col * colWidth;
-        const y = yPos + row * 8;
+        const y = yPos + row * 10;
 
         // Label
         doc.setFont(fontFamily, "normal");
         doc.setTextColor(100, 116, 139);
+        doc.setFontSize(10);
         doc.text(`${field.label}`, x, y);
         // Value
         doc.setFont(fontFamily, "bold");
         doc.setTextColor(15, 23, 42);
-        doc.text(String(field.value || "-"), x, y + 4.5);
+        doc.setFontSize(12);
+        doc.text(String(field.value || "-"), x, y + 5.5);
       }
     }
 
-    yPos += rows * 8 + 4;
+    yPos += rows * 10 + 4;
 
     // Thin separator line
     doc.setDrawColor(226, 232, 240);
@@ -268,19 +270,19 @@ export const generateDocumentPDF = (config) => {
       startY: yPos,
       margin: { left: margins.left, right: margins.right },
       styles: {
-        fontSize: 9,
-        cellPadding: 3.5,
+        fontSize: 12,
+        cellPadding: 4.5,
         lineColor: [226, 232, 240],
         lineWidth: 0.2,
         textColor: [15, 23, 42],
-        font: fontFamily, // Use Roboto so Cyrillic renders correctly in table cells
+        font: fontFamily,
       },
       headStyles: {
         fillColor: [37, 99, 235],
         textColor: 255,
         fontStyle: "bold",
-        cellPadding: 4,
-        fontSize: 9,
+        cellPadding: 5,
+        fontSize: 12,
         font: fontFamily,
       },
       alternateRowStyles: { fillColor: [248, 250, 252] },
@@ -319,23 +321,23 @@ export const generateDocumentPDF = (config) => {
       if (isLast && total.bold) {
         // Grand total - blue bar
         yPos += 2;
-        const barH = 9;
+        const barH = 11;
         doc.setFillColor(37, 99, 235);
         doc.roundedRect(margins.left, yPos - 1, contentWidth, barH, 1.5, 1.5, 'F');
-        doc.setFontSize(10);
+        doc.setFontSize(13);
         doc.setFont(fontFamily, "bold");
         doc.setTextColor(255, 255, 255);
-        doc.text(`${total.label}:`, margins.left + 4, yPos + 5.5);
-        doc.text(String(total.value), pageWidth - margins.right - 4, yPos + 5.5, { align: "right" });
+        doc.text(`${total.label}:`, margins.left + 4, yPos + 7);
+        doc.text(String(total.value), pageWidth - margins.right - 4, yPos + 7, { align: "right" });
         yPos += barH + 4;
       } else {
-        doc.setFontSize(9);
+        doc.setFontSize(11);
         doc.setFont(fontFamily, total.bold ? "bold" : "normal");
         doc.setTextColor(71, 85, 105);
         doc.text(`${total.label}:`, lineX + 2, yPos + 2);
         doc.setTextColor(15, 23, 42);
         doc.text(String(total.value), valueX, yPos + 2, { align: "right" });
-        yPos += 7;
+        yPos += 8;
       }
     });
     yPos += 4;
@@ -345,22 +347,22 @@ export const generateDocumentPDF = (config) => {
   // FOOTER FIELDS
   // ═══════════════════════════════════════════
   if (footerFields.length > 0) {
-    doc.setFontSize(9);
+    doc.setFontSize(11);
     footerFields.forEach((field) => {
       doc.setFont(fontFamily, "bold");
       doc.setTextColor(71, 85, 105);
       doc.text(`${field.label}:`, margins.left, yPos);
       doc.setFont(fontFamily, "normal");
       doc.setTextColor(15, 23, 42);
-      doc.text(String(field.value || "-"), margins.left + 30, yPos);
-      yPos += 5;
+      doc.text(String(field.value || "-"), margins.left + 35, yPos);
+      yPos += 6;
     });
     yPos += 5;
   }
 
   // Notes
   if (notes) {
-    doc.setFontSize(8);
+    doc.setFontSize(10);
     // Roboto italic variant is not registered; fall back to normal to avoid
     // jsPDF font-missing warnings. Text still renders Cyrillic correctly.
     doc.setFont(fontFamily, "normal");
@@ -378,14 +380,14 @@ export const generateDocumentPDF = (config) => {
 
     doc.setDrawColor(150, 150, 150);
     doc.setTextColor(15, 23, 42);
-    doc.setFontSize(9);
+    doc.setFontSize(12);
 
     // Left signature - Topshirdi
     doc.setFont(fontFamily, "bold");
     doc.text("Topshirdi:", margins.left, yPos);
     doc.setLineWidth(0.3);
     doc.line(margins.left, yPos + 14, margins.left + 55, yPos + 14);
-    doc.setFontSize(8);
+    doc.setFontSize(10);
     doc.setFont(fontFamily, "normal");
     doc.setTextColor(100, 116, 139);
     doc.text("(imzo)", margins.left + 18, yPos + 19);
@@ -396,21 +398,21 @@ export const generateDocumentPDF = (config) => {
       doc.setLineDash([2, 2]);
       doc.setLineWidth(0.4);
       doc.circle(pageWidth / 2, yPos + 9, 14);
-      doc.setFontSize(7);
+      doc.setFontSize(9);
       doc.setTextColor(180, 180, 180);
       doc.text("M.O.", pageWidth / 2, yPos + 10, { align: "center" });
       doc.setLineDash([]);
     }
 
     // Right signature - Qabul qildi
-    doc.setFontSize(9);
+    doc.setFontSize(12);
     doc.setFont(fontFamily, "bold");
     doc.setTextColor(15, 23, 42);
     doc.text("Qabul qildi:", pageWidth - margins.right - 55, yPos);
     doc.setDrawColor(150, 150, 150);
     doc.setLineWidth(0.3);
     doc.line(pageWidth - margins.right - 55, yPos + 14, pageWidth - margins.right, yPos + 14);
-    doc.setFontSize(8);
+    doc.setFontSize(10);
     doc.setFont(fontFamily, "normal");
     doc.setTextColor(100, 116, 139);
     doc.text("(imzo)", pageWidth - margins.right - 37, yPos + 19);

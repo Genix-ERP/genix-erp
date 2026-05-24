@@ -29,6 +29,55 @@ export const constructionService = {
     await apiClient.delete(`/construction/projects/${id}`);
   },
 
+  // =====================================================
+  // CRM LINKAGE — wires Genix construction to Yuksalish CRM
+  // =====================================================
+
+  // Fetches the CRM's project list (via Genix backend proxy so the browser
+  // never holds the CRM token). Returns { configured: bool, projects: [] }.
+  async listCRMProjects() {
+    const response = await apiClient.get('/construction/crm/projects');
+    return response.data.data;
+  },
+
+  // Fetches the blocks of a CRM project. crmProjectId is the CRM-side id.
+  async listCRMBlocks(crmProjectId) {
+    const response = await apiClient.get('/construction/crm/blocks', {
+      params: { crm_project_id: crmProjectId },
+    });
+    return response.data.data;
+  },
+
+  // Sets (or clears with null/0) crm_project_id on a Genix construction
+  // project. Called from the project edit form's "CRM" section.
+  async setProjectCRMLink(genixProjectId, crmProjectId) {
+    const response = await apiClient.put(
+      `/construction/projects/${genixProjectId}/crm-link`,
+      { crm_project_id: crmProjectId || null }
+    );
+    return response.data.data;
+  },
+
+  // Sets per-building crm_block_id + current stage + auto-sync toggle.
+  async setBuildingCRMLink(projectId, buildingId, { crmBlockId, currentStage, autoSync }) {
+    const body = {};
+    if (crmBlockId !== undefined) body.crm_block_id = crmBlockId || null;
+    if (currentStage !== undefined) body.current_crm_stage = currentStage;
+    if (autoSync !== undefined) body.crm_auto_sync = autoSync;
+    const response = await apiClient.put(
+      `/construction/projects/${projectId}/buildings/${buildingId}/crm-link`,
+      body
+    );
+    return response.data.data;
+  },
+
+  // Manual re-sync of a photo report (for "Re-send to CRM" buttons after
+  // a failure or link change).
+  async resyncPhotoReportToCRM(reportId) {
+    const response = await apiClient.post(`/construction/photo-reports/${reportId}/resync-crm`);
+    return response.data.data;
+  },
+
   async getProjectDashboard(id) {
     const response = await apiClient.get(`/construction/projects/${id}/dashboard`);
     return response.data.data;
@@ -760,6 +809,14 @@ export const constructionService = {
     // construction_estimate.budget_total (migration 369) so the
     // Reja vs Fakt page can display the imported budget verbatim
     // instead of computing it from per-line plan totals.
+    // Per-request timeout override. The global axios timeout is 30s which
+    // is fine for normal CRUD, but a real-world resurs/единич import can be
+    // 2–3 MB of JSON with 3000+ lines — on a slow connection the upload
+    // alone exceeds 30s and aborts before the server even sees the request.
+    // Backend processing itself is fast (~15 ms for ~400 lines per the
+    // logs), so the long timeout is purely a network-upload allowance.
+    // 5 minutes covers very slow connections without leaving hung
+    // requests open indefinitely if the connection truly dies.
     const response = await apiClient.post(`/construction/estimates/${estimateId}/lines/bulk`, {
       lines,
       replace,
@@ -768,6 +825,8 @@ export const constructionService = {
       budget_total: budgetTotal,
       material_budget: materialBudget,
       transport_budget: transportBudget,
+    }, {
+      timeout: 300000,
     });
     return response.data.data;
   },

@@ -118,6 +118,7 @@ import { ImportModal, ExportModal, ImportExportButtons } from '@/components/shar
 import { ReportGenerator } from '@/components/construction/ReportGenerator';
 import { ProjectKanban } from '@/components/construction/ProjectKanban';
 import { UZ_REGIONS, citiesForRegion } from '@/components/construction/uzRegions';
+import CRMLinkPanel from '@/components/construction/CRMLinkPanel';
 import {
   ProgressWidget,
   TimelineWidget,
@@ -909,6 +910,7 @@ const OverviewTabContent = React.memo(function OverviewTabContent({
   sections,
   team,
   vendors,
+  acts,
   t,
   setActiveGroup,
   setActiveTab,
@@ -1096,6 +1098,7 @@ const OverviewTabContent = React.memo(function OverviewTabContent({
         }}
         sections={sections}
         vendors={vendors}
+        acts={acts}
       />
     </div>
   );
@@ -1191,6 +1194,11 @@ const ProjectDetailView = ({
   const [buildings, setBuildings] = useState([]);
   const [selectedBuilding, setSelectedBuilding] = useState(null);
   const [sections, setSections] = useState([]);
+  // Acts list for the Umumiy ko'rinish alerts widget — surfaces any
+  // construction_act whose period_to deadline is within the next 5 days
+  // and not already approved/cancelled. Loaded alongside the other
+  // overview data in the activeTab='overview' branch below.
+  const [acts, setActs] = useState([]);
   const [team, setTeam] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [vendors, setVendors] = useState([]);
@@ -1220,10 +1228,16 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
   const [uploadingBuildingFile, setUploadingBuildingFile] = useState(false);
 
   // Forms
+  // commercial_units_count was always on the backend (entity.go:329 —
+  // ConstructionBuilding.CommercialUnitsCount) but the form never carried
+  // it. With the new "residential_non_residential" building type the
+  // apartments field splits into TWO inputs, one for residential
+  // apartments (apartments_count) and one for non-residential units
+  // (commercial_units_count), so we now thread the second field through.
   const [buildingForm, setBuildingForm] = useState({
     name: '', code: '', description: '', building_type: '', building_purpose: '',
-    floors_count: '', total_area: '', apartments_count: '', estimated_cost: '',
-    status: 'draft'
+    floors_count: '', total_area: '', apartments_count: '', commercial_units_count: '',
+    estimated_cost: '', status: 'draft'
   });
   const [teamForm, setTeamForm] = useState({ employee_id: '', role: '', responsibilities: '', start_date: '' });
   const [materialRequestForm, setMaterialRequestForm] = useState({
@@ -1325,16 +1339,22 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
         switch (activeTab) {
           case 'overview':
             try {
-              const [buildingsData, overviewSectionsData, overviewTeamData, overviewVendorsData] = await Promise.all([
+              // Acts are pulled alongside the other overview data so the
+              // AlertsWidget can flag deadlines within 5 days. .catch on
+              // the acts promise so a permissions hiccup on /acts doesn't
+              // crater the rest of the overview load.
+              const [buildingsData, overviewSectionsData, overviewTeamData, overviewVendorsData, overviewActsData] = await Promise.all([
                 constructionService.listBuildings(project.id),
                 constructionService.listSections(project.id),
                 constructionService.listTeamMembers(project.id),
-                constructionService.listProjectVendors(project.id)
+                constructionService.listProjectVendors(project.id),
+                constructionService.listActs(project.id).catch(() => []),
               ]);
               setBuildings(sortBuildings(buildingsData));
               setSections(overviewSectionsData || []);
               setTeam(overviewTeamData || []);
               setVendors(overviewVendorsData || []);
+              setActs(Array.isArray(overviewActsData) ? overviewActsData : (overviewActsData?.data || []));
             } catch (e) {
               console.error('Error loading overview data:', e);
             }
@@ -1446,6 +1466,17 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
       toast.error(t('invalid_apartments_count') || "Xonadonlar soni noto'g'ri");
       return;
     }
+    // commercial_units_count — only relevant for the residential_non_residential
+    // type, but parsed unconditionally so the value round-trips on edits where
+    // the user later switched the type back to something else.
+    const commercialUnits = buildingForm.commercial_units_count
+      ? parseInt(buildingForm.commercial_units_count, 10)
+      : 0;
+    if (buildingForm.commercial_units_count
+        && (!Number.isFinite(commercialUnits) || commercialUnits < 0)) {
+      toast.error(t('invalid_commercial_units_count') || "Noturar xonalar soni noto'g'ri");
+      return;
+    }
     const estCost = buildingForm.estimated_cost ? parseFloat(buildingForm.estimated_cost) : 0;
     if (buildingForm.estimated_cost && (!Number.isFinite(estCost) || estCost < 0)) {
       toast.error(t('invalid_estimated_cost') || "Taxminiy qiymat noto'g'ri");
@@ -1490,6 +1521,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
         floors_count: floors,
         total_area: area,
         apartments_count: apartments,
+        commercial_units_count: commercialUnits,
         estimated_cost: estCost,
       };
 
@@ -1506,8 +1538,8 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
       setShowBuildingModal(false);
       setBuildingForm({
         name: '', code: '', description: '', building_type: '', building_purpose: '',
-        floors_count: '', total_area: '', apartments_count: '', estimated_cost: '',
-        status: 'draft'
+        floors_count: '', total_area: '', apartments_count: '', commercial_units_count: '',
+        estimated_cost: '', status: 'draft'
       });
     } catch (error) {
       console.error('Error saving building:', error);
@@ -1535,6 +1567,21 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
   const handleBuildingFileUpload = async (e) => {
     const files = e.target.files;
     if (!files?.length || !buildingFilesTarget) return;
+
+    // Mirror the backend's STORAGE_MAX_FILE_SIZE default (100MB). Catching
+    // it here avoids a wasted multipart upload and gives the user an
+    // instant, translated error instead of a generic 400 from the API.
+    const MAX_FILE_BYTES = 100 * 1024 * 1024;
+    const oversized = Array.from(files).find((f) => f.size > MAX_FILE_BYTES);
+    if (oversized) {
+      const limitMB = Math.floor(MAX_FILE_BYTES / (1024 * 1024));
+      toast.error(
+        (t('file_too_large') || "Fayl hajmi {limit} MB dan oshmasligi kerak").replace('{limit}', limitMB)
+      );
+      e.target.value = '';
+      return;
+    }
+
     setUploadingBuildingFile(true);
     try {
       for (const file of files) {
@@ -1561,7 +1608,17 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
       toast.success(t('file_uploaded') || 'Fayl yuklandi');
     } catch (err) {
       console.error('Error uploading building file:', err);
-      toast.error(t('error_occurred') || 'Xatolik yuz berdi');
+      // Backend's size check may still trip if the env var is set lower
+      // than our local default — surface the same translated message.
+      const apiMsg = err?.response?.data?.message || err?.response?.data?.error || '';
+      if (/file size exceeds/i.test(apiMsg)) {
+        const limitMB = Math.floor(MAX_FILE_BYTES / (1024 * 1024));
+        toast.error(
+          (t('file_too_large') || "Fayl hajmi {limit} MB dan oshmasligi kerak").replace('{limit}', limitMB)
+        );
+      } else {
+        toast.error(t('error_occurred') || 'Xatolik yuz berdi');
+      }
     } finally {
       setUploadingBuildingFile(false);
       e.target.value = '';
@@ -2366,6 +2423,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
             sections={sections}
             team={team}
             vendors={vendors}
+            acts={acts}
             t={t}
             setActiveGroup={setActiveGroup}
             setActiveTab={setActiveTab}
@@ -2484,6 +2542,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                                     floors_count: building.floors_count || '',
                                     total_area: building.total_area || '',
                                     apartments_count: building.apartments_count || '',
+                                    commercial_units_count: building.commercial_units_count || '',
                                     estimated_cost: building.estimated_cost || '',
                                     status: building.status || 'draft'
                                   });
@@ -3217,6 +3276,8 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="residential">{t('residential') || 'Turar-joy'}</SelectItem>
+                    <SelectItem value="non_residential">{t('non_residential') || 'Noturar'}</SelectItem>
+                    <SelectItem value="residential_non_residential">{t('residential_non_residential') || 'Turar/noturar'}</SelectItem>
                     <SelectItem value="commercial">{t('commercial') || 'Tijorat'}</SelectItem>
                     <SelectItem value="parking">{t('parking') || 'Avtoturargoh'}</SelectItem>
                     <SelectItem value="mixed">{t('mixed') || 'Aralash'}</SelectItem>
@@ -3248,17 +3309,71 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                   placeholder="5000"
                 />
               </div>
-              <div>
-                <Label htmlFor="bld-apts">{t('apartments_count') || 'Xonadonlar soni'}</Label>
-                <NumberInput
-                  id="bld-apts"
-                  allowDecimal={false}
-                  value={buildingForm.apartments_count}
-                  onChange={(raw) => setBuildingForm({ ...buildingForm, apartments_count: raw })}
-                  placeholder="64"
-                />
-              </div>
+              {/* Units field — shape depends on building_type:
+                    • non_residential                → single "Noturar xonalar" input
+                      (mapped to commercial_units_count on the backend).
+                    • residential_non_residential    → row collapses, two inputs are
+                      rendered below in a separate grid: "Turar xonadonlar"
+                      (apartments_count) + "Noturar xonalar"
+                      (commercial_units_count).
+                    • everything else (incl. blank)  → single "Xonadonlar soni"
+                      input (apartments_count), original behaviour. */}
+              {buildingForm.building_type === 'non_residential' ? (
+                <div>
+                  <Label htmlFor="bld-non-res-units">{t('non_residential_units') || 'Noturar xonalar'}</Label>
+                  <NumberInput
+                    id="bld-non-res-units"
+                    allowDecimal={false}
+                    value={buildingForm.commercial_units_count}
+                    onChange={(raw) => setBuildingForm({ ...buildingForm, commercial_units_count: raw })}
+                    placeholder="32"
+                  />
+                </div>
+              ) : buildingForm.building_type === 'residential_non_residential' ? (
+                // Placeholder to keep the 2-col grid balanced; the real
+                // inputs live in the next grid below where both sit on
+                // their own row, side by side, with full width each.
+                <div />
+              ) : (
+                <div>
+                  <Label htmlFor="bld-apts">{t('apartments_count') || 'Xonadonlar soni'}</Label>
+                  <NumberInput
+                    id="bld-apts"
+                    allowDecimal={false}
+                    value={buildingForm.apartments_count}
+                    onChange={(raw) => setBuildingForm({ ...buildingForm, apartments_count: raw })}
+                    placeholder="64"
+                  />
+                </div>
+              )}
             </div>
+            {/* When building is mixed residential + non-residential, give
+               each unit-count input its own labelled cell on a dedicated
+               row so both numbers are equally prominent. */}
+            {buildingForm.building_type === 'residential_non_residential' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="bld-res-units">{t('residential_units') || 'Turar xonadonlar'}</Label>
+                  <NumberInput
+                    id="bld-res-units"
+                    allowDecimal={false}
+                    value={buildingForm.apartments_count}
+                    onChange={(raw) => setBuildingForm({ ...buildingForm, apartments_count: raw })}
+                    placeholder="64"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="bld-non-res-units-mix">{t('non_residential_units') || 'Noturar xonalar'}</Label>
+                  <NumberInput
+                    id="bld-non-res-units-mix"
+                    allowDecimal={false}
+                    value={buildingForm.commercial_units_count}
+                    onChange={(raw) => setBuildingForm({ ...buildingForm, commercial_units_count: raw })}
+                    placeholder="12"
+                  />
+                </div>
+              </div>
+            )}
             {buildingForm.id && (
               <div>
                 <Label>{t('status') || 'Holat'}</Label>
@@ -4579,6 +4694,19 @@ export default function Construction() {
 
       if (editingProject) {
         await updateProject(editingProject.id, formData);
+        // Sync the CRM link as a separate PUT (the main update endpoint
+        // doesn't know about crm_project_id; the dedicated /crm-link route
+        // owns that field so the regular form stays small and stable).
+        if (projectForm.crm_project_id !== editingProject.crm_project_id) {
+          try {
+            await constructionService.setProjectCRMLink(editingProject.id, projectForm.crm_project_id);
+          } catch (e) {
+            // Non-fatal — the project itself saved; surface the CRM error
+            // to the user but don't block the save.
+            console.warn('Failed to update CRM link:', e);
+            toast.error(t('crm_link_failed') || 'CRM bog\'lash xatosi');
+          }
+        }
         toast.success(t('project_updated') || 'Loyiha yangilandi');
       } else {
         await createProject(formData);
@@ -5414,6 +5542,20 @@ export default function Construction() {
                       </SelectContent>
                     </Select>
                   </div>
+                </section>
+
+                {/* CRM linkage — only shown when editing an existing project
+                    because we need its server-side id to PUT /crm-link.
+                    The save handler below picks up projectForm.crm_project_id
+                    and forwards it via constructionService.setProjectCRMLink. */}
+                <Separator />
+                <section>
+                  <CRMLinkPanel
+                    mode="project"
+                    value={projectForm.crm_project_id}
+                    onChange={(crmId) => setProjectForm({ ...projectForm, crm_project_id: crmId })}
+                    language={language}
+                  />
                 </section>
               </>
             )}

@@ -49,7 +49,7 @@ export const authService = {
   async login(email, password, tenantId = null, isPhone = false) {
     const payload = isPhone
       ? { phone: email.replace(/\s/g, ''), password }
-      : { email, password };
+      : { email: email.trim().toLowerCase(), password };
     if (tenantId) {
       payload.tenant_id = tenantId;
     }
