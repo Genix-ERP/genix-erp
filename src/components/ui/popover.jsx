@@ -9,8 +9,14 @@ const PopoverTrigger = PopoverPrimitive.Trigger
 
 const PopoverAnchor = PopoverPrimitive.Anchor
 
-const PopoverContent = React.forwardRef(({ className, align = "center", sideOffset = 4, ...props }, ref) => (
-  <PopoverPrimitive.Portal>
+const PopoverContent = React.forwardRef(({ className, align = "center", sideOffset = 4, noPortal = false, ...props }, ref) => {
+  // When set, skips the Portal wrapper so the content renders inline.
+  // Useful inside a Radix Dialog: the Dialog's react-remove-scroll
+  // blocks wheel events on any element portaled outside it, which
+  // breaks scroll on dropdown lists. Rendering inline keeps the
+  // content as a descendant of the Dialog content so wheel events
+  // are allowed through.
+  const content = (
     <PopoverPrimitive.Content
       ref={ref}
       align={align}
@@ -20,8 +26,9 @@ const PopoverContent = React.forwardRef(({ className, align = "center", sideOffs
         className
       )}
       {...props} />
-  </PopoverPrimitive.Portal>
-))
+  );
+  return noPortal ? content : <PopoverPrimitive.Portal>{content}</PopoverPrimitive.Portal>;
+})
 PopoverContent.displayName = PopoverPrimitive.Content.displayName
 
 export { Popover, PopoverTrigger, PopoverContent, PopoverAnchor }

@@ -535,10 +535,50 @@ export function QuickActionsWidget({ onAction }) {
 // ─────────────────────────────────────────────
 // Alerts Widget
 // ─────────────────────────────────────────────
-export function AlertsWidget({ project, sections = [], vendors = [] }) {
+export function AlertsWidget({ project, sections = [], vendors = [], acts = [] }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const alerts = [];
+
+  // Acts whose period_to deadline is within the next 5 days and still
+  // in an actionable state (draft / submitted). One alert per act,
+  // most-urgent first. Days are computed from calendar dates (not
+  // floored ms) so DST transitions don't shift an act over the
+  // 5-day boundary. We also include acts that are already 1 day
+  // overdue so an alert doesn't disappear the moment the deadline
+  // passes; anything older falls off this widget.
+  const ACT_WARN_DAYS = 5;
+  const msPerDay = 24 * 60 * 60 * 1000;
+  const todayMidnight = new Date(); todayMidnight.setHours(0, 0, 0, 0);
+  const dueSoonActs = [];
+  for (const a of Array.isArray(acts) ? acts : []) {
+    if (!a || !a.period_to) continue;
+    const state = String(a.state || '').toLowerCase();
+    if (state === 'approved' || state === 'cancelled' || state === 'rejected') continue;
+    const due = new Date(a.period_to);
+    if (Number.isNaN(due.getTime())) continue;
+    const dueMidnight = new Date(due); dueMidnight.setHours(0, 0, 0, 0);
+    const daysLeft = Math.round((dueMidnight - todayMidnight) / msPerDay);
+    if (daysLeft < -1 || daysLeft > ACT_WARN_DAYS) continue;
+    dueSoonActs.push({ act: a, daysLeft });
+  }
+  dueSoonActs.sort((x, y) => x.daysLeft - y.daysLeft);
+  for (const { act, daysLeft } of dueSoonActs) {
+    const isOverdue = daysLeft < 0;
+    const isToday   = daysLeft === 0;
+    const label = isOverdue
+      ? (t('act_overdue_label') || "Muddati o'tgan")
+      : isToday
+        ? (t('act_due_today_label') || 'Bugun muddati')
+        : `${daysLeft} ${t('days_left_short') || 'kun qoldi'}`;
+    alerts.push({
+      type: isOverdue ? 'error' : (daysLeft <= 1 ? 'warning' : 'info'),
+      title: `${act.name || 'Akt'} — ${label}`,
+      description: (t('act_deadline_alert_desc') || "Akt muddati yaqinlashmoqda")
+        + ` · ${new Date(act.period_to).toLocaleDateString()}`,
+      icon: Clock,
+    });
+  }
 
   if (project.total_smeta > project.contract_amount && project.contract_amount > 0) {
     alerts.push({

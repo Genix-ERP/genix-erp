@@ -245,9 +245,19 @@ export default function Returns() {
   const handleItemChange = (index, field, value) => {
     const newItems = [...formData.items];
     if (field === "quantity") {
-      newItems[index][field] = Math.max(1, parseInt(value) || 1);
+      // Keep the raw string while the user is typing — coercing to a
+      // number here breaks partial inputs like "0." or "0.5". The
+      // previous version did `Math.max(1, parseInt(value) || 1)`
+      // which (a) parseInt-truncated decimals to 0, then (b) bumped
+      // every <1 value back to 1, making it impossible to type
+      // fractional quantities like 0.525 (kg / m / etc.).
+      // The submit handler does parseFloat on the way out, so the
+      // payload sent to the backend is always numeric.
+      newItems[index][field] = value;
     } else if (field === "unit_price") {
-      newItems[index][field] = parseFloat(value) || 0;
+      // Same logic — keep raw input. Don't coerce intermediate
+      // states like "" or "0." back to 0.
+      newItems[index][field] = value;
     } else {
       newItems[index][field] = value;
     }
@@ -255,7 +265,20 @@ export default function Returns() {
   };
 
   const handleSubmit = async () => {
-    const totalAmount = formData.items.reduce(
+    // Coerce raw input strings (which may include partial states like
+    // "0." while the user was typing) into numbers exactly once,
+    // here at submission time. Empty / non-numeric → 0 so the
+    // backend never sees a string.
+    const num = (v) => {
+      const f = parseFloat(v);
+      return Number.isFinite(f) ? f : 0;
+    };
+    const normalizedItems = formData.items.map((item) => ({
+      ...item,
+      quantity: num(item.quantity),
+      unit_price: num(item.unit_price),
+    }));
+    const totalAmount = normalizedItems.reduce(
       (sum, item) => sum + item.quantity * item.unit_price,
       0
     );
@@ -263,7 +286,7 @@ export default function Returns() {
     const data = {
       ...formData,
       organization_id: activeCompany?.id,
-      items: formData.items.map((item) => ({
+      items: normalizedItems.map((item) => ({
         ...item,
         total: item.quantity * item.unit_price,
       })),
@@ -349,8 +372,15 @@ export default function Returns() {
     return conditions[condition] || condition;
   };
 
+  // Live total for the "Jami qaytarish summasi" preview. parseFloat
+  // each field so a partial string input ("0.") doesn't NaN the sum
+  // — empty inputs contribute 0, valid decimals contribute fully.
   const totalAmount = formData.items.reduce(
-    (sum, item) => sum + item.quantity * item.unit_price,
+    (sum, item) => {
+      const q = parseFloat(item.quantity);
+      const p = parseFloat(item.unit_price);
+      return sum + (Number.isFinite(q) ? q : 0) * (Number.isFinite(p) ? p : 0);
+    },
     0
   );
 
@@ -724,7 +754,8 @@ export default function Returns() {
                               )}
                               <Input
                                 type="number"
-                                min="1"
+                                min="0"
+                                step="any"
                                 value={item.quantity}
                                 onChange={(e) => handleItemChange(index, "quantity", e.target.value)}
                               />
@@ -738,6 +769,7 @@ export default function Returns() {
                               <Input
                                 type="number"
                                 min="0"
+                                step="any"
                                 value={item.unit_price}
                                 onChange={(e) => handleItemChange(index, "unit_price", e.target.value)}
                               />
@@ -764,7 +796,9 @@ export default function Returns() {
                               </Select>
                             </div>
                             <div className="w-32 h-10 flex items-center justify-end font-medium text-sm whitespace-nowrap">
-                              {formatCurrency(item.quantity * item.unit_price)}
+                              {formatCurrency(
+                                (parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0)
+                              )}
                             </div>
                             <Button
                               variant="ghost"

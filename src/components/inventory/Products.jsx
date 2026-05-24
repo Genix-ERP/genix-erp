@@ -499,10 +499,13 @@ export default function Products() {
     { key: 'requires_lot_tracking', label: 'Partiya kuzatuvi', render: (v) => v ? 'Ha' : 'Yo\'q' },
     { key: 'requires_serial_tracking', label: 'Seriya kuzatuvi', render: (v) => v ? 'Ha' : 'Yo\'q' },
 
-    // Units of Measure
-    { key: 'inventory_uom', label: 'Inventar birligi' },
-    { key: 'sales_uom', label: 'Sotish birligi' },
-    { key: 'purchase_uom', label: 'Sotib olish birligi' },
+    // Units of Measure — keys match what the API returns in ProductResponse
+    // (unit_code / *_unit_name), not the form field names. The previous keys
+    // (inventory_uom / sales_uom / purchase_uom) only exist on the edit form
+    // state, so the export silently wrote empty cells.
+    { key: 'unit_code', label: 'Inventar birligi' },
+    { key: 'sales_unit_name', label: 'Sotish birligi' },
+    { key: 'purchase_unit_name', label: 'Sotib olish birligi' },
     { key: 'uom_conversion_factor', label: 'Birlik konvertatsiyasi' },
 
     // Expiration
@@ -813,7 +816,12 @@ export default function Products() {
         'ulgurji narx': 'wholesale_price', // export: "Ulgurji narx" — import: "Ulgurji narxi"
         'kelib chiqish mamlakatiy': 'country_of_origin', // export label
         'og\'irlik': 'weight',
+        'uzunlik': 'length',                               // export: "Uzunlik" — import: "Uzunlik (cm)"
         'kenglik': 'width',
+        'balandlik': 'height',                             // export: "Balandlik" — import: "Balandlik (cm)"
+        'minimal zaxira': 'min_stock_level',               // export: "Minimal zaxira" — import: "Min qoldiq"
+        'yetkazib berish muddati (kun)': 'lead_time_days', // export: "Yetkazib berish muddati (kun)" — import: "Yetkazib berish kuni"
+        'saqlash sharoitlari': 'storage_conditions',       // export: plural — import: "Saqlash sharoiti" (singular)
       });
       // Strip the "*" required-marker, collapse whitespace, lowercase.
       // The downloaded template writes headers like "Nomi *" with the
@@ -1225,16 +1233,11 @@ export default function Products() {
     }
   };
 
-  // Summary calculations — use totalProducts from paginated API for total count
-  const summaryStats = {
-    totalProducts: totalProducts,
-    activeProducts: products.filter(p => p.is_active).length,
-    stockableProducts: products.filter(p => p.is_stockable).length,
-    lowStockProducts: products.filter(p => {
-      const stock = items.filter(i => i.product_id === p.id).reduce((s, i) => s + (i.current_stock || 0), 0);
-      return p.min_stock_level > 0 && stock <= p.min_stock_level;
-    }).length
-  };
+  // NOTE: Summary calculations were here but have been moved further down,
+  // after accessibleWarehouseIds is declared, so the "Omborda" card can
+  // count products that actually have stock in an accessible warehouse
+  // (rather than just counting products with the is_stockable attribute,
+  // which was a misleading proxy that ignored real stock levels).
 
   // Fetch the entire filtered product set (across all pages) and open
   // the Export modal once the data is in hand. Uses the same filters
@@ -1247,17 +1250,14 @@ export default function Products() {
       if (searchQuery) params.search = searchQuery;
       if (categoryFilter !== "all") params.category_id = categoryFilter;
       if (inventoryTypeFilter !== "all") params.inventory_type = inventoryTypeFilter;
+      if (warehouseFilter !== "all") params.warehouse_id = warehouseFilter;
       if (statusFilter === "inactive") params.include_inactive = "true";
       const result = await inventoryService.listProductsPaginated(params);
       let items = result?.data || [];
       // Same client-side filters as fetchProducts so the export
-      // matches what the user sees on screen.
-      if (warehouseFilter !== "all") {
-        const productIdsInWarehouse = new Set(
-          inventory.filter(i => i.warehouse_id === warehouseFilter).map(i => i.product_id)
-        );
-        items = items.filter(product => productIdsInWarehouse.has(product.id));
-      }
+      // matches what the user sees on screen. Warehouse filter is now
+      // server-side; only the inactive filter still needs client filtering
+      // because the backend returns active+inactive when include_inactive=true.
       if (statusFilter === "inactive") {
         items = items.filter(product => !product.is_active);
       }
@@ -1273,9 +1273,14 @@ export default function Products() {
     } finally {
       setIsPreparingExport(false);
     }
-  }, [searchQuery, categoryFilter, warehouseFilter, statusFilter, inventoryTypeFilter, inventory, toast, t]);
+  }, [searchQuery, categoryFilter, warehouseFilter, statusFilter, inventoryTypeFilter, toast, t]);
 
-  // Server-side fetch for products with pagination
+  // Server-side fetch for products with pagination.
+  // Warehouse filter is now sent to the backend (ListProducts accepts a
+  // `warehouse_id` param that filters via EXISTS on the inventory table).
+  // Previously the warehouse filter was applied client-side over the current
+  // 20-row page, which silently dropped any matching product that lived on
+  // any other page — making the filter look like it only worked for one item.
   const fetchProducts = useCallback(async () => {
     setProductsLoading(true);
     try {
@@ -1283,16 +1288,10 @@ export default function Products() {
       if (searchQuery) params.search = searchQuery;
       if (categoryFilter !== "all") params.category_id = categoryFilter;
       if (inventoryTypeFilter !== "all") params.inventory_type = inventoryTypeFilter;
+      if (warehouseFilter !== "all") params.warehouse_id = warehouseFilter;
       if (statusFilter === "inactive") params.include_inactive = "true";
       const result = await inventoryService.listProductsPaginated(params);
       let items = result?.data || [];
-      // Warehouse filter is client-side (not supported by backend)
-      if (warehouseFilter !== "all") {
-        const productIdsInWarehouse = new Set(
-          inventory.filter(i => i.warehouse_id === warehouseFilter).map(i => i.product_id)
-        );
-        items = items.filter(product => productIdsInWarehouse.has(product.id));
-      }
       // For inactive filter, backend returns all — filter client-side
       if (statusFilter === "inactive") {
         items = items.filter(product => !product.is_active);
@@ -1306,7 +1305,7 @@ export default function Products() {
     } finally {
       setProductsLoading(false);
     }
-  }, [currentPage, searchQuery, categoryFilter, warehouseFilter, statusFilter, inventoryTypeFilter, inventory]);
+  }, [currentPage, searchQuery, categoryFilter, warehouseFilter, statusFilter, inventoryTypeFilter]);
 
   useEffect(() => {
     fetchProducts();
@@ -1326,6 +1325,39 @@ export default function Products() {
       (warehouses || []).filter(w => w.organization_id === activeCompany.id).map(w => w.id)
     );
   }, [warehouses, activeCompany]);
+
+  // Summary stat cards above the product table. Two notes for future-self:
+  //   • totalProducts comes from the paginated API meta so it reflects the
+  //     full filtered set, not just the current page.
+  //   • activeProducts / inStockProducts / lowStockProducts are computed
+  //     from the local `products` and `inventory` arrays. The inventory
+  //     context fetches products with limit=5000 and inventory with
+  //     limit=10000, so for tenants beyond those caps these stats can
+  //     undercount — switch to a dedicated /products/stats endpoint if
+  //     that ever becomes a real problem.
+  //   • "inStockProducts" replaces the previous `stockableProducts`
+  //     metric (count of products with is_stockable=true). is_stockable
+  //     was a product attribute, not a measurement of real stock, which
+  //     made the "Omborda" card disagree with the warehouse totals.
+  const summaryStats = useMemo(() => {
+    const inStockProductIds = new Set();
+    for (const inv of inventory || []) {
+      const qty = inv.quantity_on_hand ?? inv.quantity ?? 0;
+      if (qty <= 0) continue;
+      if (inv.warehouse_type === 'scrap') continue;
+      if (!accessibleWarehouseIds.has(inv.warehouse_id)) continue;
+      if (inv.product_id) inStockProductIds.add(inv.product_id);
+    }
+    return {
+      totalProducts: totalProducts,
+      activeProducts: products.filter(p => p.is_active).length,
+      inStockProducts: inStockProductIds.size,
+      lowStockProducts: products.filter(p => {
+        const stock = items.filter(i => i.product_id === p.id).reduce((s, i) => s + (i.current_stock || 0), 0);
+        return p.min_stock_level > 0 && stock <= p.min_stock_level;
+      }).length,
+    };
+  }, [totalProducts, products, inventory, items, accessibleWarehouseIds]);
 
   const getProductStock = (productId) => {
     let stockItems = inventory.filter(i => i.product_id === productId && i.warehouse_type !== 'scrap' && accessibleWarehouseIds.has(i.warehouse_id));
@@ -1691,12 +1723,16 @@ export default function Products() {
       };
 
       await updateProduct(selectedProduct.id, productData);
+      toast({ title: t('success'), description: t('product_updated') || 'Mahsulot yangilandi' });
       resetForm();
       setSelectedProduct(null);
       setShowEditModal(false);
       fetchProducts();
     } catch (error) {
       console.error('Error updating product:', error);
+      const errData = error?.response?.data?.error;
+      const errMsg = typeof errData === 'string' ? errData : errData?.message || error?.response?.data?.message || error.message || t('update_failed');
+      toast({ title: t('error'), description: errMsg, variant: 'destructive' });
     } finally {
       setIsSaving(false);
     }
@@ -1781,12 +1817,34 @@ export default function Products() {
     setShowDeleteCategoryModal(true);
   };
 
-  const handleDeleteCategory = () => {
+  const handleDeleteCategory = async () => {
     if (!selectedCategory) return;
 
-    deleteCategory(selectedCategory.id);
-    setSelectedCategory(null);
-    setShowDeleteCategoryModal(false);
+    try {
+      await deleteCategory(selectedCategory.id);
+      setSelectedCategory(null);
+      setShowDeleteCategoryModal(false);
+    } catch (err) {
+      // Map backend BadRequest messages to translated toasts. The backend
+      // refuses to delete a category that still has products or has child
+      // categories — without this surfacing, the user just sees a silent
+      // failure (toast title is generic, body lives in console).
+      const backendMsg = err?.response?.data?.error?.message || '';
+      let description = t('delete_category_failed') || 'Failed to delete category';
+      if (backendMsg.includes('associated products')) {
+        description = t('category_has_products')
+          || 'This category still has products. Move them to another category before deleting.';
+      } else if (backendMsg.includes('child categories')) {
+        description = t('category_has_subcategories')
+          || 'This category has sub-categories. Delete the sub-categories first.';
+      }
+      toast({
+        title: t('delete_category_failed') || 'Failed to delete category',
+        description,
+        variant: 'destructive',
+      });
+      setShowDeleteCategoryModal(false);
+    }
   };
 
   const getTypeColor = (type) => {
@@ -1924,9 +1982,9 @@ export default function Products() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">{t('stockable')}</p>
+                <p className="text-sm text-slate-500">{t('products_in_stock') || 'In Stock'}</p>
                 <p className="text-2xl font-bold text-blue-600">
-                  {summaryStats.stockableProducts}
+                  {summaryStats.inStockProducts}
                 </p>
               </div>
               <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
@@ -2131,7 +2189,14 @@ export default function Products() {
                               )}
                             </div>
                             <div>
-                              <p className="font-medium text-slate-900">{product.name}</p>
+                              <div className="flex items-center gap-1.5">
+                                <p className="font-medium text-slate-900">{product.name}</p>
+                                {product.track_inventory === false && (
+                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 bg-amber-50 text-amber-700 border-amber-200">
+                                    {language === 'uz' ? "Kuzatilmaydi" : language === 'ru' ? "Без учёта" : "Untracked"}
+                                  </Badge>
+                                )}
+                              </div>
                               {product.barcode && (
                                 <p className="text-xs text-slate-500 flex items-center gap-1">
                                   <Barcode className="w-3 h-3" /> {product.barcode}
@@ -2354,7 +2419,13 @@ export default function Products() {
                     </TableHeader>
                     <TableBody>
                       {categories.map((category) => {
-                        const productCount = products.filter(p => p.category_id === category.id).length;
+                        // Use the backend-supplied tenant-wide count rather
+                        // than filtering the org-scoped `products` array.
+                        // The local count missed products in sibling orgs,
+                        // which made the delete-category guard refuse rows
+                        // the UI claimed had "0 mahsulotlar".
+                        const productCount = category.product_count
+                          ?? products.filter(p => p.category_id === category.id).length;
                         return (
                           <TableRow key={category.id} className="hover:bg-slate-50/50">
                             <TableCell className="font-medium text-slate-900">
@@ -2875,7 +2946,7 @@ export default function Products() {
                       <ChevronDown className="w-4 h-4 ml-2 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-[--radix-popover-trigger-width] p-2" align="start">
+                  <PopoverContent noPortal className="w-[--radix-popover-trigger-width] p-2" align="start">
                     <div
                       className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-100 cursor-pointer"
                       onClick={() => {
@@ -2890,7 +2961,7 @@ export default function Products() {
                       <span className="text-sm font-medium">{t('select_all') || 'Select all'}</span>
                     </div>
                     <div className="border-t my-1" />
-                    <div className="max-h-60 overflow-y-auto">
+                    <div className="max-h-[min(60vh,20rem)] overflow-y-auto overscroll-contain">
                       {companies.map(company => {
                         const isActive = activeCompany?.id === company.id;
                         return (
@@ -3000,6 +3071,24 @@ export default function Products() {
             {formData.type === 'product' && (
               <div>
                 <h4 className="font-semibold text-slate-900 mb-3">{t('inventory_settings')}</h4>
+                <div className="flex items-center justify-between mb-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                  <div className="flex-1">
+                    <span className="text-sm font-medium text-slate-700">
+                      {language === 'uz' ? "Miqdorni kuzatish" : language === 'ru' ? "Отслеживать количество" : "Track Inventory"}
+                    </span>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {language === 'uz'
+                        ? "O'chirilganda miqdor omborda kamaytirilmaydi (suv, gaz kabi cheksiz ta'minotlar)"
+                        : language === 'ru'
+                        ? "При отключении количество не списывается со склада (вода, газ — бесконечное снабжение)"
+                        : "When off, quantity is never deducted from inventory (water, gas — infinite supply)"}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={formData.track_inventory !== false}
+                    onCheckedChange={(checked) => setFormData({...formData, track_inventory: checked})}
+                  />
+                </div>
                 <div className="grid grid-cols-3 gap-4">
                   <div>
                     <LabelWithHelp

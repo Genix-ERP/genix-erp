@@ -176,9 +176,24 @@ export default function ChartOfAccounts() {
     return filtered;
   }, [accounts, searchQuery, typeFilter]);
 
-  // Calculate totals by type (category from backend)
-  // Only sum leaf accounts (non-parent) to avoid double-counting parent + children
-  // Contra-asset accounts (normal_balance=credit) reduce the asset total
+  // Calculate totals by type (category from backend).
+  // Only sum leaf accounts (non-parent) to avoid double-counting parent + children.
+  //
+  // Sign convention: accounts.current_balance is stored in the universal DR-CR
+  // convention (debit minus credit), so credit-normal categories (liability,
+  // equity, revenue) carry negative values when in their normal healthy state.
+  // To match how the Asosiy panel dashboard displays these (positive numbers
+  // for income, equity, etc., matching what non-accountants expect), we flip
+  // the sign for accounts whose normal_balance is 'credit'. After the flip
+  // every category is summed in its "natural" positive direction:
+  //   - Aktiv +X     → assets owned
+  //   - Majburiyat +X → liabilities owed
+  //   - Kapital +X   → equity recognized
+  //   - Daromad +X   → revenue earned
+  //   - Xarajat +X   → expenses incurred
+  // Contra-asset accounts (normal_balance=credit but category=asset, e.g.,
+  // accumulated depreciation) still reduce the asset total — their natural
+  // sign is the opposite of what they reduce, so we subtract abs().
   const totals = useMemo(() => {
     const parentIds = new Set(accounts.filter(a => a.parent_id).map(a => a.parent_id));
     const result = { asset: 0, liability: 0, equity: 0, revenue: 0, expense: 0 };
@@ -186,12 +201,21 @@ export default function ChartOfAccounts() {
       // Skip parent accounts to avoid double-counting
       if (parentIds.has(acc.id)) return;
       const category = acc.category || acc.type;
-      if (result[category] !== undefined) {
-        if (isContraAsset(acc)) {
-          result[category] -= Math.abs(acc.current_balance || 0);
-        } else {
-          result[category] += acc.current_balance || 0;
-        }
+      if (result[category] === undefined) return;
+      const rawBalance = acc.current_balance || 0;
+      if (isContraAsset(acc)) {
+        // Contra-asset: subtracts from gross asset total (e.g., 4910
+        // Shubhali qarzlar zaxirasi). Same as before.
+        result[category] -= Math.abs(rawBalance);
+      } else if (acc.normal_balance === 'credit') {
+        // Credit-normal accounts (liability/equity/revenue): flip sign so
+        // a healthy negative DR-CR balance displays as a positive natural
+        // amount.
+        result[category] -= rawBalance;
+      } else {
+        // Debit-normal accounts (asset/expense): raw balance already
+        // matches the natural display sign.
+        result[category] += rawBalance;
       }
     });
     return result;

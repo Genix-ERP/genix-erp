@@ -44,6 +44,7 @@ export default function WorkOrders() {
     quantity_produced: 0,
     scrap_quantity: 0,
     scrap_reason: '',
+    shortfall_reason: '',
   });
 
   // Load data
@@ -175,6 +176,7 @@ export default function WorkOrders() {
         quantity_produced: 0,
         scrap_quantity: 0,
         scrap_reason: '',
+        shortfall_reason: '',
       });
       loadData();
     } catch (error) {
@@ -701,12 +703,33 @@ export default function WorkOrders() {
                         />
                       </div>
                     )}
+                    {(() => {
+                      const remaining = (selectedWorkOrder.quantity_to_produce || 0) - (selectedWorkOrder.quantity_produced || 0);
+                      const isShort = (completeForm.quantity_produced + completeForm.scrap_quantity) < remaining && completeForm.quantity_produced > 0;
+                      return isShort ? (
+                        <div className="col-span-2">
+                          <label className="text-sm font-medium mb-1 block text-amber-700">
+                            {language === 'uz' ? 'Kamomad sababi' : language === 'ru' ? 'Причина недостачи' : 'Shortfall Reason'} *
+                          </label>
+                          <textarea
+                            className="w-full border rounded-md p-2 text-sm min-h-[60px]"
+                            value={completeForm.shortfall_reason}
+                            onChange={(e) => setCompleteForm({...completeForm, shortfall_reason: e.target.value})}
+                            placeholder={language === 'uz' ? 'Nima uchun kamroq ishlab chiqarildi...' : language === 'ru' ? 'Укажите причину недостачи...' : 'Why was less produced...'}
+                          />
+                        </div>
+                      ) : null;
+                    })()}
                   </div>
                   <div className="mt-4 flex justify-end">
                     <Button
                       onClick={handleCompleteWorkOrder}
                       className="bg-gradient-to-r from-green-600 to-green-700"
-                      disabled={completeForm.quantity_produced <= 0}
+                      disabled={completeForm.quantity_produced <= 0 || (() => {
+                        const remaining = (selectedWorkOrder?.quantity_to_produce || 0) - (selectedWorkOrder?.quantity_produced || 0);
+                        const isShort = (completeForm.quantity_produced + completeForm.scrap_quantity) < remaining && completeForm.quantity_produced > 0;
+                        return isShort && !completeForm.shortfall_reason.trim();
+                      })()}
                     >
                       <CheckCircle className="w-4 h-4 mr-2" />
                       {t('mark_as_done') || 'Mark as Done'}

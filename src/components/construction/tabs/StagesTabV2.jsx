@@ -6,10 +6,12 @@ import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useAuth } from '@/components/contexts/AuthContext';
+import { useEmployeePermissions } from '@/components/contexts/EmployeePermissionsContext';
 import { useTranslation } from '@/components/utils/translations';
 import { constructionService } from '@/api/services/construction';
 import { formatApiError } from '@/utils/apiErrors';
 import AddResourcePickerModal from '@/components/construction/AddResourcePickerModal';
+import AddSubWorkModal from '@/components/construction/AddSubWorkModal';
 
 // =====================================================================
 // StagesTabV2 — full port of construction_module_v2.html
@@ -473,6 +475,11 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
   const { user, isSiteAdmin, isOwner } = useAuth();
   const canSwitchRole = (typeof isSiteAdmin === 'function' && isSiteAdmin())
     || (typeof isOwner === 'function' && isOwner());
+  // Permission gating for the per-stage trash button. Admins/owners/
+  // site-admins are auto-true via the hook; regular employees only see
+  // the delete affordance when their role grants `construction.delete`.
+  const { canDelete: canDeletePermFn } = useEmployeePermissions();
+  const canDeleteConstruction = canDeletePermFn('construction');
 
   // ── Data state ───────────────────────────────────────────────────
   const [buildings, setBuildings] = useState([]);    // act as v2's "blocks"
@@ -483,6 +490,58 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
   const [loading, setLoading] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0); // bump to force a reload
   const [buildingStageCounts, setBuildingStageCounts] = useState({}); // buildingId → stage count
+
+  // Manually-added stages — rows from construction_stages that don't have
+  // any works yet under their name. The Bosqichlar list is normally derived
+  // from estimate-work parent paths (deriveStages below), so a stage with
+  // zero works wouldn't render at all. We fetch listStages for the active
+  // building and merge any whose name isn't already represented by derived
+  // stages, rendered as empty cards (0 works, 0%, pending status).
+  const [manualStages, setManualStages] = useState([]); // [{id, name, building_id, ...}]
+
+  // "+ Bosqich qo'shish" modal state. null = closed; { name } = open with a
+  // draft name field. Submission calls createStage on the server, then
+  // bumps refreshTick so the merged list pulls the new row in.
+  const [addStageModal, setAddStageModal] = useState(null);
+  const [addStageBusy, setAddStageBusy] = useState(false);
+
+  // IDs of stages the user added via "+ Bosqich qo'shish".
+  //
+  // Persisted in localStorage (per project) so the "user-added at top"
+  // ordering survives page reloads. We can't infer this from the
+  // backend alone because:
+  //   • construction_stages has no `is_user_created` flag — both manual
+  //     and auto-import paths use the same createStage endpoint.
+  //   • Multiple єдинич estimates in a block produce many auto-stage
+  //     rows; only ONE єдинич is loaded into `lines` at a time, so the
+  //     other імports' stages appear "empty" and would otherwise outrank
+  //     the user's own stage in an id-DESC sort.
+  // Marking explicitly is the cleanest discriminator without a backend
+  // change. Modal save handler below pushes the new id; the stages
+  // useMemo filters by Set membership.
+  const manualIdsStorageKey = project?.id ? `manualStageIds:${project.id}` : '';
+  const [recentlyAddedStageIds, setRecentlyAddedStageIds] = useState(() => {
+    if (!project?.id) return [];
+    try {
+      const raw = window.localStorage.getItem(`manualStageIds:${project.id}`);
+      if (!raw) return [];
+      const arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr.map(Number).filter(Number.isFinite) : [];
+    } catch { return []; }
+  });
+  const persistManualIds = useCallback((ids) => {
+    if (!manualIdsStorageKey) return;
+    try { window.localStorage.setItem(manualIdsStorageKey, JSON.stringify(ids)); }
+    catch { /* quota / disabled — ignore, in-memory state still works */ }
+  }, [manualIdsStorageKey]);
+
+  // Parent stage name for the "+ Sub-bosqich" modal. When set, the
+  // AddSubWorkModal opens in section mode and creates a new sub-stage
+  // (an estimate line whose parent_item_number = `${parentStage} › ${name}`).
+  // This gives the user the richer form (code/name/uom/qty) they
+  // expected, mirroring the "Yangi qo'shimcha etap" dialog in Smeta
+  // boshqaruvi instead of the simpler name-only AddStageModal.
+  const [addSubBosqichParent, setAddSubBosqichParent] = useState(null);
   // ВОР Miqdor lookup for the active building. Bosqichlar drives its
   // works off the Единич estimate (which is now imported in template
   // mode with quantity=0), but the user-visible REJA column wants the
@@ -610,16 +669,27 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
         // because that would put fake stages back on the page.
         const sameBuilding = list.filter((e) =>
           activeBuildingId ? Number(e.building_id) === Number(activeBuildingId) : !e.building_id);
-        let matchedEst = sameBuilding.find(
-          (e) => String(e.source_type || '').toLowerCase() === 'edinich'
-        ) || null;
+        // Pick the LATEST єdinich for this block (highest id) when the
+        // block has been re-imported multiple times. `find()` used to
+        // pick whatever came first in the API order, which is typically
+        // id ASC — so old imports without `original_quantity` (column
+        // added by migration 349) would win, leaving REJA stuck at 0
+        // even after the user reimported a fresh file. Sorting DESC by
+        // id makes the most recent import authoritative.
+        const sortedEdinich = sameBuilding
+          .filter((e) => String(e.source_type || '').toLowerCase() === 'edinich')
+          .sort((a, b) => Number(b.id || 0) - Number(a.id || 0));
+        let matchedEst = sortedEdinich[0] || null;
         // ВОР side-fetch — same building. Used only to source the user-
         // facing REJA quantity for each work; the actual stage tree
         // still comes from единич. Done in parallel with the единич
         // line fetch below to avoid a serial round-trip.
-        const vorEst = sameBuilding.find(
-          (e) => String(e.source_type || '').toLowerCase() === 'vor'
-        ) || null;
+        // Same "latest wins" rule for ВОР as for єдинич — old ВОР
+        // imports may not match the current єдинич's section structure.
+        const sortedVor = sameBuilding
+          .filter((e) => String(e.source_type || '').toLowerCase() === 'vor')
+          .sort((a, b) => Number(b.id || 0) - Number(a.id || 0));
+        const vorEst = sortedVor[0] || null;
         if (!matchedEst) {
           setLines([]);
           setActiveEstimateId(null);
@@ -728,17 +798,156 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
 
   const reload = () => setRefreshTick((n) => n + 1);
 
+  // Cascade-delete a stage by name. Removes:
+  //   • Every estimate line whose parent_item_number === stageName OR
+  //     starts with `${stageName} › ` (so nested sub-stages go too).
+  //   • The construction_stages row(s) sharing that name.
+  // Confirmation in window.confirm shows how many works get deleted.
+  // Wired to the trash button on each stage card header below.
+  const removeStage = useCallback(async (stageName) => {
+    if (!stageName) return;
+    const matchingLines = lines.filter((ln) => {
+      const isSub = ln.parent_line_id != null && Number(ln.parent_line_id) > 0;
+      if (isSub) return false;
+      const pin = String(ln.parent_item_number || '');
+      return pin === stageName || pin.startsWith(`${stageName} › `);
+    });
+    const matchingStages = manualStages.filter((s) => {
+      const n = String(s.name || '');
+      return n === stageName || n.startsWith(`${stageName} › `);
+    });
+    const title = t('delete_stage') || "Bosqichni o'chirish";
+    const body = (t('confirm_delete_stage_body')
+      || "\"{stage}\" bosqichini va undagi {n} ta ishni o'chirmoqchimisiz?\n\nBu amalni qaytarib bo'lmaydi.")
+      .replace('{stage}', stageName)
+      .replace('{n}', String(matchingLines.length));
+    askConfirm(title, body, async () => {
+      try {
+        for (const ln of matchingLines) {
+          try {
+            await constructionService.deleteEstimateLine(
+              Number(ln.estimate_id || activeEstimateId || 0),
+              ln.id,
+            );
+          } catch (e) {
+            console.error('Failed to delete line', ln.id, e);
+          }
+        }
+        const deletedIds = new Set();
+        for (const s of matchingStages) {
+          try {
+            await constructionService.deleteStage(s.id);
+            deletedIds.add(Number(s.id));
+          } catch {
+            /* already gone server-side; ignore */
+          }
+        }
+        // Prune deleted IDs from the localStorage-tracked manual list
+        // so it doesn't accumulate stale references over time.
+        if (deletedIds.size > 0) {
+          setRecentlyAddedStageIds((prev) => {
+            const next = prev.filter((id) => !deletedIds.has(Number(id)));
+            persistManualIds(next);
+            return next;
+          });
+        }
+        reload();
+        toast.success(t('deleted') || "O'chirildi");
+      } catch (e) {
+        toast.error(formatApiError(e, t, 'Xatolik'));
+      }
+    }, t('delete') || "O'chirish");
+  }, [lines, manualStages, activeEstimateId, t, askConfirm, persistManualIds]);
+
+  // ── Fetch manually-created stages for the active building ────────
+  // Stages are stored in construction_stages (migration 333 made them
+  // building-scoped). Most of them are auto-created on import from the
+  // Единич "СЕКЦИЯ" headers, but the user can also add them via the
+  // "+ Bosqich qo'shish" button below — and those won't show up in the
+  // path-derived list because they have no works yet.
+  useEffect(() => {
+    if (!project?.id) return;
+    let cancelled = false;
+    const opts = activeBuildingId ? { buildingId: activeBuildingId } : undefined;
+    constructionService.listStages(project.id, opts)
+      .then((rows) => {
+        if (cancelled) return;
+        const list = Array.isArray(rows) ? rows : (rows?.data || rows?.items || []);
+        // Scope to the active building. listStages with a buildingId arg
+        // already filters server-side; the local filter is a belt-and-
+        // braces guard for the "Hammasi" case (no filter passed).
+        // No sort — we preserve the backend's natural order. Newly-added
+        // stages from THIS session are floated to the top separately via
+        // recentlyAddedStageIds below, so we don't disturb the order of
+        // auto-imported stages that already live in construction_stages.
+        setManualStages(
+          activeBuildingId
+            ? list.filter((s) => Number(s.building_id) === Number(activeBuildingId))
+            : list,
+        );
+      })
+      .catch(() => { if (!cancelled) setManualStages([]); });
+    return () => { cancelled = true; };
+  }, [project?.id, activeBuildingId, refreshTick]);
+
   // ── Derived data ─────────────────────────────────────────────────
-  const stages = useMemo(() => deriveStages(lines), [lines]);
-  // Plan-quantity resolver for progress aggregations: prefer the ВОР
-  // Miqdor for the work's name; fall back to its own quantity for any
-  // work that isn't in the ВОР map (custom-added rows, or projects
-  // without a ВОР sheet). Stable identity is fine across renders.
+  // Path-derived stages (work-driven). These carry the actual progress,
+  // cost, and approval state visible on each card.
+  const derivedStages = useMemo(() => deriveStages(lines), [lines]);
+  // Merge in manually-created empty stages — those whose name isn't
+  // already represented by a derived stage. Empty stages render with
+  // 0 works / 0% progress / "pending" status, which the existing
+  // stage-card code path handles cleanly (stageStatus returns
+  // 'pending' for ws.length === 0, progressFromWorks returns 0).
+  // Once the user adds works under such a stage via Smeta boshqaruvi,
+  // the derived stage takes over and the entry is no longer "empty".
+  const stages = useMemo(() => {
+    const derivedNames = new Set(
+      derivedStages.map((s) => String(s.name || '').trim().toLowerCase()),
+    );
+    // Only stages whose id is in the localStorage-tracked "user
+    // explicitly added" set show up as empty extras at the TOP. Other
+    // construction_stages rows that have no loaded lines (e.g.
+    // auto-import ghosts from a re-imported єdinich whose lines aren't
+    // the active єdinich) are intentionally HIDDEN — they would
+    // otherwise flood the Bosqichlar list with 0-ish entries that the
+    // user has no way to act on. Stages with works are rendered by the
+    // derivedStages list regardless.
+    const userAddedSet = new Set(recentlyAddedStageIds.map(Number));
+    const userAdded = [];
+    for (const ms of manualStages) {
+      if (!userAddedSet.has(Number(ms.id))) continue;
+      const key = String(ms.name || '').trim().toLowerCase();
+      if (!key) continue;
+      if (derivedNames.has(key)) continue; // already in derived (has works)
+      userAdded.push({
+        name: ms.name,
+        works: [],
+        subStages: [],
+        manual_stage_id: ms.id,
+      });
+    }
+    // Newest user-add first (highest id).
+    userAdded.sort((a, b) =>
+      Number(b.manual_stage_id || 0) - Number(a.manual_stage_id || 0),
+    );
+    return [...userAdded, ...derivedStages];
+  }, [derivedStages, manualStages, recentlyAddedStageIds]);
+  // Plan-quantity resolver for progress aggregations. Fallback chain:
+  //   1. ВОР Miqdor (strict key: section + name + uom).
+  //   2. ВОР Miqdor (loose: name only) — rescues files where section
+  //      labels differ between Единич and ВОР.
+  //   3. The Единич row's `original_quantity` (col F "по проектным
+  //      данным", anchored at import via migration 349). This is the
+  //      important fallback for projects with NO ВОР sheet: template-mode
+  //      Единич imports zero out the live `quantity` ledger so the
+  //      foreman can type FAKT, which made REJA render as 0 here without
+  //      this fallback. original_quantity preserves the file value.
+  //   4. The work's own live `quantity` — last-ditch fallback for
+  //      legacy rows that predate the original_quantity anchor or for
+  //      custom-added rows the user entered a value on.
   const resolveWorkQty = useCallback((w) => {
     if (!w) return 0;
-    // vorPlanByName is now { strict, loose } — try strict (section +
-    // name + uom) first so duplicates in different sections of the
-    // same ВОР sheet stay separated, then fall back to name-only.
     const strict = vorPlanByName?.strict;
     const loose = vorPlanByName?.loose;
     if (strict) {
@@ -750,6 +959,8 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
       const v = loose.get(normName(w.name)) || 0;
       if (v > 0) return v;
     }
+    const origQty = Number(w.original_quantity || 0);
+    if (origQty > 0) return origQty;
     return Number(w.quantity || 0);
   }, [vorPlanByName]);
   const blockProg = useMemo(() => blockProgress(stages, resolveWorkQty), [stages, resolveWorkQty]);
@@ -1081,6 +1292,21 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
       <div className="rounded-xl border border-slate-200 bg-white p-4">
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <h2 className="text-base font-bold text-slate-900">📐 {t('blocks_section')}</h2>
+          {/* "+ Bosqich qo'shish" — opens the create-stage modal. Disabled
+             when no building is active because construction_stages rows
+             must be scoped to a building (migration 333). Visible to any
+             role with tab access; backend createStage still validates the
+             user's project permissions. */}
+          {activeBuildingId && (
+            <button
+              type="button"
+              onClick={() => setAddStageModal({ name: '' })}
+              className="px-3 py-1.5 rounded-lg text-[12px] font-semibold border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition inline-flex items-center gap-1.5"
+            >
+              <span className="text-[14px] leading-none">+</span>
+              {t('add_stage') || "Bosqich qo'shish"}
+            </button>
+          )}
         </div>
         <div className="flex gap-2 flex-wrap">
           {buildings.length === 0 ? (
@@ -1159,11 +1385,16 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
                     : (hasSubmitted ? '0 0 0 1px rgba(245,158,11,0.08)' : 'none'),
                 }}
               >
-                {/* Stage header */}
+                {/* Stage header — outer div so a trash button can sit next
+                   to the toggle without nesting buttons. The toggle button
+                   absorbs the bulk of the row (flex-1) so click-anywhere
+                   to expand still works; the trash icon is a sibling that
+                   only swallows its own click. */}
+                <div className="w-full flex items-stretch hover:bg-slate-50 transition">
                 <button
                   type="button"
                   onClick={() => toggleStage(stKey)}
-                  className="w-full px-5 py-4 flex items-center gap-4 hover:bg-slate-50 transition text-left"
+                  className="flex-1 min-w-0 px-5 py-4 flex items-center gap-4 text-left"
                 >
                   {/* Stage chevron — mockup uses a CSS-rotated ▶ arrow. */}
                   <span
@@ -1227,11 +1458,61 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
                       : <span className="inline-flex items-center gap-1.5"><span className="text-[14px] leading-none">🔒</span> {t('hidden')}</span>}
                   </div>
                 </button>
+                {/* Trash icon — cascade-deletes the whole stage (every
+                   work under it AND any nested sub-stages). Hidden for
+                   the synthetic "Uncategorized" bucket since that's a
+                   virtual grouping not backed by a real name.
+                   Permission gated via canDeleteConstruction: only
+                   tenant admins/owners and employees with the
+                   `construction.delete` permission see this button. */}
+                {canDeleteConstruction && stage.name !== UNCATEGORISED_KEY && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); removeStage(stage.name); }}
+                    className="px-3 flex items-center justify-center text-red-500 hover:text-red-700 hover:bg-red-50 border-l border-slate-100"
+                    title={t('delete_stage') || "Bosqichni o'chirish"}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="3 6 5 6 21 6" />
+                      <path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6" />
+                      <path d="M10 11v6" />
+                      <path d="M14 11v6" />
+                      <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
+                    </svg>
+                  </button>
+                )}
+                </div>
 
                 {/* Stage content — sub-stages if the works' item_numbers
                    carry a hierarchical layer, flat works table otherwise. */}
                 {expanded && (
                   <div className="border-t border-slate-100 bg-slate-50 px-5 py-4">
+                    {/* "+ Sub-bosqich" — opens the richer AddSubWorkModal
+                       (same form as "Yangi qo'shimcha etap" in Smeta
+                       boshqaruvi: code, name, uom, qty). The modal saves
+                       an estimate line with parent_item_number =
+                       "PARENT_STAGE › NEW_NAME", which the deriveStages
+                       grouping renders as a new sub-stage under this
+                       stage. Disabled when there's no active єдинич
+                       estimate to attach the line to. */}
+                    <div className="flex justify-end mb-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!activeEstimateId) {
+                            toast.error(t('no_estimate_for_work')
+                              || "Bu blok uchun єдинич smeta topilmadi");
+                            return;
+                          }
+                          setAddSubBosqichParent(stage.name);
+                        }}
+                        className="px-3 py-1.5 rounded-md text-[11px] font-medium border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 inline-flex items-center gap-1"
+                      >
+                        <span className="text-[13px] leading-none font-bold">+</span>
+                        {t('add_substage') || "Sub-bosqich qo'shish"}
+                      </button>
+                    </div>
+
                     <StageBody
                       stage={stage}
                       canSeeCost={canSeeCost}
@@ -1312,6 +1593,170 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
           reload();
         }}
       />
+
+      {/* "+ Sub-bosqich" modal — re-uses the AddSubWorkModal component in
+         its "parentSection" mode so the user gets the familiar
+         code / name / uom / qty form. The new line is saved with
+         parent_item_number = `${stage.name} › ${name}`, which the
+         deriveStages grouping picks up as a fresh sub-stage. */}
+      <AddSubWorkModal
+        open={!!addSubBosqichParent}
+        onClose={() => setAddSubBosqichParent(null)}
+        projectId={project?.id}
+        estimateId={activeEstimateId}
+        parentSection={addSubBosqichParent || ''}
+        onSaved={() => {
+          setAddSubBosqichParent(null);
+          reload();
+        }}
+      />
+
+      {/* Add-stage modal — manually create a stage for the active
+         block. POSTs to construction_stages via createStage; once the
+         list reload fires, the new (empty) stage shows up as a card on
+         this tab because the manualStages → stages merge above adds
+         zero-work stages whose name isn't already covered by a
+         derived stage.
+
+         When a parent stage is picked from the dropdown, the new
+         stage's name is composed as "PARENT › CHILD" using the same
+         " › " delimiter the importer uses. The hierarchical name is
+         what other tabs (Smeta boshqaruvi) need to render the entry
+         as a nested sub-stage. */}
+      {addStageModal && (
+        <AddStageModal
+          value={addStageModal.name}
+          parent={addStageModal.parent || ''}
+          onChange={(name) => setAddStageModal((m) => ({ ...m, name }))}
+          busy={addStageBusy}
+          onCancel={() => { if (!addStageBusy) setAddStageModal(null); }}
+          onConfirm={async () => {
+            const rawName = (addStageModal.name || '').trim();
+            if (!rawName) return;
+            const parent = (addStageModal.parent || '').trim();
+            const fullName = parent ? `${parent} › ${rawName}` : rawName;
+            setAddStageBusy(true);
+            try {
+              const created = await constructionService.createStage(project.id, {
+                name: fullName,
+                status: 'not_started',
+                planned_budget: 0,
+                // Migration 333: stages are building-scoped. The button is
+                // disabled when activeBuildingId is null so we can safely
+                // pass it here without a guard.
+                building_id: Number(activeBuildingId),
+              });
+              // Remember the new id so the stages useMemo can pin it to
+              // the top of the list once listStages re-fetches.
+              // Persisted to localStorage so the ordering survives reloads.
+              if (created && created.id != null) {
+                setRecentlyAddedStageIds((prev) => {
+                  const next = [...prev, Number(created.id)];
+                  persistManualIds(next);
+                  return next;
+                });
+              }
+              setAddStageModal(null);
+              reload();
+              toast.success(t('stage_added') || "Bosqich qo'shildi");
+            } catch (e) {
+              toast.error(formatApiError(e, t, 'Xatolik'));
+            } finally {
+              setAddStageBusy(false);
+            }
+          }}
+          t={t}
+        />
+      )}
+    </div>
+  );
+}
+
+// =====================================================================
+// ADD STAGE MODAL — two modes driven by the `parent` prop:
+//
+//   • parent empty → "Bosqich qo'shish" creates a top-level stage.
+//   • parent set   → "Sub-bosqich qo'shish" with a fixed-parent badge
+//     (no dropdown — the caller's expanded stage card already picked it).
+//
+// The composed name "PARENT › CHILD" is what the section-grouping logic
+// elsewhere uses to nest the entry under its parent.
+// =====================================================================
+function AddStageModal({
+  value, onChange,
+  parent,
+  busy, onCancel, onConfirm, t,
+}) {
+  const isSub = !!(parent && String(parent).trim());
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center"
+         style={{ background: 'rgba(15,23,42,0.5)' }}
+         onClick={onCancel}>
+      <div className="bg-white rounded-2xl p-6 max-w-[480px] w-[90%] shadow-2xl"
+           onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-base font-bold text-slate-900 mb-1">
+          {isSub
+            ? (t('add_substage') || "Sub-bosqich qo'shish")
+            : (t('add_stage') || "Bosqich qo'shish")}
+        </h3>
+        <p className="text-[12px] text-slate-500 mb-4">
+          {isSub
+            ? (t('add_substage_hint') || "Yangi sub-bosqich nomi")
+            : (t('add_stage_hint') || "Yangi bosqich nomi (masalan: \"Pardozlash\", \"Elektrika\")")}
+        </p>
+
+        {/* Parent breadcrumb pill — sub-stage mode only. The parent is
+           fixed by the entry point (the "+ Sub-bosqich" button on the
+           expanded stage card), so we show it read-only. */}
+        {isSub && (
+          <div className="mb-4 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-[12px] text-emerald-700">
+            <span className="text-emerald-500 mr-1">{t('parent_section_label') || "Asosiy:"}</span>
+            <span className="font-medium">{parent}</span>
+          </div>
+        )}
+
+        <label className="block text-[11px] uppercase tracking-wider font-semibold text-slate-500 mb-1.5">
+          {isSub
+            ? (t('substage_name') || "Sub-bosqich nomi")
+            : (t('stage_name') || "Bosqich nomi")}
+        </label>
+        <input
+          type="text"
+          value={value || ''}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') onConfirm();
+            if (e.key === 'Escape') onCancel();
+          }}
+          placeholder={isSub
+            ? (t('substage_name_placeholder') || "Sub-bosqich nomi")
+            : (t('stage_name_placeholder') || "Poydevor, Karkos, Pardozlash")}
+          className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 mb-5"
+          autoFocus
+          disabled={busy}
+        />
+
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="px-4 py-2 rounded-lg text-xs font-semibold bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+          >
+            {t('cancel') || 'Bekor qilish'}
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={busy || !(value || '').trim()}
+            className="px-4 py-2 rounded-lg text-xs font-semibold bg-emerald-700 hover:bg-emerald-800 text-white inline-flex items-center gap-1.5 disabled:opacity-50 disabled:hover:bg-emerald-700"
+          >
+            {busy
+              ? (<><Loader2 className="w-3.5 h-3.5 animate-spin" /> {t('saving') || "Saqlanmoqda..."}</>)
+              : (t('add') || "Qo'shish")}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1592,8 +2037,15 @@ function WorksTable({
             if (vorQty <= 0 && vorPlanByName?.loose) {
               vorQty = Number(vorPlanByName.loose.get(normName(w.name)) || 0);
             }
+            // Fall back to the Единич row's `original_quantity` (col F
+            // "по проектным данным", anchored at import) BEFORE the
+            // live quantity ledger — see resolveWorkQty above for the
+            // rationale. Without this, projects without a ВОР sheet
+            // render REJA as 0 because template-mode Единич imports
+            // zero `quantity` to let the foreman fill FAKT.
+            const origQty = Number(w.original_quantity || 0);
             const ownQty = Number(w.quantity || 0);
-            const planQty = vorQty > 0 ? vorQty : ownQty;
+            const planQty = vorQty > 0 ? vorQty : (origQty > 0 ? origQty : ownQty);
             const doneQty = Number(w.done_quantity || 0);
             const pct = planQty > 0 ? Math.min((doneQty / planQty) * 100, 100) : 0;
             const stMeta = STATUS_META[w.approval_status] || STATUS_META.pending;
