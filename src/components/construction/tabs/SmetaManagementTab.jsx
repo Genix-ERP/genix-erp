@@ -760,12 +760,50 @@ export default function SmetaManagementTab({ project }) {
       const isSub = ln.parent_line_id != null && Number(ln.parent_line_id) > 0;
       if (isSub) continue;
       const secKey = ln.parent_item_number || (t('uncategorized') || 'Boshqalar');
-      if (sectionFilter && secKey !== sectionFilter) continue;
+      if (sectionFilter && secKey !== sectionFilter && !secKey.startsWith(`${sectionFilter} › `)) continue;
       if (search) {
         const q = search.toLowerCase();
         const hay = `${ln.code || ''} ${ln.item_number || ''} ${ln.name || ''}`.toLowerCase();
         if (!hay.includes(q)) continue;
       }
+
+      // Nested section paths ("PARENT › CHILD" or deeper) — park the
+      // line on its parent's subSection bucket so it renders nested
+      // inside the parent card instead of materialising as a sibling
+      // top-level section. Previously the secKey was used verbatim,
+      // which caused e.g. "Topshirish › topshirish 1-bosqich" to show
+      // up as its own section header right next to "Topshirish".
+      //
+      // Split at the FIRST delimiter so the top-level is always the
+      // leading segment. For deeper paths like "СЕКЦИЯ №1 › РАБОТЫ › 123"
+      // the sub-section keeps the remaining segments as its display
+      // name ("РАБОТЫ › 123") — flat one-level nesting but the parent
+      // hierarchy still reads correctly.
+      if (secKey.includes(' › ')) {
+        const firstIdx = secKey.indexOf(' › ');
+        const parentName = secKey.slice(0, firstIdx);
+        const childName  = secKey.slice(firstIdx + 3);
+        const par = sectionMap.get(parentName) || { name: parentName, lines: [], total: 0 };
+        if (!par.subSections) par.subSections = [];
+        let sub = par.subSections.find((s) => s.fullName === secKey);
+        if (!sub) {
+          sub = { name: childName, fullName: secKey, lines: [], total: 0 };
+          par.subSections.push(sub);
+        } else {
+          // A previously-seeded empty manual sub-section gets repurposed
+          // here — drop the "I'm an empty placeholder" flag now that real
+          // lines are attached.
+          delete sub.is_empty_manual;
+        }
+        sub.lines.push(ln);
+        const eff = effByParent.get(Number(ln.id));
+        const amt = eff != null ? eff : (Number(ln.total_amount) || 0);
+        sub.total += amt;
+        par.total += amt; // roll the sub-section's spend up into the parent header
+        sectionMap.set(parentName, par);
+        continue;
+      }
+
       const cur = sectionMap.get(secKey) || { name: secKey, lines: [], total: 0 };
       cur.lines.push(ln);
       const eff = effByParent.get(Number(ln.id));
@@ -777,12 +815,12 @@ export default function SmetaManagementTab({ project }) {
     // parents as subSections[]. Top-level manual sections were already
     // pre-seeded into sectionMap above (before the imported-lines pass)
     // so they sort first in the rendered list. Here we only handle the
-    // hierarchical ones — those whose name contains " › " and whose
-    // prefix matches an existing section. We look for the LAST " › "
-    // so paths like "A › B › C" attach to the most-specific parent
-    // ("A › B"), falling back to shorter prefixes if no exact match
-    // exists. Filter targeting matches the parent OR the full nested
-    // name so the section dropdown still surfaces children correctly.
+    // hierarchical ones — those whose name contains " › ". We split at
+    // the FIRST delimiter so the parent is always the leading segment
+    // (matches the lines-iteration rule above). Deeper paths keep their
+    // remaining segments as the sub-section display name. Filter
+    // targeting matches the parent OR the full nested name so the
+    // section dropdown still surfaces children correctly.
     const DELIM = ' › ';
     const sortedManual = [...manualSectionNames].sort((a, b) =>
       String(a).length - String(b).length,
@@ -791,9 +829,9 @@ export default function SmetaManagementTab({ project }) {
       if (!name) continue;
       if (!name.includes(DELIM)) continue; // top-level handled above
       if (sectionMap.has(name)) continue;
-      const lastIdx = name.lastIndexOf(DELIM);
-      const parent = name.slice(0, lastIdx);
-      const child  = name.slice(lastIdx + DELIM.length);
+      const firstIdx = name.indexOf(DELIM);
+      const parent = name.slice(0, firstIdx);
+      const child  = name.slice(firstIdx + DELIM.length);
       if (!sectionMap.has(parent)) continue;
       if (sectionFilter && sectionFilter !== parent && sectionFilter !== name) continue;
       if (search) {
@@ -802,6 +840,10 @@ export default function SmetaManagementTab({ project }) {
       }
       const par = sectionMap.get(parent);
       if (!par.subSections) par.subSections = [];
+      // Skip if the work-line iteration above already created this sub-section
+      // bucket (i.e. real lines live under "PARENT › CHILD") — pushing again
+      // would render a duplicate empty placeholder card right next to it.
+      if (par.subSections.some((s) => s.fullName === name)) continue;
       par.subSections.push({
         name: child,
         fullName: name,
@@ -1622,82 +1664,139 @@ export default function SmetaManagementTab({ project }) {
                       );
                     })}
 
-                    {/* Manually-created sub-sections — empty cards nested
-                       inside the parent. Each is a placeholder for a
-                       hierarchy the user defined via the "+ Sub-bosqich"
-                       button. Indented with a left border accent so it
-                       reads as nested instead of as a sibling section.
-                       Carries its own "+ Sub-bosqich" so the user can
-                       add a deeper level (PARENT › CHILD › GRANDCHILD). */}
+                    {/* Sub-sections nested inside the parent. Two flavours:
+                       (a) an empty placeholder the user created via
+                       "+ Sub-bosqich" before adding any work, and
+                       (b) a real bucket with one or more work lines
+                       whose parent_item_number is "PARENT › CHILD".
+                       Both render as an indented card with a left
+                       border accent, then any work cards underneath. */}
                     {!collapsed && Array.isArray(sec.subSections) && sec.subSections.map((sub) => (
-                      <div
-                        key={sub.fullName}
-                        className="ml-6 mb-2 rounded-lg px-4 py-3 flex items-center gap-2.5 border-l-2"
-                        style={{
-                          background: C.inset,
-                          border: `1px dashed ${C.border2}`,
-                          borderLeftColor: C.teal,
-                          borderLeftWidth: 3,
-                        }}
-                      >
-                        <span className="text-[12px] text-slate-400">└</span>
-                        <span className="flex-1 text-left font-medium text-[12.5px] text-slate-700">{sub.name}</span>
-                        <span
-                          className="text-[10.5px] font-mono px-2 py-0.5 rounded"
-                          style={{ background: C.card, color: C.muted }}
-                        >
-                          {sub.lines.length} {t('works_count_suffix') || 'ish'}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setAddWorkModal({
-                            sectionName: sub.fullName, name: '', uom: '', code: '',
-                          })}
-                          className="px-2 py-1 rounded text-[10.5px] font-medium flex items-center gap-1"
+                      <React.Fragment key={sub.fullName}>
+                        <div
+                          className="ml-6 mb-2 rounded-lg px-4 py-3 flex items-center gap-2.5 border-l-2"
                           style={{
-                            background: 'rgba(13,148,136,0.08)', color: C.teal,
-                            border: '1px solid rgba(13,148,136,0.25)',
+                            background: C.inset,
+                            border: `1px dashed ${C.border2}`,
+                            borderLeftColor: C.teal,
+                            borderLeftWidth: 3,
                           }}
-                          title={t('add_work') || "Ish qo'shish"}
                         >
-                          <span className="text-[12px] leading-none font-bold">+</span>
-                          {t('add_work_short') || "Ish"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (!estimateId) {
-                              toast.error(t('no_estimate_for_work')
-                                || "Bu blok uchun єдинич smeta topilmadi");
-                              return;
-                            }
-                            setAddSubBosqichSection(sub.fullName);
-                          }}
-                          className="px-2 py-1 rounded text-[10.5px] font-medium flex items-center gap-1"
-                          style={{
-                            background: C.card, color: C.muted,
-                            border: `1px solid ${C.border2}`,
-                          }}
-                          title={t('add_substage') || "Sub-bosqich qo'shish"}
-                        >
-                          <span className="text-[12px] leading-none font-bold">+</span>
-                          {t('substage_short') || "Sub-bosqich"}
-                        </button>
-                        {canDeleteConstruction && (
+                          <span className="text-[12px] text-slate-400">└</span>
+                          <span className="flex-1 text-left font-medium text-[12.5px] text-slate-700">{sub.name}</span>
+                          <span
+                            className="text-[10.5px] font-mono px-2 py-0.5 rounded"
+                            style={{ background: C.card, color: C.muted }}
+                          >
+                            {sub.lines.length} {t('works_count_suffix') || 'ish'}
+                          </span>
                           <button
                             type="button"
-                            onClick={() => removeSection(sub.fullName)}
-                            className="p-1 rounded flex items-center justify-center"
+                            onClick={() => setAddWorkModal({
+                              sectionName: sub.fullName, name: '', uom: '', code: '',
+                            })}
+                            className="px-2 py-1 rounded text-[10.5px] font-medium flex items-center gap-1"
                             style={{
-                              background: 'rgba(220,38,38,0.06)', color: C.red,
-                              border: '1px solid rgba(220,38,38,0.25)',
+                              background: 'rgba(13,148,136,0.08)', color: C.teal,
+                              border: '1px solid rgba(13,148,136,0.25)',
                             }}
-                            title={t('delete_substage') || "Sub-bosqichni o'chirish"}
+                            title={t('add_work') || "Ish qo'shish"}
                           >
-                            <Trash2 className="w-3 h-3" />
+                            <span className="text-[12px] leading-none font-bold">+</span>
+                            {t('add_work_short') || "Ish"}
                           </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!estimateId) {
+                                toast.error(t('no_estimate_for_work')
+                                  || "Bu blok uchun єдинич smeta topilmadi");
+                                return;
+                              }
+                              setAddSubBosqichSection(sub.fullName);
+                            }}
+                            className="px-2 py-1 rounded text-[10.5px] font-medium flex items-center gap-1"
+                            style={{
+                              background: C.card, color: C.muted,
+                              border: `1px solid ${C.border2}`,
+                            }}
+                            title={t('add_substage') || "Sub-bosqich qo'shish"}
+                          >
+                            <span className="text-[12px] leading-none font-bold">+</span>
+                            {t('substage_short') || "Sub-bosqich"}
+                          </button>
+                          {canDeleteConstruction && (
+                            <button
+                              type="button"
+                              onClick={() => removeSection(sub.fullName)}
+                              className="p-1 rounded flex items-center justify-center"
+                              style={{
+                                background: 'rgba(220,38,38,0.06)', color: C.red,
+                                border: '1px solid rgba(220,38,38,0.25)',
+                              }}
+                              title={t('delete_substage') || "Sub-bosqichni o'chirish"}
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Work cards belonging to this sub-section. Indented
+                           so the nesting reads visually. Each card carries
+                           the same controls as a top-level work (qty edit,
+                           resources, sub-stages). */}
+                        {Array.isArray(sub.lines) && sub.lines.length > 0 && (
+                          <div className="ml-6 mb-2">
+                            {sub.lines.map((ln) => {
+                              const subs = subByParent.get(Number(ln.id)) || [];
+                              const subStages = subs.filter(isSubStageRow);
+                              return (
+                                <React.Fragment key={ln.id}>
+                                  <WorkCard
+                                    line={ln}
+                                    subs={subs}
+                                    isOpen={openWorks.has(ln.id)}
+                                    onToggle={() => toggleWork(ln.id)}
+                                    qtyDraft={qtyDraft[ln.id]}
+                                    setQtyDraft={(v) => setQtyDraft((d) => ({ ...d, [ln.id]: v }))}
+                                    clearQtyDraft={() => setQtyDraft((d) => { const n = { ...d }; delete n[ln.id]; return n; })}
+                                    commitQty={commitQty}
+                                    resetQty={resetQty}
+                                    removeLine={removeLine}
+                                    openAddResource={openAddResource}
+                                    openAddStage={openAddStage}
+                                    openTopup={openTopup}
+                                    removeTopup={removeTopup}
+                                    t={t}
+                                    isSubStage={false}
+                                  />
+                                  {subStages.map((ss) => (
+                                    <WorkCard
+                                      key={ss.id}
+                                      line={ss}
+                                      subs={subByParent.get(Number(ss.id)) || []}
+                                      isOpen={openWorks.has(ss.id)}
+                                      onToggle={() => toggleWork(ss.id)}
+                                      qtyDraft={qtyDraft[ss.id]}
+                                      setQtyDraft={(v) => setQtyDraft((d) => ({ ...d, [ss.id]: v }))}
+                                      clearQtyDraft={() => setQtyDraft((d) => { const n = { ...d }; delete n[ss.id]; return n; })}
+                                      commitQty={commitQty}
+                                      resetQty={resetQty}
+                                      removeLine={removeLine}
+                                      openAddResource={openAddResource}
+                                      openAddStage={openAddStage}
+                                      openTopup={openTopup}
+                                      removeTopup={removeTopup}
+                                      t={t}
+                                      isSubStage
+                                    />
+                                  ))}
+                                </React.Fragment>
+                              );
+                            })}
+                          </div>
                         )}
-                      </div>
+                      </React.Fragment>
                     ))}
                   </div>
                 );

@@ -1117,8 +1117,39 @@ const ProjectDetailView = ({
   onProjectStatusChange,
 }) => {
   const { formatCurrencyCompact } = useCurrencyFormatter();
-  const [activeGroup, setActiveGroup] = useState('dashboard');
-  const [activeTab, setActiveTab] = useState('overview');
+
+  // Persist active group / tab in the URL so a hard refresh (or a
+  // copy-pasted link) lands the user back on the same view. Falls
+  // back to the previous defaults ('dashboard' / 'overview') when the
+  // params aren't present. The two-way sync below keeps the URL in
+  // step with state changes from the in-page navigation.
+  const [projectViewParams, setProjectViewParams] = useSearchParams();
+  const initialGroup = projectViewParams.get('group') || 'dashboard';
+  const initialTab   = projectViewParams.get('tab')   || 'overview';
+  const [activeGroup, setActiveGroup] = useState(initialGroup);
+  const [activeTab,   setActiveTab]   = useState(initialTab);
+  // Whenever the user navigates, mirror the change to the URL. We use
+  // `replace: true` so each click doesn't push a new history entry —
+  // the back button still does what users expect (return to the
+  // project list), not walk through every tab they touched.
+  useEffect(() => {
+    const next = new URLSearchParams(projectViewParams);
+    let changed = false;
+    if (next.get('group') !== activeGroup) {
+      if (activeGroup === 'dashboard') next.delete('group');
+      else next.set('group', activeGroup);
+      changed = true;
+    }
+    if (next.get('tab') !== activeTab) {
+      if (activeTab === 'overview') next.delete('tab');
+      else next.set('tab', activeTab);
+      changed = true;
+    }
+    if (changed) setProjectViewParams(next, { replace: true });
+    // We intentionally don't list projectViewParams in deps — that
+    // would re-run on every URL change and create a feedback loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeGroup, activeTab]);
 
   // Top-level navigation groups for the project page.
   //

@@ -53,7 +53,9 @@ const CAT_TAG = {
 function classify(rt) {
   rt = String(rt || '').toLowerCase();
   if (['labor', 'ish', 'ishchi', 'worker'].includes(rt)) return 'labor';
-  if (['equipment', 'machine', 'mashina', 'masina'].includes(rt)) return 'equipment';
+  // 'machinery' (Mashina mexanizm) buckets with 'equipment' so it shows
+  // under the same MASHINA tag in the resource picker chip list.
+  if (['equipment', 'machine', 'mashina', 'masina', 'machinery'].includes(rt)) return 'equipment';
   return 'material';
 }
 
@@ -380,7 +382,17 @@ export default function AddResourcePickerModal({ open, onClose, projectId, estim
                       style={{ background: '#FFFFFF', color: '#0F172A', border: '1px solid #CBD5E1', fontFamily: 'inherit' }}
                     >
                       <option value="material">{t('mat_type_material') || 'Material'}</option>
-                      <option value="equipment">{t('mat_type_equipment') || 'Mashina'}</option>
+                      <option value="equipment">{t('mat_type_equipment') || 'Uskuna'}</option>
+                      {/* "Mashina mexanizm" — Russian construction
+                         convention separates стационарное оборудование
+                         (equipment installed in the building, MAТЕРИАЛЫ
+                         section in СН-РФ) from строительные машины и
+                         механизмы (construction machinery used to BUILD,
+                         MAШ.-Ч hours). This option captures the latter.
+                         Stored as resource_type='machinery' — a new
+                         bucket the backend accepts as free text. Existing
+                         resource_type='equipment' rows are untouched. */}
+                      <option value="machinery">{t('mat_type_machinery') || 'Mashina mexanizm'}</option>
                       <option value="labor">{t('mat_type_labor') || 'Mehnat'}</option>
                     </select>
                   </div>

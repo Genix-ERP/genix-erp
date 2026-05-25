@@ -902,36 +902,72 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
   // Once the user adds works under such a stage via Smeta boshqaruvi,
   // the derived stage takes over and the entry is no longer "empty".
   const stages = useMemo(() => {
-    const derivedNames = new Set(
-      derivedStages.map((s) => String(s.name || '').trim().toLowerCase()),
-    );
-    // Only stages whose id is in the localStorage-tracked "user
-    // explicitly added" set show up as empty extras at the TOP. Other
-    // construction_stages rows that have no loaded lines (e.g.
-    // auto-import ghosts from a re-imported єdinich whose lines aren't
-    // the active єdinich) are intentionally HIDDEN — they would
-    // otherwise flood the Bosqichlar list with 0-ish entries that the
-    // user has no way to act on. Stages with works are rendered by the
-    // derivedStages list regardless.
+    // Build a name → manual-stage-id index of every stage the user
+    // explicitly added via "+ Bosqich qo'shish" (tracked in
+    // localStorage so it survives page reloads). This lets us
+    // recognise a manual stage in BOTH branches — whether it's still
+    // empty (no works yet) or whether the user has since attached
+    // works to it (which would otherwise have it appear in
+    // derivedStages alongside imported stages).
     const userAddedSet = new Set(recentlyAddedStageIds.map(Number));
-    const userAdded = [];
+    const manualByName = new Map();
     for (const ms of manualStages) {
       if (!userAddedSet.has(Number(ms.id))) continue;
       const key = String(ms.name || '').trim().toLowerCase();
       if (!key) continue;
-      if (derivedNames.has(key)) continue; // already in derived (has works)
-      userAdded.push({
+      if (!manualByName.has(key)) manualByName.set(key, Number(ms.id));
+    }
+
+    const derivedNames = new Set(
+      derivedStages.map((s) => String(s.name || '').trim().toLowerCase()),
+    );
+
+    // Pull derived stages that match a user-added manual stage to the
+    // FRONT of the list — these are user-added stages that already
+    // have works, so they need their progress/cost from derived data
+    // but their position must still be "pinned at top".
+    const pinnedDerived = [];
+    const restDerived   = [];
+    for (const ds of derivedStages) {
+      const key = String(ds.name || '').trim().toLowerCase();
+      const mid = manualByName.get(key);
+      if (mid != null) {
+        pinnedDerived.push({ ...ds, manual_stage_id: mid });
+      } else {
+        restDerived.push(ds);
+      }
+    }
+
+    // Empty user-added stages — those whose name isn't in
+    // derivedStages because no works exist yet. Render as a 0% / 0
+    // works card. Auto-import "ghost" stages (construction_stages
+    // rows that AREN'T in the user-added set) are intentionally
+    // hidden so they don't flood the list with empty extras.
+    const userAddedEmpty = [];
+    for (const ms of manualStages) {
+      if (!userAddedSet.has(Number(ms.id))) continue;
+      const key = String(ms.name || '').trim().toLowerCase();
+      if (!key) continue;
+      if (derivedNames.has(key)) continue; // covered by pinnedDerived above
+      userAddedEmpty.push({
         name: ms.name,
         works: [],
         subStages: [],
         manual_stage_id: ms.id,
       });
     }
-    // Newest user-add first (highest id).
-    userAdded.sort((a, b) =>
-      Number(b.manual_stage_id || 0) - Number(a.manual_stage_id || 0),
-    );
-    return [...userAdded, ...derivedStages];
+
+    // Newest add first (highest id) within each pinned bucket so the
+    // most recent "+ Bosqich qo'shish" lands at the very top.
+    const byNewest = (a, b) =>
+      Number(b.manual_stage_id || 0) - Number(a.manual_stage_id || 0);
+    userAddedEmpty.sort(byNewest);
+    pinnedDerived.sort(byNewest);
+
+    // Top: empty extras (no works yet) — most recent first.
+    // Middle: user-added stages that now have works — most recent first.
+    // Bottom: everything else in natural import order.
+    return [...userAddedEmpty, ...pinnedDerived, ...restDerived];
   }, [derivedStages, manualStages, recentlyAddedStageIds]);
   // Plan-quantity resolver for progress aggregations. Fallback chain:
   //   1. ВОР Miqdor (strict key: section + name + uom).
