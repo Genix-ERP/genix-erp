@@ -122,6 +122,24 @@ export function formatPhoneInput(value) {
   return formatted;
 }
 
+// Format phone for DISPLAY: +998 90 123 45 67
+export function formatPhoneDisplay(value) {
+  if (!value) return '';
+  let digits = String(value).replace(/[^\d]/g, '');
+  if (!digits) return '';
+  // Ensure country code
+  if (!digits.startsWith('998') && digits.length <= 9) digits = '998' + digits;
+  digits = digits.slice(0, 12);
+  const parts = [
+    '+' + digits.slice(0, 3),      // +998
+    digits.slice(3, 5),            // 90
+    digits.slice(5, 8),            // 123
+    digits.slice(8, 10),           // 45
+    digits.slice(10, 12),          // 67
+  ].filter(Boolean);
+  return parts.join(' ').trim();
+}
+
 // Parse formatted phone back to raw: +998XXXXXXXXX
 export function parsePhoneInput(value) {
   if (!value) return '';

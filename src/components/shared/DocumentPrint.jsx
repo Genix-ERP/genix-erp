@@ -1,5 +1,6 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
+import { useCompany } from "@/components/contexts/CompanyContext";
 import {
   Dialog,
   DialogContent,
@@ -28,7 +29,6 @@ import {
 import { jsPDF } from "jspdf";
 import "jspdf-autotable";
 import { format } from "date-fns";
-import { ensurePdfFonts, registerPdfFontsSync } from "./pdfFonts";
 
 // Document templates
 export const DOCUMENT_TEMPLATES = {
@@ -106,14 +106,47 @@ export const DOCUMENT_TEMPLATES = {
   },
 };
 
-// Company info placeholder
+// Map an organization/activeCompany object from CompanyContext to the print shape.
+// Accepts either a CompanyContext-shaped object OR an already-formatted {name,address,...} object.
+export const mapCompanyToPrintInfo = (company) => {
+  if (!company) return null;
+  // Already in print shape (name + maybe logo)
+  if (company.name && !company.company_name) {
+    return {
+      name: company.name,
+      address: company.address || '',
+      phone: company.phone || '',
+      email: company.email || '',
+      inn: company.inn || company.tax_id || '',
+      logo: company.logo || company.logo_url || null,
+      bank_account: company.bank_account || '',
+      bank_mfo: company.bank_mfo || '',
+      bank_name: company.bank_name || '',
+    };
+  }
+  // CompanyContext shape (company_name, legal_address, tax_id, etc.)
+  return {
+    name: company.company_name || '',
+    address: company.legal_address || '',
+    phone: company.phone || '',
+    email: company.email || '',
+    inn: company.tax_id || '',
+    logo: company.logo_url || null,
+    bank_account: company.bank_account || '',
+    bank_mfo: company.bank_mfo || '',
+    bank_name: company.bank_name || '',
+  };
+};
+
+// Company info fallback — used only when no customCompany is passed.
+// Tries localStorage first (legacy), then returns empty shape (no Genix hardcoding).
 const getCompanyInfo = () => {
   return {
-    name: localStorage.getItem("company_name") || "Yuksalish ERP",
-    address: localStorage.getItem("company_address") || "Toshkent, O'zbekiston",
-    phone: localStorage.getItem("company_phone") || "+998 XX XXX XX XX",
-    email: localStorage.getItem("company_email") || "info@genix.uz",
-    inn: localStorage.getItem("company_inn") || "123456789",
+    name: localStorage.getItem("company_name") || "",
+    address: localStorage.getItem("company_address") || "",
+    phone: localStorage.getItem("company_phone") || "",
+    email: localStorage.getItem("company_email") || "",
+    inn: localStorage.getItem("company_inn") || "",
     logo: localStorage.getItem("company_logo") || null,
   };
 };
@@ -136,21 +169,15 @@ export const generateDocumentPDF = (config) => {
   } = config;
 
   const templateConfig = DOCUMENT_TEMPLATES[template] || DOCUMENT_TEMPLATES.invoice;
-  const company = customCompany || getCompanyInfo();
+  // Accept either already-mapped print shape or raw CompanyContext object
+  const company = mapCompanyToPrintInfo(customCompany) || getCompanyInfo();
   const margins = templateConfig.margins;
 
   const doc = new jsPDF({
-    orientation: config.orientation || templateConfig.orientation,
+    orientation: templateConfig.orientation,
     unit: "mm",
     format: "a4",
   });
-
-  // Register Unicode font (Roboto) so Cyrillic / Latin-extended renders
-  // correctly. No-op if fonts haven't preloaded yet — in that case Helvetica
-  // is used and Cyrillic will garble. Async paths (printDocument, download,
-  // PrintPreviewModal) await ensurePdfFonts() before calling this.
-  const hasUnicodeFont = registerPdfFontsSync(doc);
-  const fontFamily = hasUnicodeFont ? "Roboto" : undefined;
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -172,31 +199,36 @@ export const generateDocumentPDF = (config) => {
   }
 
   // Company name - top left
-  doc.setFontSize(20);
-  doc.setFont(fontFamily, "bold");
+  doc.setFontSize(16);
+  doc.setFont(undefined, "bold");
   doc.setTextColor(15, 23, 42);
   doc.text(company.name, margins.left, yPos + 6);
 
   // Document number - top right, colored
   if (documentNumber) {
-    doc.setFontSize(16);
-    doc.setFont(fontFamily, "bold");
+    doc.setFontSize(12);
+    doc.setFont(undefined, "bold");
     doc.setTextColor(37, 99, 235);
     doc.text(documentNumber, pageWidth - margins.right, yPos + 6, { align: "right" });
   }
 
   // Company details - second line
-  doc.setFontSize(10);
-  doc.setFont(fontFamily, "normal");
+  doc.setFontSize(8);
+  doc.setFont(undefined, "normal");
   doc.setTextColor(100, 116, 139);
-  const companyDetails = [company.address, `info@genix.uz`, `INN: ${company.inn}`].filter(Boolean).join("  |  ");
-  doc.text(companyDetails, margins.left, yPos + 13);
+  const companyDetails = [
+    company.address,
+    company.phone,
+    company.email,
+    company.inn ? `INN: ${company.inn}` : null,
+  ].filter(Boolean).join("  |  ");
+  doc.text(companyDetails, margins.left, yPos + 12);
 
   // Date - right side under doc number
   if (documentDate) {
-    doc.setFontSize(12);
+    doc.setFontSize(9);
     doc.setTextColor(100, 116, 139);
-    doc.text(documentDate, pageWidth - margins.right, yPos + 13, { align: "right" });
+    doc.text(documentDate, pageWidth - margins.right, yPos + 12, { align: "right" });
   }
 
   yPos += 20;
@@ -204,13 +236,13 @@ export const generateDocumentPDF = (config) => {
   // ═══════════════════════════════════════════
   // BLUE TITLE BAR
   // ═══════════════════════════════════════════
-  const barHeight = 12;
+  const barHeight = 10;
   doc.setFillColor(37, 99, 235);
   doc.rect(margins.left, yPos, contentWidth, barHeight, 'F');
-  doc.setFontSize(14);
-  doc.setFont(fontFamily, "bold");
+  doc.setFontSize(12);
+  doc.setFont(undefined, "bold");
   doc.setTextColor(255, 255, 255);
-  doc.text(title || templateConfig.title, pageWidth / 2, yPos + 8.5, { align: "center" });
+  doc.text(title || templateConfig.title, pageWidth / 2, yPos + 7, { align: "center" });
 
   yPos += barHeight + 6;
 
@@ -218,7 +250,7 @@ export const generateDocumentPDF = (config) => {
   // HEADER FIELDS (2 columns, clean layout)
   // ═══════════════════════════════════════════
   if (headerFields.length > 0) {
-    doc.setFontSize(11);
+    doc.setFontSize(9);
     const colWidth = contentWidth / 2;
     const rows = Math.ceil(headerFields.length / 2);
 
@@ -228,22 +260,20 @@ export const generateDocumentPDF = (config) => {
         if (idx >= headerFields.length) continue;
         const field = headerFields[idx];
         const x = margins.left + col * colWidth;
-        const y = yPos + row * 10;
+        const y = yPos + row * 8;
 
         // Label
-        doc.setFont(fontFamily, "normal");
+        doc.setFont(undefined, "normal");
         doc.setTextColor(100, 116, 139);
-        doc.setFontSize(10);
         doc.text(`${field.label}`, x, y);
         // Value
-        doc.setFont(fontFamily, "bold");
+        doc.setFont(undefined, "bold");
         doc.setTextColor(15, 23, 42);
-        doc.setFontSize(12);
-        doc.text(String(field.value || "-"), x, y + 5.5);
+        doc.text(String(field.value || "-"), x, y + 4.5);
       }
     }
 
-    yPos += rows * 10 + 4;
+    yPos += rows * 8 + 4;
 
     // Thin separator line
     doc.setDrawColor(226, 232, 240);
@@ -270,20 +300,18 @@ export const generateDocumentPDF = (config) => {
       startY: yPos,
       margin: { left: margins.left, right: margins.right },
       styles: {
-        fontSize: 12,
-        cellPadding: 4.5,
+        fontSize: 9,
+        cellPadding: 3.5,
         lineColor: [226, 232, 240],
         lineWidth: 0.2,
         textColor: [15, 23, 42],
-        font: fontFamily,
       },
       headStyles: {
         fillColor: [37, 99, 235],
         textColor: 255,
         fontStyle: "bold",
-        cellPadding: 5,
-        fontSize: 12,
-        font: fontFamily,
+        cellPadding: 4,
+        fontSize: 9,
       },
       alternateRowStyles: { fillColor: [248, 250, 252] },
       columnStyles: tableColumns.reduce((acc, col, index) => {
@@ -321,23 +349,23 @@ export const generateDocumentPDF = (config) => {
       if (isLast && total.bold) {
         // Grand total - blue bar
         yPos += 2;
-        const barH = 11;
+        const barH = 9;
         doc.setFillColor(37, 99, 235);
         doc.roundedRect(margins.left, yPos - 1, contentWidth, barH, 1.5, 1.5, 'F');
-        doc.setFontSize(13);
-        doc.setFont(fontFamily, "bold");
+        doc.setFontSize(10);
+        doc.setFont(undefined, "bold");
         doc.setTextColor(255, 255, 255);
-        doc.text(`${total.label}:`, margins.left + 4, yPos + 7);
-        doc.text(String(total.value), pageWidth - margins.right - 4, yPos + 7, { align: "right" });
+        doc.text(`${total.label}:`, margins.left + 4, yPos + 5.5);
+        doc.text(String(total.value), pageWidth - margins.right - 4, yPos + 5.5, { align: "right" });
         yPos += barH + 4;
       } else {
-        doc.setFontSize(11);
-        doc.setFont(fontFamily, total.bold ? "bold" : "normal");
+        doc.setFontSize(9);
+        doc.setFont(undefined, total.bold ? "bold" : "normal");
         doc.setTextColor(71, 85, 105);
         doc.text(`${total.label}:`, lineX + 2, yPos + 2);
         doc.setTextColor(15, 23, 42);
         doc.text(String(total.value), valueX, yPos + 2, { align: "right" });
-        yPos += 8;
+        yPos += 7;
       }
     });
     yPos += 4;
@@ -347,25 +375,23 @@ export const generateDocumentPDF = (config) => {
   // FOOTER FIELDS
   // ═══════════════════════════════════════════
   if (footerFields.length > 0) {
-    doc.setFontSize(11);
+    doc.setFontSize(9);
     footerFields.forEach((field) => {
-      doc.setFont(fontFamily, "bold");
+      doc.setFont(undefined, "bold");
       doc.setTextColor(71, 85, 105);
       doc.text(`${field.label}:`, margins.left, yPos);
-      doc.setFont(fontFamily, "normal");
+      doc.setFont(undefined, "normal");
       doc.setTextColor(15, 23, 42);
-      doc.text(String(field.value || "-"), margins.left + 35, yPos);
-      yPos += 6;
+      doc.text(String(field.value || "-"), margins.left + 30, yPos);
+      yPos += 5;
     });
     yPos += 5;
   }
 
   // Notes
   if (notes) {
-    doc.setFontSize(10);
-    // Roboto italic variant is not registered; fall back to normal to avoid
-    // jsPDF font-missing warnings. Text still renders Cyrillic correctly.
-    doc.setFont(fontFamily, "normal");
+    doc.setFontSize(8);
+    doc.setFont(undefined, "italic");
     doc.setTextColor(100, 116, 139);
     const splitNotes = doc.splitTextToSize(notes, contentWidth);
     doc.text(splitNotes, margins.left, yPos);
@@ -380,15 +406,15 @@ export const generateDocumentPDF = (config) => {
 
     doc.setDrawColor(150, 150, 150);
     doc.setTextColor(15, 23, 42);
-    doc.setFontSize(12);
+    doc.setFontSize(9);
 
     // Left signature - Topshirdi
-    doc.setFont(fontFamily, "bold");
+    doc.setFont(undefined, "bold");
     doc.text("Topshirdi:", margins.left, yPos);
     doc.setLineWidth(0.3);
     doc.line(margins.left, yPos + 14, margins.left + 55, yPos + 14);
-    doc.setFontSize(10);
-    doc.setFont(fontFamily, "normal");
+    doc.setFontSize(8);
+    doc.setFont(undefined, "normal");
     doc.setTextColor(100, 116, 139);
     doc.text("(imzo)", margins.left + 18, yPos + 19);
 
@@ -398,22 +424,22 @@ export const generateDocumentPDF = (config) => {
       doc.setLineDash([2, 2]);
       doc.setLineWidth(0.4);
       doc.circle(pageWidth / 2, yPos + 9, 14);
-      doc.setFontSize(9);
+      doc.setFontSize(7);
       doc.setTextColor(180, 180, 180);
       doc.text("M.O.", pageWidth / 2, yPos + 10, { align: "center" });
       doc.setLineDash([]);
     }
 
     // Right signature - Qabul qildi
-    doc.setFontSize(12);
-    doc.setFont(fontFamily, "bold");
+    doc.setFontSize(9);
+    doc.setFont(undefined, "bold");
     doc.setTextColor(15, 23, 42);
     doc.text("Qabul qildi:", pageWidth - margins.right - 55, yPos);
     doc.setDrawColor(150, 150, 150);
     doc.setLineWidth(0.3);
     doc.line(pageWidth - margins.right - 55, yPos + 14, pageWidth - margins.right, yPos + 14);
-    doc.setFontSize(10);
-    doc.setFont(fontFamily, "normal");
+    doc.setFontSize(8);
+    doc.setFont(undefined, "normal");
     doc.setTextColor(100, 116, 139);
     doc.text("(imzo)", pageWidth - margins.right - 37, yPos + 19);
 
@@ -440,28 +466,43 @@ export const generateDocumentPDF = (config) => {
   // Footer with generation info
   doc.setFontSize(7);
   doc.setTextColor(180, 180, 180);
-  doc.text(
-    `${company.name} | Yaratilgan: ${format(new Date(), "dd.MM.yyyy HH:mm")}`,
-    margins.left,
-    pageHeight - 8
-  );
+  const footerLeft = company.name
+    ? `${company.name} | Yaratilgan: ${format(new Date(), "dd.MM.yyyy HH:mm")}`
+    : `Yaratilgan: ${format(new Date(), "dd.MM.yyyy HH:mm")}`;
+  doc.text(footerLeft, margins.left, pageHeight - 8);
 
   return doc;
 };
 
 // Print document directly
-export const printDocument = async (config) => {
-  await ensurePdfFonts().catch(() => {});
+export const printDocument = (config) => {
   const doc = generateDocumentPDF(config);
   doc.autoPrint();
   window.open(doc.output("bloburl"), "_blank");
 };
 
 // Download document as PDF
-export const downloadDocument = async (config, filename = "document") => {
-  await ensurePdfFonts().catch(() => {});
+export const downloadDocument = (config, filename = "document") => {
   const doc = generateDocumentPDF(config);
   doc.save(`${filename}.pdf`);
+};
+
+// React hook that auto-injects the active company branding into print/download/generate
+// Usage: const { print, download, generate } = usePrintDocument();
+// Then: print({ template: 'invoice', ... })  — branding comes from activeCompany automatically
+export const usePrintDocument = () => {
+  const { activeCompany } = useCompany();
+
+  const injectCompany = useCallback((config) => ({
+    ...config,
+    customCompany: config.customCompany || activeCompany,
+  }), [activeCompany]);
+
+  const generate = useCallback((config) => generateDocumentPDF(injectCompany(config)), [injectCompany]);
+  const print = useCallback((config) => printDocument(injectCompany(config)), [injectCompany]);
+  const download = useCallback((config, filename) => downloadDocument(injectCompany(config), filename), [injectCompany]);
+
+  return { generate, print, download, activeCompany };
 };
 
 // Quick print button component
@@ -484,31 +525,29 @@ export function PrintPreviewModal({
   const [isLoading, setIsLoading] = useState(false);
   const [pdfUrl, setPdfUrl] = useState(null);
   const iframeRef = useRef(null);
+  const { activeCompany } = useCompany();
 
   React.useEffect(() => {
-    let cancelled = false;
     if (open && config) {
       setIsLoading(true);
-      (async () => {
-        try {
-          await ensurePdfFonts().catch(() => {}); // ensure Cyrillic fonts are ready
-          if (cancelled) return;
-          const doc = generateDocumentPDF(config);
-          const url = doc.output("bloburl");
-          if (!cancelled) setPdfUrl(url);
-        } catch (error) {
-          console.error("PDF yaratishda xatolik:", error);
-        } finally {
-          if (!cancelled) setIsLoading(false);
-        }
-      })();
+      try {
+        // Auto-inject active company branding if caller didn't provide one
+        const finalConfig = {
+          ...config,
+          customCompany: config.customCompany || activeCompany,
+        };
+        const doc = generateDocumentPDF(finalConfig);
+        const url = doc.output("bloburl");
+        setPdfUrl(url);
+      } catch (error) {
+        console.error("PDF yaratishda xatolik:", error);
+      } finally {
+        setIsLoading(false);
+      }
     } else {
       setPdfUrl(null);
     }
-    return () => {
-      cancelled = true;
-    };
-  }, [open, config]);
+  }, [open, config, activeCompany]);
 
   const handlePrint = () => {
     if (pdfUrl) {
@@ -531,7 +570,7 @@ export function PrintPreviewModal({
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl h-[90vh] flex flex-col">
         <DialogHeader className="flex-shrink-0">
-          <DialogTitle className="flex items-center justify-between pr-8">
+          <DialogTitle className="flex items-center justify-between">
             <span className="flex items-center gap-2">
               <Eye className="w-5 h-5" />
               Hujjatni ko'rish
@@ -703,6 +742,7 @@ export function BatchPrintModal({
   const [selectedDocs, setSelectedDocs] = useState([]);
   const [isPrinting, setIsPrinting] = useState(false);
   const [progress, setProgress] = useState(0);
+  const { activeCompany } = useCompany();
 
   React.useEffect(() => {
     if (open) {
@@ -726,7 +766,9 @@ export function BatchPrintModal({
     for (let i = 0; i < totalDocs; i++) {
       const doc = selectedItems[i];
       const config = generateConfig(doc);
-      await downloadDocument(config, `${entityName}_${doc.id}`);
+      // Inject active company branding if not already provided
+      const finalConfig = { ...config, customCompany: config.customCompany || activeCompany };
+      downloadDocument(finalConfig, `${entityName}_${doc.id}`);
       setProgress(((i + 1) / totalDocs) * 100);
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
