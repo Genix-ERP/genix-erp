@@ -1056,16 +1056,21 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
   //      custom-added rows the user entered a value on.
   const resolveWorkQty = useCallback((w) => {
     if (!w) return 0;
-    // Priority — prefer the єдинич's own anchored plan first. ВОР is
-    // the RESCUE for template-mode єдинич imports whose
-    // original_quantity is 0 (no col F value). Within the ВОР rescue
-    // path we try a row-number-based lookup FIRST (the user-confirmed
-    // disambiguator for files where the same name+code appears in
-    // multiple sections with different planned qtys), then fall back
-    // to the section+name+uom strict match, then a name-only loose
-    // match. Live `quantity` is the last-ditch fallback.
-    const origQty = Number(w.original_quantity || 0);
-    if (origQty > 0) return origQty;
+    // Priority — ВОР is the project's Bill of Quantities, so its
+    // (item_number, code) match wins first. It's the AUTHORITATIVE
+    // project plan; when ВОР and єдинич disagree on the same row
+    // (e.g. ВОР row 29 = 0.102, єдинич row 29 = 0.012 for an
+    // arm-ie work that appears twice), the ВОР figure is the one
+    // the foreman should target.
+    //
+    // Chain:
+    //   1. ВОР byItem  (item_number + code) — deterministic
+    //   2. ВОР strict  (section + name + uom)
+    //   3. єдинич's original_quantity (col F anchor) — fallback when
+    //      ВОР has no matching row at all (some єдинич-only works
+    //      don't surface in the project's ВОР sheet).
+    //   4. ВОР loose   (name only) — last-ditch ВОР rescue.
+    //   5. live `quantity` — final fallback for legacy rows.
     const byItem = vorPlanByName?.byItem;
     const strict = vorPlanByName?.strict;
     const loose = vorPlanByName?.loose;
@@ -1073,8 +1078,6 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
       const itemNum = String(w.item_number || '').trim();
       if (itemNum) {
         const codeKey = String(w.code || '').trim().toLowerCase();
-        // Prefer (item_number, code) — guards against item_numbers
-        // accidentally aligning across mismatched code rows.
         const v = Number(byItem.get(`${itemNum}|${codeKey}`) || byItem.get(itemNum) || 0);
         if (v > 0) return v;
       }
@@ -1084,6 +1087,8 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
       const v = strict.get(sk) || 0;
       if (v > 0) return v;
     }
+    const origQty = Number(w.original_quantity || 0);
+    if (origQty > 0) return origQty;
     if (loose) {
       const v = loose.get(normName(w.name)) || 0;
       if (v > 0) return v;
@@ -2145,44 +2150,45 @@ function WorksTable({
             const isLocked = w.approval_status === 'confirmed_engineer';
             const isSupConfirmed = w.approval_status === 'confirmed_supervisor';
             const rowBg = isLocked ? '#F0FDF4' : (isSupConfirmed ? '#FEF7E0' : 'transparent');
-            // REJA = the planned project quantity. Priority:
-            //   1. єдинич's own original_quantity (col F anchor) — the
-            //      authoritative per-work plan the user sees on the
-            //      Smetalar tab.
-            //   2. ВОР byItem (item_number + code) — disambiguates the
-            //      common case where the same work name+code appears
-            //      in multiple sections with different planned qtys
-            //      (e.g. УСТРОЙСТВО ПОЯСОВ at rows 33, 52, 109).
-            //   3. ВОР strict (section + name + uom) — rescues when the
-            //      row numbering doesn't align.
-            //   4. ВОР loose (name only) — rescues when section labels
-            //      disagree between єдинич and ВОР.
-            //   5. live `quantity` — last fallback for legacy rows.
+            // REJA priority — mirrors resolveWorkQty above:
+            //   1. ВОР byItem (item_number + code) — the project's BoQ
+            //      figure, deterministic and authoritative.
+            //   2. ВОР strict (section + name + uom).
+            //   3. єдинич's original_quantity — fallback when ВОР has
+            //      no matching row.
+            //   4. ВОР loose (name only) — last-ditch ВОР rescue.
+            //   5. live `quantity` — final fallback.
             const origQty = Number(w.original_quantity || 0);
             const ownQty = Number(w.quantity || 0);
-            let vorQty = 0;
-            if (origQty <= 0) {
-              if (vorPlanByName?.byItem) {
-                const itemNum = String(w.item_number || '').trim();
-                if (itemNum) {
-                  const codeKey = String(w.code || '').trim().toLowerCase();
-                  vorQty = Number(
-                    vorPlanByName.byItem.get(`${itemNum}|${codeKey}`)
-                    || vorPlanByName.byItem.get(itemNum)
-                    || 0
-                  );
-                }
-              }
-              if (vorQty <= 0 && vorPlanByName?.strict) {
-                vorQty = Number(vorPlanByName.strict.get(
-                  compoundKey(w.parent_item_number, w.name, w.uom),
-                ) || 0);
-              }
-              if (vorQty <= 0 && vorPlanByName?.loose) {
-                vorQty = Number(vorPlanByName.loose.get(normName(w.name)) || 0);
+            let vorByItemQty = 0;
+            if (vorPlanByName?.byItem) {
+              const itemNum = String(w.item_number || '').trim();
+              if (itemNum) {
+                const codeKey = String(w.code || '').trim().toLowerCase();
+                vorByItemQty = Number(
+                  vorPlanByName.byItem.get(`${itemNum}|${codeKey}`)
+                  || vorPlanByName.byItem.get(itemNum)
+                  || 0
+                );
               }
             }
-            const planQty = origQty > 0 ? origQty : (vorQty > 0 ? vorQty : ownQty);
+            let vorStrictQty = 0;
+            if (vorByItemQty <= 0 && vorPlanByName?.strict) {
+              vorStrictQty = Number(vorPlanByName.strict.get(
+                compoundKey(w.parent_item_number, w.name, w.uom),
+              ) || 0);
+            }
+            let vorLooseQty = 0;
+            if (vorByItemQty <= 0 && vorStrictQty <= 0
+                && origQty <= 0 && vorPlanByName?.loose) {
+              vorLooseQty = Number(vorPlanByName.loose.get(normName(w.name)) || 0);
+            }
+            const planQty =
+              vorByItemQty > 0 ? vorByItemQty
+              : vorStrictQty > 0 ? vorStrictQty
+              : origQty > 0 ? origQty
+              : vorLooseQty > 0 ? vorLooseQty
+              : ownQty;
             const doneQty = Number(w.done_quantity || 0);
             const pct = planQty > 0 ? Math.min((doneQty / planQty) * 100, 100) : 0;
             const stMeta = STATUS_META[w.approval_status] || STATUS_META.pending;

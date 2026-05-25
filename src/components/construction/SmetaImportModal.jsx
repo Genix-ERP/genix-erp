@@ -395,17 +395,24 @@ function parseEdinich(workbook) {
       // Children's per-unit norm is captured below in
       // `quantity_per_unit`; child.quantity stays 0 so the cascade
       // `parent.qty × norm` resolves to 0 too.
+      // Parent rows store their project quantity in COL E in most
+      // Госархитектстрой templates (older files put it in col F).
+      // We try col E first and fall back to col F. Reading just col F
+      // historically left modern files with parent qty = 0 because
+      // that column is blank for parents in their layout.
+      //
+      // We also keep NEGATIVE values — subtraction positions
+      // ("ВЫЧИТАЕТСЯ ПОЗИЦИЯ") store a negative qty so the work
+      // deducts from the totals. Dropping them to 0 would lose the
+      // intended deduction.
+      const parentRaw = colE !== 0 ? colE : colF;
       currentSection.items.push({
         item_number: colA,
         code: colB,
         name: colC,
         uom: colD,
         quantity: 0,
-        // colF is already a clean number via toNum (handles comma-
-        // decimal). Old code used `isNaN(colF) ? 0 : colF` which was
-        // a workaround for parseFloat's NaN on bad input; toNum
-        // already guarantees a finite number.
-        norma_quantity: colF,
+        norma_quantity: parentRaw,
         quantity_per_unit: 0,
         is_parent: hasCode,
         resource_type: '',
@@ -479,13 +486,17 @@ function parseEdinich(workbook) {
   // whose colE > 0 to do the inversion (children with empty norms can't
   // help). If no usable child exists we leave the parent at 0 — there's
   // no way to derive it from the data we have.
+  // Post-pass uses !== 0 instead of > 0 so NEGATIVE quantities also
+  // get derived. Subtraction positions ("ВЫЧИТАЕТСЯ ПОЗИЦИЯ") store
+  // negative values; the > 0 guard previously dropped them and made
+  // the parent + every child render as 0.
   for (const sec of sections) {
     if (!Array.isArray(sec.items)) continue;
     for (let i = 0; i < sec.items.length; i++) {
       const it = sec.items[i];
-      // Only parents whose own col F was empty/zero get patched.
+      // Only parents whose own value was empty get patched.
       if (it.is_parent !== undefined && !it.is_parent) continue;
-      if (Number(it.norma_quantity) > 0) continue;
+      if (Number(it.norma_quantity) !== 0) continue;
       const parentNumStr = String(it.item_number || '').trim();
       if (!parentNumStr) continue;
       for (let j = i + 1; j < sec.items.length; j++) {
@@ -493,7 +504,7 @@ function parseEdinich(workbook) {
         if (String(child.parent_item_number || '') !== parentNumStr) break;
         const childTotal = Number(child.norma_quantity || 0);
         const perUnit    = Number(child.quantity_per_unit || 0);
-        if (childTotal > 0 && perUnit > 0) {
+        if (childTotal !== 0 && perUnit !== 0) {
           it.norma_quantity = childTotal / perUnit;
           break;
         }
@@ -1540,7 +1551,11 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
         let importedQuantity;
         if (isResurs && item.quantity != null) {
           importedQuantity = Number(item.quantity) || 0;
-        } else if (item.norma_quantity != null && Number(item.norma_quantity) > 0) {
+        } else if (item.norma_quantity != null && Number(item.norma_quantity) !== 0) {
+          // !== 0 instead of > 0 so NEGATIVE quantities survive the
+          // round-trip. Subtraction positions ("ВЫЧИТАЕТСЯ ПОЗИЦИЯ")
+          // legitimately store negative qtys; dropping them as
+          // undefined would render them as 0 on the Smetalar tab.
           importedQuantity = Number(item.norma_quantity);
         } else {
           importedQuantity = undefined;

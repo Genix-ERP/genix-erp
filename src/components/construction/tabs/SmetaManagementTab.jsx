@@ -904,14 +904,40 @@ export default function SmetaManagementTab({ project }) {
       }
       return ma - mb; // Infinity values fall to the end naturally
     });
-    // Also sort each section's sub-sections by min item_number so the
-    // hierarchy follows the printed smeta page numbering. Sub-sections
-    // without a numeric leading row fall to the end of the parent's
-    // sub-section list, alphabetically by name. Pinned sections (manual)
-    // get the same treatment for symmetry.
+    // Also sort each section's sub-sections so manually-added ones
+    // pin to the top (newest first) and imported sub-sections sort by
+    // their min item_number. Without the manual-pin step, an empty
+    // user-added sub-section (no item_number → Infinity sort key)
+    // landed at the end of its parent's content — past every imported
+    // row — which is the opposite of what the user expects when they
+    // create a sub-stage and want to see it right away.
+    const manualSubSet = new Set(
+      (manualSectionNames || []).map((n) => String(n || '').trim()),
+    );
+    const isManualSubData = (sub) => {
+      if (manualSubSet.has(String(sub.fullName || ''))) return true;
+      if (sub.is_empty_manual) return true;
+      const lines = sub.lines || [];
+      if (lines.length === 0) return true;
+      if (lines.every((ln) => ln.is_manual === true)) return true;
+      // Heuristic — imported єдинич lines always have a pure-numeric
+      // item_number (e.g. "1", "27", "395"). Lines added by the user
+      // either lack one entirely or use a parent#-seq / free-form
+      // string. If none of the sub-section's lines look imported,
+      // treat the bucket as manual. Falls back gracefully when the
+      // backend hasn't been rebuilt with migration 417's is_manual
+      // writes.
+      return lines.every((ln) => {
+        const raw = String(ln.item_number || '').trim();
+        return !raw || !/^\d+$/.test(raw);
+      });
+    };
     for (const sec of [...pinned, ...imported]) {
       if (Array.isArray(sec.subSections) && sec.subSections.length > 1) {
         sec.subSections.sort((a, b) => {
+          const aManual = isManualSubData(a);
+          const bManual = isManualSubData(b);
+          if (aManual !== bManual) return aManual ? -1 : 1;
           const ma = minItemNum(a);
           const mb = minItemNum(b);
           if (ma === mb) {
@@ -1832,9 +1858,30 @@ export default function SmetaManagementTab({ project }) {
                               </button>
                             )}
                           </div>
-                          {Array.isArray(sub.lines) && sub.lines.length > 0 && (
+                          {/* Hide the "bucket marker" line that AddSubWorkModal
+                             creates with the same name as the sub-section
+                             itself — otherwise the user sees the sub-section
+                             header followed by an inner row repeating the
+                             same name (e.g. "└ yangi 1 ish" then "yangi
+                             yangi ЧЕЛ.-Ч 2 0 resurs"). We treat a line as
+                             a bucket marker when its name matches the
+                             sub-section's child name AND it has no
+                             resources of its own — the sub-section header
+                             plus the user's "+ Ish" affordance is enough
+                             to manage it from there. */}
+                          {(() => {
+                            const normTxt = (s) => String(s || '').trim().toLowerCase();
+                            const subName = normTxt(sub.name);
+                            const visibleLines = (sub.lines || []).filter((ln) => {
+                              if (normTxt(ln.name) !== subName) return true;
+                              const lnSubs = subByParent.get(Number(ln.id)) || [];
+                              const hasResources = lnSubs.some((s) => !isSubStageRow(s));
+                              return hasResources;
+                            });
+                            if (visibleLines.length === 0) return null;
+                            return (
                             <div className="ml-6 mb-2">
-                              {sub.lines.map((ln) => {
+                              {visibleLines.map((ln) => {
                                 const subs = subByParent.get(Number(ln.id)) || [];
                                 const subStages = subs.filter(isSubStageRow);
                                 return (
@@ -1884,20 +1931,60 @@ export default function SmetaManagementTab({ project }) {
                                 );
                               })}
                             </div>
-                          )}
+                            );
+                          })()}
                         </React.Fragment>
                       );
+                      // Manual sub-sections pin to the top. Detection
+                      // chain (each is a strong-enough signal on its own):
+                      //   1. Full name matches a construction_stages row
+                      //      tracked in manualSectionNames.
+                      //   2. is_empty_manual placeholder (pre-seeded).
+                      //   3. Sub-section has zero lines (empty bucket).
+                      //   4. Every line carries is_manual = TRUE
+                      //      (migration 417 + backend writes).
+                      //   5. HEURISTIC fallback — every line lacks a
+                      //      leading-numeric item_number (e.g. "qwqw",
+                      //      "yangi"). Imported єдинич lines have item
+                      //      numbers like "1", "27", "395" — purely
+                      //      digits. Lines added via the UI either get
+                      //      "1-3" style (parent#-seq) or whatever the
+                      //      user typed, which won't match /^\d+$/.
+                      //      Useful when the backend hasn't been rebuilt
+                      //      with migration 417's is_manual writes yet.
+                      const isManualSub = (sub) => {
+                        const full = String(sub.fullName || '').trim();
+                        if (manualSectionNames && manualSectionNames.includes(full)) return true;
+                        if (sub.is_empty_manual) return true;
+                        const lines = sub.lines || [];
+                        if (lines.length === 0) return true;
+                        if (lines.every((ln) => ln.is_manual === true)) return true;
+                        return lines.every((ln) => {
+                          const raw = String(ln.item_number || '').trim();
+                          return !raw || !/^\d+$/.test(raw);
+                        });
+                      };
+                      const manualSubs = [];
                       const entries = [];
                       for (const ln of (sec.lines || [])) {
                         entries.push({ kind: 'line', sort: leadNum(ln.item_number), data: ln });
                       }
                       for (const sub of (sec.subSections || [])) {
-                        entries.push({ kind: 'sub', sort: subMinItem(sub), data: sub });
+                        if (isManualSub(sub)) {
+                          manualSubs.push(sub);
+                        } else {
+                          entries.push({ kind: 'sub', sort: subMinItem(sub), data: sub });
+                        }
                       }
                       entries.sort((a, b) => a.sort - b.sort);
-                      return entries.map((entry) =>
-                        entry.kind === 'line' ? renderLineEntry(entry.data) : renderSubEntry(entry.data),
-                      );
+                      // Manual sub-sections render first; everything else
+                      // follows in item_number order.
+                      return [
+                        ...manualSubs.map((sub) => renderSubEntry(sub)),
+                        ...entries.map((entry) =>
+                          entry.kind === 'line' ? renderLineEntry(entry.data) : renderSubEntry(entry.data),
+                        ),
+                      ];
                     })()}
 
                     {/* Legacy sub-section render — left in place but
