@@ -792,6 +792,21 @@ export const constructionService = {
     return response.data.data;
   },
 
+  // Clone-by-code variant of createEstimateLine. Creates the new line and,
+  // when an existing parent line in the same project shares `source_code`,
+  // copies all of its resources onto the new line in one round-trip. Use
+  // for "+ Ish" / "+ Yangi qo'shimcha etap" submissions where the user
+  // entered a SHRNK code that may already exist elsewhere in the smeta.
+  //
+  // Returns: { id, cloned_resources, source_id?, source_name? }
+  async cloneEstimateLineByCode(estimateId, data) {
+    const response = await apiClient.post(
+      `/construction/estimates/${estimateId}/lines/clone-by-code`,
+      data,
+    );
+    return response.data.data;
+  },
+
   async bulkCreateEstimateLines(estimateId, lines, {
     replace = false,
     sourceType = '',
