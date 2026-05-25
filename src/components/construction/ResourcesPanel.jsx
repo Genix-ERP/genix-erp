@@ -64,7 +64,9 @@ const MAT_LABEL_KEY = {
 function classify(rt) {
   rt = String(rt || '').toLowerCase();
   if (['labor', 'ish', 'ishchi', 'worker'].includes(rt)) return 'labor';
-  if (['equipment', 'machine', 'mashina', 'masina'].includes(rt)) return 'equipment';
+  // 'machinery' (Mashina mexanizm) buckets into the same MASHINA filter
+  // as legacy 'equipment' — both render under the Mashina tag.
+  if (['equipment', 'machine', 'mashina', 'masina', 'machinery'].includes(rt)) return 'equipment';
   return 'material';
 }
 
