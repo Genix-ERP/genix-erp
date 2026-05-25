@@ -147,9 +147,9 @@ function LayoutContent({ children, currentPageName }) {
   const settingsLogo = adminSettings?.general?.company?.logo_url || null;
   const brandLogoUrl = resolveBrandLogoUrl(settingsLogo || readStoredBrandLogo());
 
-  // Set browser title based on language
+  // Set browser title
   React.useEffect(() => {
-    document.title = "Yuksalish ERP";
+    document.title = "Genix";
   }, [language]);
 
   // Force re-render when user role changes by including user in dependency tracking
