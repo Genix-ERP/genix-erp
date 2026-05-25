@@ -5,16 +5,20 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Plus, Edit, Trash2, CheckCircle, XCircle, Receipt, Tag, ChevronLeft, ChevronRight } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import Loader from '@/components/ui/loader';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { sortBuildings } from '@/utils/naturalSort';
 import { toast } from 'sonner';
 
 const STATUS_COLORS = {
@@ -72,9 +76,23 @@ const ExpensesTab = ({ project, scope }) => {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
-  const [filters, setFilters] = useState({ status: '', stage_id: '', category_id: '' });
+  const [filters, setFilters] = useState({ status: '', stage_id: '', category_id: '', building_id: 'all' });
+  const [buildings, setBuildings] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 20;
+
+  // Buildings drive the block-pill row above the summary cards. Loaded
+  // once per project; the pills mirror the Byudjet tab so users get a
+  // consistent block-filter UX across the Moliya area.
+  useEffect(() => {
+    if (!project?.id) return;
+    let cancelled = false;
+    constructionService
+      .listBuildings(project.id)
+      .then((rows) => { if (!cancelled) setBuildings(sortBuildings(Array.isArray(rows) ? rows : [])); })
+      .catch(() => { if (!cancelled) setBuildings([]); });
+    return () => { cancelled = true; };
+  }, [project?.id]);
 
   const load = useCallback(async () => {
     if (!project?.id) return;
@@ -85,6 +103,11 @@ const ExpensesTab = ({ project, scope }) => {
       if (filters.status) params.status = filters.status;
       if (filters.stage_id) params.stage_id = filters.stage_id;
       if (filters.category_id) params.category_id = filters.category_id;
+      // Backend treats absent / 0 as project-wide; only forward when a
+      // specific block is picked.
+      if (filters.building_id && filters.building_id !== 'all') {
+        params.building_id = filters.building_id;
+      }
       const [expData, stageData, catData] = await Promise.all([
         constructionService.listExpenseLines(project.id, params),
         constructionService.listStages(project.id),
@@ -158,8 +181,10 @@ const ExpensesTab = ({ project, scope }) => {
       };
       if (editingLine) {
         await constructionService.updateExpenseLine(editingLine.id, payload);
+        toast.success(t('expense_updated') || 'Xarajat yangilandi');
       } else {
         await constructionService.createExpenseLine(project.id, payload);
+        toast.success(t('expense_created') || "Xarajat qo'shildi");
       }
       setShowModal(false);
       load();
@@ -173,6 +198,7 @@ const ExpensesTab = ({ project, scope }) => {
   const handleApprove = async (line) => {
     try {
       await constructionService.approveExpenseLine(line.id);
+      toast.success(t('expense_approved') || 'Xarajat tasdiqlandi');
       load();
     } catch (e) {
       toast.error(e?.response?.data?.message || t('error_occurred'));
@@ -184,6 +210,7 @@ const ExpensesTab = ({ project, scope }) => {
     try {
       await constructionService.deleteExpenseLine(deleteTarget.id);
       setDeleteTarget(null);
+      toast.success(t('expense_deleted') || "Xarajat o'chirildi");
       load();
     } catch (e) {
       toast.error(e?.response?.data?.message || t('error_occurred'));
@@ -192,10 +219,15 @@ const ExpensesTab = ({ project, scope }) => {
 
   const handleCancel = async () => {
     if (!cancelTarget) return;
+    if (!cancelReason?.trim()) {
+      toast.error(t('cancel_reason_required') || 'Bekor qilish sababini kiriting');
+      return;
+    }
     try {
       await constructionService.cancelExpenseLine(cancelTarget.id, cancelReason);
       setCancelTarget(null);
       setCancelReason('');
+      toast.success(t('expense_cancelled') || 'Xarajat bekor qilindi');
       load();
     } catch (e) {
       toast.error(e?.response?.data?.message || t('error_occurred'));
@@ -239,22 +271,28 @@ const ExpensesTab = ({ project, scope }) => {
   };
 
   const handleSaveCat = async () => {
-    if (!catForm.name.trim()) return;
+    if (!catForm.name.trim()) {
+      toast.error(t('category_name_required') || 'Kategoriya nomi shart');
+      return;
+    }
     setCatSaving(true);
     try {
       const payload = {
-        name: catForm.name,
+        name: catForm.name.trim(),
         default_debit_account_id: catForm.default_debit_account_id || '',
       };
       if (editingCat) {
         await constructionService.updateCostCategory(editingCat.id, payload);
+        toast.success(t('category_updated') || 'Kategoriya yangilandi');
       } else {
         await constructionService.createCostCategory(payload);
+        toast.success(t('category_created') || "Kategoriya qo'shildi");
       }
       setShowCatModal(false);
       loadCategories();
     } catch (e) {
       console.error('Failed to save category:', e);
+      toast.error(e?.response?.data?.message || t('error_occurred'));
     } finally {
       setCatSaving(false);
     }
@@ -263,9 +301,15 @@ const ExpensesTab = ({ project, scope }) => {
   const handleToggleCat = async (cat) => {
     try {
       await constructionService.updateCostCategory(cat.id, { is_active: !cat.is_active });
+      toast.success(
+        !cat.is_active
+          ? (t('category_activated') || 'Kategoriya yoqildi')
+          : (t('category_deactivated') || "Kategoriya o'chirildi")
+      );
       loadCategories();
     } catch (e) {
       console.error('Failed to toggle category:', e);
+      toast.error(e?.response?.data?.message || t('error_occurred'));
     }
   };
 
@@ -304,7 +348,7 @@ const ExpensesTab = ({ project, scope }) => {
           </CardHeader>
           <CardContent>
             {catLoading ? (
-              <div className="text-center py-8 text-slate-400">{t('loading') || 'Yuklanmoqda...'}</div>
+              <Loader />
             ) : categories.length === 0 ? (
               <div className="text-center py-12">
                 <Tag className="w-12 h-12 text-slate-300 mx-auto mb-3" />
@@ -348,6 +392,44 @@ const ExpensesTab = ({ project, scope }) => {
         </Card>
       ) : (
       <>
+      {/* Building tab row — mirrors the Byudjet tab. "Hammasi" keeps
+          the project-wide view available; per-block pills filter both
+          the summary totals and the operations table. Only render when
+          the project actually has buildings attached so single-building
+          projects don't see a useless one-pill row. */}
+      {buildings.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setFilters((f) => ({ ...f, building_id: 'all' }))}
+            className={cn(
+              'px-3 py-1.5 rounded-full text-xs font-medium border transition-colors',
+              filters.building_id === 'all'
+                ? 'bg-slate-900 text-white border-slate-900'
+                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50',
+            )}
+          >
+            {t('all') || 'Hammasi'}
+          </button>
+          {buildings.map((b) => (
+            <button
+              key={b.id}
+              type="button"
+              onClick={() => setFilters((f) => ({ ...f, building_id: String(b.id) }))}
+              className={cn(
+                'px-3 py-1.5 rounded-full text-xs font-medium border transition-colors',
+                String(filters.building_id) === String(b.id)
+                  ? 'bg-slate-900 text-white border-slate-900'
+                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50',
+              )}
+              title={b.code || b.name}
+            >
+              {b.name || b.code || `#${b.id}`}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Summary */}
       <div className="grid grid-cols-3 gap-4">
         <Card><CardContent className="p-4">
@@ -432,9 +514,43 @@ const ExpensesTab = ({ project, scope }) => {
                     const totalCount = (data.items || []).length;
                     const totalPages = Math.ceil(totalCount / pageSize);
                     const paginatedItems = (data.items || []).slice((currentPage - 1) * pageSize, currentPage * pageSize);
-                    return paginatedItems.map(line => (
+                    return paginatedItems.map(line => {
+                    // Display: prefer created_at (TIMESTAMP — has hh:mm),
+                    // fall back to expense_date (DATE — only date). The
+                    // backend stores expense_date as a DATE type so its
+                    // ISO output is always "YYYY-MM-DDT00:00:00Z" with
+                    // a fake midnight; created_at carries the real time.
+                    // Format manually to dd.mm.yyyy hh:mm so the locale
+                    // matches the rest of the Uzbek UI.
+                    const fmtDate = (val) => {
+                      if (!val) return '—';
+                      // Backend stores TIMESTAMP WITHOUT TIME ZONE
+                      // (server-local — Asia/Tashkent for this deploy).
+                      // Go's JSON encoder still appends a Z to the ISO
+                      // string, which makes browsers interpret the value
+                      // as UTC and then shift it by the local TZ offset
+                      // (the +5h skew the user reported). Stripping the
+                      // Z and any sub-second fraction lets new Date()
+                      // parse the value as local time, which matches
+                      // what the Postgres column actually holds.
+                      const stripped = String(val)
+                        .replace(/Z$/, '')
+                        .replace(/\.\d+$/, '');
+                      const d = new Date(stripped);
+                      if (isNaN(d.getTime())) return String(val).slice(0, 10);
+                      const pad = (n) => String(n).padStart(2, '0');
+                      const datePart = `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`;
+                      // Skip the time when it's exactly midnight (the
+                      // expense_date fallback path) — we don't want to
+                      // pretend a fake "00:00" was a real entry time.
+                      const h = d.getHours();
+                      const m = d.getMinutes();
+                      if (h === 0 && m === 0) return datePart;
+                      return `${datePart} ${pad(h)}:${pad(m)}`;
+                    };
+                    return (
                     <tr key={line.id} className="border-b hover:bg-slate-50">
-                      <td className="py-2 px-3 whitespace-nowrap">{line.expense_date}</td>
+                      <td className="py-2 px-3 whitespace-nowrap">{fmtDate(line.created_at || line.expense_date)}</td>
                       <td className="py-2 px-3 max-w-[200px] truncate" title={line.description}>{line.description}</td>
                       <td className="py-2 px-3">{line.supplier_name || '—'}</td>
                       <td className="py-2 px-3">{line.stage_name || '—'}</td>
@@ -466,7 +582,8 @@ const ExpensesTab = ({ project, scope }) => {
                         </div>
                       </td>
                     </tr>
-                  ));
+                  );
+                  });
                   })()}
                 </tbody>
               </table>
@@ -555,7 +672,7 @@ const ExpensesTab = ({ project, scope }) => {
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <Label>{t('quantity')}</Label>
-                <Input type="number" value={form.quantity} onChange={e => setForm(f => ({...f, quantity: e.target.value}))} placeholder="0" />
+                <NumberInput value={form.quantity} onChange={raw => setForm(f => ({...f, quantity: raw}))} placeholder="0" />
               </div>
               <div>
                 <Label>{t('uom')}</Label>

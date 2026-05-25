@@ -62,9 +62,10 @@ const getPeriodLabel = (period, language) => {
 // Collapsible P&L section component (Odoo-style)
 // Helper to pick translated account name
 const pickAccountName = (account, language) => {
-  if (language === 'uz' && account.account_name_uz) return account.account_name_uz;
+  if (language === 'ru' && account.account_name_ru) return account.account_name_ru;
   if (language === 'en' && account.account_name_en) return account.account_name_en;
-  return account.account_name;
+  if (language === 'uz' && account.account_name_uz) return account.account_name_uz;
+  return account.account_name_uz || account.account_name;
 };
 
 function PnLSection({ title, items, total, formatCurrency, isCollapsible, language }) {

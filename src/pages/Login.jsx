@@ -5,13 +5,16 @@ import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import LanguageSelector from '@/components/ui/language-selector';
 import GoogleSignInButton from '@/components/ui/GoogleSignInButton';
-import { Loader2, Mail, Lock, Phone, Building2, ArrowLeft } from 'lucide-react';
+import { Loader2, Mail, Lock, Phone, Building2, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import './Login.scss';
+import { readStoredBrandLogo, resolveBrandLogoUrl } from '@/utils/brandLogo';
 
 export default function Login() {
+  const [brandLogoUrl] = useState(() => resolveBrandLogoUrl(readStoredBrandLogo()));
   const [identifier, setIdentifier] = useState('');
+  const [isPhone, setIsPhone] = useState(false);
   const [password, setPassword] = useState('');
-  const [usePhone, setUsePhone] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [tenants, setTenants] = useState(null);
@@ -26,9 +29,8 @@ export default function Login() {
   // Translation helpers for phone-specific strings
   const T = {
     phone: { uz: 'Telefon raqam', ru: 'Номер телефона', en: 'Phone number' },
-    enter_phone: { uz: 'Telefon raqamingizni kiriting', ru: 'Введите номер телефона', en: 'Enter your phone number' },
-    use_email: { uz: 'Email bilan kirish', ru: 'Войти с email', en: 'Sign in with email' },
-    use_phone: { uz: 'Telefon bilan kirish', ru: 'Войти с телефоном', en: 'Sign in with phone' },
+    email_or_phone: { uz: 'Email yoki telefon', ru: 'Email или телефон', en: 'Email or phone' },
+    enter_email_or_phone: { uz: 'Email yoki telefon raqam kiriting', ru: 'Введите email или телефон', en: 'Enter email or phone' },
   };
   const tr = (key) => T[key]?.[language] || T[key]?.en || key;
 
@@ -38,19 +40,25 @@ export default function Login() {
     }
   }, [shouldNavigate, isAuthenticated, user, navigate]);
 
-  // Reset identifier when toggling input type
-  const toggleInputType = () => {
-    setUsePhone(prev => !prev);
-    setIdentifier('');
-    setError('');
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
-    const result = await login(identifier, password, selectedTenantId, usePhone);
+    // Read directly from DOM to handle browser/Google autofill
+    // (autofill may not trigger React onChange events)
+    const domIdentifier = document.getElementById('identifier')?.value || identifier;
+    const domPassword = document.getElementById('password')?.value || password;
+
+    // Sync React state if autofill provided different values
+    if (domIdentifier !== identifier) setIdentifier(domIdentifier);
+    if (domPassword !== password) setPassword(domPassword);
+
+    const cleanIdentifier = domIdentifier.replace(/\s/g, '');
+    const cleanPassword = domPassword.trim();
+    // Auto-detect phone from input shape: starts with + or all digits, no @ sign
+    const looksLikePhone = /^[\+\d]/.test(cleanIdentifier) && !cleanIdentifier.includes('@');
+    const result = await login(cleanIdentifier, cleanPassword, selectedTenantId, looksLikePhone);
 
     if (result.success) {
       setShouldNavigate(true);
@@ -69,9 +77,16 @@ export default function Login() {
     setError('');
     setIsLoading(true);
 
+    // Read from DOM in case autofill was used
+    const domIdentifier = document.getElementById('identifier')?.value || identifier;
+    const domPassword = document.getElementById('password')?.value || password;
+
+    // Use Google auth if we have a stored credential
+    const cleanIdentifier = domIdentifier.replace(/\s/g, '');
+    const looksLikePhone = /^[\+\d]/.test(cleanIdentifier) && !cleanIdentifier.includes('@');
     const result = googleCredential
       ? await loginWithGoogle(googleCredential, tenantId)
-      : await login(identifier, password, tenantId, usePhone);
+      : await login(cleanIdentifier, domPassword, tenantId, looksLikePhone);
 
     if (result.success) {
       setShouldNavigate(true);
@@ -121,8 +136,8 @@ export default function Login() {
         <div className="login-card">
           <div className="login-card__header">
             <img
-              src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68d244cb8a392237a5acfbd9/a049d6898_Logo.png"
-              alt="Genix Logo"
+              src={brandLogoUrl}
+              alt="Logo"
               className="login-card__logo"
             />
             <h1 className="login-card__title">{t('select_company')}</h1>
@@ -131,7 +146,7 @@ export default function Login() {
 
           <div className="login-card__body">
             {error && (
-              <div className="login-error" style={{ marginBottom: '1rem' }}>
+              <div className="login-error login-error--spaced" role="alert">
                 {error}
               </div>
             )}
@@ -160,7 +175,7 @@ export default function Login() {
               onClick={handleBackToLogin}
               disabled={isLoading}
             >
-              <ArrowLeft style={{ width: 16, height: 16 }} />
+              <ArrowLeft size={16} />
               {t('back_to_login')}
             </button>
           </div>
@@ -179,51 +194,61 @@ export default function Login() {
       <div className="login-card">
         <div className="login-card__header">
           <img
-            src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68d244cb8a392237a5acfbd9/a049d6898_Logo.png"
-            alt="Genix Logo"
+            src={brandLogoUrl}
+            alt="Logo"
             className="login-card__logo"
           />
           <h1 className="login-card__title">{t('welcome_back')}</h1>
+          <p className="login-card__subtitle">{t('sign_in_to_continue')}</p>
         </div>
 
         <div className="login-card__body">
           <form className="login-form" onSubmit={handleSubmit}>
             {error && (
-              <div className="login-error">{error}</div>
+              <div className="login-error" role="alert">{error}</div>
             )}
 
             <div className="login-form__field">
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <label htmlFor="identifier" className="login-form__label">
-                  {usePhone ? tr('phone') : t('email')}
-                </label>
-                <button
-                  type="button"
-                  onClick={toggleInputType}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    fontSize: '0.75rem',
-                    color: '#0EA5E9',
-                    cursor: 'pointer',
-                    padding: 0,
-                    fontWeight: 500,
-                  }}
-                >
-                  {usePhone ? tr('use_email') : tr('use_phone')}
-                </button>
-              </div>
+              <label htmlFor="identifier" className="login-form__label">
+                {isPhone ? tr('phone') : tr('email_or_phone')}
+              </label>
               <div className="login-form__input-wrap">
-                {usePhone
+                {isPhone
                   ? <Phone className="login-form__icon" />
                   : <Mail className="login-form__icon" />
                 }
                 <input
                   id="identifier"
-                  type={usePhone ? 'tel' : 'email'}
-                  placeholder={usePhone ? tr('enter_phone') : t('enter_email')}
+                  name="email"
+                  type="text"
+                  autoComplete="username"
+                  placeholder={isPhone ? '+998 XX XXX XX XX' : tr('enter_email_or_phone')}
                   value={identifier}
-                  onChange={(e) => setIdentifier(e.target.value)}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    // Auto-detect: if already in phone mode OR first char is digit/+ and no @
+                    if (isPhone || (/^[\+\d]/.test(raw) && !raw.includes('@'))) {
+                      const digits = raw.replace(/\D/g, '');
+                      const local = digits.startsWith('998') ? digits.slice(3) : digits;
+                      const limited = local.slice(0, 9);
+                      // No local digits left → reset to email mode
+                      if (limited.length === 0) {
+                        setIsPhone(false);
+                        setIdentifier('');
+                        return;
+                      }
+                      setIsPhone(true);
+                      let formatted = '+998';
+                      if (limited.length > 0) formatted += ' ' + limited.slice(0, 2);
+                      if (limited.length > 2) formatted += ' ' + limited.slice(2, 5);
+                      if (limited.length > 5) formatted += ' ' + limited.slice(5, 7);
+                      if (limited.length > 7) formatted += ' ' + limited.slice(7, 9);
+                      setIdentifier(formatted);
+                    } else {
+                      setIsPhone(false);
+                      setIdentifier(raw);
+                    }
+                  }}
                   className="login-form__input"
                   required
                 />
@@ -236,19 +261,30 @@ export default function Login() {
                 <Lock className="login-form__icon" />
                 <input
                   id="password"
-                  type="password"
+                  name="password"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="current-password"
                   placeholder={t('enter_password')}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="login-form__input"
+                  className="login-form__input login-form__input--with-toggle"
                   required
                 />
+                <button
+                  type="button"
+                  className="login-form__toggle"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? t('hide_password') : t('show_password')}
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
               </div>
             </div>
 
-            <div style={{ textAlign: 'right', marginTop: -4 }}>
-              <Link to="/forgot-password" style={{ fontSize: 13, color: '#0EA5E9', textDecoration: 'none' }}>
-                {t('forgot_password') || "Parolni unutdingizmi?"}
+            <div className="login-form__meta">
+              <Link to="/forgot-password" className="login-form__link">
+                {t('set_password') || "Parol o'rnatish"}
               </Link>
             </div>
 
@@ -259,7 +295,7 @@ export default function Login() {
             >
               {isLoading ? (
                 <>
-                  <Loader2 style={{ width: 16, height: 16, animation: 'spin 1s linear infinite' }} />
+                  <Loader2 size={18} className="login-form__spinner" />
                   {t('signing_in')}
                 </>
               ) : (
@@ -268,12 +304,11 @@ export default function Login() {
             </button>
           </form>
 
-          {backendAvailable && (
-            <p className="login-register">
-              {t('dont_have_account')}{' '}
-              <Link to="/register">{t('sign_up')}</Link>
-            </p>
-          )}
+          <div className="login-divider"><span>{t('or')}</span></div>
+
+          <Link to="/register" className="login-form__register">
+            {t('sign_up')}
+          </Link>
         </div>
       </div>
     </div>

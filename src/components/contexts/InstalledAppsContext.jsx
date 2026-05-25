@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { useCompany } from './CompanyContext';
 import { installedAppsService } from '@/api/services/installedApps';
 import { checkBackendHealth } from '@/config/dataMode';
+import apiClient from '@/api/client';
 
 const STORAGE_KEY = 'genix_installed_apps';
 
@@ -13,7 +14,7 @@ const getStorageKey = (baseKey, companyId) => {
 };
 
 export function InstalledAppsProvider({ children }) {
-  const { activeCompany } = useCompany();
+  const { activeCompany, companies, refreshCompanies } = useCompany();
 
   // Initialize from localStorage cache immediately to avoid delay
   const [installedApps, setInstalledApps] = useState(() => {
@@ -42,13 +43,14 @@ export function InstalledAppsProvider({ children }) {
     // Load from localStorage immediately (no blocking)
     const companyId = activeCompany?.id;
     const storageKey = getStorageKey(STORAGE_KEY, companyId);
+    let localApps = [];
     try {
       const stored = localStorage.getItem(storageKey);
       if (stored) {
         const apps = JSON.parse(stored);
-        const activeApps = (apps || []).filter(app => app.status === 'active');
-        if (activeApps.length > 0) {
-          setInstalledApps(activeApps);
+        localApps = (apps || []).filter(app => app.status === 'active');
+        if (localApps.length > 0) {
+          setInstalledApps(localApps);
           setIsLoading(false);
         }
       }
@@ -61,12 +63,22 @@ export function InstalledAppsProvider({ children }) {
 
       if (isAvailable) {
         const apps = await installedAppsService.getInstalledApps();
-        const activeApps = (apps || []).filter(app => app.status === 'active');
-        setInstalledApps(activeApps);
-        localStorage.setItem(storageKey, JSON.stringify(activeApps));
+        const backendApps = (apps || []).filter(app => app.status === 'active');
+
+        // Merge: backend is source of truth for apps it knows about,
+        // but preserve local-only apps (pending sync / offline installs).
+        // This prevents clobbering local installs when backend returns empty
+        // due to auth issues, empty tenant state, or partial outages.
+        const backendIds = new Set(backendApps.map(a => a.app_id));
+        const localOnly = localApps.filter(a => !backendIds.has(a.app_id) && a._localOnly);
+        const merged = [...backendApps, ...localOnly];
+
+        setInstalledApps(merged);
+        localStorage.setItem(storageKey, JSON.stringify(merged));
       }
     } catch (error) {
       console.error('Error loading installed apps from backend:', error);
+      // Keep whatever was loaded from localStorage; don't clear on network error.
     }
 
     setIsLoading(false);
@@ -172,6 +184,45 @@ export function InstalledAppsProvider({ children }) {
     return installedApps.some(app => app.app_id === appId);
   }, [installedApps]);
 
+  // Per-org hide list (migration 386). Apps in the active company's
+  // `hidden_apps` are still "installed" tenant-wide but should not
+  // appear in the sidebar while operating inside that organization.
+  const isAppHiddenInActiveCompany = useCallback((appId) => {
+    const list = activeCompany?.hidden_apps;
+    return Array.isArray(list) && list.includes(appId);
+  }, [activeCompany]);
+
+  // Returns the set of organization IDs that currently hide the given app.
+  // Used by the Apps page modal to show which companies have unchecked
+  // visibility for an app.
+  const getOrgsHidingApp = useCallback((appId) => {
+    return (companies || [])
+      .filter(c => Array.isArray(c.hidden_apps) && c.hidden_apps.includes(appId))
+      .map(c => c.id);
+  }, [companies]);
+
+  // Set the visibility of `appId` for a specific organization. `hidden`=true
+  // adds the app to that org's hidden_apps; false removes it. Issues a
+  // PATCH against /organizations/:id with the next array, then refreshes
+  // the companies list so the sidebar re-evaluates immediately.
+  const setAppHiddenForOrg = useCallback(async (appId, orgId, hidden) => {
+    const org = (companies || []).find(c => c.id === orgId);
+    if (!org) return;
+    const current = Array.isArray(org.hidden_apps) ? org.hidden_apps : [];
+    let next;
+    if (hidden) {
+      if (current.includes(appId)) return; // already hidden
+      next = [...current, appId];
+    } else {
+      if (!current.includes(appId)) return; // already visible
+      next = current.filter(a => a !== appId);
+    }
+    await apiClient.put(`/organizations/${orgId}`, { hidden_apps: next });
+    if (refreshCompanies) {
+      await refreshCompanies();
+    }
+  }, [companies, refreshCompanies]);
+
   const value = useMemo(() => ({
     installedApps,
     isLoading,
@@ -179,8 +230,11 @@ export function InstalledAppsProvider({ children }) {
     refreshInstalledApps,
     isAppInstalled,
     installApp,
-    uninstallApp
-  }), [installedApps, isLoading, backendAvailable, refreshInstalledApps, isAppInstalled, installApp, uninstallApp]);
+    uninstallApp,
+    isAppHiddenInActiveCompany,
+    getOrgsHidingApp,
+    setAppHiddenForOrg,
+  }), [installedApps, isLoading, backendAvailable, refreshInstalledApps, isAppInstalled, installApp, uninstallApp, isAppHiddenInActiveCompany, getOrgsHidingApp, setAppHiddenForOrg]);
 
   return (
     <InstalledAppsContext.Provider value={value}>

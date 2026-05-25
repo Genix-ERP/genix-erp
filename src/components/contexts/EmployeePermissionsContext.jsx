@@ -104,6 +104,40 @@ export function EmployeePermissionsProvider({ children }) {
     }
   }, [isAuthenticated, user?.id, loadPermissions]);
 
+  // Re-fetch permissions when the tab regains focus / becomes visible.
+  // RATE-LIMITED to once every 30 seconds — without this, opening any
+  // dialog or alert that briefly steals + returns focus would cascade
+  // re-renders and unmount/remount whatever component the user is
+  // currently looking at (which broke the file-import flow because
+  // the dynamically-mounted <input type=file> kept getting torn down
+  // before the OS file picker could fire its change event).
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    let lastRefreshTs = 0;
+    const REFRESH_DEBOUNCE_MS = 30 * 1000;
+    const refreshIfStale = () => {
+      const now = Date.now();
+      if (now - lastRefreshTs < REFRESH_DEBOUNCE_MS) return;
+      lastRefreshTs = now;
+      loadPermissions();
+    };
+
+    const onFocus = () => { refreshIfStale(); };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        refreshIfStale();
+      }
+    };
+
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [isAuthenticated, loadPermissions]);
+
   // Check if user has permission for a specific action on a module
   const hasPermission = useCallback((moduleId, action) => {
     // Admins have all permissions

@@ -126,16 +126,32 @@ export default function CostCalculation() {
   const [form, setForm] = useState(emptyForm());
   const [saving, setSaving] = useState(false);
 
-  // Product search for adding components
+  // Product search for adding components — search-as-you-type
   const [products, setProducts] = useState([]);
   const [productSearch, setProductSearch] = useState('');
   const [productFocused, setProductFocused] = useState(false);
   const [newLine, setNewLine] = useState({ product_id: '', product_name: '', quantity: 1, unit: 'pcs', unit_cost: 0 });
+  const productSearchTimer = React.useRef(null);
 
   useEffect(() => {
     loadCalcs();
-    loadProducts();
   }, []);
+
+  // Debounced product search
+  useEffect(() => {
+    if (!productSearch || productSearch.length < 2) {
+      setProducts([]);
+      return;
+    }
+    if (productSearchTimer.current) clearTimeout(productSearchTimer.current);
+    productSearchTimer.current = setTimeout(async () => {
+      try {
+        const data = await inventoryService.listProducts({ search: productSearch, limit: 20 });
+        setProducts(data || []);
+      } catch (e) { /* silent */ }
+    }, 300);
+    return () => { if (productSearchTimer.current) clearTimeout(productSearchTimer.current); };
+  }, [productSearch]);
 
   async function loadCalcs() {
     try {
@@ -146,13 +162,6 @@ export default function CostCalculation() {
     } finally {
       setLoading(false);
     }
-  }
-
-  async function loadProducts() {
-    try {
-      const data = await inventoryService.listProducts();
-      setProducts(data || []);
-    } catch (e) { /* silent */ }
   }
 
   // Computed totals
@@ -270,8 +279,13 @@ export default function CostCalculation() {
     }
   }
 
-  function downloadPDF(calc) {
+  async function downloadPDF(calc) {
+    const { ensurePdfFonts, registerPdfFontsSync } = await import("../shared/pdfFonts");
+    await ensurePdfFonts().catch(() => {});
+
     const doc = new jsPDF();
+    const hasUnicodeFont = registerPdfFontsSync(doc);
+    const fontFamily = hasUnicodeFont ? "Roboto" : undefined;
     const pageW = doc.internal.pageSize.getWidth();
 
     // Header
@@ -315,11 +329,11 @@ export default function CostCalculation() {
     doc.setTextColor(255, 255, 255);
     doc.text('Jami narx:', 20, summaryY + 50);
     doc.setFontSize(14);
-    doc.setFont(undefined, 'bold');
+    doc.setFont(fontFamily, 'bold');
     doc.text(fmtMoney(calc.total_with_profit) + ' so\'m', pageW - 18, summaryY + 50, { align: 'right' });
 
     if (calc.notes) {
-      doc.setFont(undefined, 'normal');
+      doc.setFont(fontFamily, 'normal');
       doc.setFontSize(9);
       doc.setTextColor(120, 120, 120);
       doc.text('* ' + calc.notes, 14, summaryY + 64);
@@ -333,9 +347,7 @@ export default function CostCalculation() {
     c.product_name.toLowerCase().includes(search.toLowerCase())
   );
 
-  const filteredProducts = productSearch
-    ? products.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase())).slice(0, 12)
-    : products.slice(0, 12);
+  const filteredProducts = products;
 
   const TAB_STYLE = "flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200";
 
@@ -454,7 +466,7 @@ export default function CostCalculation() {
                 <Input
                   value={form.name}
                   onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                  placeholder={language === 'uz' ? 'Masalan: Stul kalkulyatsiyasi' : 'e.g. Chair cost estimate'}
+                  placeholder={language === 'uz' ? 'Stul kalkulyatsiyasi' : 'e.g. Chair cost estimate'}
                 />
               </div>
               <div>
@@ -462,7 +474,7 @@ export default function CostCalculation() {
                 <Input
                   value={form.product_name}
                   onChange={e => setForm(f => ({ ...f, product_name: e.target.value }))}
-                  placeholder={language === 'uz' ? 'Masalan: Stul' : 'e.g. Chair'}
+                  placeholder={language === 'uz' ? 'Stul' : 'e.g. Chair'}
                 />
               </div>
               <div>

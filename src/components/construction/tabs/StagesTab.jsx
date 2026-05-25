@@ -5,16 +5,24 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from '@/components/ui/command';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Plus, Edit, Trash2, Layers, X, ChevronDown, ChevronRight, ChevronLeft, Package, Truck, Users, ShieldCheck } from 'lucide-react';
+import { Plus, Edit, Trash2, Layers, X, ChevronDown, ChevronsUpDown, Check, ChevronRight, ChevronLeft, Package, Truck, Users, ShieldCheck, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
+import { sortBuildings } from '@/utils/naturalSort';
+import { formatApiError } from '@/utils/apiErrors';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { useAuth } from '@/components/contexts/AuthContext';
+import { useAdminSettings } from '@/components/contexts/AdminSettingsContext';
 import { toast } from 'sonner';
 
 const STATUS_COLORS = {
@@ -31,12 +39,22 @@ const EMPTY_FORM = {
   planned_start: '',
   planned_end: '',
   notes: '',
+  building_id: '', // '' = project-wide (unassigned), otherwise building id
+};
+
+const RESERVATION_STATUS_COLORS = {
+  pending: 'bg-yellow-100 text-yellow-800 border-yellow-300',
+  approved: 'bg-green-100 text-green-800 border-green-300',
+  rejected: 'bg-red-100 text-red-800 border-red-300',
+  cancelled: 'bg-slate-100 text-slate-600 border-slate-300',
 };
 
 const StagesTab = ({ project }) => {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { formatCurrency } = useCurrencyFormatter();
+  const { user } = useAuth();
+  const { settings } = useAdminSettings();
 
   const STATUS_LABELS = {
     not_started: t('not_started'),
@@ -49,6 +67,14 @@ const StagesTab = ({ project }) => {
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 20;
+
+  // Buildings tab (migration 333) — filter stages by building. 'all' shows
+  // every stage; any number is a specific building id.
+  const [buildings, setBuildings] = useState([]);
+  // `buildingFilter` is the id of the active building tab. `null` means no
+  // building is selected yet (initial render before buildings have loaded);
+  // the effect below picks the first building as soon as they arrive.
+  const [buildingFilter, setBuildingFilter] = useState(null);
 
   // Stage modal
   const [showModal, setShowModal] = useState(false);
@@ -73,10 +99,25 @@ const StagesTab = ({ project }) => {
   const [showMaterialModal, setShowMaterialModal] = useState(false);
   const [materialSubStageId, setMaterialSubStageId] = useState(null);
   const [materialForm, setMaterialForm] = useState({ product_id: '', product_name: '', uom: 'шт', quantity: '', unit_cost: '' });
+  // Searchable product picker state
+  const [productPickerOpen, setProductPickerOpen] = useState(false);
+  const [productSearch, setProductSearch] = useState('');
   const [inventoryProducts, setInventoryProducts] = useState([]);
   // Estimate resources for equipment/employee tabs
   const [estimateEquipmentResources, setEstimateEquipmentResources] = useState([]);
   const [estimateLaborResources, setEstimateLaborResources] = useState([]);
+  // Reservations
+  const [reservations, setReservations] = useState([]);
+  const [reservationsLoading, setReservationsLoading] = useState(false);
+
+  // Determine if current user is the designated material approver
+  // System admin and tenant owner can always approve without being assigned
+  const constructionSettings = settings?.construction?.material_approval || {};
+  const approverUserId = constructionSettings.approver_user_id || '';
+  const userRole = user?.role || '';
+  const isSystemAdminOrOwner = userRole === 'site_admin' || userRole === 'owner' || user?.is_system_admin;
+  const isApprover = isSystemAdminOrOwner || (approverUserId && user?.id === approverUserId);
+
   // Unified modal tab: 'materials' | 'equipment' | 'employee'
   const [modalTab, setModalTab] = useState('materials');
   // Equipment/Employee form (shared)
@@ -85,25 +126,121 @@ const StagesTab = ({ project }) => {
   const [subStageEquipment, setSubStageEquipment] = useState({});
   const [equipmentLoading, setEquipmentLoading] = useState(null);
 
-  // Load inventory products + estimate resources for dropdowns
+  // Load reservations for this project
+  const loadReservations = useCallback(async () => {
+    if (!project?.id) return;
+    setReservationsLoading(true);
+    try {
+      const data = await inventoryService.listReservations({ project_id: project.id, limit: 500 });
+      setReservations(data || []);
+    } catch (e) {
+      console.error('Failed to load reservations:', e);
+      setReservations([]);
+    } finally {
+      setReservationsLoading(false);
+    }
+  }, [project?.id]);
+
+  useEffect(() => { loadReservations(); }, [loadReservations]);
+
+  // Helper: find reservation for a material in a substage
+  const getReservationForMaterial = (mat, subStageId) => {
+    if (!mat.product_id) return null;
+    return reservations.find(r =>
+      r.product_id === mat.product_id &&
+      r.substage_id === subStageId &&
+      r.status !== 'cancelled'
+    ) || null;
+  };
+
+  // Approve / Reject handlers.
+  //
+  // Errors go through `formatApiError(err, t, fallback)` which:
+  //   * Unwraps both the legacy {error: "string"} shape and the structured
+  //     {error: {code, message, details}} shape so Sonner never tries to
+  //     render an object (the root cause of the "Objects are not valid as a
+  //     React child" crash we saw before).
+  //   * Looks up known codes (e.g. INSUFFICIENT_STOCK) in a tiny registry and
+  //     interpolates the localised template against `details`, so the toast
+  //     reads "Omborda yetarli emas. Mavjud: 151, So'ralgan: 200" in Uzbek
+  //     instead of the raw English "Insufficient stock. Available: 151.00…".
+  const handleApproveReservation = async (reservationId) => {
+    try {
+      await inventoryService.approveReservation(reservationId);
+      toast.success(language === 'ru' ? 'Материал одобрен' : language === 'en' ? 'Material approved' : 'Material tasdiqlandi');
+      await loadReservations();
+    } catch (e) {
+      toast.error(formatApiError(
+        e,
+        t,
+        language === 'ru' ? 'Ошибка при одобрении' : language === 'en' ? 'Approval error' : 'Tasdiqlashda xatolik',
+      ));
+    }
+  };
+
+  const handleRejectReservation = async (reservationId) => {
+    try {
+      await inventoryService.rejectReservation(reservationId);
+      toast.success(language === 'ru' ? 'Материал отклонён' : language === 'en' ? 'Material rejected' : 'Material rad etildi');
+      await loadReservations();
+    } catch (e) {
+      toast.error(formatApiError(
+        e,
+        t,
+        language === 'ru' ? 'Ошибка при отклонении' : language === 'en' ? 'Rejection error' : 'Rad etishda xatolik',
+      ));
+    }
+  };
+
+  // Load inventory products + estimate resources for dropdowns.
+  // We fetch ALL products (so products that have never been received into a
+  // warehouse still appear with Qoldiq = 0), then overlay stock balances from
+  // the inventory table where available. The inventory-only query used to
+  // miss ~1300 of the catalog's 1340 items.
   useEffect(() => {
     if (!project?.id) return;
-    // Load inventory products (deduplicate by product_id, aggregate stock)
-    inventoryService.listInventory({ limit: 500 })
-      .then(d => {
-        const map = {};
-        (d || []).forEach(item => {
-          if (map[item.product_id]) {
-            map[item.product_id].quantity_on_hand += item.quantity_on_hand || 0;
-            map[item.product_id].quantity_available += item.quantity_available || 0;
-            map[item.product_id].quantity_reserved += item.quantity_reserved || 0;
-          } else {
-            map[item.product_id] = { ...item };
-          }
-        });
-        setInventoryProducts(Object.values(map));
-      })
-      .catch(() => setInventoryProducts([]));
+
+    Promise.all([
+      inventoryService.listProducts({ limit: 5000 }).catch(() => []),
+      inventoryService.listInventory({ limit: 5000 }).catch(() => []),
+    ]).then(([products, inv]) => {
+      // Aggregate inventory rows by product_id across warehouses
+      const stockByProduct = {};
+      (inv || []).forEach(item => {
+        const pid = item.product_id;
+        if (!pid) return;
+        if (stockByProduct[pid]) {
+          stockByProduct[pid].quantity_on_hand += item.quantity_on_hand || 0;
+          stockByProduct[pid].quantity_available += item.quantity_available || 0;
+          stockByProduct[pid].quantity_reserved += item.quantity_reserved || 0;
+        } else {
+          stockByProduct[pid] = {
+            quantity_on_hand: item.quantity_on_hand || 0,
+            quantity_available: item.quantity_available || 0,
+            quantity_reserved: item.quantity_reserved || 0,
+            unit_cost: item.unit_cost,
+            uom: item.uom,
+          };
+        }
+      });
+
+      // Build rows from the product catalog, overlaying stock where known
+      const rows = (products || []).map(p => {
+        const stk = stockByProduct[p.id] || {};
+        return {
+          product_id: p.id,
+          product_name: p.name,
+          uom: stk.uom || p.unit_code || p.unit?.code || 'шт',
+          unit_cost: stk.unit_cost ?? p.cost_price ?? 0,
+          quantity_on_hand: stk.quantity_on_hand ?? 0,
+          quantity_available: stk.quantity_available ?? 0,
+          quantity_reserved: stk.quantity_reserved ?? 0,
+        };
+      });
+
+      rows.sort((a, b) => (a.product_name || '').localeCompare(b.product_name || ''));
+      setInventoryProducts(rows);
+    }).catch(() => setInventoryProducts([]));
     // Load estimate resources by type for equipment/employee dropdowns
     constructionService.listEstimateResources(project.id, 'equipment')
       .then(d => setEstimateEquipmentResources(d || []))
@@ -127,9 +264,15 @@ const StagesTab = ({ project }) => {
 
   const load = useCallback(async () => {
     if (!project?.id) return;
+    // No building picked yet — wait for the buildings effect to set one.
+    if (buildingFilter == null) return;
     setLoading(true);
     try {
-      const data = await constructionService.listStages(project.id);
+      // Stages are always scoped to the active building tab now (the old
+      // "Hammasi" / all-stages option has been removed).
+      const data = await constructionService.listStages(project.id, {
+        buildingId: buildingFilter,
+      });
       const list = data || [];
       setStages(list);
       await loadAllSubStages(list);
@@ -138,9 +281,40 @@ const StagesTab = ({ project }) => {
     } finally {
       setLoading(false);
     }
-  }, [project?.id, loadAllSubStages]);
+  }, [project?.id, loadAllSubStages, buildingFilter]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Load buildings once per project — used by the tab row above the stages
+  // list and by the building-picker in the create/edit modal.
+  useEffect(() => {
+    if (!project?.id) return;
+    let cancelled = false;
+    constructionService
+      .listBuildings(project.id)
+      // Natural-sort by display name so "block 1 / block 2 / block 10"
+      // always appear in that order, not by the backend's sort_order → code
+      // default which can surface them as "block 2 / block 1 / block 3".
+      .then((rows) => { if (!cancelled) setBuildings(sortBuildings(Array.isArray(rows) ? rows : [])); })
+      .catch(() => { if (!cancelled) setBuildings([]); });
+    return () => { cancelled = true; };
+  }, [project?.id]);
+
+  // With the "Hammasi" tab removed, the filter must always point at a real
+  // building. Auto-select the first one when buildings arrive, and re-select
+  // if the currently active building disappears after a reload.
+  useEffect(() => {
+    if (!buildings || buildings.length === 0) {
+      if (buildingFilter !== null) setBuildingFilter(null);
+      return;
+    }
+    const stillExists =
+      buildingFilter != null &&
+      buildings.some((b) => String(b.id) === String(buildingFilter));
+    if (!stillExists) {
+      setBuildingFilter(String(buildings[0].id));
+    }
+  }, [buildings, buildingFilter]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -243,6 +417,7 @@ const StagesTab = ({ project }) => {
       }
       setShowMaterialModal(false);
       await loadSubStageMaterials(materialSubStageId);
+      await loadReservations();
       const stageId = findStageForSubStage(materialSubStageId);
       if (stageId) await reloadSubStages(stageId);
       const data = await constructionService.listStages(project.id);
@@ -315,7 +490,10 @@ const StagesTab = ({ project }) => {
 
   const openCreate = () => {
     setEditingStage(null);
-    setForm({ ...EMPTY_FORM, stage_order: stages.length });
+    // Pre-fill the building selector with whichever tab the user is viewing
+    // so the new stage lands in the same block.
+    const preselectedBuilding = buildingFilter != null ? String(buildingFilter) : '';
+    setForm({ ...EMPTY_FORM, stage_order: stages.length, building_id: preselectedBuilding });
     setModalSubStages([]);
     setError(null);
     setShowModal(true);
@@ -331,6 +509,7 @@ const StagesTab = ({ project }) => {
       planned_start: stage.planned_start ? stage.planned_start.slice(0, 10) : '',
       planned_end: stage.planned_end ? stage.planned_end.slice(0, 10) : '',
       notes: stage.notes || '',
+      building_id: stage.building_id ? String(stage.building_id) : '',
     });
     const existing = (subStagesMap[stage.id] || []).map(s => ({
       _key: s.id, id: s.id, name: s.name, status: s.status,
@@ -365,6 +544,9 @@ const StagesTab = ({ project }) => {
         planned_start: form.planned_start || '',
         planned_end: form.planned_end || '',
         notes: form.notes || '',
+        // Migration 333: when editing, `0` clears the building; on create it's
+        // interpreted as "unassigned / project-wide".
+        building_id: form.building_id ? Number(form.building_id) : 0,
       };
 
       let stageId;
@@ -515,6 +697,31 @@ const StagesTab = ({ project }) => {
             {t('add_stage')}
           </Button>
         </CardHeader>
+        {/* Building tab row (migration 333). One pill per building; the
+             previous "Hammasi" (all-stages) tab has been removed so the view
+             is always scoped to a single block. */}
+        {buildings.length > 0 && (
+          <div className="px-6 pb-3 -mt-2">
+            <div className="flex flex-wrap gap-2">
+              {buildings.map((b) => (
+                <button
+                  key={b.id}
+                  type="button"
+                  onClick={() => setBuildingFilter(String(b.id))}
+                  className={cn(
+                    'px-3 py-1.5 rounded-full text-xs font-medium border transition-colors',
+                    String(buildingFilter) === String(b.id)
+                      ? 'bg-slate-900 text-white border-slate-900'
+                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50',
+                  )}
+                  title={b.code || b.name}
+                >
+                  {b.name || b.code || `#${b.id}`}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <CardContent>
           {loading ? (
             <div className="text-center py-8 text-slate-400">{t('loading')}</div>
@@ -728,35 +935,81 @@ const StagesTab = ({ project }) => {
                                 <div className="ml-4 mt-1 mb-2 border rounded bg-white p-2 space-y-3">
                                   {/* Materials section */}
                                   <div>
-                                    <div className="text-xs font-semibold text-amber-700 mb-1 flex items-center gap-1">
-                                      <Package className="w-3 h-3" />
+                                    <div className="text-sm font-semibold text-amber-700 mb-1 flex items-center gap-1">
+                                      <Package className="w-3.5 h-3.5" />
                                       {t('materials') || 'Materiallar'}
                                     </div>
                                     {isLoadingMats ? (
-                                      <p className="text-xs text-slate-400 py-2 text-center">{t('loading')}</p>
+                                      <p className="text-sm text-slate-400 py-2 text-center">{t('loading')}</p>
                                     ) : materials.length === 0 ? (
-                                      <p className="text-xs text-slate-400 py-2 text-center">{t('no_items')}</p>
+                                      <p className="text-sm text-slate-400 py-2 text-center">{t('no_items')}</p>
                                     ) : (
-                                      <table className="w-full text-xs">
+                                      <table className="w-full text-sm">
                                         <thead>
                                           <tr className="border-b text-slate-500">
-                                            <th className="text-left py-1 px-1">{t('name')}</th>
-                                            <th className="text-right py-1 px-1">{t('unit')}</th>
-                                            <th className="text-right py-1 px-1">{t('quantity')}</th>
-                                            <th className="text-right py-1 px-1">{t('unit_cost')}</th>
-                                            <th className="text-right py-1 px-1">{t('total')}</th>
+                                            <th className="text-left py-1.5 px-2">{t('name')}</th>
+                                            <th className="text-right py-1.5 px-2">{t('unit')}</th>
+                                            <th className="text-right py-1.5 px-2">{t('quantity')}</th>
+                                            <th className="text-right py-1.5 px-2">{t('unit_cost')}</th>
+                                            <th className="text-right py-1.5 px-2">{t('total')}</th>
+                                            <th className="text-center py-1.5 px-2">{t('status')}</th>
                                             <th className="w-8"></th>
                                           </tr>
                                         </thead>
                                         <tbody>
-                                          {materials.map(mat => (
-                                            <tr key={mat.id} className="border-b border-slate-50 hover:bg-slate-50 group">
-                                              <td className="py-1 px-1">{mat.product_name}</td>
-                                              <td className="py-1 px-1 text-right text-slate-500">{mat.uom}</td>
-                                              <td className="py-1 px-1 text-right">{mat.quantity}</td>
-                                              <td className="py-1 px-1 text-right">{formatCurrency(mat.unit_cost)}</td>
-                                              <td className="py-1 px-1 text-right font-medium">{formatCurrency(mat.total_cost)}</td>
-                                              <td className="py-1 px-1 text-center">
+                                          {materials.map(mat => {
+                                            const reservation = getReservationForMaterial(mat, sub.id);
+                                            const resStatus = reservation?.status || null;
+                                            const isPending = resStatus === 'pending';
+                                            const isRejected = resStatus === 'rejected';
+                                            const isApproved = resStatus === 'approved';
+                                            const rowBg = isRejected ? 'bg-red-50' : isPending ? 'bg-yellow-50' : '';
+
+                                            return (
+                                            <tr key={mat.id} className={`border-b border-slate-50 hover:bg-slate-50 group ${rowBg}`}>
+                                              <td className="py-1.5 px-2">{mat.product_name}</td>
+                                              <td className="py-1.5 px-2 text-right text-slate-500">{mat.uom}</td>
+                                              <td className="py-1.5 px-2 text-right">{mat.quantity}</td>
+                                              <td className="py-1.5 px-2 text-right">{formatCurrency(mat.unit_cost)}</td>
+                                              <td className="py-1.5 px-2 text-right font-medium">{formatCurrency(mat.total_cost)}</td>
+                                              <td className="py-1.5 px-2 text-center">
+                                                {reservation ? (
+                                                  <div className="flex items-center justify-center gap-1">
+                                                    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium border ${RESERVATION_STATUS_COLORS[resStatus] || 'bg-slate-100 text-slate-600'}`}>
+                                                      {isPending && <Clock className="w-3 h-3" />}
+                                                      {isApproved && <CheckCircle className="w-3 h-3" />}
+                                                      {isRejected && <XCircle className="w-3 h-3" />}
+                                                      {isPending ? (language === 'ru' ? 'Ожидает' : language === 'en' ? 'Pending' : 'Kutilmoqda')
+                                                        : isApproved ? (language === 'ru' ? 'Одобрено' : language === 'en' ? 'Approved' : 'Tasdiqlangan')
+                                                        : isRejected ? (language === 'ru' ? 'Отклонено' : language === 'en' ? 'Rejected' : 'Rad etilgan')
+                                                        : resStatus}
+                                                    </span>
+                                                    {isPending && isApprover && (
+                                                      <div className="flex gap-0.5 ml-1">
+                                                        <Button
+                                                          variant="ghost" size="sm"
+                                                          className="h-5 w-5 p-0 text-green-600 hover:text-green-800 hover:bg-green-100"
+                                                          onClick={() => handleApproveReservation(reservation.id)}
+                                                          title={language === 'ru' ? 'Одобрить' : language === 'en' ? 'Approve' : 'Tasdiqlash'}
+                                                        >
+                                                          <CheckCircle className="w-3.5 h-3.5" />
+                                                        </Button>
+                                                        <Button
+                                                          variant="ghost" size="sm"
+                                                          className="h-5 w-5 p-0 text-red-600 hover:text-red-800 hover:bg-red-100"
+                                                          onClick={() => handleRejectReservation(reservation.id)}
+                                                          title={language === 'ru' ? 'Отклонить' : language === 'en' ? 'Reject' : 'Rad etish'}
+                                                        >
+                                                          <XCircle className="w-3.5 h-3.5" />
+                                                        </Button>
+                                                      </div>
+                                                    )}
+                                                  </div>
+                                                ) : (
+                                                  <span className="text-xs text-slate-400">—</span>
+                                                )}
+                                              </td>
+                                              <td className="py-1.5 px-2 text-center">
                                                 <Button
                                                   variant="ghost" size="sm"
                                                   className="h-5 w-5 p-0 text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100"
@@ -766,7 +1019,8 @@ const StagesTab = ({ project }) => {
                                                 </Button>
                                               </td>
                                             </tr>
-                                          ))}
+                                            );
+                                          })}
                                         </tbody>
                                       </table>
                                     )}
@@ -774,23 +1028,23 @@ const StagesTab = ({ project }) => {
 
                                   {/* Equipment section */}
                                   <div>
-                                    <div className="text-xs font-semibold text-blue-700 mb-1 flex items-center gap-1">
-                                      <Truck className="w-3 h-3" />
+                                    <div className="text-sm font-semibold text-blue-700 mb-1 flex items-center gap-1">
+                                      <Truck className="w-3.5 h-3.5" />
                                       {t('rf_equipment') || 'Texnika'}
                                     </div>
                                     {isLoadingEquip ? (
-                                      <p className="text-xs text-slate-400 py-2 text-center">{t('loading')}</p>
+                                      <p className="text-sm text-slate-400 py-2 text-center">{t('loading')}</p>
                                     ) : equipmentItems.length === 0 ? (
-                                      <p className="text-xs text-slate-400 py-2 text-center">{t('no_items')}</p>
+                                      <p className="text-sm text-slate-400 py-2 text-center">{t('no_items')}</p>
                                     ) : (
-                                      <table className="w-full text-xs">
+                                      <table className="w-full text-sm">
                                         <thead>
                                           <tr className="border-b text-slate-500">
-                                            <th className="text-left py-1 px-1">{t('name')}</th>
-                                            <th className="text-right py-1 px-1">{t('unit')}</th>
-                                            <th className="text-right py-1 px-1">{t('quantity')}</th>
-                                            <th className="text-right py-1 px-1">{t('unit_cost')}</th>
-                                            <th className="text-right py-1 px-1">{t('total')}</th>
+                                            <th className="text-left py-1.5 px-2">{t('name')}</th>
+                                            <th className="text-right py-1.5 px-2">{t('unit')}</th>
+                                            <th className="text-right py-1.5 px-2">{t('quantity')}</th>
+                                            <th className="text-right py-1.5 px-2">{t('unit_cost')}</th>
+                                            <th className="text-right py-1.5 px-2">{t('total')}</th>
                                             <th className="w-8"></th>
                                           </tr>
                                         </thead>
@@ -800,12 +1054,12 @@ const StagesTab = ({ project }) => {
                                             const total = eq.total_cost || qty * (eq.unit_price || 0);
                                             return (
                                               <tr key={eq.id} className="border-b border-slate-50 hover:bg-slate-50 group">
-                                                <td className="py-1 px-1">{eq.name}</td>
-                                                <td className="py-1 px-1 text-right text-slate-500">{eq.work_unit}</td>
-                                                <td className="py-1 px-1 text-right">{qty}</td>
-                                                <td className="py-1 px-1 text-right">{formatCurrency(eq.unit_price)}</td>
-                                                <td className="py-1 px-1 text-right font-medium">{formatCurrency(total)}</td>
-                                                <td className="py-1 px-1 text-center">
+                                                <td className="py-1.5 px-2">{eq.name}</td>
+                                                <td className="py-1.5 px-2 text-right text-slate-500">{eq.work_unit}</td>
+                                                <td className="py-1.5 px-2 text-right">{qty}</td>
+                                                <td className="py-1.5 px-2 text-right">{formatCurrency(eq.unit_price)}</td>
+                                                <td className="py-1.5 px-2 text-right font-medium">{formatCurrency(total)}</td>
+                                                <td className="py-1.5 px-2 text-center">
                                                   <Button
                                                     variant="ghost" size="sm"
                                                     className="h-5 w-5 p-0 text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100"
@@ -824,23 +1078,23 @@ const StagesTab = ({ project }) => {
 
                                   {/* Labor section */}
                                   <div>
-                                    <div className="text-xs font-semibold text-green-700 mb-1 flex items-center gap-1">
-                                      <Users className="w-3 h-3" />
+                                    <div className="text-sm font-semibold text-green-700 mb-1 flex items-center gap-1">
+                                      <Users className="w-3.5 h-3.5" />
                                       {t('rf_employee') || 'Ishchi kuchi'}
                                     </div>
                                     {isLoadingEquip ? (
-                                      <p className="text-xs text-slate-400 py-2 text-center">{t('loading')}</p>
+                                      <p className="text-sm text-slate-400 py-2 text-center">{t('loading')}</p>
                                     ) : laborItems.length === 0 ? (
-                                      <p className="text-xs text-slate-400 py-2 text-center">{t('no_items')}</p>
+                                      <p className="text-sm text-slate-400 py-2 text-center">{t('no_items')}</p>
                                     ) : (
-                                      <table className="w-full text-xs">
+                                      <table className="w-full text-sm">
                                         <thead>
                                           <tr className="border-b text-slate-500">
-                                            <th className="text-left py-1 px-1">{t('name')}</th>
-                                            <th className="text-right py-1 px-1">{t('unit')}</th>
-                                            <th className="text-right py-1 px-1">{t('quantity')}</th>
-                                            <th className="text-right py-1 px-1">{t('unit_cost')}</th>
-                                            <th className="text-right py-1 px-1">{t('total')}</th>
+                                            <th className="text-left py-1.5 px-2">{t('name')}</th>
+                                            <th className="text-right py-1.5 px-2">{t('unit')}</th>
+                                            <th className="text-right py-1.5 px-2">{t('quantity')}</th>
+                                            <th className="text-right py-1.5 px-2">{t('unit_cost')}</th>
+                                            <th className="text-right py-1.5 px-2">{t('total')}</th>
                                             <th className="w-8"></th>
                                           </tr>
                                         </thead>
@@ -850,12 +1104,12 @@ const StagesTab = ({ project }) => {
                                             const total = lb.total_cost || qty * (lb.unit_price || 0);
                                             return (
                                               <tr key={lb.id} className="border-b border-slate-50 hover:bg-slate-50 group">
-                                                <td className="py-1 px-1">{lb.name}</td>
-                                                <td className="py-1 px-1 text-right text-slate-500">{lb.work_unit}</td>
-                                                <td className="py-1 px-1 text-right">{qty}</td>
-                                                <td className="py-1 px-1 text-right">{formatCurrency(lb.unit_price)}</td>
-                                                <td className="py-1 px-1 text-right font-medium">{formatCurrency(total)}</td>
-                                                <td className="py-1 px-1 text-center">
+                                                <td className="py-1.5 px-2">{lb.name}</td>
+                                                <td className="py-1.5 px-2 text-right text-slate-500">{lb.work_unit}</td>
+                                                <td className="py-1.5 px-2 text-right">{qty}</td>
+                                                <td className="py-1.5 px-2 text-right">{formatCurrency(lb.unit_price)}</td>
+                                                <td className="py-1.5 px-2 text-right font-medium">{formatCurrency(total)}</td>
+                                                <td className="py-1.5 px-2 text-center">
                                                   <Button
                                                     variant="ghost" size="sm"
                                                     className="h-5 w-5 p-0 text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100"
@@ -936,6 +1190,31 @@ const StagesTab = ({ project }) => {
                 </SelectContent>
               </Select>
             </div>
+            {/* Migration 333: assign stage to a building/block. The previous
+                "Umumiy (bino tanlanmagan)" fallback has been removed so new
+                stages always belong to a concrete block. */}
+            {buildings.length > 0 && (
+              <div>
+                <Label>{t('building_block') || 'Bino / Blok'}</Label>
+                <Select
+                  value={form.building_id ? String(form.building_id) : ''}
+                  onValueChange={(v) =>
+                    setForm((f) => ({ ...f, building_id: v }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('select_building') || 'Bino / Blok tanlang'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {buildings.map((b) => (
+                      <SelectItem key={b.id} value={String(b.id)}>
+                        {b.name || b.code || `#${b.id}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div>
               <Label>{t('notes')}</Label>
               <Textarea value={form.notes} onChange={e => setForm(f => ({...f, notes: e.target.value}))} rows={2} />
@@ -1027,31 +1306,117 @@ const StagesTab = ({ project }) => {
             <div className="space-y-4">
               <div>
                 <Label>{t('select_product') || 'Mahsulot tanlang'}</Label>
-                <Select
-                  value={materialForm.product_id || undefined}
-                  onValueChange={(val) => {
-                    const p = inventoryProducts.find(ip => ip.product_id === val);
-                    if (p) {
-                      setMaterialForm(f => ({
-                        ...f,
-                        product_id: p.product_id,
-                        product_name: p.product_name,
-                        uom: 'шт',
-                        unit_cost: p.unit_cost ? String(p.unit_cost) : '',
-                      }));
-                    }
-                  }}
-                >
-                  <SelectTrigger><SelectValue placeholder={t('select_product') || 'Mahsulot tanlang'} /></SelectTrigger>
-                  <SelectContent className="max-h-[300px]">
-                    {inventoryProducts.map(p => (
-                      <SelectItem key={p.product_id} value={p.product_id}>
-                        {p.product_name} — {t('stock') || 'Zaxira'}: {p.quantity_available ?? p.quantity_on_hand ?? 0}
-                        {p.unit_cost ? ` (${formatCurrency(p.unit_cost)})` : ''}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {/* Searchable product picker: client-side filter across all loaded
+                    products (the catalog is fully in inventoryProducts). Popover is
+                    width-matched to the trigger so it never overflows the modal. */}
+                <Popover open={productPickerOpen} onOpenChange={setProductPickerOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={productPickerOpen}
+                      className="w-full justify-between font-normal h-9 px-3 text-sm"
+                    >
+                      <span className="truncate">
+                        {materialForm.product_name
+                          ? materialForm.product_name
+                          : (t('select_product') || 'Mahsulot tanlang')}
+                      </span>
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  {/* onWheel.stopPropagation stops the parent Dialog from
+                      eating wheel events — without it the inner CommandList
+                      scrollbar is visible but won't scroll. */}
+                  <PopoverContent
+                    className="p-0"
+                    align="start"
+                    sideOffset={4}
+                    style={{ width: 'var(--radix-popover-trigger-width)' }}
+                    onWheel={(e) => e.stopPropagation()}
+                    onTouchMove={(e) => e.stopPropagation()}
+                  >
+                    {(() => {
+                      const q = productSearch.trim().toLowerCase();
+                      const filtered = q
+                        ? inventoryProducts.filter(p =>
+                            (p.product_name || '').toLowerCase().includes(q))
+                        : inventoryProducts;
+                      const shown = filtered.slice(0, 200);
+                      const hiddenCount = filtered.length - shown.length;
+
+                      return (
+                        <Command shouldFilter={false}>
+                          <CommandInput
+                            placeholder={t('search_product') || 'Qidirish...'}
+                            value={productSearch}
+                            onValueChange={setProductSearch}
+                          />
+                          <CommandList className="max-h-[280px] overflow-y-auto">
+                            <CommandEmpty>{t('not_found') || 'Topilmadi'}</CommandEmpty>
+                            {filtered.length > 0 && (
+                              <CommandGroup>
+                                {shown.map(p => {
+                                  const stock = p.quantity_available ?? p.quantity_on_hand ?? 0;
+                                  const isSelected = materialForm.product_id === p.product_id;
+                                  return (
+                                    <CommandItem
+                                      key={p.product_id}
+                                      value={`${p.product_name} ${p.product_id}`}
+                                      onSelect={() => {
+                                        setMaterialForm(f => ({
+                                          ...f,
+                                          product_id: p.product_id,
+                                          product_name: p.product_name,
+                                          uom: p.uom || 'шт',
+                                          unit_cost: p.unit_cost ? String(p.unit_cost) : '',
+                                        }));
+                                        setProductPickerOpen(false);
+                                        setProductSearch('');
+                                      }}
+                                    >
+                                      <Check
+                                        className={cn(
+                                          'mr-2 h-4 w-4 shrink-0',
+                                          isSelected ? 'opacity-100' : 'opacity-0'
+                                        )}
+                                      />
+                                      <div className="flex-1 min-w-0">
+                                        <div className="truncate text-sm">{p.product_name}</div>
+                                        <div className="text-xs text-slate-500 flex gap-2">
+                                          <span
+                                            className={cn(
+                                              stock < 0 && 'text-red-600',
+                                              stock === 0 && 'text-amber-600',
+                                              stock > 0 && 'text-emerald-600'
+                                            )}
+                                          >
+                                            {t('stock') || 'Qoldiq'}: {stock}
+                                          </span>
+                                          {p.unit_cost ? (
+                                            <span>· {formatCurrency(p.unit_cost)}</span>
+                                          ) : null}
+                                        </div>
+                                      </div>
+                                    </CommandItem>
+                                  );
+                                })}
+                              </CommandGroup>
+                            )}
+                          </CommandList>
+                          {hiddenCount > 0 && (
+                            <div className="px-3 py-2 text-xs text-slate-500 border-t">
+                              {(t('showing_first') || 'Ko\'rsatildi')}: {shown.length} / {filtered.length}.
+                              {' '}
+                              {(t('refine_search') || 'Aniqroq qidiring')}
+                            </div>
+                          )}
+                        </Command>
+                      );
+                    })()}
+                  </PopoverContent>
+                </Popover>
                 {materialForm.product_id && (
                   <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
                     <ShieldCheck className="w-3 h-3" />
@@ -1069,10 +1434,9 @@ const StagesTab = ({ project }) => {
                 </div>
                 <div>
                   <Label>{t('quantity')}</Label>
-                  <Input
-                    type="number" step="0.0001" min="0"
+                  <NumberInput
                     value={materialForm.quantity}
-                    onChange={e => setMaterialForm(f => ({ ...f, quantity: e.target.value }))}
+                    onChange={raw => setMaterialForm(f => ({ ...f, quantity: raw }))}
                   />
                 </div>
                 <div>
@@ -1154,8 +1518,8 @@ const StagesTab = ({ project }) => {
                 </div>
                 <div>
                   <Label>{t('quantity') || 'Miqdor'}</Label>
-                  <Input type="number" step="0.01" min="0" value={equipmentForm.quantity}
-                    onChange={e => setEquipmentForm(f => ({ ...f, quantity: e.target.value }))} />
+                  <NumberInput value={equipmentForm.quantity}
+                    onChange={raw => setEquipmentForm(f => ({ ...f, quantity: raw }))} />
                 </div>
                 <div>
                   <Label>{t('rf_unit_price') || 'Narxi'}</Label>
@@ -1230,8 +1594,8 @@ const StagesTab = ({ project }) => {
                 </div>
                 <div>
                   <Label>{t('quantity') || 'Miqdor'}</Label>
-                  <Input type="number" step="0.01" min="0" value={equipmentForm.quantity}
-                    onChange={e => setEquipmentForm(f => ({ ...f, quantity: e.target.value }))} />
+                  <NumberInput value={equipmentForm.quantity}
+                    onChange={raw => setEquipmentForm(f => ({ ...f, quantity: raw }))} />
                 </div>
                 <div>
                   <Label>{t('rf_unit_price') || 'Narxi'}</Label>

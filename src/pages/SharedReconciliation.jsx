@@ -288,7 +288,7 @@ export default function SharedReconciliation() {
               <label style={styles.label}>Sizning hisob-kitobingiz bo'yicha qoldiq (ixtiyoriy):</label>
               <input
                 type="number"
-                placeholder="Masalan: 8000000"
+                placeholder="8000000"
                 value={disputeAmount}
                 onChange={(e) => setDisputeAmount(e.target.value)}
                 style={styles.input}

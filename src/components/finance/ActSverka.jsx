@@ -406,10 +406,10 @@ export default function ActSverka() {
         labels: {
           reconciliation_act: t('reconciliation_act') || 'Akt sverka',
           period: t('period') || 'Davr',
-          opening_balance: t('opening_balance') || 'Davr boshi qoldiq',
-          total_debit: t('total_debit') || 'Jami debet',
-          total_credit: t('total_credit') || 'Jami kredit',
-          closing_balance: t('closing_balance') || 'Davr oxiri qoldiq',
+          opening_balance: language === 'uz' ? 'Davr boshi qoldiq' : language === 'ru' ? 'Начальный остаток' : 'Opening Balance',
+          total_debit: language === 'uz' ? 'Jami sotilgan' : language === 'ru' ? 'Всего продано' : 'Total Sold',
+          total_credit: language === 'uz' ? 'Jami to\'langan' : language === 'ru' ? 'Всего оплачено' : 'Total Paid',
+          closing_balance: language === 'uz' ? 'Davr oxiri qoldiq' : language === 'ru' ? 'Конечный остаток' : 'Closing Balance',
           date: t('date') || 'Sana',
           document: t('document') || 'Hujjat',
           description: t('description') || 'Tavsif',
@@ -419,9 +419,9 @@ export default function ActSverka() {
           quantity: t('quantity') || 'Miqdor',
           unit_price: t('unit_price') || 'Narx',
           item_total: t('total') || 'Jami',
-          debit: t('debit') || 'Debet',
-          credit: t('credit') || 'Kredit',
-          balance: t('balance') || 'Balans',
+          debit: language === 'uz' ? 'Sotilgan' : language === 'ru' ? 'Продано' : 'Sold',
+          credit: language === 'uz' ? 'To\'langan' : language === 'ru' ? 'Оплачено' : 'Paid',
+          balance: language === 'uz' ? 'Qoldiq' : language === 'ru' ? 'Остаток' : 'Balance',
           period_turnover: t('period_turnover') || "Davr bo'yicha aylanma",
           on_behalf_org: t('print_on_behalf_org') || 'Tashkilot nomidan',
           on_behalf_partner: t('print_on_behalf_partner') || 'Kontragent nomidan',
@@ -674,13 +674,13 @@ export default function ActSverka() {
               </Card>
               <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60">
                 <CardContent className="p-4">
-                  <p className="text-xs text-slate-500 mb-1">{t('total_debit') || 'Jami debet'}</p>
+                  <p className="text-xs text-slate-500 mb-1">{language === 'uz' ? 'Jami sotilgan' : language === 'ru' ? 'Всего продано' : 'Total Sold'}</p>
                   <p className="text-lg font-bold text-blue-600">{formatCurrency(act.our_debit_total || 0)}</p>
                 </CardContent>
               </Card>
               <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60">
                 <CardContent className="p-4">
-                  <p className="text-xs text-slate-500 mb-1">{t('total_credit') || 'Jami kredit'}</p>
+                  <p className="text-xs text-slate-500 mb-1">{language === 'uz' ? 'Jami to\'langan' : language === 'ru' ? 'Всего оплачено' : 'Total Paid'}</p>
                   <p className="text-lg font-bold text-red-600">{formatCurrency(act.our_credit_total || 0)}</p>
                 </CardContent>
               </Card>
@@ -701,9 +701,9 @@ export default function ActSverka() {
                     <TableHead className="w-[100px] text-xs font-semibold">{t('date') || 'Sana'}</TableHead>
                     <TableHead className="w-[140px] text-xs font-semibold">{t('document') || 'Hujjat'}</TableHead>
                     <TableHead className="text-xs font-semibold">{t('description') || 'Tavsif'}</TableHead>
-                    <TableHead className="w-[130px] text-right text-xs font-semibold">{t('debit') || 'Debet'}</TableHead>
-                    <TableHead className="w-[130px] text-right text-xs font-semibold">{t('credit') || 'Kredit'}</TableHead>
-                    <TableHead className="w-[140px] text-right text-xs font-semibold">{t('balance') || 'Qoldiq'}</TableHead>
+                    <TableHead className="w-[130px] text-right text-xs font-semibold">{language === 'uz' ? 'Sotilgan' : language === 'ru' ? 'Продано' : 'Sold'}</TableHead>
+                    <TableHead className="w-[130px] text-right text-xs font-semibold">{language === 'uz' ? 'To\'langan' : language === 'ru' ? 'Оплачено' : 'Paid'}</TableHead>
+                    <TableHead className="w-[140px] text-right text-xs font-semibold">{language === 'uz' ? 'Qoldiq' : language === 'ru' ? 'Остаток' : 'Balance'}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1228,10 +1228,10 @@ export default function ActSverka() {
                 <TableRow className="bg-slate-50">
                   <TableHead>{t('counterparty') || 'Kontragent'}</TableHead>
                   <TableHead>{t('period') || 'Davr'}</TableHead>
-                  <TableHead className="text-right">{t('opening') || 'Boshlanish'}</TableHead>
-                  <TableHead className="text-right">{t('debit') || 'Debet'}</TableHead>
-                  <TableHead className="text-right">{t('credit') || 'Kredit'}</TableHead>
-                  <TableHead className="text-right">{t('closing') || 'Tugash'}</TableHead>
+                  <TableHead className="text-right">{language === 'uz' ? 'Boshlang\'ich' : language === 'ru' ? 'Начальный' : 'Opening'}</TableHead>
+                  <TableHead className="text-right">{language === 'uz' ? 'Jami sotilgan' : language === 'ru' ? 'Всего продано' : 'Total Sold'}</TableHead>
+                  <TableHead className="text-right">{language === 'uz' ? 'Jami to\'langan' : language === 'ru' ? 'Всего оплачено' : 'Total Paid'}</TableHead>
+                  <TableHead className="text-right">{language === 'uz' ? 'Qoldiq' : language === 'ru' ? 'Остаток' : 'Balance'}</TableHead>
                   <TableHead className="text-center">{t('status') || 'Holat'}</TableHead>
                   <TableHead className="text-center">Javob</TableHead>
                   <TableHead className="text-center">{t('actions') || 'Amallar'}</TableHead>

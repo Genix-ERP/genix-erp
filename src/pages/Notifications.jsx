@@ -18,9 +18,10 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
+import { renderNotification, NOTIFICATION_TEMPLATES } from "@/utils/notificationCatalog";
 import { cn } from "@/lib/utils";
 
-const API_BASE = 'http://localhost:8080/api/v1';
+const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
 
 function getHeaders() {
   const token = localStorage.getItem('accessToken');
@@ -162,32 +163,27 @@ export default function Notifications() {
   };
 
   const getTypeLabel = (type) => {
-    // Try direct translation key first, then fallback to formatted type string
-    const translated = t(type);
-    if (translated && translated !== type) return translated;
-    // Also try known mappings
-    const labels = {
-      invoice_sent: t('invoice_sent') || 'Invoice Sent',
-      payment_confirmed: t('payment_confirmed') || 'Payment Confirmed',
-      payment_received: t('payment_received') || 'Payment Received',
-      payment_recorded: t('payment_recorded') || 'Payment Recorded',
-      invoice_overdue: t('invoice_overdue') || 'Invoice Overdue',
-      credit_note_created: t('credit_note_created') || 'Credit Note Created',
-      low_stock: t('low_stock_warning') || 'Low Stock',
-      purchase_invoice_created: t('purchase_invoice_created') || 'Purchase Invoice Created',
-      purchase_invoice_confirmed: t('purchase_invoice_confirmed') || 'Purchase Invoice Confirmed',
-      expense_approved: t('expense_approved') || 'Expense Approved',
-      salary_confirmed: t('salary_confirmed') || 'Salary Confirmed',
-      sales_order_confirmed: t('sales_order_confirmed') || 'Sales Order Confirmed',
-      purchase_order_approved: t('purchase_order_approved') || 'Purchase Order Approved',
-      reconciliation_reminder: t('reconciliation_reminder') || 'Reconciliation Reminder',
-      reconciliation_no_response: t('reconciliation_no_response') || 'Reconciliation No Response',
-      forma19_created: t('forma19_created') || 'Form 19 Created',
-      act_signed: t('act_signed') || 'Act Signed',
-      act_cancelled: t('act_cancelled') || 'Act Cancelled',
-      info: t('info') || 'Information',
-    };
-    return labels[type] || type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    // Primary: reuse the notification catalog's title translation key, so
+    // every catalog type (currently 23) gets a translated chip label without
+    // a parallel hand-maintained map drifting out of sync. Example: a new
+    // `budget_exceeded` type auto-picks up its localised label as soon as the
+    // catalog entry + notif_budget_exceeded_title translation are added —
+    // without touching this file.
+    const tmpl = NOTIFICATION_TEMPLATES[type];
+    if (tmpl?.titleKey) {
+      const translated = t(tmpl.titleKey);
+      if (translated && translated !== tmpl.titleKey) return translated;
+    }
+
+    // Secondary: fall back to a direct `t(type)` lookup (covers legacy
+    // translation keys where the key IS the type string — e.g., "info").
+    const direct = t(type);
+    if (direct && direct !== type) return direct;
+
+    // Last resort: prettify the raw type. This only fires for notifications
+    // whose type isn't in the catalog AND has no translation — effectively
+    // unknown/ad-hoc rows. Same formatter as before.
+    return type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   };
 
   const unreadCount = notifications.filter(n => !n.is_read).length;
@@ -251,7 +247,7 @@ export default function Notifications() {
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-slate-500">{t('read')}</p>
+                  <p className="text-xs text-slate-500">{t('notif_read_filter') || 'Read'}</p>
                   <p className="text-2xl font-bold text-green-600">
                     {notifications.length - unreadCount}
                   </p>
@@ -276,7 +272,7 @@ export default function Notifications() {
                   <TabsList className="w-full bg-white/80 backdrop-blur-sm p-1.5 rounded-xl border border-slate-200/60 shadow-sm flex flex-wrap justify-start gap-1 h-auto">
                     <TabsTrigger value="all" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">{t('all') || 'All'} ({notifications.length})</TabsTrigger>
                     <TabsTrigger value="unread" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">{t('unread') || 'Unread'} ({unreadCount})</TabsTrigger>
-                    <TabsTrigger value="read" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">{t('read') || 'Read'} ({notifications.length - unreadCount})</TabsTrigger>
+                    <TabsTrigger value="read" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">{t('notif_read_filter') || 'Read'} ({notifications.length - unreadCount})</TabsTrigger>
                   </TabsList>
                 </Tabs>
               </div>
@@ -331,7 +327,12 @@ export default function Notifications() {
                 </div>
               ) : (
                 <div className="divide-y divide-slate-100">
-                  {filteredNotifications.map((notification) => (
+                  {filteredNotifications.map((notification) => {
+                    // Re-render in the current UI language; falls back to the
+                    // stored title/message for unknown types or rows whose
+                    // `data` doesn't carry the interpolation fields.
+                    const view = renderNotification(notification, t, language);
+                    return (
                     <div
                       key={notification.id}
                       className={cn(
@@ -346,7 +347,7 @@ export default function Notifications() {
 
                         <div className="flex-1 min-w-0">
                           <div className="flex items-start justify-between gap-2 mb-1">
-                            <h4 className="font-semibold text-slate-900">{notification.title}</h4>
+                            <h4 className="font-semibold text-slate-900">{view.title}</h4>
                             {!notification.is_read && (
                               <Badge className="bg-blue-500 text-white text-xs">
                                 {t('new') || 'New'}
@@ -354,13 +355,13 @@ export default function Notifications() {
                             )}
                           </div>
 
-                          <p className="text-sm text-slate-600 mb-2">{notification.message}</p>
+                          <p className="text-sm text-slate-600 mb-2">{view.body}</p>
 
                           <div className="flex items-center gap-3 text-xs text-slate-400">
                             <Badge variant="outline" className={getTypeColor(notification.type)}>
                               {getTypeLabel(notification.type)}
                             </Badge>
-                            <span>{new Date(notification.created_at).toLocaleString()}</span>
+                            <span>{new Date(notification.created_at).toLocaleString(undefined, { hour12: false })}</span>
                           </div>
                         </div>
 
@@ -386,7 +387,8 @@ export default function Notifications() {
                         </div>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </ScrollArea>

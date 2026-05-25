@@ -4,8 +4,13 @@ import { useCompany } from './CompanyContext';
 import { useAuth } from './AuthContext';
 import { isDemoMode, checkBackendHealth, getStorageKey } from '@/config/dataMode';
 import { DEFAULT_ADMIN_SETTINGS, deepMerge, getSetting as getSettingValue, setSetting as setSettingValue } from '@/config/defaultSettings';
+import { writeStoredBrandLogo } from '@/utils/brandLogo';
 
 const ADMIN_SETTINGS_STORAGE_KEY = 'genix_admin_settings';
+
+function syncBrandLogoToPublicStorage(settingsData) {
+  writeStoredBrandLogo(settingsData?.general?.company?.logo_url || null);
+}
 
 const AdminSettingsContext = createContext();
 
@@ -84,19 +89,26 @@ export function AdminSettingsProvider({ children }) {
             setOriginalSettings(mergedSettings);
             // Also cache in localStorage
             saveToLocalStorage(mergedSettings);
+            // Authoritative backend response: sync the public brand-logo cache
+            syncBrandLogoToPublicStorage(mergedSettings);
           } else {
             // No settings from API, use defaults
             setSettings(DEFAULT_ADMIN_SETTINGS);
             setOriginalSettings(DEFAULT_ADMIN_SETTINGS);
+            syncBrandLogoToPublicStorage(DEFAULT_ADMIN_SETTINGS);
           }
         } catch (apiError) {
           console.warn('API failed, falling back to localStorage:', apiError);
           const localSettings = loadFromLocalStorage();
           setSettings(localSettings);
           setOriginalSettings(localSettings);
+          // Transient failure: preserve the existing public brand-logo cache
         }
       } else {
-        // No backend available, use localStorage
+        // No backend available / no active company yet — DO NOT touch the
+        // public brand-logo cache: this runs on every initial mount before
+        // CompanyContext resolves, and clobbering the cache here causes the
+        // sidebar/login to flash the fallback logo.
         const localSettings = loadFromLocalStorage();
         setSettings(localSettings);
         setOriginalSettings(localSettings);
@@ -141,6 +153,65 @@ export function AdminSettingsProvider({ children }) {
     }));
   }, []);
 
+  // Commit the brand logo URL immediately (no manual Save needed).
+  // Persists ONLY general.company.logo_url to backend by sending an updated
+  // 'general' section built from the last-saved (originalSettings) state, so
+  // any unrelated unsaved edits the user has in flight are preserved.
+  const commitLogoUrl = useCallback(async (logoUrl) => {
+    if (!canManageSettings()) {
+      setError('Permission denied: Only administrators can save settings');
+      return false;
+    }
+
+    setIsSaving(true);
+    setError(null);
+    try {
+      const baseGeneral = originalSettings.general || {};
+      const baseCompany = baseGeneral.company || {};
+      const newGeneral = {
+        ...baseGeneral,
+        company: { ...baseCompany, logo_url: logoUrl },
+      };
+
+      if (backendAvailable && activeCompany?.id) {
+        try {
+          await adminSettingsService.updateSection(activeCompany.id, 'general', newGeneral);
+        } catch (apiError) {
+          console.warn('Logo backend save failed, persisting locally:', apiError);
+        }
+      }
+
+      // Patch the live in-memory state without clobbering other in-flight edits
+      setSettings(prev => {
+        const next = JSON.parse(JSON.stringify(prev));
+        if (!next.general) next.general = {};
+        if (!next.general.company) next.general.company = {};
+        next.general.company.logo_url = logoUrl;
+        return next;
+      });
+      // Mark the logo as committed so the dirty-check doesn't flag it
+      setOriginalSettings(prev => {
+        const next = JSON.parse(JSON.stringify(prev));
+        if (!next.general) next.general = {};
+        if (!next.general.company) next.general.company = {};
+        next.general.company.logo_url = logoUrl;
+        return next;
+      });
+
+      // Cache & sync to public storage for the (pre-auth) login page
+      saveToLocalStorage({ ...settings, general: { ...(settings.general || {}), company: { ...((settings.general || {}).company || {}), logo_url: logoUrl } } });
+      writeStoredBrandLogo(logoUrl);
+      setLastSaved(new Date());
+      return true;
+    } catch (err) {
+      console.error('Error committing logo URL:', err);
+      setError(err.message);
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  }, [canManageSettings, originalSettings, backendAvailable, activeCompany, saveToLocalStorage, settings]);
+
   // Save all settings
   const saveSettings = useCallback(async () => {
     if (!canManageSettings()) {
@@ -162,6 +233,7 @@ export function AdminSettingsProvider({ children }) {
 
       // Always save to localStorage
       saveToLocalStorage(settings);
+      syncBrandLogoToPublicStorage(settings);
       setOriginalSettings(settings);
       setLastSaved(new Date());
       return true;
@@ -195,6 +267,7 @@ export function AdminSettingsProvider({ children }) {
 
       // Always save to localStorage
       saveToLocalStorage(settings);
+      syncBrandLogoToPublicStorage(settings);
       setOriginalSettings(prev => ({
         ...prev,
         [section]: settings[section]
@@ -275,6 +348,7 @@ export function AdminSettingsProvider({ children }) {
     getSetting,
     updateSetting,
     updateSection,
+    commitLogoUrl,
     saveSettings,
     saveSection,
     resetSection,
@@ -286,7 +360,7 @@ export function AdminSettingsProvider({ children }) {
 
     // Default settings reference
     DEFAULT_SETTINGS: DEFAULT_ADMIN_SETTINGS
-  }), [settings, isLoading, isSaving, error, lastSaved, backendAvailable, canManageSettings, hasUnsavedChanges, getSetting, updateSetting, updateSection, saveSettings, saveSection, resetSection, resetAllSettings, discardChanges, loadSettings, exportSettings, importSettings]);
+  }), [settings, isLoading, isSaving, error, lastSaved, backendAvailable, canManageSettings, hasUnsavedChanges, getSetting, updateSetting, updateSection, commitLogoUrl, saveSettings, saveSection, resetSection, resetAllSettings, discardChanges, loadSettings, exportSettings, importSettings]);
 
   return (
     <AdminSettingsContext.Provider value={value}>

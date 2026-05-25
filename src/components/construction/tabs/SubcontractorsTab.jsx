@@ -539,16 +539,16 @@ const SubcontractorsTab = ({ project, buildings = [], wbsItems = [] }) => {
                 {language === 'ru' ? 'Реквизиты для Формы 2 / Формы 3' : 'Forma 2 / Forma 3 uchun rekvizitlar'}
               </div>
               <div>
-                <Label>{language === 'ru' ? 'Юридический адрес' : 'Yuridik manzil'}</Label>
+                <Label>{language === 'ru' ? 'Юридический адрес' : language === 'uz' ? 'Yuridik manzil' : 'Legal Address'}</Label>
                 <Input
                   value={form.address || ''}
                   onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
-                  placeholder={language === 'ru' ? 'г. Ташкент, ...' : 'Toshkent sh., ...'}
+                  placeholder={language === 'ru' ? 'г. Ташкент, ...' : language === 'uz' ? 'Toshkent sh., ...' : 'Tashkent, ...'}
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label>{language === 'ru' ? 'Телефон организации' : 'Tashkilot telefoni'}</Label>
+                  <Label>{language === 'ru' ? 'Телефон организации' : language === 'uz' ? 'Tashkilot telefoni' : 'Organization Phone'}</Label>
                   <Input
                     value={form.phone || ''}
                     onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
@@ -556,7 +556,7 @@ const SubcontractorsTab = ({ project, buildings = [], wbsItems = [] }) => {
                   />
                 </div>
                 <div>
-                  <Label>МФО</Label>
+                  <Label>{language === 'ru' ? 'МФО' : 'MFO'}</Label>
                   <Input
                     value={form.mfo || ''}
                     onChange={e => setForm(f => ({ ...f, mfo: e.target.value }))}
@@ -566,15 +566,15 @@ const SubcontractorsTab = ({ project, buildings = [], wbsItems = [] }) => {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label>{language === 'ru' ? 'Название банка' : 'Bank nomi'}</Label>
+                  <Label>{language === 'ru' ? 'Название банка' : language === 'uz' ? 'Bank nomi' : 'Bank Name'}</Label>
                   <Input
                     value={form.bank_name || ''}
                     onChange={e => setForm(f => ({ ...f, bank_name: e.target.value }))}
-                    placeholder={language === 'ru' ? 'АКБ "..."' : 'AKB "..."'}
+                    placeholder={language === 'ru' ? 'АКБ "..."' : language === 'uz' ? 'AKB "..."' : 'Bank "..."'}
                   />
                 </div>
                 <div>
-                  <Label>{language === 'ru' ? 'Расчётный счёт' : 'Hisob raqam'}</Label>
+                  <Label>{language === 'ru' ? 'Расчётный счёт' : language === 'uz' ? 'Hisob raqam' : 'Settlement Account'}</Label>
                   <Input
                     value={form.bank_account || ''}
                     onChange={e => setForm(f => ({ ...f, bank_account: e.target.value }))}
@@ -584,7 +584,7 @@ const SubcontractorsTab = ({ project, buildings = [], wbsItems = [] }) => {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label>СТИР (ИНН)</Label>
+                  <Label>{language === 'ru' ? 'СТИР (ИНН)' : language === 'uz' ? 'STIR (INN)' : 'TIN (STIR)'}</Label>
                   <Input
                     value={form.stir || ''}
                     onChange={e => setForm(f => ({ ...f, stir: e.target.value }))}
@@ -592,7 +592,7 @@ const SubcontractorsTab = ({ project, buildings = [], wbsItems = [] }) => {
                   />
                 </div>
                 <div>
-                  <Label>ОКОНХ</Label>
+                  <Label>{language === 'ru' ? 'ОКОНХ' : 'OKONH'}</Label>
                   <Input
                     value={form.okonh || ''}
                     onChange={e => setForm(f => ({ ...f, okonh: e.target.value }))}
@@ -602,19 +602,19 @@ const SubcontractorsTab = ({ project, buildings = [], wbsItems = [] }) => {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label>{language === 'ru' ? 'Руководитель' : 'Rahbar (director)'}</Label>
+                  <Label>{language === 'ru' ? 'Руководитель' : language === 'uz' ? 'Rahbar (direktor)' : 'Director'}</Label>
                   <Input
                     value={form.director_name || ''}
                     onChange={e => setForm(f => ({ ...f, director_name: e.target.value }))}
-                    placeholder={language === 'ru' ? 'Ф.И.О' : 'F.I.Sh'}
+                    placeholder={language === 'ru' ? 'Ф.И.О' : language === 'uz' ? 'F.I.Sh' : 'Full name'}
                   />
                 </div>
                 <div>
-                  <Label>{language === 'ru' ? 'Главный бухгалтер' : 'Bosh buxgalter'}</Label>
+                  <Label>{language === 'ru' ? 'Главный бухгалтер' : language === 'uz' ? 'Bosh buxgalter' : 'Chief Accountant'}</Label>
                   <Input
                     value={form.chief_accountant_name || ''}
                     onChange={e => setForm(f => ({ ...f, chief_accountant_name: e.target.value }))}
-                    placeholder={language === 'ru' ? 'Ф.И.О' : 'F.I.Sh'}
+                    placeholder={language === 'ru' ? 'Ф.И.О' : language === 'uz' ? 'F.I.Sh' : 'Full name'}
                   />
                 </div>
               </div>

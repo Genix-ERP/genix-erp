@@ -22,6 +22,7 @@ import { format } from "date-fns";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
+import ProductCombobox from "@/components/shared/ProductCombobox";
 import { usePermissions } from "@/hooks/usePermissions";
 import { toast } from 'sonner';
 
@@ -171,7 +172,7 @@ export default function StockTransfers() {
         product_id: transferForm.product_id,
         from_warehouse_id: transferForm.from_warehouse_id,
         to_warehouse_id: transferForm.to_warehouse_id,
-        quantity: parseInt(transferForm.quantity),
+        quantity: parseFloat(transferForm.quantity),
         notes: transferForm.notes,
         reference: transferForm.reference || `TRF-${Date.now()}`
       });
@@ -511,21 +512,16 @@ export default function StockTransfers() {
                 required
                 helpText={t('help_transfer_product') || "Ko'chirmoqchi bo'lgan mahsulotni tanlang"}
               />
-              <Select
+              {/* Use the shared combobox so users can search by name/code
+                  and see the full product name on hover (the old Select
+                  truncated long names with no way to read them). */}
+              <ProductCombobox
+                products={products.filter(p => p.is_stockable)}
                 value={transferForm.product_id}
                 onValueChange={(value) => setTransferForm({...transferForm, product_id: value})}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={t('select_product')} />
-                </SelectTrigger>
-                <SelectContent>
-                  {products.filter(p => p.is_stockable).map(product => (
-                    <SelectItem key={product.id} value={product.id}>
-                      {product.name} ({product.code})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                placeholder={t('select_product')}
+                t={t}
+              />
             </div>
 
             {/* From Warehouse */}
@@ -617,14 +613,15 @@ export default function StockTransfers() {
               />
               <Input
                 type="number"
-                min="1"
+                min="0.0001"
+                step="any"
                 max={transferForm.from_warehouse_id ? getAvailableStock(transferForm.product_id, transferForm.from_warehouse_id) : undefined}
                 placeholder={t('enter_quantity') || "Miqdorni kiriting"}
                 value={transferForm.quantity}
                 onChange={(e) => setTransferForm({...transferForm, quantity: e.target.value})}
                 required
               />
-              {transferForm.product_id && transferForm.from_warehouse_id && parseInt(transferForm.quantity) > getAvailableStock(transferForm.product_id, transferForm.from_warehouse_id) && (
+              {transferForm.product_id && transferForm.from_warehouse_id && parseFloat(transferForm.quantity) > getAvailableStock(transferForm.product_id, transferForm.from_warehouse_id) && (
                 <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
                   <AlertCircle className="w-3 h-3" />
                   {t('quantity_exceeds_available') || "Miqdor mavjud zaxiradan oshib ketdi"}
@@ -678,8 +675,8 @@ export default function StockTransfers() {
                   !transferForm.from_warehouse_id ||
                   !transferForm.to_warehouse_id ||
                   !transferForm.quantity ||
-                  parseInt(transferForm.quantity) <= 0 ||
-                  parseInt(transferForm.quantity) > getAvailableStock(transferForm.product_id, transferForm.from_warehouse_id)
+                  parseFloat(transferForm.quantity) <= 0 ||
+                  parseFloat(transferForm.quantity) > getAvailableStock(transferForm.product_id, transferForm.from_warehouse_id)
                 }
               >
                 {isSaving ? (

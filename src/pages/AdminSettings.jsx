@@ -29,11 +29,15 @@ import {
   Loader2,
   Info,
   Crown,
-  Zap
+  Zap,
+  HardHat,
+  Receipt,
+  Image as ImageIcon
 } from 'lucide-react';
 
 // Import settings components
 import GeneralSettings from '@/components/admin-settings/GeneralSettings';
+import BrandingSettings from '@/components/admin-settings/BrandingSettings';
 import CRMSettings from '@/components/admin-settings/CRMSettings';
 import SalesSettings from '@/components/admin-settings/SalesSettings';
 import InventorySettings from '@/components/admin-settings/InventorySettings';
@@ -41,7 +45,9 @@ import PurchaseSettings from '@/components/admin-settings/PurchaseSettings';
 import ManufacturingSettings from '@/components/admin-settings/ManufacturingSettings';
 import HRSettings from '@/components/admin-settings/HRSettings';
 import FinanceSettings from '@/components/admin-settings/FinanceSettings';
+import ExpensesSettings from '@/components/admin-settings/ExpensesSettings';
 import ProjectSettings from '@/components/admin-settings/ProjectSettings';
+import ConstructionSettings from '@/components/admin-settings/ConstructionSettings';
 import WorkflowSettings from '@/components/admin-settings/WorkflowSettings';
 import CompanySettings from '@/components/settings/CompanySettings';
 import SubscriptionSettings from '@/components/settings/SubscriptionSettings';
@@ -50,6 +56,7 @@ import SubscriptionSettings from '@/components/settings/SubscriptionSettings';
 // 'general' is always shown, others depend on installed apps
 const SECTIONS = [
   { id: 'general', icon: Building2, label: 'general_settings', component: GeneralSettings, appIds: null }, // null = always show
+  { id: 'branding', icon: ImageIcon, label: 'branding_settings', component: BrandingSettings, appIds: null },
   { id: 'companies', icon: Building2, label: 'companies', component: CompanySettings, appIds: null },
   { id: 'subscription', icon: Crown, label: 'subscription', component: SubscriptionSettings, appIds: null },
   { id: 'crm', icon: Target, label: 'crm_settings', component: CRMSettings, appIds: ['crm'] },
@@ -59,7 +66,9 @@ const SECTIONS = [
   { id: 'manufacturing', icon: Factory, label: 'manufacturing_settings', component: ManufacturingSettings, appIds: ['manufacturing'] },
   { id: 'hr', icon: Briefcase, label: 'hr_settings', component: HRSettings, appIds: ['hr', 'payroll', 'expenses'] },
   { id: 'finance', icon: DollarSign, label: 'finance_settings', component: FinanceSettings, appIds: ['finance', 'assets', 'expenses'] },
+  { id: 'expenses', icon: Receipt, label: 'expenses_settings', component: ExpensesSettings, appIds: ['expenses'] },
   { id: 'projects', icon: FolderKanban, label: 'project_settings', component: ProjectSettings, appIds: ['projects'] },
+  { id: 'construction', icon: HardHat, label: 'construction_settings', component: ConstructionSettings, appIds: ['construction'] },
   { id: 'workflows', icon: Zap, label: 'workflow_settings', component: WorkflowSettings, appIds: null }
 ];
 
@@ -311,7 +320,7 @@ export default function AdminSettings() {
                 onClick={resetAllSettings}
                 className="w-full text-slate-600 hover:text-red-600 hover:border-red-200"
               >
-                <RotateCcw className="w-4 h-4 mr-2" />
+                <RotateCcw className="w-4 h-4" />
                 {t('reset_all_defaults')}
               </Button>
             </div>

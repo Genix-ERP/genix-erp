@@ -1,10 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { constructionService } from '@/api/services/construction';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { TrendingUp, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { TrendingUp, ChevronLeft, ChevronRight, FileSpreadsheet } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { sortBuildings } from '@/utils/naturalSort';
+import SvodReportModal from '@/components/construction/SvodReportModal';
 
 const getRowColor = (pct) => {
   if (pct <= 0) return '';
@@ -30,12 +34,40 @@ const BudgetTab = ({ project }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 20;
 
+  // Buildings tab (mirrors StagesTab / migration 333). One pill per building;
+  // an extra "Hammasi" pill keeps the existing project-wide view available
+  // since budget totals make sense at the project level too, unlike Stages.
+  const [buildings, setBuildings] = useState([]);
+  const [buildingFilter, setBuildingFilter] = useState('all');
+
+  // Свод (consolidated estimate) export modal — opens the Uzbek 12-line
+  // "Сводная сметная" layout with the project's per-building FAKT figures
+  // and user-editable percentage rows (overhead / insurance / VAT / PQ-161).
+  const [svodOpen, setSvodOpen] = useState(false);
+
+  // Load buildings once per project for the tab row.
+  useEffect(() => {
+    if (!project?.id) return;
+    let cancelled = false;
+    constructionService
+      .listBuildings(project.id)
+      // Natural-sort (block 1 / block 2 / block 10 order) — backend ORDER BY
+      // defaults to sort_order → code, which doesn't respect numeric suffixes.
+      .then((rows) => { if (!cancelled) setBuildings(sortBuildings(Array.isArray(rows) ? rows : [])); })
+      .catch(() => { if (!cancelled) setBuildings([]); });
+    return () => { cancelled = true; };
+  }, [project?.id]);
+
   const load = useCallback(async () => {
     if (!project?.id) return;
     setLoading(true);
     setError(null);
     try {
-      const data = await constructionService.getStageBudgetReport(project.id);
+      // The service helper drops the param when the filter is 'all', so the
+      // backend keeps its original project-wide behaviour by default.
+      const data = await constructionService.getStageBudgetReport(project.id, {
+        buildingId: buildingFilter,
+      });
       setReport(data);
     } catch (e) {
       setError(t('budget_load_error') || 'Error loading budget report');
@@ -43,9 +75,13 @@ const BudgetTab = ({ project }) => {
     } finally {
       setLoading(false);
     }
-  }, [project?.id]);
+  }, [project?.id, buildingFilter]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Reset pagination whenever the active building tab changes so the user
+  // never lands on a blank page after filtering to a smaller block.
+  useEffect(() => { setCurrentPage(1); }, [buildingFilter]);
 
   if (loading) return <div className="text-center py-8 text-slate-400">{t('loading')}</div>;
   if (error) return <div className="text-center py-8 text-red-500">{error}</div>;
@@ -57,12 +93,28 @@ const BudgetTab = ({ project }) => {
   const totalVariance = report.total_variance || 0;
   const totalPct = totalPlanned > 0 ? (totalActual / totalPlanned) * 100 : 0;
 
-  // Group rows by stage
+  // Group rows by stage. We track two pieces per stage:
+  //   • rows: the per-category breakdown shown as indented sub-rows.
+  //     Filtered to entries with a real category_id so we don't render
+  //     "↳ Uncategorized" rows for backfilled expenses that lack a
+  //     cost_category_id.
+  //   • actualTotal: the sum of every row's actual for the stage,
+  //     INCLUDING category_id = 0 rows. Per-work expenses written by
+  //     the YAKUNIY backfill (migration 376) and the runtime
+  //     finaliseMaterialsForWork have no cost_category_id, so without
+  //     this they'd be invisible in the stage row's Fakt column even
+  //     though the top-card "Umumiy fakt xarajatlar" sums them.
   const byStage = {};
   rows.forEach(row => {
     if (!byStage[row.stage_id]) {
-      byStage[row.stage_id] = { name: row.stage_name, planned: row.planned_budget, rows: [] };
+      byStage[row.stage_id] = {
+        name: row.stage_name,
+        planned: row.planned_budget,
+        rows: [],
+        actualTotal: 0,
+      };
     }
+    byStage[row.stage_id].actualTotal += Number(row.actual || 0);
     if (row.category_id > 0 && row.actual > 0) {
       byStage[row.stage_id].rows.push(row);
     }
@@ -70,8 +122,70 @@ const BudgetTab = ({ project }) => {
 
   return (
     <div className="space-y-4">
-      {/* Summary KPIs */}
-      <div className="grid grid-cols-4 gap-4">
+      {/* Building tab row — mirrors Bosqichlar tab (migration 333). Unlike
+          Stages, we keep a "Hammasi" pill so the user can still see the
+          project-wide totals (which is the default view). The Свод export
+          button sits on the right of this row so it's always visible
+          alongside the block filter, regardless of whether buildings exist. */}
+      <div className="flex flex-wrap items-center gap-2">
+        {buildings.length > 0 && (
+          <>
+            <button
+              type="button"
+              onClick={() => setBuildingFilter('all')}
+              className={cn(
+                'px-3 py-1.5 rounded-full text-xs font-medium border transition-colors',
+                buildingFilter === 'all'
+                  ? 'bg-slate-900 text-white border-slate-900'
+                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50',
+              )}
+            >
+              {t('all') || 'Hammasi'}
+            </button>
+            {buildings.map((b) => (
+              <button
+                key={b.id}
+                type="button"
+                onClick={() => setBuildingFilter(String(b.id))}
+                className={cn(
+                  'px-3 py-1.5 rounded-full text-xs font-medium border transition-colors',
+                  String(buildingFilter) === String(b.id)
+                    ? 'bg-slate-900 text-white border-slate-900'
+                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50',
+                )}
+                title={b.code || b.name}
+              >
+                {b.name || b.code || `#${b.id}`}
+              </button>
+            ))}
+          </>
+        )}
+        <div className="flex-1" />
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setSvodOpen(true)}
+          className="text-xs"
+        >
+          <FileSpreadsheet className="w-4 h-4 mr-1" />
+          {/* Inline language map — `t()` from useTranslation returns the
+              key itself when missing, so the old `t('svod_report') || ''`
+              fallback never fired and the button rendered the raw key.
+              We keep this label localised here (3 strings) instead of
+              extending the 24k-line translations.jsx file. */}
+          {({ uz: 'Свод hisobot', ru: 'Сводный отчёт', en: 'Svod report' })[language] || 'Свод hisobot'}
+        </Button>
+      </div>
+
+      {/* Summary KPIs.
+          The 4th "Byudjetdan foydalanish" (% utilization) card was
+          removed per product feedback — the same percentage was
+          already implied by the difference card (Og'ish), and a
+          progress bar at 0–1% on a barely-started project read more
+          like a chart artefact than useful information. Three cards
+          here, four-column grid kept to match the surrounding spacing
+          on the page. */}
+      <div className="grid grid-cols-3 gap-4">
         <Card><CardContent className="p-4">
           <p className="text-sm text-slate-500">{t('budget_total_planned') || 'Total planned budget'}</p>
           <p className="text-xl font-bold text-blue-600">{formatCurrency(totalPlanned)}</p>
@@ -85,16 +199,6 @@ const BudgetTab = ({ project }) => {
           <p className={`text-xl font-bold ${totalVariance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
             {totalVariance >= 0 ? '+' : ''}{formatCurrency(totalVariance)}
           </p>
-        </CardContent></Card>
-        <Card><CardContent className="p-4">
-          <p className="text-sm text-slate-500">{t('budget_utilization') || 'Utilization (%)'}</p>
-          <p className={`text-xl font-bold ${getBadgeColor(totalPct)}`}>{totalPct.toFixed(1)}%</p>
-          <div className="w-full bg-slate-200 rounded-full h-2 mt-2">
-            <div
-              className={`h-2 rounded-full ${totalPct < 90 ? 'bg-green-500' : totalPct <= 100 ? 'bg-yellow-500' : 'bg-red-500'}`}
-              style={{ width: `${Math.min(100, totalPct)}%` }}
-            />
-          </div>
         </CardContent></Card>
       </div>
 
@@ -134,7 +238,10 @@ const BudgetTab = ({ project }) => {
                     const paginatedEntries = stageEntries.slice(startIdx, endIdx);
 
                     return paginatedEntries.map(([stageId, stage]) => {
-                    const stageActual = stage.rows.reduce((s, r) => s + r.actual, 0);
+                    // Use the all-rows total (incl. uncategorized expenses)
+                    // not just the categorised rows below — see byStage
+                    // construction above for why.
+                    const stageActual = stage.actualTotal || stage.rows.reduce((s, r) => s + r.actual, 0);
                     const stagePct = stage.planned > 0 ? (stageActual / stage.planned) * 100 : 0;
                     const stageVariance = stage.planned - stageActual;
                     return (
@@ -216,6 +323,16 @@ const BudgetTab = ({ project }) => {
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-yellow-200 inline-block" /> 90–100% — {t('budget_legend_attention') || 'Attention'}</span>
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-200 inline-block" /> &gt;100% — {t('budget_legend_over') || 'Over budget'}</span>
       </div>
+
+      {/* Свод (consolidated estimate) export modal. Mounted unconditionally;
+          its `open` prop controls visibility so the data fetch only fires
+          on actual open. */}
+      <SvodReportModal
+        open={svodOpen}
+        onClose={() => setSvodOpen(false)}
+        projectId={project?.id}
+        projectName={project?.name}
+      />
     </div>
   );
 };

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, Bell, BellRing, CheckCheck, Trash2 } from "lucide-react";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
+import { renderNotification } from "@/utils/notificationCatalog";
 
 export default function NotificationSettings() {
   const { language } = useLanguage();
@@ -29,7 +30,7 @@ export default function NotificationSettings() {
   const fetchNotifications = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('http://localhost:8080/api/v1/notifications?limit=20', {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || '/api/v1'}/notifications?limit=20`, {
         headers: getHeaders(),
       });
       if (res.ok) {
@@ -49,7 +50,7 @@ export default function NotificationSettings() {
 
   const handleMarkAsRead = async (id) => {
     try {
-      await fetch(`http://localhost:8080/api/v1/notifications/${id}/read`, {
+      await fetch(`${import.meta.env.VITE_API_URL || '/api/v1'}/notifications/${id}/read`, {
         method: 'PUT',
         headers: getHeaders(),
       });
@@ -61,7 +62,7 @@ export default function NotificationSettings() {
 
   const handleMarkAllAsRead = async () => {
     try {
-      await fetch('http://localhost:8080/api/v1/notifications/read-all', {
+      await fetch(`${import.meta.env.VITE_API_URL || '/api/v1'}/notifications/read-all`, {
         method: 'PUT',
         headers: getHeaders(),
       });
@@ -73,7 +74,7 @@ export default function NotificationSettings() {
 
   const handleDelete = async (id) => {
     try {
-      const res = await fetch(`http://localhost:8080/api/v1/notifications/${id}`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || '/api/v1'}/notifications/${id}`, {
         method: 'DELETE',
         headers: getHeaders(),
       });
@@ -122,21 +123,32 @@ export default function NotificationSettings() {
           </div>
         ) : (
           <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">
-            {notifications.map(notification => (
+            {notifications.map(notification => {
+              // Run through the catalog so the title/message render
+              // in the user's current language (EN/UZ/RU). Falls back
+              // to the stored title/message when the type isn't in
+              // the catalog yet — those values were frozen at the
+              // user's profile language at creation time.
+              const display = renderNotification(notification, t, language);
+              return (
               <div key={notification.id} className={`p-4 rounded-lg flex items-start gap-4 transition-colors ${notification.is_read ? 'bg-slate-50' : 'bg-blue-50 border border-blue-100'}`}>
                 <div className="mt-1">
                   <BellRing className={`w-5 h-5 ${notification.is_read ? 'text-slate-400' : 'text-blue-500'}`} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h4 className="font-semibold text-sm">{notification.title}</h4>
-                  <p className="text-sm text-slate-600 mt-0.5">{notification.message}</p>
+                  <h4 className="font-semibold text-sm">{display.title}</h4>
+                  <p className="text-sm text-slate-600 mt-0.5">{display.body}</p>
                   <div className="flex items-center gap-2 mt-1.5">
                     {notification.type && (
                       <span className="text-[10px] px-1.5 py-0.5 bg-slate-200 text-slate-600 rounded font-medium">
-                        {t(notification.type) || notification.type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                        {t(`notif_type_${notification.type}`) !== `notif_type_${notification.type}`
+                          ? t(`notif_type_${notification.type}`)
+                          : (t(notification.type) !== notification.type
+                              ? t(notification.type)
+                              : notification.type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()))}
                       </span>
                     )}
-                    <p className="text-xs text-slate-400">{new Date(notification.created_at).toLocaleString()}</p>
+                    <p className="text-xs text-slate-400">{new Date(notification.created_at).toLocaleString(undefined, { hour12: false })}</p>
                   </div>
                 </div>
                 <div className="flex gap-1 shrink-0">
@@ -150,7 +162,8 @@ export default function NotificationSettings() {
                   </Button>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </CardContent>

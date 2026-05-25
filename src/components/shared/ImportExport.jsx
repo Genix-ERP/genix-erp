@@ -173,15 +173,22 @@ export const exportToCSV = (data, columns, filename) => {
 };
 
 // Export to PDF
-export const exportToPDF = (data, columns, filename, title = "Report") => {
+export const exportToPDF = async (data, columns, filename, title = "Report") => {
+  const { ensurePdfFonts, registerPdfFontsSync } = await import("./pdfFonts");
+  await ensurePdfFonts().catch(() => {});
+
   const doc = new jsPDF();
+  const hasUnicodeFont = registerPdfFontsSync(doc);
+  const fontFamily = hasUnicodeFont ? "Roboto" : undefined;
 
   // Title
   doc.setFontSize(16);
+  if (fontFamily) doc.setFont(fontFamily, "bold");
   doc.text(title, 14, 15);
 
   // Date
   doc.setFontSize(10);
+  if (fontFamily) doc.setFont(fontFamily, "normal");
   doc.text(`Yaratilgan: ${new Date().toLocaleDateString("uz-UZ")}`, 14, 22);
 
   // Table
@@ -196,8 +203,8 @@ export const exportToPDF = (data, columns, filename, title = "Report") => {
     head: [columns.map((col) => col.label)],
     body: tableData,
     startY: 28,
-    styles: { fontSize: 8 },
-    headStyles: { fillColor: [59, 130, 246] },
+    styles: { fontSize: 8, font: fontFamily },
+    headStyles: { fillColor: [59, 130, 246], font: fontFamily },
   });
 
   doc.save(`${filename}.pdf`);
@@ -389,7 +396,18 @@ export function ImportModal({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent
+        className="max-w-3xl max-h-[90vh] overflow-y-auto"
+        // The OS file picker sits visually outside the Dialog; when the
+        // user clicks "Open" in that picker, Radix interprets the
+        // returning click as an "outside interaction" and closes the
+        // dialog before our onChange handler can advance to step 2 (so
+        // the modal silently disappears the moment the file is picked).
+        // Block outside-pointer + outside-focus auto-closes; the X
+        // button and ESC key still work because onOpenChange is wired.
+        onPointerDownOutside={(e) => e.preventDefault()}
+        onInteractOutside={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Upload className="w-5 h-5" />
@@ -447,29 +465,37 @@ export function ImportModal({
           </div>
 
           {/* Step 1: File Selection */}
+          {/* Using a <label> wrapping a screen-reader-only <input> so the
+              browser handles the file picker open via native HTML behaviour
+              instead of a programmatic .click(). With the programmatic path,
+              when the OS file picker closes some browsers fire a phantom
+              focus/pointer event that Radix's Dialog sees as "outside" and
+              uses to close itself, tearing down the input before its change
+              event can run. Native label-driven file selection keeps focus
+              inside the Dialog scope. */}
           {step === 1 && (
             <div className="space-y-4">
-              <div
-                className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-blue-500 transition-colors"
-                onClick={() => fileInputRef.current?.click()}
+              <label
+                htmlFor="import-file-input"
+                className="block border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-blue-500 transition-colors"
               >
                 <Upload className="w-12 h-12 text-slate-400 mx-auto mb-4" />
                 <p className="text-lg font-medium">{t('select_excel_or_csv')}</p>
                 <p className="text-sm text-slate-500 mt-1">
                   {t('supported_formats')}
                 </p>
-              </div>
-
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".xlsx,.xls,.csv"
-                className="hidden"
-                onChange={(e) => {
-                  const selected = e.target.files?.[0];
-                  if (selected) handleFileSelect(selected);
-                }}
-              />
+                <input
+                  id="import-file-input"
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  className="sr-only"
+                  onChange={(e) => {
+                    const selected = e.target.files?.[0];
+                    if (selected) handleFileSelect(selected);
+                  }}
+                />
+              </label>
 
               <div className="flex justify-center">
                 <Button variant="outline" onClick={downloadTemplate}>
@@ -603,6 +629,10 @@ export function ExportModal({
   const [isExporting, setIsExporting] = useState(false);
 
   const toggleColumn = (key) => {
+    // Required columns (e.g. `id` for the round-trip update flow) must
+    // stay selected — uncheck attempts are silently ignored.
+    const col = columns.find(c => c.key === key);
+    if (col?.required) return;
     setSelectedColumns((prev) =>
       prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
     );
@@ -685,7 +715,11 @@ export function ExportModal({
                 onClick={() =>
                   setSelectedColumns(
                     selectedColumns.length === columns.length
-                      ? []
+                      // Deselect-all keeps required columns selected,
+                      // since the round-trip update flow needs `id`
+                      // (or whatever else is marked required) to
+                      // identify rows on re-import.
+                      ? columns.filter((col) => col.required).map((col) => col.key)
                       : columns.map((col) => col.key)
                   )
                 }
@@ -699,13 +733,18 @@ export function ExportModal({
               {columns.map((col) => (
                 <label
                   key={col.key}
-                  className="flex items-center gap-2 cursor-pointer"
+                  className={`flex items-center gap-2 ${col.required ? 'cursor-not-allowed opacity-90' : 'cursor-pointer'}`}
+                  title={col.required ? (t('required_for_round_trip_update') || "Required for round-trip update — can't be deselected") : undefined}
                 >
                   <Checkbox
-                    checked={selectedColumns.includes(col.key)}
+                    checked={col.required ? true : selectedColumns.includes(col.key)}
                     onCheckedChange={() => toggleColumn(col.key)}
+                    disabled={col.required}
                   />
-                  <span className="text-sm">{col.label}</span>
+                  <span className="text-sm">
+                    {col.label}
+                    {col.required && <span className="text-red-500 ml-0.5">*</span>}
+                  </span>
                 </label>
               ))}
             </div>
@@ -750,6 +789,11 @@ export function ImportExportButtons({
   onExport,
   importDisabled = false,
   exportDisabled = false,
+  // When true, the export button shows a spinner and is disabled.
+  // Used by callers that need to fetch full data (across paginated
+  // pages) before opening the export modal — keeps the user from
+  // clicking again mid-fetch.
+  isExporting = false,
 }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
@@ -772,9 +816,11 @@ export function ImportExportButtons({
           variant="outline"
           size="sm"
           onClick={onExport}
-          disabled={exportDisabled}
+          disabled={exportDisabled || isExporting}
         >
-          <Download className="w-4 h-4 mr-1" />
+          {isExporting
+            ? <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+            : <Download className="w-4 h-4 mr-1" />}
           {t('export') || 'Export'}
         </Button>
       )}

@@ -2,14 +2,14 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { hrService } from "@/api/services/hr";
 import { aiService } from "@/api/services/ai";
 import apiClient from "@/api/client";
-import { formatPhoneInput, parsePhoneInput } from "@/utils/formatCurrency";
+import { formatPhoneInput, parsePhoneInput, formatPriceInput, parsePriceInput } from "@/utils/formatCurrency";
 import { useToast } from "@/components/ui/use-toast";
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import DepartmentManagement from "@/components/hr/DepartmentManagement";
@@ -81,7 +81,6 @@ import { useInstalledApps } from "@/components/contexts/InstalledAppsContext";
 import { useEmployeePermissions, AVAILABLE_MODULES } from "@/components/contexts/EmployeePermissionsContext";
 import { PERMISSION_MATRIX } from "@/config/permissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
-import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 
 export default function HR() {
   const { language } = useLanguage();
@@ -347,6 +346,8 @@ Only return the JSON, no other text.`;
         email: emp.email || '',
         phone: emp.phone || '',
         job_title: emp.job_title || '',
+        job_position_id: emp.job_position_id || '',
+        job_position_name: emp.job_position_name || '',
         department_id: emp.department_id || '',
         department: emp.department || 'other',
         hire_date: emp.hire_date,
@@ -543,6 +544,7 @@ Only return the JSON, no other text.`;
 
     setIsSubmitting(true);
     try {
+      const hireDate = selectedEmployee.hire_date ? selectedEmployee.hire_date.split('T')[0] : new Date().toISOString().split('T')[0];
       const employeeData = {
         full_name: selectedEmployee.full_name,
         email: selectedEmployee.email || '',
@@ -551,13 +553,14 @@ Only return the JSON, no other text.`;
         department: selectedEmployee.department,
         department_id: selectedEmployee.department_id || selectedEmployee.department || '',
         job_position_id: selectedEmployee.job_position_id || '',
-        hire_date: selectedEmployee.hire_date,
+        hire_date: hireDate,
         salary: parseFloat(selectedEmployee.salary) || 0,
         status: selectedEmployee.status,
         performance_score: parseFloat(selectedEmployee.performance_score) || 3,
         turnover_risk: selectedEmployee.turnover_risk,
         permission: selectedEmployee.permission
       };
+      console.log('[HR Update] Sending employeeData:', JSON.stringify(employeeData, null, 2));
 
       await hrService.updateEmployee(selectedEmployee.id, employeeData);
 
@@ -1167,7 +1170,7 @@ Only return the JSON, no other text.`;
                 <div className="space-y-1">
                   <Label className="text-xs">{t('job_position') || 'Job Position'}</Label>
                   <Select
-                    value={newEmployee.job_position_id}
+                    value={newEmployee.job_position_id || undefined}
                     onValueChange={value => setNewEmployee({...newEmployee, job_position_id: value})}
                   >
                     <SelectTrigger><SelectValue placeholder={t('select_job_position') || 'Select position'} /></SelectTrigger>
@@ -1432,6 +1435,7 @@ Only return the JSON, no other text.`;
           <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>{t('edit_employee') || 'Edit Employee'}</DialogTitle>
+              <DialogDescription className="sr-only">{t('edit_employee_description') || 'Edit employee details'}</DialogDescription>
             </DialogHeader>
             {selectedEmployee && (
               <div className="space-y-4 py-4">
@@ -1481,7 +1485,7 @@ Only return the JSON, no other text.`;
                   <div className="space-y-2">
                     <Label>{t('job_position') || 'Lavozim'}</Label>
                     <Select
-                      value={selectedEmployee.job_position_id || ''}
+                      value={selectedEmployee.job_position_id || undefined}
                       onValueChange={value => setSelectedEmployee({...selectedEmployee, job_position_id: value})}
                     >
                       <SelectTrigger><SelectValue placeholder={t('select_job_position') || 'Lavozimni tanlang'} /></SelectTrigger>

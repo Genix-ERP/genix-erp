@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,8 @@ import {
   Plus, Search, Package, Pencil, Trash2, Eye, DollarSign,
   Tag, Barcode, Box, Boxes, Filter, MoreHorizontal, AlertCircle,
   CheckCircle, XCircle, ShoppingCart, Archive, Upload, Download, History,
-  Layers, Printer, HelpCircle, Truck, RefreshCw, Scale, ChevronDown, ChevronLeft, ChevronRight, ShieldCheck
+  Layers, Printer, HelpCircle, Truck, RefreshCw, Scale, ChevronDown, ChevronLeft, ChevronRight, ShieldCheck,
+  Loader2
 } from "lucide-react";
 import {
   Tooltip,
@@ -16,7 +17,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import ExcelJS from "exceljs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -56,6 +58,13 @@ import {
   ImportExportButtons,
   useAuditTrail,
 } from '@/components/shared';
+// parseSpreadsheetFile lets us bypass the ImportModal for product import.
+// The Radix Dialog used by ImportModal closes itself when the OS file picker
+// returns (its outside-interaction detection misfires on file pickers in
+// macOS), tearing down the input before its change handler can run. By
+// running the file input directly on the products page we skip the dialog
+// entirely.
+import { parseSpreadsheetFile } from '@/components/shared/ImportExport';
 
 // ── EAN-13 Barcode Utilities ──────────────────────────────────────────────────
 const EAN13_L = ['0001101','0011001','0010011','0111101','0100011','0110001','0101111','0111011','0110111','0001011'];
@@ -169,7 +178,8 @@ export default function Products() {
     updateCategory,
     deleteCategory,
     isLoading,
-    isLotTrackingEnabled
+    isLotTrackingEnabled,
+    refreshData: refreshInventoryData,
   } = useInventory();
   const { accounts } = useFinancials();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
@@ -202,6 +212,7 @@ export default function Products() {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [warehouseFilter, setWarehouseFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [inventoryTypeFilter, setInventoryTypeFilter] = useState("trade");
 
   // Server-side pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -222,7 +233,115 @@ export default function Products() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  // Confirmation modal that appears before the file picker — gives users
+  // a "Download Template" button so they can grab the expected column
+  // shape (Nomi / Shtrix kod / Kategoriya / Teglar / Tan narxi / Sotish
+  // narxi) and a "Choose File" button that triggers the body-level
+  // singleton input.
+  const [showImportConfirmModal, setShowImportConfirmModal] = useState(false);
+  // Direct file-input ref for product import. The ref points at the
+  // wrapper <div>; the actual <input type=file> is mounted into it via
+  // the useEffect below using vanilla DOM APIs (addEventListener, NOT
+  // React onChange). Reason: React's onChange on a file input was
+  // mysteriously dropping events in this app — verified by the user's
+  // browser-level test where a `document.createElement('input')` with
+  // `inp.onchange = ...` worked perfectly while the same flow through
+  // a JSX `<input onChange={...}>` did not fire. By staying on the DOM
+  // side for the listener we guarantee the change event reaches us.
+  const productImportFileRef = useRef(null);
+  const [isProductImporting, setIsProductImporting] = useState(false);
+  // Two-step modal: 'main' shows the upload/download choice; 'fields'
+  // shows the column picker — only reached via the Download Template
+  // button. Reset to 'main' whenever the modal closes so the next
+  // open starts on the simple view.
+  const [importStep, setImportStep] = useState('main');
+
+  // Single source of truth for what the product import understands.
+  // Drives BOTH the downloaded template (column order + headers) AND
+  // the spreadsheet parser (header → backend field mapping). To add a
+  // new importable field, just add an entry here — the modal, template
+  // generator, and parser all consume this list.
+  //
+  // `default: true` means the column is pre-selected when the user
+  // opens the import modal. Required (`name`) is also default-on and
+  // can't be unchecked (the parser drops rows missing it).
+  const IMPORT_FIELD_DEFS = useMemo(() => ([
+    // ── Core (recommended for almost every import) ────────────────────
+    { key: 'name',           label: 'Nomi',             group: 'core',     required: true,  default: true,  width: 32 },
+    { key: 'barcode',        label: 'Shtrix kod',       group: 'core',     default: true,  width: 18 },
+    { key: 'category',       label: 'Kategoriya',       group: 'core',     default: true,  width: 22 },
+    { key: 'tags',           label: 'Teglar',           group: 'core',     default: true,  width: 22 },
+    { key: 'cost_price',     label: 'Tan narxi',        group: 'pricing',  default: true,  width: 14, kind: 'number' },
+    { key: 'list_price',     label: 'Sotish narxi',     group: 'pricing',  default: true,  width: 14, kind: 'number' },
+
+    // ── Pricing extras ────────────────────────────────────────────────
+    { key: 'wholesale_price',label: 'Ulgurji narxi',    group: 'pricing',  width: 14, kind: 'number' },
+    { key: 'min_price',      label: 'Min narxi',        group: 'pricing',  width: 14, kind: 'number' },
+    { key: 'delivery_price', label: 'Yetkazib berish narxi', group: 'pricing', width: 16, kind: 'number' },
+
+    // ── Identifiers ───────────────────────────────────────────────────
+    { key: 'search_key',     label: 'Qidiruv kaliti',   group: 'identifiers', width: 18 },
+    { key: 'sku',            label: 'SKU',              group: 'identifiers', width: 14 },
+    { key: 'brand',          label: 'Brend',            group: 'identifiers', width: 18 },
+    { key: 'manufacturer',   label: 'Ishlab chiqaruvchi', group: 'identifiers', width: 22 },
+    { key: 'model_number',   label: 'Model raqami',     group: 'identifiers', width: 18 },
+    { key: 'upc',            label: 'UPC',              group: 'identifiers', width: 14 },
+    { key: 'ean',            label: 'EAN',              group: 'identifiers', width: 14 },
+    { key: 'isbn',           label: 'ISBN',             group: 'identifiers', width: 14 },
+    { key: 'mpn',            label: 'MPN',              group: 'identifiers', width: 14 },
+    { key: 'hs_code',        label: 'HS kodi',          group: 'identifiers', width: 14 },
+    { key: 'country_of_origin', label: 'Mamlakat',      group: 'identifiers', width: 18 },
+
+    // ── Inventory ─────────────────────────────────────────────────────
+    { key: 'inventory_type', label: 'Tovar turi',       group: 'inventory', width: 16 },
+    { key: 'min_stock_level',label: 'Min qoldiq',       group: 'inventory', width: 14, kind: 'number' },
+    { key: 'reorder_point',  label: 'Qayta buyurtma nuqtasi', group: 'inventory', width: 18, kind: 'number' },
+    { key: 'reorder_quantity', label: 'Qayta buyurtma miqdori', group: 'inventory', width: 18, kind: 'number' },
+    { key: 'shelf_life_days',label: 'Saqlash muddati (kun)', group: 'inventory', width: 18, kind: 'number' },
+    { key: 'storage_conditions', label: 'Saqlash sharoiti', group: 'inventory', width: 22 },
+
+    // ── Supplier ──────────────────────────────────────────────────────
+    { key: 'supplier_sku',   label: 'Yetkazib beruvchi SKU', group: 'supplier', width: 18 },
+    { key: 'lead_time_days', label: 'Yetkazib berish kuni', group: 'supplier', width: 18, kind: 'number' },
+    { key: 'customer_lead_time_days', label: 'Mijoz uchun kuni', group: 'supplier', width: 18, kind: 'number' },
+
+    // ── Dimensions ────────────────────────────────────────────────────
+    { key: 'weight',         label: 'Vazn (kg)',        group: 'dimensions', width: 12, kind: 'number' },
+    { key: 'length',         label: 'Uzunlik (cm)',     group: 'dimensions', width: 12, kind: 'number' },
+    { key: 'width',          label: 'Eni (cm)',         group: 'dimensions', width: 12, kind: 'number' },
+    { key: 'height',         label: 'Balandlik (cm)',   group: 'dimensions', width: 12, kind: 'number' },
+
+    // ── Other ─────────────────────────────────────────────────────────
+    { key: 'description',    label: 'Tavsif',           group: 'other',    width: 40 },
+    { key: 'warranty_months',label: 'Kafolat (oy)',     group: 'other',    width: 14, kind: 'number' },
+    { key: 'type',           label: 'Tur',              group: 'other',    width: 12 },
+  ]), []);
+
+  // Selected import fields. Initialized from `default: true` entries
+  // and persisted in localStorage so the user's preference survives
+  // page reloads and tab switches.
+  const [selectedImportFields, setSelectedImportFields] = useState(() => {
+    try {
+      const stored = localStorage.getItem('genix_product_import_fields');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (_) { /* ignore */ }
+    return IMPORT_FIELD_DEFS.filter(f => f.default).map(f => f.key);
+  });
+  useEffect(() => {
+    try { localStorage.setItem('genix_product_import_fields', JSON.stringify(selectedImportFields)); }
+    catch (_) { /* localStorage may be unavailable in private mode — non-fatal */ }
+  }, [selectedImportFields]);
   const [showExportModal, setShowExportModal] = useState(false);
+  // Holds the FULL filtered product set used by the Export modal.
+  // The list view itself is paginated (default 20 per page) so passing
+  // `filteredProducts` to ExportModal would only export the current
+  // page. We fetch the full set on demand when the user clicks Export
+  // so the modal sees everything that matches the current filters.
+  const [allProductsForExport, setAllProductsForExport] = useState([]);
+  const [isPreparingExport, setIsPreparingExport] = useState(false);
   const [showCategoryImportModal, setShowCategoryImportModal] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showCategoryManageModal, setShowCategoryManageModal] = useState(false);
@@ -303,8 +422,15 @@ export default function Products() {
     };
   }, []);
 
-  // Export columns configuration - comprehensive product fields
+  // Export columns configuration - comprehensive product fields.
+  //
+  // The `id` column is REQUIRED and locked-on. It carries the product's
+  // UUID so the user can edit the file in Excel and re-import it as a
+  // bulk UPDATE — the backend matches each row to an existing product
+  // by `id` and only writes the columns the user filled in. Without
+  // `id` re-importing the same export would create duplicate products.
   const exportColumns = [
+    { key: 'id', label: 'ID', required: true },
     // Basic Info
     { key: 'name', label: 'Nomi' },
     { key: 'barcode', label: 'Shtrix kod' },
@@ -373,10 +499,13 @@ export default function Products() {
     { key: 'requires_lot_tracking', label: 'Partiya kuzatuvi', render: (v) => v ? 'Ha' : 'Yo\'q' },
     { key: 'requires_serial_tracking', label: 'Seriya kuzatuvi', render: (v) => v ? 'Ha' : 'Yo\'q' },
 
-    // Units of Measure
-    { key: 'inventory_uom', label: 'Inventar birligi' },
-    { key: 'sales_uom', label: 'Sotish birligi' },
-    { key: 'purchase_uom', label: 'Sotib olish birligi' },
+    // Units of Measure — keys match what the API returns in ProductResponse
+    // (unit_code / *_unit_name), not the form field names. The previous keys
+    // (inventory_uom / sales_uom / purchase_uom) only exist on the edit form
+    // state, so the export silently wrote empty cells.
+    { key: 'unit_code', label: 'Inventar birligi' },
+    { key: 'sales_unit_name', label: 'Sotish birligi' },
+    { key: 'purchase_unit_name', label: 'Sotib olish birligi' },
     { key: 'uom_conversion_factor', label: 'Birlik konvertatsiyasi' },
 
     // Expiration
@@ -397,37 +526,517 @@ export default function Products() {
   ];
 
   const handleImport = async (data) => {
-    for (const row of data) {
-      if (!row.name || !row.name.toString().trim()) continue;
-      const generatedCode = row.barcode || row.name.toString().toUpperCase().replace(/\s+/g, '-').substring(0, 50);
+    // Build the payload for the bulk endpoint. The backend handles
+    // category resolution by name, code auto-generation, and per-row
+    // duplicate detection — we just pass through what's in the sheet.
+    // (Old behaviour: 690 sequential `await createProduct(...)` calls,
+    // which froze the modal for ~3 minutes and bailed on the first
+    // failure with one terse error.)
+    // eslint-disable-next-line no-console
+    console.log('[product-import] handleImport called', {
+      rows: Array.isArray(data) ? data.length : 'not-array',
+      firstRow: Array.isArray(data) ? data[0] : null,
+      activeCompanyId: activeCompany?.id || null,
+    });
+    const products = (data || [])
+      .filter(row => row && row.name != null && String(row.name).trim() !== '')
+      .map(row => {
+        let categoryId = '';
+        if (row.category) {
+          const cat = categories.find(c => c.name?.toLowerCase() === row.category?.toString().toLowerCase());
+          if (cat) categoryId = cat.id;
+        }
+        return {
+          name: String(row.name).trim(),
+          // Caller-supplied barcode wins; otherwise the server auto-slugs
+          // a code from the name.
+          barcode: row.barcode != null ? String(row.barcode).trim() : '',
+          category_id: categoryId || undefined,
+          // Pass the raw category string too so the backend can match by
+          // case-insensitive name even if the frontend cache is stale.
+          category: row.category != null ? String(row.category).trim() : undefined,
+          tags: row.tags ? String(row.tags).split(',').map(t => t.trim()).filter(Boolean) : [],
+          type: 'product',
+          cost_price: parseFloat(row.cost_price) || 0,
+          list_price: parseFloat(row.list_price) || 0,
+          is_active: true,
+        };
+      });
 
-      // Resolve category by name (case-insensitive)
-      let categoryId = '';
-      if (row.category) {
-        const cat = categories.find(c => c.name?.toLowerCase() === row.category?.toString().toLowerCase());
-        if (cat) categoryId = cat.id;
+    // eslint-disable-next-line no-console
+    console.log('[product-import] built products payload', {
+      count: products.length,
+      firstThree: products.slice(0, 3),
+    });
+
+    if (products.length === 0) {
+      // eslint-disable-next-line no-console
+      console.warn('[product-import] aborting: products array is empty after mapping. ' +
+        'This usually means the column mapping in the modal didn\'t map "Nomi" → name. ' +
+        'Raw data sample:', (data || []).slice(0, 2));
+      toast({ title: 'Import: 0 rows', description: 'Faylda mahsulot topilmadi (mapping bo‘sh bo‘lishi mumkin)' });
+      return;
+    }
+
+    // eslint-disable-next-line no-console
+    console.log('[product-import] POST /products/bulk →', {
+      productCount: products.length,
+      organization_ids: activeCompany?.id ? [activeCompany.id] : [],
+    });
+
+    let result;
+    try {
+      result = await inventoryService.bulkCreateProducts({
+        products,
+        organization_ids: activeCompany?.id ? [activeCompany.id] : [],
+      });
+      // eslint-disable-next-line no-console
+      console.log('[product-import] bulk result', result);
+    } catch (err) {
+      // Network or 5xx — surface a real message instead of axios's
+      // generic "Request failed with status code 500".
+      console.error('[product-import] Bulk import failed:', err);
+      console.error('[product-import] response data:', err?.response?.data);
+      console.error('[product-import] response status:', err?.response?.status);
+      const detail = err?.response?.data?.message || err?.message || String(err);
+      throw new Error(detail);
+    }
+
+    const { created = 0, skipped = 0, failed = 0, total = products.length, outcomes = [] } = result || {};
+
+    // Refresh inventory state so the new products appear in the list
+    // without a page reload.
+    if (typeof refreshInventoryData === 'function') {
+      try { await refreshInventoryData(); } catch (_) { /* non-fatal */ }
+    }
+
+    addAuditLog('create', 'batch',
+      `${created}/${total} products imported (skipped: ${skipped}, failed: ${failed})`);
+
+    // Surface a summary. If anything was skipped or failed, log the
+    // per-row details so the admin can investigate.
+    const summaryTitle = `Import: ${created} created · ${skipped} skipped · ${failed} failed`;
+    if (skipped > 0 || failed > 0) {
+      const issues = outcomes
+        .filter(o => o.status === 'skipped' || o.status === 'failed')
+        .slice(0, 20)
+        .map(o => `Row ${o.row} (${o.name}): ${o.status}${o.reason ? ' — ' + o.reason : ''}`)
+        .join('\n');
+      console.warn('[Product import] outcome summary:\n' + issues);
+      toast({
+        title: summaryTitle,
+        description: issues || undefined,
+        variant: failed > 0 ? 'destructive' : 'default',
+      });
+    } else {
+      toast({ title: summaryTitle });
+    }
+  };
+
+  // Direct (no-modal) product import. Click flow:
+  //   1. User clicks the "Import" button → triggers the hidden file input.
+  //   2. Native file picker opens; user selects xlsx/csv.
+  //   3. We parse here, build the bulk payload, POST /products/bulk,
+  //      refresh the list, and toast a summary.
+  // This deliberately skips ImportModal because Radix Dialog kept eating
+  // the input's change event when the file picker closed.
+  // Generate a styled template xlsx with the expected column headers
+  // and trigger a browser download. Mirrors the styling of the
+  // ImportExport `downloadTemplate` so it visually matches the other
+  // import templates in the app.
+  const downloadProductImportTemplate = async () => {
+    // Build columns from the user's selected fields, preserving the
+    // canonical order from IMPORT_FIELD_DEFS. Always include the
+    // required `name` column even if somehow excluded from the
+    // selection (defensive — the UI prevents unchecking it).
+    const selectedKeys = new Set([
+      'name',
+      ...selectedImportFields,
+    ]);
+    const cols = IMPORT_FIELD_DEFS
+      .filter(f => selectedKeys.has(f.key))
+      .map(f => ({ label: f.label, required: !!f.required, width: f.width || 18, kind: f.kind }));
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'GenixERP';
+    wb.created = new Date();
+    const ws = wb.addWorksheet('Mahsulotlar');
+
+    // Header row — bold white text on blue, centered, with a thin
+    // bottom border.
+    const headerRow = ws.addRow(cols.map(c => c.required ? `${c.label} *` : c.label));
+    headerRow.height = 28;
+    headerRow.eachCell((cell) => {
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
+      cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+      cell.border = {
+        top:    { style: 'thin', color: { argb: 'FF2563EB' } },
+        bottom: { style: 'thin', color: { argb: 'FF2563EB' } },
+        left:   { style: 'thin', color: { argb: 'FF2563EB' } },
+        right:  { style: 'thin', color: { argb: 'FF2563EB' } },
+      };
+    });
+
+    // Sample row — one example value per selected column. Hard-coded
+    // examples for known fields; falls back to the column label for
+    // anything else so the user sees what shape we expect even on
+    // custom imports.
+    const SAMPLES = {
+      name: 'Vешалка прешебочный никель простая',
+      barcode: '4780000000123',
+      category: 'Xomashyo',
+      tags: 'mebel, fabrika',
+      cost_price: 3782,
+      list_price: 4500,
+      wholesale_price: 4200,
+      min_price: 4000,
+      delivery_price: 0,
+      brand: 'BrandName',
+      manufacturer: 'Factory',
+      model_number: 'MD-123',
+      upc: '012345678905',
+      ean: '4006381333931',
+      isbn: '978-3-16-148410-0',
+      mpn: 'MPN-001',
+      hs_code: '7308.30',
+      country_of_origin: 'CN',
+      sku: 'SKU-001',
+      search_key: 'CHAIR-NICK-3782',
+      weight: 1.5,
+      length: 40,
+      width: 30,
+      height: 90,
+      warranty_months: 12,
+      lead_time_days: 7,
+      customer_lead_time_days: 3,
+      shelf_life_days: 365,
+      storage_conditions: 'Quruq, salqin',
+      min_stock_level: 5,
+      reorder_point: 10,
+      reorder_quantity: 50,
+      supplier_sku: 'VSKU-001',
+      description: 'Mahsulot tavsifi',
+      type: 'product',
+      inventory_type: 'trade',
+    };
+    const selectedDefs = IMPORT_FIELD_DEFS.filter(f => selectedKeys.has(f.key));
+    const sample = ws.addRow(selectedDefs.map(f => SAMPLES[f.key] != null ? SAMPLES[f.key] : ''));
+    sample.height = 22;
+    sample.eachCell((cell) => {
+      cell.font = { italic: true, color: { argb: 'FF94A3B8' }, size: 10 };
+      cell.alignment = { vertical: 'middle' };
+      cell.border = { bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } } };
+    });
+
+    // Note row below the sample explaining required + auto-create.
+    // Merge across however many columns the user picked.
+    const noteRow = ws.addRow([
+      '* — Majburiy. Mavjud bo‘lmagan kategoriya avtomatik yaratiladi. Bir xil nomli mahsulot mavjud bo‘lsa, dublikat yaratilmaydi (joriy kompaniyaga ulanadi).',
+    ]);
+    const lastColLetter = (n) => {
+      // Convert 1-based column number to letter (A, B, ..., Z, AA, AB, ...).
+      let s = ''; let m = n;
+      while (m > 0) { const r = (m - 1) % 26; s = String.fromCharCode(65 + r) + s; m = Math.floor((m - 1) / 26); }
+      return s;
+    };
+    const noteEnd = lastColLetter(cols.length);
+    ws.mergeCells(`A${noteRow.number}:${noteEnd}${noteRow.number}`);
+    const note = ws.getCell(`A${noteRow.number}`);
+    note.font = { italic: true, color: { argb: 'FFEF4444' }, size: 9 };
+    note.alignment = { vertical: 'middle', wrapText: true };
+    noteRow.height = 36;
+
+    // Apply column widths.
+    cols.forEach((c, i) => { ws.getColumn(i + 1).width = c.width; });
+
+    // Freeze the header row so it stays visible when the user scrolls.
+    ws.views = [{ state: 'frozen', ySplit: 1 }];
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'Mahsulotlar_template.xlsx';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  const handleDirectProductImportFile = async (e) => {
+    const file = e.target.files?.[0];
+    // Reset the input so picking the same file twice still fires onChange.
+    if (e.target) e.target.value = '';
+    if (!file) return;
+
+    setIsProductImporting(true);
+    try {
+      const parsed = await parseSpreadsheetFile(file);
+      // eslint-disable-next-line no-console
+      console.log('[product-import] parsed', { headers: parsed.headers, rows: parsed.rows?.length });
+
+      // Build the header → backend-field map from IMPORT_FIELD_DEFS so
+      // any field the template can include is also parsable on the way
+      // back. Keep a few legacy aliases (English column names) so an
+      // older template still works after the field-set was expanded.
+      const headerKeyMap = {};
+      IMPORT_FIELD_DEFS.forEach(f => {
+        // The Uzbek label as written in the template.
+        headerKeyMap[f.label.toLowerCase()] = f.key;
+        // The bare backend key, in case the user typed it directly.
+        headerKeyMap[f.key.toLowerCase()] = f.key;
+      });
+      // Aliases so the round-trip Export → Edit → Import works even
+      // when the export column labels don't perfectly match the
+      // import-template labels. `id` is always recognized so the
+      // round trip works regardless of language.
+      Object.assign(headerKeyMap, {
+        // ID variants
+        id: 'id',
+        'product id': 'id',
+        'product_id': 'id',
+        // English aliases for common columns
+        name: 'name',
+        barcode: 'barcode',
+        category: 'category',
+        tags: 'tags',
+        'cost price': 'cost_price',
+        'list price': 'list_price',
+        'wholesale price': 'wholesale_price',
+        'min price': 'min_price',
+        'delivery price': 'delivery_price',
+        brand: 'brand',
+        manufacturer: 'manufacturer',
+        weight: 'weight',
+        description: 'description',
+        // Uzbek labels used by the Export modal that differ slightly
+        // from the import template's labels — covers both spellings
+        // so a re-import of an exported xlsx maps correctly.
+        'turi': 'type',                  // export: "Turi" — import: "Tur"
+        'minimal narx': 'min_price',     // export: "Minimal narx" — import: "Min narxi"
+        'ulgurji narx': 'wholesale_price', // export: "Ulgurji narx" — import: "Ulgurji narxi"
+        'kelib chiqish mamlakatiy': 'country_of_origin', // export label
+        'og\'irlik': 'weight',
+        'uzunlik': 'length',                               // export: "Uzunlik" — import: "Uzunlik (cm)"
+        'kenglik': 'width',
+        'balandlik': 'height',                             // export: "Balandlik" — import: "Balandlik (cm)"
+        'minimal zaxira': 'min_stock_level',               // export: "Minimal zaxira" — import: "Min qoldiq"
+        'yetkazib berish muddati (kun)': 'lead_time_days', // export: "Yetkazib berish muddati (kun)" — import: "Yetkazib berish kuni"
+        'saqlash sharoitlari': 'storage_conditions',       // export: plural — import: "Saqlash sharoiti" (singular)
+      });
+      // Strip the "*" required-marker, collapse whitespace, lowercase.
+      // The downloaded template writes headers like "Nomi *" with the
+      // asterisk inline, and users often paste them back unchanged —
+      // without this normalisation the lookup misses and every row
+      // gets filtered out, producing the "0 rows" toast.
+      const normaliseHeader = (h) =>
+        String(h || '')
+          .toLowerCase()
+          .replace(/\*/g, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+      const mapping = {};
+      (parsed.headers || []).forEach(h => {
+        const norm = normaliseHeader(h);
+        if (headerKeyMap[norm]) mapping[h] = headerKeyMap[norm];
+      });
+
+      const txt = (v) => (v != null && String(v).trim() !== '' ? String(v).trim() : undefined);
+      const num = (v) => {
+        if (v == null || v === '') return undefined;
+        const f = parseFloat(String(v).replace(/\s/g, '').replace(',', '.'));
+        return Number.isFinite(f) ? f : undefined;
+      };
+
+      const products = (parsed.rows || [])
+        .map(raw => {
+          const row = {};
+          Object.entries(mapping).forEach(([h, key]) => { row[key] = raw[h]; });
+          return row;
+        })
+        // A row is valid for processing if it has either:
+        //   - an `id` (UPDATE mode — the user is editing an existing product), or
+        //   - a `name` (CREATE mode — making a new product).
+        // Empty-but-existent rows in the spreadsheet (Excel often leaves
+        // trailing empty rows) get filtered out.
+        .filter(r => r && (txt(r.id) || txt(r.name)))
+        .map(r => {
+          const id = txt(r.id);
+          const isUpdate = !!id;
+
+          let categoryId = '';
+          if (r.category) {
+            const cat = categories.find(c => c.name?.toLowerCase() === String(r.category).toLowerCase());
+            if (cat) categoryId = cat.id;
+          }
+
+          // For UPDATE rows we ONLY include fields the user actually
+          // populated — anything blank stays as-is on the server. For
+          // CREATE rows we enforce sensible defaults (cost_price = 0
+          // etc.) so the row is shaped like a fresh CreateProduct call.
+          const payload = isUpdate
+            ? { id, type: txt(r.type), tags: r.tags ? String(r.tags).split(',').map(t => t.trim()).filter(Boolean) : undefined }
+            : {
+                name: String(r.name).trim(),
+                type: txt(r.type) || 'product',
+                is_active: true,
+                tags: r.tags ? String(r.tags).split(',').map(t => t.trim()).filter(Boolean) : [],
+              };
+
+          // Set name and category_id only when the user actually
+          // provided values for them. On UPDATE rows, omitted name
+          // means "keep existing"; on CREATE rows we already set name
+          // above.
+          const nameVal = txt(r.name);
+          if (nameVal && isUpdate) payload.name = nameVal;
+          if (categoryId) payload.category_id = categoryId;
+          if (txt(r.category)) payload.category = txt(r.category);
+
+          // Strings — only included when present, so UPDATE rows don't
+          // accidentally null-out columns the user didn't touch.
+          ['barcode', 'sku', 'search_key', 'brand', 'manufacturer',
+           'model_number', 'upc', 'ean', 'isbn', 'mpn', 'hs_code',
+           'country_of_origin', 'description', 'storage_conditions',
+           'inventory_type', 'supplier_sku',
+          ].forEach(k => { const v = txt(r[k]); if (v !== undefined) payload[k] = v; });
+
+          // Numbers.
+          ['cost_price', 'list_price', 'wholesale_price', 'min_price',
+           'delivery_price', 'weight', 'length', 'width', 'height',
+           'min_stock_level', 'reorder_point', 'reorder_quantity',
+           'warranty_months', 'lead_time_days', 'customer_lead_time_days',
+           'shelf_life_days',
+          ].forEach(k => { const v = num(r[k]); if (v !== undefined) payload[k] = v; });
+
+          // CREATE-only defaults: list view + margin calculations
+          // assume non-null prices.
+          if (!isUpdate) {
+            if (payload.cost_price == null) payload.cost_price = 0;
+            if (payload.list_price == null) payload.list_price = 0;
+          }
+
+          return payload;
+        });
+
+      if (products.length === 0) {
+        toast({ title: 'Import: 0 rows', description: 'Faylda mahsulot topilmadi (kolonkalar mos kelmadi)' });
+        return;
       }
 
-      const productData = {
-        name: row.name,
-        code: generatedCode,
-        barcode: row.barcode || '',
-        category_id: categoryId || undefined,
-        tags: row.tags ? row.tags.split(',').map(t => t.trim()) : [],
-        type: 'product',
-        cost_price: parseFloat(row.cost_price) || 0,
-        list_price: parseFloat(row.list_price) || 0,
-        is_stockable: true,
-        track_inventory: true,
-        is_purchasable: true,
-        is_sellable: true,
-        is_active: true,
+      const result = await inventoryService.bulkCreateProducts({
+        products,
         organization_ids: activeCompany?.id ? [activeCompany.id] : [],
-      };
-      await createProduct(productData);
+      });
+
+      const { total = products.length, outcomes = [] } = result || {};
+      // Count outcomes from the per-row results so we don't miss the
+      // 'updated' status that the backend's UPDATE branch emits — the
+      // top-level `result.created` only covers CREATE rows.
+      const counts = (outcomes || []).reduce((acc, o) => {
+        acc[o.status] = (acc[o.status] || 0) + 1;
+        return acc;
+      }, {});
+      const created = counts.created || result?.created || 0;
+      const updated = counts.updated || 0;
+      const skipped = counts.skipped || result?.skipped || 0;
+      const failed  = counts.failed  || result?.failed  || 0;
+
+      // Refresh both the inventory-level cache (for stock counts on
+      // sibling tabs) AND the products list itself. The local
+      // `fetchProducts()` call is essential — without it the page
+      // keeps showing the previously-loaded page data even though
+      // the server has the updated values, making it look like the
+      // import did nothing even when the toast says "N updated".
+      if (typeof refreshInventoryData === 'function') {
+        try { await refreshInventoryData(); } catch (_) { /* non-fatal */ }
+      }
+      try { await fetchProducts(); } catch (_) { /* non-fatal */ }
+      addAuditLog('create', 'batch',
+        `${created} created · ${updated} updated · ${skipped} skipped · ${failed} failed (of ${total})`);
+
+      const parts = [];
+      if (created > 0) parts.push(`${created} created`);
+      if (updated > 0) parts.push(`${updated} updated`);
+      if (skipped > 0) parts.push(`${skipped} skipped`);
+      if (failed > 0) parts.push(`${failed} failed`);
+      const summaryTitle = `Import: ${parts.join(' · ') || '0 rows'}`;
+
+      if (skipped > 0 || failed > 0) {
+        const issues = outcomes
+          .filter(o => o.status === 'skipped' || o.status === 'failed')
+          .slice(0, 20)
+          .map(o => `Row ${o.row} (${o.name}): ${o.status}${o.reason ? ' — ' + o.reason : ''}`)
+          .join('\n');
+        console.warn('[product-import] outcome summary:\n' + issues);
+        toast({
+          title: summaryTitle,
+          description: issues || undefined,
+          variant: failed > 0 ? 'destructive' : 'default',
+        });
+      } else {
+        toast({ title: summaryTitle });
+      }
+    } catch (err) {
+      console.error('[product-import] failed:', err);
+      const detail = err?.response?.data?.message || err?.message || String(err);
+      toast({
+        title: 'Import error',
+        description: detail,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsProductImporting(false);
     }
-    addAuditLog('create', 'batch', `${data.length} products imported`);
   };
+
+  // Mount the file input on <body>, NOT inside the React tree.
+  // Reason: the user's Products component is being unmounted/remounted
+  // by something upstream (verified via window.__importDebug — multiple
+  // mount/cleanup cycles after page load). Keeping the input alive
+  // across those remounts means clicking it from the toolbar always has
+  // a working <input>, regardless of what React does to its tree.
+  // We attach the change listener once at app-level on the singleton
+  // input. The "Import" button just .click()s it.
+  // Hand the LATEST handler closure to a window-level slot every render.
+  // The body-attached singleton input's listener (bound once per page)
+  // reads from this slot, so it always invokes the freshest closure
+  // even after the React component unmounts/remounts.
+  useEffect(() => {
+    window.__productImportHandler = handleDirectProductImportFile;
+  });
+
+  // One-time setup: ensure a body-attached file input exists and has a
+  // change listener bound exactly once per page lifecycle. We CAN'T
+  // re-bind the listener on each component mount because the parent
+  // tree cycles unmount→mount and the cleanup would remove the listener
+  // *during* the open OS file picker — when the user then picks a file
+  // and the change event fires, there's no handler attached. By binding
+  // once and routing through `window.__productImportHandler`, the
+  // listener survives any number of React remounts.
+  useEffect(() => {
+    let input = document.getElementById('genixerp-product-import-input-singleton');
+    if (!input) {
+      input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.xlsx,.xls,.csv';
+      input.id = 'genixerp-product-import-input-singleton';
+      document.body.appendChild(input);
+    }
+    // Always re-apply style (overwrites any stale pointer-events:none
+    // from older versions of this code).
+    input.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;';
+    productImportFileRef.current = input;
+
+    if (input.dataset.bound !== 'true') {
+      input.addEventListener('change', (e) => {
+        const handler = window.__productImportHandler;
+        if (handler) handler(e);
+      });
+      input.dataset.bound = 'true';
+    }
+    // Intentionally NO cleanup — we don't want to detach the listener
+    // when the React component unmounts. The input + listener live
+    // for the whole page lifecycle.
+  }, []);
 
   const categoryImportColumns = [
     { key: 'name', label: 'Nomi', required: true },
@@ -449,6 +1058,7 @@ export default function Products() {
   const [formData, setFormData] = useState({
     name: '',
     barcode: '',
+    search_key: '',
     type: 'product',
     category_id: '',
     description: '',
@@ -623,34 +1233,65 @@ export default function Products() {
     }
   };
 
-  // Summary calculations — use totalProducts from paginated API for total count
-  const summaryStats = {
-    totalProducts: totalProducts,
-    activeProducts: products.filter(p => p.is_active).length,
-    stockableProducts: products.filter(p => p.is_stockable).length,
-    lowStockProducts: products.filter(p => {
-      const stock = items.filter(i => i.product_id === p.id).reduce((s, i) => s + (i.current_stock || 0), 0);
-      return p.min_stock_level > 0 && stock <= p.min_stock_level;
-    }).length
-  };
+  // NOTE: Summary calculations were here but have been moved further down,
+  // after accessibleWarehouseIds is declared, so the "Omborda" card can
+  // count products that actually have stock in an accessible warehouse
+  // (rather than just counting products with the is_stockable attribute,
+  // which was a misleading proxy that ignored real stock levels).
 
-  // Server-side fetch for products with pagination
+  // Fetch the entire filtered product set (across all pages) and open
+  // the Export modal once the data is in hand. Uses the same filters
+  // as the list view so a user who's filtered to "Plita" gets the
+  // full Plita set in their export, not just the visible page.
+  const handleOpenExport = useCallback(async () => {
+    setIsPreparingExport(true);
+    try {
+      const params = { page: 1, limit: 10000 };
+      if (searchQuery) params.search = searchQuery;
+      if (categoryFilter !== "all") params.category_id = categoryFilter;
+      if (inventoryTypeFilter !== "all") params.inventory_type = inventoryTypeFilter;
+      if (warehouseFilter !== "all") params.warehouse_id = warehouseFilter;
+      if (statusFilter === "inactive") params.include_inactive = "true";
+      const result = await inventoryService.listProductsPaginated(params);
+      let items = result?.data || [];
+      // Same client-side filters as fetchProducts so the export
+      // matches what the user sees on screen. Warehouse filter is now
+      // server-side; only the inactive filter still needs client filtering
+      // because the backend returns active+inactive when include_inactive=true.
+      if (statusFilter === "inactive") {
+        items = items.filter(product => !product.is_active);
+      }
+      setAllProductsForExport(items);
+      setShowExportModal(true);
+    } catch (err) {
+      console.error('Failed to load products for export:', err);
+      toast({
+        variant: 'destructive',
+        title: t('error') || 'Error',
+        description: t('export_load_failed') || "Eksport uchun mahsulotlarni yuklab bo'lmadi",
+      });
+    } finally {
+      setIsPreparingExport(false);
+    }
+  }, [searchQuery, categoryFilter, warehouseFilter, statusFilter, inventoryTypeFilter, toast, t]);
+
+  // Server-side fetch for products with pagination.
+  // Warehouse filter is now sent to the backend (ListProducts accepts a
+  // `warehouse_id` param that filters via EXISTS on the inventory table).
+  // Previously the warehouse filter was applied client-side over the current
+  // 20-row page, which silently dropped any matching product that lived on
+  // any other page — making the filter look like it only worked for one item.
   const fetchProducts = useCallback(async () => {
     setProductsLoading(true);
     try {
       const params = { page: currentPage, limit: pageSize };
       if (searchQuery) params.search = searchQuery;
       if (categoryFilter !== "all") params.category_id = categoryFilter;
+      if (inventoryTypeFilter !== "all") params.inventory_type = inventoryTypeFilter;
+      if (warehouseFilter !== "all") params.warehouse_id = warehouseFilter;
       if (statusFilter === "inactive") params.include_inactive = "true";
       const result = await inventoryService.listProductsPaginated(params);
       let items = result?.data || [];
-      // Warehouse filter is client-side (not supported by backend)
-      if (warehouseFilter !== "all") {
-        const productIdsInWarehouse = new Set(
-          inventory.filter(i => i.warehouse_id === warehouseFilter).map(i => i.product_id)
-        );
-        items = items.filter(product => productIdsInWarehouse.has(product.id));
-      }
       // For inactive filter, backend returns all — filter client-side
       if (statusFilter === "inactive") {
         items = items.filter(product => !product.is_active);
@@ -664,7 +1305,7 @@ export default function Products() {
     } finally {
       setProductsLoading(false);
     }
-  }, [currentPage, searchQuery, categoryFilter, warehouseFilter, statusFilter, inventory]);
+  }, [currentPage, searchQuery, categoryFilter, warehouseFilter, statusFilter, inventoryTypeFilter]);
 
   useEffect(() => {
     fetchProducts();
@@ -673,7 +1314,7 @@ export default function Products() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, categoryFilter, warehouseFilter, statusFilter]);
+  }, [searchQuery, categoryFilter, warehouseFilter, statusFilter, inventoryTypeFilter]);
 
   const totalPages = Math.ceil(totalProducts / pageSize);
 
@@ -684,6 +1325,39 @@ export default function Products() {
       (warehouses || []).filter(w => w.organization_id === activeCompany.id).map(w => w.id)
     );
   }, [warehouses, activeCompany]);
+
+  // Summary stat cards above the product table. Two notes for future-self:
+  //   • totalProducts comes from the paginated API meta so it reflects the
+  //     full filtered set, not just the current page.
+  //   • activeProducts / inStockProducts / lowStockProducts are computed
+  //     from the local `products` and `inventory` arrays. The inventory
+  //     context fetches products with limit=5000 and inventory with
+  //     limit=10000, so for tenants beyond those caps these stats can
+  //     undercount — switch to a dedicated /products/stats endpoint if
+  //     that ever becomes a real problem.
+  //   • "inStockProducts" replaces the previous `stockableProducts`
+  //     metric (count of products with is_stockable=true). is_stockable
+  //     was a product attribute, not a measurement of real stock, which
+  //     made the "Omborda" card disagree with the warehouse totals.
+  const summaryStats = useMemo(() => {
+    const inStockProductIds = new Set();
+    for (const inv of inventory || []) {
+      const qty = inv.quantity_on_hand ?? inv.quantity ?? 0;
+      if (qty <= 0) continue;
+      if (inv.warehouse_type === 'scrap') continue;
+      if (!accessibleWarehouseIds.has(inv.warehouse_id)) continue;
+      if (inv.product_id) inStockProductIds.add(inv.product_id);
+    }
+    return {
+      totalProducts: totalProducts,
+      activeProducts: products.filter(p => p.is_active).length,
+      inStockProducts: inStockProductIds.size,
+      lowStockProducts: products.filter(p => {
+        const stock = items.filter(i => i.product_id === p.id).reduce((s, i) => s + (i.current_stock || 0), 0);
+        return p.min_stock_level > 0 && stock <= p.min_stock_level;
+      }).length,
+    };
+  }, [totalProducts, products, inventory, items, accessibleWarehouseIds]);
 
   const getProductStock = (productId) => {
     let stockItems = inventory.filter(i => i.product_id === productId && i.warehouse_type !== 'scrap' && accessibleWarehouseIds.has(i.warehouse_id));
@@ -702,6 +1376,7 @@ export default function Products() {
     setFormData({
       name: '',
       barcode: '',
+      search_key: '',
       type: 'product',
       category_id: '',
       description: '',
@@ -874,6 +1549,7 @@ export default function Products() {
     setFormData({
       name: product.name || '',
       barcode: product.barcode || '',
+      search_key: product.search_key || '',
       type: product.type || 'product',
       category_id: product.category_id || '',
       description: product.description || '',
@@ -899,6 +1575,8 @@ export default function Products() {
       can_be_rented: product.can_be_rented || false,
       can_be_subcontracted: product.can_be_subcontracted || false,
       is_overhead_expense: product.is_overhead_expense || false,
+      is_manufacturable: product.is_manufacturable || false,
+      auto_manufacture: product.auto_manufacture || false,
       tags: product.tags || [],
       // Advanced fields
       brand: product.brand || '',
@@ -1045,12 +1723,16 @@ export default function Products() {
       };
 
       await updateProduct(selectedProduct.id, productData);
+      toast({ title: t('success'), description: t('product_updated') || 'Mahsulot yangilandi' });
       resetForm();
       setSelectedProduct(null);
       setShowEditModal(false);
       fetchProducts();
     } catch (error) {
       console.error('Error updating product:', error);
+      const errData = error?.response?.data?.error;
+      const errMsg = typeof errData === 'string' ? errData : errData?.message || error?.response?.data?.message || error.message || t('update_failed');
+      toast({ title: t('error'), description: errMsg, variant: 'destructive' });
     } finally {
       setIsSaving(false);
     }
@@ -1135,12 +1817,34 @@ export default function Products() {
     setShowDeleteCategoryModal(true);
   };
 
-  const handleDeleteCategory = () => {
+  const handleDeleteCategory = async () => {
     if (!selectedCategory) return;
 
-    deleteCategory(selectedCategory.id);
-    setSelectedCategory(null);
-    setShowDeleteCategoryModal(false);
+    try {
+      await deleteCategory(selectedCategory.id);
+      setSelectedCategory(null);
+      setShowDeleteCategoryModal(false);
+    } catch (err) {
+      // Map backend BadRequest messages to translated toasts. The backend
+      // refuses to delete a category that still has products or has child
+      // categories — without this surfacing, the user just sees a silent
+      // failure (toast title is generic, body lives in console).
+      const backendMsg = err?.response?.data?.error?.message || '';
+      let description = t('delete_category_failed') || 'Failed to delete category';
+      if (backendMsg.includes('associated products')) {
+        description = t('category_has_products')
+          || 'This category still has products. Move them to another category before deleting.';
+      } else if (backendMsg.includes('child categories')) {
+        description = t('category_has_subcategories')
+          || 'This category has sub-categories. Delete the sub-categories first.';
+      }
+      toast({
+        title: t('delete_category_failed') || 'Failed to delete category',
+        description,
+        variant: 'destructive',
+      });
+      setShowDeleteCategoryModal(false);
+    }
   };
 
   const getTypeColor = (type) => {
@@ -1278,9 +1982,9 @@ export default function Products() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">{t('stockable')}</p>
+                <p className="text-sm text-slate-500">{t('products_in_stock') || 'In Stock'}</p>
                 <p className="text-2xl font-bold text-blue-600">
-                  {summaryStats.stockableProducts}
+                  {summaryStats.inStockProducts}
                 </p>
               </div>
               <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
@@ -1370,6 +2074,17 @@ export default function Products() {
                   ))}
                 </SelectContent>
               </Select>
+              <Select value={inventoryTypeFilter} onValueChange={setInventoryTypeFilter}>
+                <SelectTrigger className="w-[180px] bg-slate-50">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{language === 'uz' ? 'Barcha turlar' : language === 'ru' ? 'Все типы' : 'All Types'}</SelectItem>
+                  <SelectItem value="trade">{language === 'uz' ? 'Sotish uchun (1340)' : language === 'ru' ? 'Для продажи (1340)' : 'Trade (1340)'}</SelectItem>
+                  <SelectItem value="raw">{language === 'uz' ? 'Xom ashyo (1310)' : language === 'ru' ? 'Сырьё (1310)' : 'Raw Material (1310)'}</SelectItem>
+                  <SelectItem value="finished">{language === 'uz' ? 'Tayyor mahsulot (1330)' : language === 'ru' ? 'Готовая продукция (1330)' : 'Finished Goods (1330)'}</SelectItem>
+                </SelectContent>
+              </Select>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="w-[130px] bg-slate-50">
                   <SelectValue placeholder={t('status')} />
@@ -1380,9 +2095,28 @@ export default function Products() {
                   <SelectItem value="inactive">{t('inactive')}</SelectItem>
                 </SelectContent>
               </Select>
+              {/* Import button — opens a small confirm modal that lets
+                  the user download the template first. Picking a file
+                  inside the modal triggers the body-attached singleton
+                  <input type="file"> (see useEffect above). */}
+              <button
+                type="button"
+                onClick={() => setShowImportConfirmModal(true)}
+                disabled={isProductImporting}
+                className="inline-flex items-center gap-2 h-9 px-3 text-sm font-medium border border-input bg-background rounded-md cursor-pointer hover:bg-accent hover:text-accent-foreground transition-colors disabled:opacity-50"
+              >
+                <Download className="w-4 h-4" />
+                {t('import') || 'Import'}
+                {isProductImporting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              </button>
+              {/* Keep the export button using the original component.
+                  Wrapped in handleOpenExport so we fetch the full
+                  filtered product set (across pages) BEFORE opening
+                  the modal — passing the visible page only would
+                  silently truncate the export to ~20 rows. */}
               <ImportExportButtons
-                onImport={() => setShowImportModal(true)}
-                onExport={() => setShowExportModal(true)}
+                onExport={handleOpenExport}
+                isExporting={isPreparingExport}
               />
               {canCreate(MODULES.INVENTORY) && (
                 <Button
@@ -1427,10 +2161,10 @@ export default function Products() {
                 <TableHeader>
                   <TableRow className="bg-slate-50 hover:bg-slate-50">
                     <TableHead className="font-semibold text-slate-700 min-w-[200px]">{t('product')}</TableHead>
-                    <TableHead className="hidden sm:table-cell font-semibold text-slate-700 min-w-[100px] whitespace-nowrap">{t('tags')}</TableHead>
                     <TableHead className="hidden lg:table-cell font-semibold text-slate-700 min-w-[100px] whitespace-nowrap">{t('category')}</TableHead>
                     <TableHead className="hidden md:table-cell font-semibold text-slate-700 text-right min-w-[80px] whitespace-nowrap">{t('cost')}</TableHead>
                     <TableHead className="font-semibold text-slate-700 text-right min-w-[80px] whitespace-nowrap">{t('price')}</TableHead>
+                    <TableHead className="hidden md:table-cell font-semibold text-slate-700 text-right min-w-[80px] whitespace-nowrap">{t('profit_margin')}</TableHead>
                     <TableHead className="font-semibold text-slate-700 text-right min-w-[80px] whitespace-nowrap">{t('stock')}</TableHead>
                     <TableHead className="hidden sm:table-cell font-semibold text-slate-700 min-w-[80px] whitespace-nowrap">{t('status')}</TableHead>
                     <TableHead className="font-semibold text-slate-700 text-center min-w-[100px] whitespace-nowrap">{t('actions')}</TableHead>
@@ -1455,31 +2189,20 @@ export default function Products() {
                               )}
                             </div>
                             <div>
-                              <p className="font-medium text-slate-900">{product.name}</p>
+                              <div className="flex items-center gap-1.5">
+                                <p className="font-medium text-slate-900">{product.name}</p>
+                                {product.track_inventory === false && (
+                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 bg-amber-50 text-amber-700 border-amber-200">
+                                    {language === 'uz' ? "Kuzatilmaydi" : language === 'ru' ? "Без учёта" : "Untracked"}
+                                  </Badge>
+                                )}
+                              </div>
                               {product.barcode && (
                                 <p className="text-xs text-slate-500 flex items-center gap-1">
                                   <Barcode className="w-3 h-3" /> {product.barcode}
                                 </p>
                               )}
                             </div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="hidden sm:table-cell">
-                          <div className="flex flex-wrap gap-1">
-                            {product.tags && product.tags.length > 0 ? (
-                              product.tags.slice(0, 2).map((tag, idx) => (
-                                <Badge key={idx} variant="secondary" className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5">
-                                  {tag}
-                                </Badge>
-                              ))
-                            ) : (
-                              <span className="text-slate-400">-</span>
-                            )}
-                            {product.tags && product.tags.length > 2 && (
-                              <Badge variant="secondary" className="bg-slate-100 text-slate-600 text-xs px-2 py-0.5">
-                                +{product.tags.length - 2}
-                              </Badge>
-                            )}
                           </div>
                         </TableCell>
                         <TableCell className="hidden lg:table-cell text-slate-600">
@@ -1491,10 +2214,34 @@ export default function Products() {
                         <TableCell className="text-right font-semibold text-slate-900 tabular-nums">
                           {formatCurrency(product.list_price || 0)}
                         </TableCell>
+                        <TableCell className="hidden md:table-cell text-right tabular-nums">
+                          {(() => {
+                            const cost = Number(product.cost_price) || 0;
+                            const price = Number(product.list_price) || 0;
+                            if (cost <= 0 || price <= 0) {
+                              return <span className="text-slate-400">—</span>;
+                            }
+                            const pct = ((price - cost) / cost) * 100;
+                            const cls =
+                              pct > 0
+                                ? 'text-green-700 font-semibold'
+                                : pct < 0
+                                ? 'text-red-600 font-semibold'
+                                : 'text-slate-600';
+                            return (
+                              <span className={cls}>
+                                {pct.toFixed(1)}%
+                              </span>
+                            );
+                          })()}
+                        </TableCell>
                         <TableCell className="text-right">
                           {product.is_stockable ? (
                             <div className="flex flex-col items-end">
-                              <span className="font-medium text-slate-900 tabular-nums">{currentStock}</span>
+                              <span className="font-medium text-slate-900 tabular-nums">
+                                {currentStock}
+                                {product.unit_name ? ` (${product.unit_name})` : product.unit_code ? ` (${product.unit_code})` : ''}
+                              </span>
                               {stockStatus && (
                                 <Badge className={`${stockStatus.color} text-xs mt-1`}>
                                   {stockStatus.label}
@@ -1672,7 +2419,13 @@ export default function Products() {
                     </TableHeader>
                     <TableBody>
                       {categories.map((category) => {
-                        const productCount = products.filter(p => p.category_id === category.id).length;
+                        // Use the backend-supplied tenant-wide count rather
+                        // than filtering the org-scoped `products` array.
+                        // The local count missed products in sibling orgs,
+                        // which made the delete-category guard refuse rows
+                        // the UI claimed had "0 mahsulotlar".
+                        const productCount = category.product_count
+                          ?? products.filter(p => p.category_id === category.id).length;
                         return (
                           <TableRow key={category.id} className="hover:bg-slate-50/50">
                             <TableCell className="font-medium text-slate-900">
@@ -1939,6 +2692,42 @@ export default function Products() {
                 </div>
                 <div>
                   <LabelWithHelp
+                    label={t('search_key') || 'Qidiruv kaliti'}
+                    helpText={t('help_search_key') || "Kompaniyalararo bir xil materialni bog'laydi. Qurilish kompaniyasi smetadagi nomi bilan kiritsa, ishlab chiqaruvchi o'z nomi bilan sotadi — lekin kalit bir xil bo'lgani uchun tizim bog'laydi."}
+                  />
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Masalan: PK59106SHVC8"
+                      value={formData.search_key}
+                      onChange={(e) => setFormData({...formData, search_key: e.target.value.toUpperCase()})}
+                      className="flex-1 font-mono text-xs"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      title={t('generate_search_key') || "Nomdan avtomatik yaratish"}
+                      onClick={() => {
+                        const name = formData.name || '';
+                        let key = '';
+                        for (const ch of name) {
+                          if (/[\p{L}\p{N}]/u.test(ch)) key += ch.toUpperCase();
+                          if (key.length >= 32) break;
+                        }
+                        setFormData({...formData, search_key: key});
+                      }}
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  {formData.search_key && (
+                    <p className="text-[10px] text-slate-400 mt-1 font-mono">{formData.search_key}</p>
+                  )}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4 mt-4">
+                <div>
+                  <LabelWithHelp
                     label={t('category')}
                     helpText={t('help_category') || "Mahsulotlar kategoriyasi. Hisobotlar va filtrlar uchun ishlatiladi"}
                   />
@@ -2157,7 +2946,7 @@ export default function Products() {
                       <ChevronDown className="w-4 h-4 ml-2 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-[--radix-popover-trigger-width] p-2" align="start">
+                  <PopoverContent noPortal className="w-[--radix-popover-trigger-width] p-2" align="start">
                     <div
                       className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-100 cursor-pointer"
                       onClick={() => {
@@ -2172,7 +2961,7 @@ export default function Products() {
                       <span className="text-sm font-medium">{t('select_all') || 'Select all'}</span>
                     </div>
                     <div className="border-t my-1" />
-                    <div className="max-h-60 overflow-y-auto">
+                    <div className="max-h-[min(60vh,20rem)] overflow-y-auto overscroll-contain">
                       {companies.map(company => {
                         const isActive = activeCompany?.id === company.id;
                         return (
@@ -2282,6 +3071,24 @@ export default function Products() {
             {formData.type === 'product' && (
               <div>
                 <h4 className="font-semibold text-slate-900 mb-3">{t('inventory_settings')}</h4>
+                <div className="flex items-center justify-between mb-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                  <div className="flex-1">
+                    <span className="text-sm font-medium text-slate-700">
+                      {language === 'uz' ? "Miqdorni kuzatish" : language === 'ru' ? "Отслеживать количество" : "Track Inventory"}
+                    </span>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {language === 'uz'
+                        ? "O'chirilganda miqdor omborda kamaytirilmaydi (suv, gaz kabi cheksiz ta'minotlar)"
+                        : language === 'ru'
+                        ? "При отключении количество не списывается со склада (вода, газ — бесконечное снабжение)"
+                        : "When off, quantity is never deducted from inventory (water, gas — infinite supply)"}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={formData.track_inventory !== false}
+                    onCheckedChange={(checked) => setFormData({...formData, track_inventory: checked})}
+                  />
+                </div>
                 <div className="grid grid-cols-3 gap-4">
                   <div>
                     <LabelWithHelp
@@ -2417,33 +3224,6 @@ export default function Products() {
               </div>
             )}
 
-            {/* Options */}
-            <div>
-              <h4 className="font-semibold text-slate-900 mb-3">{t('options')}</h4>
-              <div className="flex flex-wrap gap-6">
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={formData.is_purchasable && formData.is_sellable}
-                    onCheckedChange={(checked) => setFormData({...formData, is_purchasable: checked, is_sellable: checked})}
-                  />
-                  <span className="text-sm text-slate-700 flex items-center">
-                    {t('can_buy_sell') || "Sotish/Sotib olish"}
-                    <FieldHelp text={t('help_can_buy_sell') || "Bu mahsulotni sotib olish va sotish mumkin. O'chirilsa, mahsulot faqat ko'rish uchun bo'ladi"} />
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={formData.is_active}
-                    onCheckedChange={(checked) => setFormData({...formData, is_active: checked})}
-                  />
-                  <span className="text-sm text-slate-700 flex items-center">
-                    {t('active')}
-                    <FieldHelp text={t('help_active') || "Faol mahsulot. O'chirilsa, mahsulot sotuvda ko'rinmaydi"} />
-                  </span>
-                </div>
-              </div>
-            </div>
-
             {/* Module Visibility */}
             <div className="pt-4 border-t border-slate-200">
               <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
@@ -2458,7 +3238,7 @@ export default function Products() {
                     type="checkbox"
                     id="can_be_sold"
                     checked={formData.can_be_sold}
-                    onChange={(e) => setFormData({...formData, can_be_sold: e.target.checked})}
+                    onChange={(e) => setFormData({...formData, can_be_sold: e.target.checked, is_sellable: e.target.checked})}
                     className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
                   />
                   <label htmlFor="can_be_sold" className="text-sm text-slate-700 flex items-center cursor-pointer">
@@ -2472,7 +3252,7 @@ export default function Products() {
                     type="checkbox"
                     id="can_be_purchased"
                     checked={formData.can_be_purchased}
-                    onChange={(e) => setFormData({...formData, can_be_purchased: e.target.checked})}
+                    onChange={(e) => setFormData({...formData, can_be_purchased: e.target.checked, is_purchasable: e.target.checked})}
                     className="w-4 h-4 text-green-600 rounded border-slate-300 focus:ring-green-500"
                   />
                   <label htmlFor="can_be_purchased" className="text-sm text-slate-700 flex items-center cursor-pointer">
@@ -3606,7 +4386,201 @@ export default function Products() {
         </DialogContent>
       </Dialog>
 
-      {/* Import Modal */}
+      {/* Product Import Confirm Modal — opens before the file picker.
+          Lets the user download the template + see the expected columns
+          before they pick a file. The file picker itself is the body-
+          attached singleton <input type="file"> mounted by the
+          useEffect above; clicking "Choose file" .click()s that input
+          (which is OUTSIDE the React tree, so this dialog can mount /
+          unmount freely without destroying it). */}
+      <Dialog
+        open={showImportConfirmModal}
+        onOpenChange={(open) => {
+          setShowImportConfirmModal(open);
+          // Reset to the main step whenever the modal closes so the
+          // next time the user opens it, they see the simple view
+          // rather than landing back on the field chooser.
+          if (!open) setImportStep('main');
+        }}
+      >
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col p-0 gap-0">
+          <DialogHeader className="px-6 pt-6 pb-3 border-b flex-shrink-0">
+            <DialogTitle className="flex items-center gap-2">
+              {importStep === 'fields' && (
+                <button
+                  type="button"
+                  onClick={() => setImportStep('main')}
+                  className="p-1 -ml-1 hover:bg-slate-100 rounded"
+                  title={t('back') || 'Back'}
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+              )}
+              <Upload className="w-5 h-5" />
+              {importStep === 'fields'
+                ? (t('products_import_select_fields') || 'Ustunlarni tanlang')
+                : t('products_import_title')}
+            </DialogTitle>
+            <DialogDescription className="text-sm text-slate-500">
+              {importStep === 'fields'
+                ? (t('products_import_select_fields_hint') || 'Shablonga qaysi ustunlar kirishini belgilang')
+                : t('products_import_description')}
+            </DialogDescription>
+          </DialogHeader>
+
+          {importStep === 'main' ? (
+            // ── Step 1: simple chooser ─────────────────────────────────
+            <>
+              <div className="overflow-y-auto px-6 py-4 flex-1 min-h-0 space-y-4">
+                <div className="text-sm text-slate-600 leading-relaxed">
+                  {t('products_import_help_note')}
+                </div>
+              </div>
+              <DialogFooter className="flex flex-col sm:flex-row gap-2 sm:gap-2 px-6 py-3 border-t bg-slate-50 flex-shrink-0">
+                <Button
+                  variant="outline"
+                  type="button"
+                  onClick={() => setImportStep('fields')}
+                  className="gap-2"
+                >
+                  <Download className="w-4 h-4" />
+                  {t('products_import_download_template')}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    // Trigger the file picker FIRST, synchronously
+                    // inside the user click handler — Chrome's
+                    // transient user activation must still be active
+                    // or it'll silently refuse to open the OS file
+                    // picker. THEN close the modal.
+                    productImportFileRef.current?.click();
+                    setShowImportConfirmModal(false);
+                    setImportStep('main');
+                  }}
+                  disabled={isProductImporting}
+                  className="gap-2 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90"
+                >
+                  <Upload className="w-4 h-4" />
+                  {t('products_import_choose_and_upload')}
+                </Button>
+              </DialogFooter>
+            </>
+          ) : (
+            // ── Step 2: column picker (only on Download flow) ──────────
+            <>
+              <div className="overflow-y-auto px-6 py-4 flex-1 min-h-0 space-y-4">
+                <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="font-medium text-slate-800">
+                      {t('products_import_select_fields') || 'Ustunlarni tanlang'}
+                      <span className="ml-2 text-xs font-normal text-slate-500">
+                        ({selectedImportFields.length}/{IMPORT_FIELD_DEFS.length})
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="text-xs text-blue-600 hover:text-blue-700"
+                        onClick={() => setSelectedImportFields(IMPORT_FIELD_DEFS.map(f => f.key))}
+                      >
+                        {t('select_all') || 'Hammasini tanlash'}
+                      </button>
+                      <span className="text-slate-300">|</span>
+                      <button
+                        type="button"
+                        className="text-xs text-blue-600 hover:text-blue-700"
+                        onClick={() => setSelectedImportFields(IMPORT_FIELD_DEFS.filter(f => f.default).map(f => f.key))}
+                      >
+                        {t('reset_to_default') || 'Sukut bo\'yicha'}
+                      </button>
+                    </div>
+                  </div>
+                  {(() => {
+                    const GROUP_LABELS = {
+                      core: t('field_group_core') || 'Asosiy',
+                      pricing: t('field_group_pricing') || 'Narxlash',
+                      identifiers: t('field_group_identifiers') || 'Identifikatorlar',
+                      inventory: t('field_group_inventory') || 'Ombor',
+                      supplier: t('field_group_supplier') || 'Yetkazib beruvchi',
+                      dimensions: t('field_group_dimensions') || 'O\'lchamlar',
+                      other: t('field_group_other') || 'Boshqa',
+                    };
+                    const grouped = IMPORT_FIELD_DEFS.reduce((acc, f) => {
+                      (acc[f.group] = acc[f.group] || []).push(f); return acc;
+                    }, {});
+                    const groupOrder = ['core', 'pricing', 'identifiers', 'inventory', 'supplier', 'dimensions', 'other'];
+                    const selectedSet = new Set(selectedImportFields);
+                    const toggle = (key) => {
+                      if (selectedSet.has(key)) {
+                        setSelectedImportFields(selectedImportFields.filter(k => k !== key));
+                      } else {
+                        setSelectedImportFields([...selectedImportFields, key]);
+                      }
+                    };
+                    return groupOrder.filter(g => grouped[g]).map(g => (
+                      <div key={g} className="mb-3 last:mb-0">
+                        <div className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold mb-1.5">
+                          {GROUP_LABELS[g]}
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                          {grouped[g].map(f => {
+                            const isChecked = selectedSet.has(f.key);
+                            const isLocked = !!f.required;
+                            return (
+                              <label
+                                key={f.key}
+                                className={`flex items-center gap-2 text-xs cursor-pointer hover:bg-white px-2 py-1 rounded ${isLocked ? 'opacity-90 cursor-not-allowed' : ''}`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked || isLocked}
+                                  disabled={isLocked}
+                                  onChange={() => !isLocked && toggle(f.key)}
+                                  className="rounded"
+                                />
+                                <span className={isChecked ? 'text-slate-800 font-medium' : 'text-slate-600'}>
+                                  {f.label}
+                                  {f.required && <span className="text-red-500 ml-0.5">*</span>}
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </div>
+              <DialogFooter className="flex flex-col sm:flex-row gap-2 sm:gap-2 px-6 py-3 border-t bg-slate-50 flex-shrink-0">
+                <Button
+                  variant="outline"
+                  type="button"
+                  onClick={() => setImportStep('main')}
+                  className="gap-2"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  {t('back') || 'Back'}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={async () => {
+                    await downloadProductImportTemplate();
+                    setShowImportConfirmModal(false);
+                    setImportStep('main');
+                  }}
+                  className="gap-2 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90"
+                >
+                  <Download className="w-4 h-4" />
+                  {t('products_import_download_template')}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Import Modal (legacy — kept for code references; not opened) */}
       <ImportModal
         open={showImportModal}
         onClose={() => setShowImportModal(false)}
@@ -3624,11 +4598,14 @@ export default function Products() {
         entityName="Kategoriyalar"
       />
 
-      {/* Export Modal */}
+      {/* Export Modal — receives the FULL filtered product set
+          (not just the visible page) via allProductsForExport,
+          which is populated by handleOpenExport before the modal
+          opens. */}
       <ExportModal
         open={showExportModal}
-        onClose={() => setShowExportModal(false)}
-        data={filteredProducts}
+        onClose={() => { setShowExportModal(false); setAllProductsForExport([]); }}
+        data={allProductsForExport}
         columns={exportColumns}
         entityName="Mahsulotlar"
         title="Mahsulotlar ro'yxati"
@@ -3684,7 +4661,9 @@ export default function Products() {
                       <SelectContent>
                         <SelectItem value="none">— {t('none')} —</SelectItem>
                         {accounts.map(acc => (
-                          <SelectItem key={acc.id} value={acc.id}>{acc.code} - {acc.name}</SelectItem>
+                          <SelectItem key={acc.id} value={acc.id}>
+                            {acc.code} - {language === 'ru' && acc.name_ru ? acc.name_ru : language === 'en' && acc.name_en ? acc.name_en : acc.name_uz || acc.name}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -3856,7 +4835,9 @@ export default function Products() {
                       <SelectContent>
                         <SelectItem value="none">— {t('none')} —</SelectItem>
                         {accounts.map(acc => (
-                          <SelectItem key={acc.id} value={acc.id}>{acc.code} - {acc.name}</SelectItem>
+                          <SelectItem key={acc.id} value={acc.id}>
+                            {acc.code} - {language === 'ru' && acc.name_ru ? acc.name_ru : language === 'en' && acc.name_en ? acc.name_en : acc.name_uz || acc.name}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { useCompany } from './CompanyContext';
 import { useInstalledApps } from './InstalledAppsContext';
+import { useEmployeePermissions } from './EmployeePermissionsContext';
 import { constructionService } from '@/api/services/construction';
 
 const ConstructionContext = createContext();
@@ -16,7 +17,9 @@ export const useConstructionContext = () => {
 export const ConstructionProvider = ({ children }) => {
   const { activeCompany } = useCompany();
   const { isAppInstalled } = useInstalledApps();
+  const { canAccessModule, isAdmin } = useEmployeePermissions();
   const constructionInstalled = isAppInstalled('construction');
+  const hasConstructionAccess = isAdmin || canAccessModule('construction');
 
   // Projects state
   const [projects, setProjects] = useState([]);
@@ -62,12 +65,13 @@ export const ConstructionProvider = ({ children }) => {
     VERIFIED: 'verified'
   };
 
-  // Load projects when company changes (only if construction app is installed)
+  // Load projects when company changes (only if construction app is installed
+  // AND the user has construction access — otherwise the call just 403s).
   useEffect(() => {
-    if (activeCompany?.id && constructionInstalled) {
+    if (activeCompany?.id && constructionInstalled && hasConstructionAccess) {
       loadProjects();
     }
-  }, [activeCompany?.id, constructionInstalled]);
+  }, [activeCompany?.id, constructionInstalled, hasConstructionAccess]);
 
   // Load projects
   const loadProjects = useCallback(async (params = {}) => {

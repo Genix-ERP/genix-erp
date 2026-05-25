@@ -109,24 +109,29 @@ apiClient.interceptors.request.use(
       config.headers['X-Tenant-ID'] = tenantId;
     }
     // Add organization header if available - use current user's specific key
-    try {
-      const userData = localStorage.getItem('genixerp_user');
-      if (userData) {
-        const user = JSON.parse(userData);
-        const userId = user.id || user.email;
-        if (userId) {
-          const orgId = localStorage.getItem(`genix_active_company_user_${userId}`);
-          if (orgId) {
-            config.headers['X-Organization-ID'] = orgId;
+    // IMPORTANT: do NOT overwrite an explicitly-set per-request X-Organization-ID
+    // (e.g. DirectorDashboard fetches data per-company via custom headers).
+    const hasExplicitOrgHeader = !!(config.headers['X-Organization-ID'] || config.headers['x-organization-id']);
+    if (!hasExplicitOrgHeader) {
+      try {
+        const userData = localStorage.getItem('genixerp_user');
+        if (userData) {
+          const user = JSON.parse(userData);
+          const userId = user.id || user.email;
+          if (userId) {
+            const orgId = localStorage.getItem(`genix_active_company_user_${userId}`);
+            if (orgId) {
+              config.headers['X-Organization-ID'] = orgId;
+            }
           }
         }
-      }
-    } catch (e) {
-      // fallback: scan for any matching key
-      const activeCompanyKey = Object.keys(localStorage).find(k => k.startsWith('genix_active_company_user_'));
-      const organizationId = activeCompanyKey ? localStorage.getItem(activeCompanyKey) : null;
-      if (organizationId) {
-        config.headers['X-Organization-ID'] = organizationId;
+      } catch (e) {
+        // fallback: scan for any matching key
+        const activeCompanyKey = Object.keys(localStorage).find(k => k.startsWith('genix_active_company_user_'));
+        const organizationId = activeCompanyKey ? localStorage.getItem(activeCompanyKey) : null;
+        if (organizationId) {
+          config.headers['X-Organization-ID'] = organizationId;
+        }
       }
     }
     return config;

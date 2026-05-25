@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import apiClient from '@/api/client';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { LabelWithHelp } from "@/components/ui/field-help";
-import { Plus, Cog, AlertTriangle, CheckCircle, Wrench, Eye, Pencil, Trash2, Settings, Check, Users, X } from 'lucide-react';
+import { Plus, Cog, AlertTriangle, CheckCircle, Wrench, Eye, Pencil, Trash2, Settings, Check, Users } from 'lucide-react';
 import { Checkbox } from "@/components/ui/checkbox";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -15,10 +16,10 @@ import { useTranslation } from '@/components/utils/translations';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useManufacturing } from '@/components/contexts/ManufacturingContext';
 import { useCompany } from '@/components/contexts/CompanyContext';
+import { useHR } from '@/components/contexts/HRContext';
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
-import { equipmentService, workCentersService } from '@/api/services/manufacturing';
-import { hrService } from '@/api/services/hr';
+import { equipmentService } from '@/api/services/manufacturing';
 import { toast } from 'sonner';
 
 const COLORS = ['#0ea5e9', '#8b5cf6', '#10b981', '#f59e0b'];
@@ -29,41 +30,18 @@ export default function WorkCenters() {
   const { formatCurrency } = useCurrencyFormatter();
   const { workCenters, workOrders, loading, createWorkCenter, updateWorkCenter, deleteWorkCenter } = useManufacturing();
   const { activeCompany } = useCompany();
+  const { employees: allEmployees = [] } = useHR();
   const { canCreate, canUpdate, canDelete } = usePermissions();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedWorkCenter, setSelectedWorkCenter] = useState(null);
   const [equipment, setEquipment] = useState([]);
-  const [allEmployees, setAllEmployees] = useState([]);
-  const [wcEmployees, setWcEmployees] = useState({});
-  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState([]);
-  const [employeeSearch, setEmployeeSearch] = useState('');
 
-  // Load equipment and employees from API
+  // Load equipment from real API
   useEffect(() => {
     equipmentService.list().then(data => setEquipment(data)).catch(() => {});
-    hrService.listEmployees({ limit: 1000, status: 'active' }).then(data => {
-      setAllEmployees(data?.employees || data || []);
-    }).catch(() => {});
   }, []);
-
-  // Load employees for all work centers
-  useEffect(() => {
-    if (workCenters?.length > 0) {
-      const loadEmployees = async () => {
-        const empMap = {};
-        for (const wc of workCenters) {
-          try {
-            const emps = await workCentersService.getEmployees(wc.id);
-            empMap[wc.id] = emps;
-          } catch { empMap[wc.id] = []; }
-        }
-        setWcEmployees(empMap);
-      };
-      loadEmployees();
-    }
-  }, [workCenters]);
 
   // Get equipment for a specific work center
   const getEquipmentForWorkCenter = (workCenterId) => {
@@ -100,13 +78,62 @@ export default function WorkCenters() {
     electricity_rate: '',
     annual_maintenance: '',
     operator_monthly_salary: '',
+    labor_rate_type: 'monthly',
+    cost_method: 'capacity',
+    require_operator: false,
   });
   const [selectedEquipmentIds, setSelectedEquipmentIds] = useState([]);
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState([]);
+  const [employeeSearch, setEmployeeSearch] = useState('');
+
+  // Format a numeric string with spaces as thousand separators for display
+  // in text inputs (e.g. 240000000 -> "240 000 000"). Preserves trailing
+  // decimal points and digits so the user can keep typing "12.5" etc.
+  const formatThousands = (val) => {
+    if (val === '' || val === null || val === undefined) return '';
+    const raw = String(val).replace(/[^\d.]/g, '');
+    if (!raw) return '';
+    const [intPart, ...decParts] = raw.split('.');
+    const formattedInt = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    // Keep the user's decimal part verbatim (incl. a trailing ".")
+    return decParts.length > 0 ? `${formattedInt}.${decParts.join('')}` : formattedInt;
+  };
+  // Strip display separators before storing so the stored value is a
+  // valid numeric string that parseFloat/backend can consume.
+  const stripThousands = (val) => String(val ?? '').replace(/\s/g, '');
+
+  // Compute the effective hourly cost for a work center. If the stored
+  // hourly_cost is 0 but breakdown components are populated, return the sum
+  // of those components. This protects against records where hourly_cost
+  // was never persisted (e.g. older WCs edited to add breakdown fields
+  // before the backend was fixed to auto-overwrite on update).
+  const getEffectiveHourlyCost = (wc) => {
+    if (!wc) return 0;
+    const stored = parseFloat(wc.hourly_cost) || 0;
+    if (stored > 0) return stored;
+    const workingHours = parseFloat(wc.working_hours_per_day) || 8;
+    const annualHours = workingHours * 365;
+    const monthlyHours = workingHours * 27;
+    const assetValue = parseFloat(wc.asset_value) || 0;
+    const usefulLife = parseFloat(wc.useful_life_years) || 10;
+    const powerKw = parseFloat(wc.power_kw) || 0;
+    const elecRate = parseFloat(wc.electricity_rate) || 0;
+    const annualMaint = parseFloat(wc.annual_maintenance) || 0;
+    const monthlySalary = parseFloat(wc.operator_monthly_salary) || 0;
+    const overhead = parseFloat(wc.overhead_cost) || 0;
+    const isDaily = wc.labor_rate_type === 'daily';
+    const salaryHours = isDaily ? workingHours : workingHours * 27;
+    const depreciation = assetValue > 0 && usefulLife > 0 ? assetValue / usefulLife / annualHours : 0;
+    const electricity = powerKw * elecRate;
+    const maintenance = annualMaint > 0 ? annualMaint / annualHours : 0;
+    const labor = monthlySalary > 0 && salaryHours > 0 ? monthlySalary / salaryHours : 0;
+    return depreciation + electricity + maintenance + labor + overhead;
+  };
 
   // Auto-calculate cost breakdown from detailed inputs
   const calculatedCosts = useMemo(() => {
     const workingHours = parseFloat(newWorkCenter.working_hours_per_day) || 8;
-    const annualHours = workingHours * 250;
+    const annualHours = workingHours * 365;
     const assetValue = parseFloat(newWorkCenter.asset_value) || 0;
     const usefulLife = parseFloat(newWorkCenter.useful_life_years) || 10;
     const powerKw = parseFloat(newWorkCenter.power_kw) || 0;
@@ -115,10 +142,14 @@ export default function WorkCenters() {
     const monthlySalary = parseFloat(newWorkCenter.operator_monthly_salary) || 0;
     const overhead = parseFloat(newWorkCenter.overhead_cost) || 0;
 
+    // Salary → hourly. Monthly: divide by 27 working days × hours/day.
+    // Daily: divide by hours/day only.
+    const isDaily = newWorkCenter.labor_rate_type === 'daily';
+    const salaryHours = isDaily ? workingHours : workingHours * 27;
     const depreciation = assetValue > 0 && usefulLife > 0 ? assetValue / usefulLife / annualHours : 0;
     const electricity = powerKw * elecRate;
     const maintenance = annualMaint > 0 ? annualMaint / annualHours : 0;
-    const labor = monthlySalary > 0 ? monthlySalary / 176 : 0;
+    const labor = monthlySalary > 0 && salaryHours > 0 ? monthlySalary / salaryHours : 0;
     const total = depreciation + electricity + maintenance + labor + overhead;
 
     return { depreciation, electricity, maintenance, labor, overhead, total };
@@ -135,6 +166,25 @@ export default function WorkCenters() {
   };
 
   // Save equipment assignments via API
+  const saveEmployeeAssignments = async (workCenterId, employeeIds) => {
+    try {
+      // First remove all existing employees for this work center
+      const existing = await apiClient.get(`/work-centers/${workCenterId}/employees`).then(r => r.data?.data?.employees || r.data?.data || []).catch(() => []);
+      const existingIds = (Array.isArray(existing) ? existing : []).map(e => e.employee_id || e.id);
+      // Remove employees no longer selected
+      for (const eid of existingIds) {
+        if (!employeeIds.includes(eid)) {
+          await apiClient.delete(`/work-centers/${workCenterId}/employees/${eid}`).catch(() => {});
+        }
+      }
+      // Add newly selected employees
+      const newIds = employeeIds.filter(eid => !existingIds.includes(eid));
+      if (newIds.length > 0) {
+        await apiClient.post(`/work-centers/${workCenterId}/employees`, { employee_ids: newIds, role: 'operator' }).catch(() => {});
+      }
+    } catch (e) { console.error('Failed to save employee assignments:', e); }
+  };
+
   const saveEquipmentAssignments = async (workCenterId, equipmentIds) => {
     const promises = equipment
       .filter(eq => equipmentIds.includes(eq.id) || eq.work_center_id === workCenterId)
@@ -160,7 +210,9 @@ export default function WorkCenters() {
         capacity_per_hour: parseFloat(newWorkCenter.capacity_per_hour) || 1,
         efficiency_factor: parseFloat(newWorkCenter.efficiency_factor) || 100,
         working_hours_per_day: parseFloat(newWorkCenter.working_hours_per_day) || 8,
-        hourly_cost: parseFloat(newWorkCenter.hourly_cost) || 0,
+        // hourly_cost is no longer editable in the form — always derive it
+        // from the breakdown so the stored value matches what's displayed.
+        hourly_cost: calculatedCosts.total || 0,
         overhead_cost: parseFloat(newWorkCenter.overhead_cost) || 0,
         currency: newWorkCenter.currency || 'USD',
         status: newWorkCenter.status || 'active',
@@ -172,20 +224,19 @@ export default function WorkCenters() {
         electricity_rate: parseFloat(newWorkCenter.electricity_rate) || 0,
         annual_maintenance: parseFloat(newWorkCenter.annual_maintenance) || 0,
         operator_monthly_salary: parseFloat(newWorkCenter.operator_monthly_salary) || 0,
+        labor_rate_type: newWorkCenter.labor_rate_type || 'monthly',
+        cost_method: newWorkCenter.cost_method || 'capacity',
+        require_operator: newWorkCenter.require_operator || false,
       };
 
       const createdWC = await createWorkCenter(wcData);
 
-      // Save equipment assignments if any were selected
+      // Save equipment and employee assignments
       if (selectedEquipmentIds.length > 0 && createdWC?.id) {
         await saveEquipmentAssignments(createdWC.id, selectedEquipmentIds);
       }
-
-      // Save employee assignments if any were selected
       if (selectedEmployeeIds.length > 0 && createdWC?.id) {
-        await workCentersService.assignEmployees(createdWC.id, { employee_ids: selectedEmployeeIds, role: 'operator' });
-        const emps = await workCentersService.getEmployees(createdWC.id);
-        setWcEmployees(prev => ({ ...prev, [createdWC.id]: emps }));
+        await saveEmployeeAssignments(createdWC.id, selectedEmployeeIds);
       }
 
       setShowCreateModal(false);
@@ -219,12 +270,15 @@ export default function WorkCenters() {
       operator_monthly_salary: '',
     });
     setSelectedEquipmentIds([]);
-    setSelectedEmployeeIds([]);
-    setEmployeeSearch('');
   };
 
+  const [viewEmployees, setViewEmployees] = useState([]);
   const handleViewWorkCenter = (wc) => {
     setSelectedWorkCenter(wc);
+    apiClient.get(`/work-centers/${wc.id}/employees`).then(r => {
+      const emps = r.data?.data?.employees || r.data?.data || [];
+      setViewEmployees(Array.isArray(emps) ? emps : []);
+    }).catch(() => setViewEmployees([]));
     setShowViewModal(true);
   };
 
@@ -249,13 +303,18 @@ export default function WorkCenters() {
       electricity_rate: wc.electricity_rate || '',
       annual_maintenance: wc.annual_maintenance || '',
       operator_monthly_salary: wc.operator_monthly_salary || '',
+      labor_rate_type: wc.labor_rate_type || 'monthly',
+      cost_method: wc.cost_method || 'capacity',
+      require_operator: wc.require_operator || false,
     });
     // Load currently assigned equipment IDs
     const assignedIds = getEquipmentForWorkCenter(wc.id).map(eq => eq.id);
     setSelectedEquipmentIds(assignedIds);
     // Load currently assigned employee IDs
-    const assignedEmps = (wcEmployees[wc.id] || []).map(emp => emp.employee_id);
-    setSelectedEmployeeIds(assignedEmps);
+    apiClient.get(`/work-centers/${wc.id}/employees`).then(r => {
+      const emps = r.data?.data?.employees || r.data?.data || [];
+      setSelectedEmployeeIds((Array.isArray(emps) ? emps : []).map(e => e.employee_id || e.id));
+    }).catch(() => setSelectedEmployeeIds([]));
     setShowEditModal(true);
   };
 
@@ -270,7 +329,9 @@ export default function WorkCenters() {
         capacity_per_hour: parseFloat(newWorkCenter.capacity_per_hour) || 1,
         efficiency_factor: parseFloat(newWorkCenter.efficiency_factor) || 100,
         working_hours_per_day: parseFloat(newWorkCenter.working_hours_per_day) || 8,
-        hourly_cost: parseFloat(newWorkCenter.hourly_cost) || 0,
+        // hourly_cost is no longer editable in the form — always derive it
+        // from the breakdown so the stored value matches what's displayed.
+        hourly_cost: calculatedCosts.total || 0,
         overhead_cost: parseFloat(newWorkCenter.overhead_cost) || 0,
         currency: newWorkCenter.currency || 'USD',
         status: newWorkCenter.status || 'active',
@@ -282,25 +343,16 @@ export default function WorkCenters() {
         electricity_rate: parseFloat(newWorkCenter.electricity_rate) || 0,
         annual_maintenance: parseFloat(newWorkCenter.annual_maintenance) || 0,
         operator_monthly_salary: parseFloat(newWorkCenter.operator_monthly_salary) || 0,
+        labor_rate_type: newWorkCenter.labor_rate_type || 'monthly',
+        cost_method: newWorkCenter.cost_method || 'capacity',
+        require_operator: newWorkCenter.require_operator || false,
       };
 
       await updateWorkCenter(selectedWorkCenter.id, wcData);
 
-      // Update equipment assignments
+      // Update equipment and employee assignments
       await saveEquipmentAssignments(selectedWorkCenter.id, selectedEquipmentIds);
-
-      // Update employee assignments - remove old, add new
-      const currentEmpIds = (wcEmployees[selectedWorkCenter.id] || []).map(e => e.employee_id);
-      const toRemove = currentEmpIds.filter(id => !selectedEmployeeIds.includes(id));
-      const toAdd = selectedEmployeeIds.filter(id => !currentEmpIds.includes(id));
-      for (const empId of toRemove) {
-        await workCentersService.removeEmployee(selectedWorkCenter.id, empId);
-      }
-      if (toAdd.length > 0) {
-        await workCentersService.assignEmployees(selectedWorkCenter.id, { employee_ids: toAdd, role: 'operator' });
-      }
-      const updatedEmps = await workCentersService.getEmployees(selectedWorkCenter.id);
-      setWcEmployees(prev => ({ ...prev, [selectedWorkCenter.id]: updatedEmps }));
+      await saveEmployeeAssignments(selectedWorkCenter.id, selectedEmployeeIds);
 
       setShowEditModal(false);
       setSelectedWorkCenter(null);
@@ -410,8 +462,8 @@ export default function WorkCenters() {
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between">
                     <div>
-                      <CardTitle className="text-lg font-bold">{wc.name}</CardTitle>
-                      <p className="text-sm text-slate-500 mt-1">{wc.code}</p>
+                      <CardTitle className="text-base font-bold">{wc.name}</CardTitle>
+                      <p className="text-xs text-slate-500 mt-1">{wc.code}</p>
                     </div>
                     <Badge className={getStatusColor(wc.status)}>
                       {getStatusIcon(wc.status)}
@@ -421,11 +473,11 @@ export default function WorkCenters() {
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="p-3 bg-blue-50 rounded-lg">
-                    <p className="text-sm text-blue-600 font-medium">{t('utilization')}</p>
-                    <p className="text-xl font-bold text-blue-900">{Math.round(wc.current_utilization || 0)}%</p>
+                    <p className="text-xs text-blue-600 font-medium">{t('utilization')}</p>
+                    <p className="text-lg font-bold text-blue-900">{Math.round(wc.current_utilization || 0)}%</p>
                   </div>
 
-                  <div className="space-y-2 text-sm">
+                  <div className="space-y-2 text-xs">
                     {wc.department && (
                       <div className="flex justify-between">
                         <span className="text-slate-600">{t('department')}:</span>
@@ -438,7 +490,7 @@ export default function WorkCenters() {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-600">{t('hourly_cost')}:</span>
-                      <span className="font-semibold">{formatCurrency(wc.hourly_cost || 0)}</span>
+                      <span className="font-semibold">{formatCurrency(getEffectiveHourlyCost(wc))}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-600">{t('working_hours_per_day')}:</span>
@@ -447,47 +499,25 @@ export default function WorkCenters() {
                     <div className="flex justify-between">
                       <span className="text-slate-600">{t('equipment')}:</span>
                       <span className="font-semibold flex items-center gap-1">
-                        <Settings className="w-3.5 h-3.5" />
+                        <Settings className="w-3 h-3" />
                         {equipmentCountByWorkCenter[wc.id] || 0} {t('items') || 'items'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-600">{t('employees') || 'Employees'}:</span>
-                      <span className="font-semibold flex items-center gap-1">
-                        <Users className="w-3.5 h-3.5" />
-                        {(wcEmployees[wc.id] || []).length} {t('items') || 'items'}
                       </span>
                     </div>
                   </div>
 
                   {/* Action buttons */}
-                  <div className="flex gap-2 pt-3 border-t border-slate-100">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleViewWorkCenter(wc)}
-                      className="flex-1"
-                    >
-                      <Eye className="w-4 h-4 mr-1" /> {t('view')}
+                  <div className="flex justify-center gap-2 pt-3 border-t border-slate-100">
+                    <Button variant="outline" size="sm" onClick={() => handleViewWorkCenter(wc)} title={t('view')}>
+                      <Eye className="w-4 h-4" />
                     </Button>
                     {canUpdate(MODULES.MANUFACTURING) && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleEditWorkCenter(wc)}
-                        className="flex-1"
-                      >
-                        <Pencil className="w-4 h-4 mr-1" /> {t('edit')}
+                      <Button variant="outline" size="sm" onClick={() => handleEditWorkCenter(wc)} title={t('edit')}>
+                        <Pencil className="w-4 h-4" />
                       </Button>
                     )}
                     {canDelete(MODULES.MANUFACTURING) && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDeleteWorkCenter(wc)}
-                        className="flex-1 text-red-600 hover:bg-red-50"
-                      >
-                        <Trash2 className="w-4 h-4 mr-1" /> {t('delete')}
+                      <Button variant="outline" size="sm" onClick={() => handleDeleteWorkCenter(wc)} title={t('delete')} className="text-red-600 hover:bg-red-50">
+                        <Trash2 className="w-4 h-4" />
                       </Button>
                     )}
                   </div>
@@ -574,15 +604,28 @@ export default function WorkCenters() {
               </div>
             </div>
 
+            <div className="flex items-center gap-3 py-1">
+              <span className="text-sm font-medium">{language === 'uz' ? 'Xarajat usuli' : language === 'ru' ? 'Метод расчёта' : 'Cost Method'}:</span>
+              <div className="flex bg-slate-100 rounded-md p-0.5 text-xs">
+                <button type="button" className={`px-3 py-1 rounded ${newWorkCenter.cost_method !== 'time' ? 'bg-white shadow text-blue-700 font-medium' : 'text-slate-500'}`} onClick={() => setNewWorkCenter({...newWorkCenter, cost_method: 'capacity'})}>{language === 'uz' ? 'Quvvat bo\'yicha' : language === 'ru' ? 'По мощности' : 'By Capacity'}</button>
+                <button type="button" className={`px-3 py-1 rounded ${newWorkCenter.cost_method === 'time' ? 'bg-white shadow text-blue-700 font-medium' : 'text-slate-500'}`} onClick={() => setNewWorkCenter({...newWorkCenter, cost_method: 'time'})}>{language === 'uz' ? 'Vaqt bo\'yicha' : language === 'ru' ? 'По времени' : 'By Time'}</button>
+              </div>
+              <div className="flex items-center gap-2 ml-4">
+                <input type="checkbox" id="wc_require_operator" checked={newWorkCenter.require_operator || false} onChange={(e) => setNewWorkCenter({...newWorkCenter, require_operator: e.target.checked})} className="w-4 h-4 accent-slate-700 cursor-pointer" />
+                <label htmlFor="wc_require_operator" className="text-sm font-medium cursor-pointer select-none">{language === 'uz' ? "Operatorni tanlash majburiy" : language === 'ru' ? "Требовать оператора" : "Require Operator"}</label>
+              </div>
+            </div>
+
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <LabelWithHelp htmlFor="wc_capacity" label={t('capacity_per_hour')} helpText={t('help_workcenter_capacity')} />
+                <LabelWithHelp htmlFor="wc_capacity" label={t('capacity_per_hour')} helpText={newWorkCenter.cost_method === 'time' ? (language === 'uz' ? 'Vaqt usulida ishlatilmaydi — xarajat haqiqiy vaqtga asoslanadi' : 'Not used in time mode — cost based on actual hours') : t('help_workcenter_capacity')} />
                 <Input
                   id="wc_capacity"
                   type="number"
                   placeholder="1"
                   value={newWorkCenter.capacity_per_hour || ''}
                   onChange={(e) => setNewWorkCenter({...newWorkCenter, capacity_per_hour: e.target.value})}
+                  disabled={newWorkCenter.cost_method === 'time'}
                 />
               </div>
               <div className="space-y-2">
@@ -609,14 +652,18 @@ export default function WorkCenters() {
 
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <LabelWithHelp htmlFor="wc_hourly_cost" label={t('hourly_cost')} helpText={t('help_workcenter_hourly_cost')} />
+                <LabelWithHelp htmlFor="wc_hourly_cost" label={t('hourly_cost')} helpText="Avtomatik hisoblanadi — quyidagi komponentlar asosida." />
                 <Input
                   id="wc_hourly_cost"
-                  type="number"
-                  placeholder="0"
-                  value={newWorkCenter.hourly_cost || ''}
-                  onChange={(e) => setNewWorkCenter({...newWorkCenter, hourly_cost: e.target.value})}
+                  type="text"
+                  readOnly
+                  disabled
+                  className="bg-slate-50 text-slate-700 cursor-not-allowed font-semibold"
+                  value={calculatedCosts.total > 0
+                    ? `${calculatedCosts.total.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat`
+                    : '0 so\'m/soat'}
                 />
+                <p className="text-[10px] text-slate-500">Quyidagi komponentlardan avtomatik hisoblanadi.</p>
               </div>
             </div>
 
@@ -628,10 +675,11 @@ export default function WorkCenters() {
                   <LabelWithHelp htmlFor="wc_asset_value" label="Stanok narxi" helpText="Uskunaning umumiy narxi (sotib olish qiymati)" />
                   <Input
                     id="wc_asset_value"
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     placeholder="0"
-                    value={newWorkCenter.asset_value}
-                    onChange={(e) => setNewWorkCenter({...newWorkCenter, asset_value: e.target.value})}
+                    value={formatThousands(newWorkCenter.asset_value)}
+                    onChange={(e) => setNewWorkCenter({...newWorkCenter, asset_value: stripThousands(e.target.value)})}
                   />
                 </div>
                 <div className="space-y-2">
@@ -660,10 +708,11 @@ export default function WorkCenters() {
                   <LabelWithHelp htmlFor="wc_elec_rate" label="Elektr narxi (so'm/kVt)" helpText="1 kVt soat elektr energiyasi narxi" />
                   <Input
                     id="wc_elec_rate"
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     placeholder="0"
-                    value={newWorkCenter.electricity_rate}
-                    onChange={(e) => setNewWorkCenter({...newWorkCenter, electricity_rate: e.target.value})}
+                    value={formatThousands(newWorkCenter.electricity_rate)}
+                    onChange={(e) => setNewWorkCenter({...newWorkCenter, electricity_rate: stripThousands(e.target.value)})}
                   />
                 </div>
               </div>
@@ -672,20 +721,28 @@ export default function WorkCenters() {
                   <LabelWithHelp htmlFor="wc_annual_maint" label="Yillik ta'mirlash" helpText="Yillik ta'mirlash va texnik xizmat xarajatlari" />
                   <Input
                     id="wc_annual_maint"
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     placeholder="0"
-                    value={newWorkCenter.annual_maintenance}
-                    onChange={(e) => setNewWorkCenter({...newWorkCenter, annual_maintenance: e.target.value})}
+                    value={formatThousands(newWorkCenter.annual_maintenance)}
+                    onChange={(e) => setNewWorkCenter({...newWorkCenter, annual_maintenance: stripThousands(e.target.value)})}
                   />
                 </div>
                 <div className="space-y-2">
-                  <LabelWithHelp htmlFor="wc_operator_salary" label="Operator ish haqi (so'm/oy)" helpText="Operator oylik ish haqi" />
+                  <div className="flex items-center justify-between">
+                    <LabelWithHelp htmlFor="wc_operator_salary" label={`Operator ish haqi (so'm/${newWorkCenter.labor_rate_type === 'daily' ? 'kun' : 'oy'})`} helpText={newWorkCenter.labor_rate_type === 'daily' ? "Operator kunlik ish haqi. Soatlik tarifga kunlik ish soatlari orqali aylantiriladi." : "Operator oylik ish haqi. Soatlik tarifga oyiga 27 ish kuni × kunlik ish soatlari orqali aylantiriladi."} />
+                    <div className="flex bg-slate-100 rounded-md p-0.5 text-xs">
+                      <button type="button" className={`px-2 py-1 rounded ${newWorkCenter.labor_rate_type === 'monthly' ? 'bg-white shadow text-blue-700 font-medium' : 'text-slate-500'}`} onClick={() => setNewWorkCenter({...newWorkCenter, labor_rate_type: 'monthly'})}>Oylik</button>
+                      <button type="button" className={`px-2 py-1 rounded ${newWorkCenter.labor_rate_type === 'daily' ? 'bg-white shadow text-blue-700 font-medium' : 'text-slate-500'}`} onClick={() => setNewWorkCenter({...newWorkCenter, labor_rate_type: 'daily'})}>Kunlik</button>
+                    </div>
+                  </div>
                   <Input
                     id="wc_operator_salary"
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     placeholder="0"
-                    value={newWorkCenter.operator_monthly_salary}
-                    onChange={(e) => setNewWorkCenter({...newWorkCenter, operator_monthly_salary: e.target.value})}
+                    value={formatThousands(newWorkCenter.operator_monthly_salary)}
+                    onChange={(e) => setNewWorkCenter({...newWorkCenter, operator_monthly_salary: stripThousands(e.target.value)})}
                   />
                 </div>
               </div>
@@ -898,15 +955,28 @@ export default function WorkCenters() {
               </div>
             </div>
 
+            <div className="flex items-center gap-3 py-1">
+              <span className="text-sm font-medium">{language === 'uz' ? 'Xarajat usuli' : language === 'ru' ? 'Метод расчёта' : 'Cost Method'}:</span>
+              <div className="flex bg-slate-100 rounded-md p-0.5 text-xs">
+                <button type="button" className={`px-3 py-1 rounded ${newWorkCenter.cost_method !== 'time' ? 'bg-white shadow text-blue-700 font-medium' : 'text-slate-500'}`} onClick={() => setNewWorkCenter({...newWorkCenter, cost_method: 'capacity'})}>{language === 'uz' ? 'Quvvat bo\'yicha' : language === 'ru' ? 'По мощности' : 'By Capacity'}</button>
+                <button type="button" className={`px-3 py-1 rounded ${newWorkCenter.cost_method === 'time' ? 'bg-white shadow text-blue-700 font-medium' : 'text-slate-500'}`} onClick={() => setNewWorkCenter({...newWorkCenter, cost_method: 'time'})}>{language === 'uz' ? 'Vaqt bo\'yicha' : language === 'ru' ? 'По времени' : 'By Time'}</button>
+              </div>
+              <div className="flex items-center gap-2 ml-4">
+                <input type="checkbox" id="edit_wc_require_operator" checked={newWorkCenter.require_operator || false} onChange={(e) => setNewWorkCenter({...newWorkCenter, require_operator: e.target.checked})} className="w-4 h-4 accent-slate-700 cursor-pointer" />
+                <label htmlFor="edit_wc_require_operator" className="text-sm font-medium cursor-pointer select-none">{language === 'uz' ? "Operatorni tanlash majburiy" : language === 'ru' ? "Требовать оператора" : "Require Operator"}</label>
+              </div>
+            </div>
+
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <LabelWithHelp htmlFor="edit_wc_capacity" label={t('capacity_per_hour')} helpText={t('help_workcenter_capacity')} />
+                <LabelWithHelp htmlFor="edit_wc_capacity" label={t('capacity_per_hour')} helpText={newWorkCenter.cost_method === 'time' ? (language === 'uz' ? 'Vaqt usulida ishlatilmaydi — xarajat haqiqiy vaqtga asoslanadi' : 'Not used in time mode — cost based on actual hours') : t('help_workcenter_capacity')} />
                 <Input
                   id="edit_wc_capacity"
                   type="number"
                   placeholder="1"
                   value={newWorkCenter.capacity_per_hour || ''}
                   onChange={(e) => setNewWorkCenter({...newWorkCenter, capacity_per_hour: e.target.value})}
+                  disabled={newWorkCenter.cost_method === 'time'}
                 />
               </div>
               <div className="space-y-2">
@@ -933,14 +1003,18 @@ export default function WorkCenters() {
 
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <LabelWithHelp htmlFor="edit_wc_hourly_cost" label={t('hourly_cost')} helpText={t('help_workcenter_hourly_cost')} />
+                <LabelWithHelp htmlFor="edit_wc_hourly_cost" label={t('hourly_cost')} helpText="Avtomatik hisoblanadi — quyidagi komponentlar asosida." />
                 <Input
                   id="edit_wc_hourly_cost"
-                  type="number"
-                  placeholder="0"
-                  value={newWorkCenter.hourly_cost || ''}
-                  onChange={(e) => setNewWorkCenter({...newWorkCenter, hourly_cost: e.target.value})}
+                  type="text"
+                  readOnly
+                  disabled
+                  className="bg-slate-50 text-slate-700 cursor-not-allowed font-semibold"
+                  value={calculatedCosts.total > 0
+                    ? `${calculatedCosts.total.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat`
+                    : '0 so\'m/soat'}
                 />
+                <p className="text-[10px] text-slate-500">Quyidagi komponentlardan avtomatik hisoblanadi.</p>
               </div>
             </div>
 
@@ -952,10 +1026,11 @@ export default function WorkCenters() {
                   <LabelWithHelp htmlFor="edit_wc_asset_value" label="Stanok narxi" helpText="Uskunaning umumiy narxi (sotib olish qiymati)" />
                   <Input
                     id="edit_wc_asset_value"
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     placeholder="0"
-                    value={newWorkCenter.asset_value}
-                    onChange={(e) => setNewWorkCenter({...newWorkCenter, asset_value: e.target.value})}
+                    value={formatThousands(newWorkCenter.asset_value)}
+                    onChange={(e) => setNewWorkCenter({...newWorkCenter, asset_value: stripThousands(e.target.value)})}
                   />
                 </div>
                 <div className="space-y-2">
@@ -984,10 +1059,11 @@ export default function WorkCenters() {
                   <LabelWithHelp htmlFor="edit_wc_elec_rate" label="Elektr narxi (so'm/kVt)" helpText="1 kVt soat elektr energiyasi narxi" />
                   <Input
                     id="edit_wc_elec_rate"
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     placeholder="0"
-                    value={newWorkCenter.electricity_rate}
-                    onChange={(e) => setNewWorkCenter({...newWorkCenter, electricity_rate: e.target.value})}
+                    value={formatThousands(newWorkCenter.electricity_rate)}
+                    onChange={(e) => setNewWorkCenter({...newWorkCenter, electricity_rate: stripThousands(e.target.value)})}
                   />
                 </div>
               </div>
@@ -996,20 +1072,28 @@ export default function WorkCenters() {
                   <LabelWithHelp htmlFor="edit_wc_annual_maint" label="Yillik ta'mirlash" helpText="Yillik ta'mirlash va texnik xizmat xarajatlari" />
                   <Input
                     id="edit_wc_annual_maint"
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     placeholder="0"
-                    value={newWorkCenter.annual_maintenance}
-                    onChange={(e) => setNewWorkCenter({...newWorkCenter, annual_maintenance: e.target.value})}
+                    value={formatThousands(newWorkCenter.annual_maintenance)}
+                    onChange={(e) => setNewWorkCenter({...newWorkCenter, annual_maintenance: stripThousands(e.target.value)})}
                   />
                 </div>
                 <div className="space-y-2">
-                  <LabelWithHelp htmlFor="edit_wc_operator_salary" label="Operator ish haqi (so'm/oy)" helpText="Operator oylik ish haqi" />
+                  <div className="flex items-center justify-between">
+                    <LabelWithHelp htmlFor="edit_wc_operator_salary" label={`Operator ish haqi (so'm/${newWorkCenter.labor_rate_type === 'daily' ? 'kun' : 'oy'})`} helpText={newWorkCenter.labor_rate_type === 'daily' ? "Operator kunlik ish haqi. Soatlik tarifga kunlik ish soatlari orqali aylantiriladi." : "Operator oylik ish haqi. Soatlik tarifga oyiga 27 ish kuni × kunlik ish soatlari orqali aylantiriladi."} />
+                    <div className="flex bg-slate-100 rounded-md p-0.5 text-xs">
+                      <button type="button" className={`px-2 py-1 rounded ${newWorkCenter.labor_rate_type === 'monthly' ? 'bg-white shadow text-blue-700 font-medium' : 'text-slate-500'}`} onClick={() => setNewWorkCenter({...newWorkCenter, labor_rate_type: 'monthly'})}>Oylik</button>
+                      <button type="button" className={`px-2 py-1 rounded ${newWorkCenter.labor_rate_type === 'daily' ? 'bg-white shadow text-blue-700 font-medium' : 'text-slate-500'}`} onClick={() => setNewWorkCenter({...newWorkCenter, labor_rate_type: 'daily'})}>Kunlik</button>
+                    </div>
+                  </div>
                   <Input
                     id="edit_wc_operator_salary"
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     placeholder="0"
-                    value={newWorkCenter.operator_monthly_salary}
-                    onChange={(e) => setNewWorkCenter({...newWorkCenter, operator_monthly_salary: e.target.value})}
+                    value={formatThousands(newWorkCenter.operator_monthly_salary)}
+                    onChange={(e) => setNewWorkCenter({...newWorkCenter, operator_monthly_salary: stripThousands(e.target.value)})}
                   />
                 </div>
               </div>
@@ -1258,7 +1342,7 @@ export default function WorkCenters() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-3 bg-amber-50 rounded-lg text-center">
                   <p className="text-xs text-amber-600 font-medium">{t('hourly_cost')}</p>
-                  <p className="text-lg font-bold text-amber-900">{formatCurrency(selectedWorkCenter.hourly_cost || 0)}</p>
+                  <p className="text-lg font-bold text-amber-900">{formatCurrency(getEffectiveHourlyCost(selectedWorkCenter))}</p>
                 </div>
                 <div className="p-3 bg-slate-50 rounded-lg text-center">
                   <p className="text-xs text-slate-600 font-medium">{t('working_hours_per_day')}</p>
@@ -1270,7 +1354,7 @@ export default function WorkCenters() {
               {(() => {
                 const wc = selectedWorkCenter;
                 const workingHours = parseFloat(wc.working_hours_per_day) || 8;
-                const annualHours = workingHours * 250;
+                const annualHours = workingHours * 365;
                 const assetValue = parseFloat(wc.asset_value) || 0;
                 const usefulLife = parseFloat(wc.useful_life_years) || 10;
                 const powerKw = parseFloat(wc.power_kw) || 0;
@@ -1279,10 +1363,12 @@ export default function WorkCenters() {
                 const monthlySalary = parseFloat(wc.operator_monthly_salary) || 0;
                 const overhead = parseFloat(wc.overhead_cost) || 0;
 
+                const isDaily = wc.labor_rate_type === 'daily';
+                const salaryHours = isDaily ? workingHours : workingHours * 27;
                 const depreciation = assetValue > 0 && usefulLife > 0 ? assetValue / usefulLife / annualHours : 0;
                 const electricity = powerKw * elecRate;
                 const maintenance = annualMaint > 0 ? annualMaint / annualHours : 0;
-                const labor = monthlySalary > 0 ? monthlySalary / 176 : 0;
+                const labor = monthlySalary > 0 && salaryHours > 0 ? monthlySalary / salaryHours : 0;
                 const total = depreciation + electricity + maintenance + labor + overhead;
 
                 if (total <= 0) return null;
@@ -1388,59 +1474,31 @@ export default function WorkCenters() {
                 )}
               </div>
 
-              {/* Employees Section */}
+              <div className="flex gap-3 pt-4">
+              {/* Assigned Employees */}
               <div className="space-y-3 pt-4 border-t border-slate-100">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-medium flex items-center gap-2">
                     <Users className="w-4 h-4" />
                     {language === 'uz' ? 'Tayinlangan xodimlar' : language === 'ru' ? 'Назначенные сотрудники' : 'Assigned Employees'}
                   </p>
-                  <Badge variant="outline">
-                    {(wcEmployees[selectedWorkCenter.id] || []).length} {t('items') || 'items'}
-                  </Badge>
+                  <Badge variant="outline">{viewEmployees.length}</Badge>
                 </div>
-
-                {(wcEmployees[selectedWorkCenter.id] || []).length > 0 ? (
-                  <div className="border rounded-lg overflow-hidden">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-slate-50">
-                          <TableHead className="text-xs">{t('employee') || 'Employee'}</TableHead>
-                          <TableHead className="text-xs">{t('job_title') || 'Job Title'}</TableHead>
-                          <TableHead className="text-xs">{t('role') || 'Role'}</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {(wcEmployees[selectedWorkCenter.id] || []).map((emp) => (
-                          <TableRow key={emp.id}>
-                            <TableCell>
-                              <div>
-                                <p className="font-medium text-sm">{emp.employee_name}</p>
-                                <p className="text-xs text-slate-500">{emp.employee_number}</p>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <span className="text-sm">{emp.job_title || '-'}</span>
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant="outline" className="text-xs capitalize">
-                                {emp.role}
-                              </Badge>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                {viewEmployees.length > 0 ? (
+                  <div className="space-y-2">
+                    {viewEmployees.map(emp => (
+                      <div key={emp.employee_id || emp.id} className="flex items-center gap-2 p-2 bg-slate-50 rounded">
+                        <Users className="w-4 h-4 text-slate-400" />
+                        <span className="text-sm font-medium">{emp.employee_name || emp.name}</span>
+                        <span className="text-xs text-slate-400">{emp.employee_number || emp.employee_id}</span>
+                      </div>
+                    ))}
                   </div>
                 ) : (
-                  <div className="text-center py-6 bg-slate-50 rounded-lg">
-                    <Users className="w-8 h-8 mx-auto mb-2 text-slate-300" />
-                    <p className="text-sm text-slate-500">{language === 'uz' ? 'Bu ish markaziga xodimlar tayinlanmagan' : language === 'ru' ? 'Нет назначенных сотрудников' : 'No employees assigned to this work center'}</p>
-                  </div>
+                  <p className="text-sm text-slate-400 text-center py-3">{language === 'uz' ? 'Xodimlar tayinlanmagan' : 'No employees assigned'}</p>
                 )}
               </div>
 
-              <div className="flex gap-3 pt-4">
                 <Button variant="outline" onClick={() => { setShowViewModal(false); setSelectedWorkCenter(null); }} className="flex-1">
                   {t('close')}
                 </Button>

@@ -617,7 +617,10 @@ export function InventoryProvider({ children }) {
       if (isAvailable) {
         try {
           const [productsData, categoriesData, warehousesData, inventoryData, movementsData] = await Promise.all([
-            inventoryService.listProducts(),
+            // Pass a high limit so dashboard summary stats (Active /
+            // Stockable / Low Stock) compute over the full product set
+            // instead of just the first page (server default = 20).
+            inventoryService.listProducts({ limit: 5000 }),
             inventoryService.listCategories(),
             inventoryService.listWarehouses(),
             inventoryService.listInventory({ limit: 10000 }),
@@ -642,7 +645,38 @@ export function InventoryProvider({ children }) {
           setProducts(productsData || []);
           setCategories(categoriesData || []);
           setWarehouses(transformedWarehouses);
-          setInventory(inventoryData || []);
+
+          // Belt-and-suspenders filter for ghost inventory rows.
+          //
+          // The backend `ListInventory` query should already filter out rows
+          // whose product has been soft-deleted (see inventory.go: the
+          // products JOIN is gated on `p.deleted_at IS NULL`). However, if
+          // an older backend binary is still serving the API, those orphan
+          // rows can sneak through and silently subtract from warehouse
+          // totals (negative `quantity_on_hand` left over from consumption
+          // that the now-deleted product was tracking).
+          //
+          // `productsData` comes from `listProducts`, which filters
+          // `deleted_at IS NULL` server-side and so only contains LIVE
+          // product IDs. We use it as the source of truth and drop any
+          // inventory row pointing at a product not in this set. This makes
+          // the UI correct regardless of which backend version is running.
+          const liveProductIds = new Set((productsData || []).map(p => p.id));
+          // Edge case: if the products list came back empty (very unusual —
+          // would only happen on a brand-new tenant or if listProducts
+          // silently truncated), skip the filter entirely. Otherwise every
+          // inventory row would be hidden and the UI would falsely report
+          // zero stock everywhere — much worse than showing ghosts.
+          const cleanInventory = liveProductIds.size === 0
+            ? (inventoryData || [])
+            : (inventoryData || []).filter(inv => {
+                // Be permissive on rows that don't carry a product_id at all
+                // (defensive — shouldn't happen, but avoid hiding legit data
+                // on schema drift) and strict on the rows that do.
+                if (!inv?.product_id) return true;
+                return liveProductIds.has(inv.product_id);
+              });
+          setInventory(cleanInventory);
           setStockMovements(movementsData || []);
 
           // Also load lots, stock counts, BOMs, reorder rules, scrap orders from backend

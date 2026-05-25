@@ -64,6 +64,14 @@ import { useTranslation } from '@/components/utils/translations';
 import { taxReportsService } from '@/api/services/taxReports';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { usePermissions } from '@/hooks/usePermissions';
+import { toast } from 'sonner';
+// Profit tax (§8.1) and Tax summary (§10) used to be top-level tabs
+// in Financials. They've been folded into Tax Reports as sub-tabs so
+// every tax view lives in one place — TaxReports renders them inside
+// the existing Overview / Periods / Transactions / Employee taxes
+// strip, lazy-mounted only when the corresponding tab is opened.
+import ProfitTax from '@/pages/ProfitTax';
+import TaxSummary from '@/pages/TaxSummary';
 
 export default function TaxReports() {
   const { language } = useLanguage();
@@ -75,6 +83,9 @@ export default function TaxReports() {
   const [activeTab, setActiveTab] = useState('overview');
   const [isLoading, setIsLoading] = useState(false);
   const [summary, setSummary] = useState(null);
+  // Employee-taxes aggregation (migration 330) — loaded lazily when the tab is active
+  const [employeeTaxReport, setEmployeeTaxReport] = useState({ rows: [], total_employee: 0, total_employer: 0, total: 0 });
+  const [employeeTaxLoading, setEmployeeTaxLoading] = useState(false);
   const [periods, setPeriods] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [selectedPeriod, setSelectedPeriod] = useState(null);
@@ -89,6 +100,46 @@ export default function TaxReports() {
 
   // Modals
   const [showCreatePeriod, setShowCreatePeriod] = useState(false);
+
+  // Employee-tax payment dialog (migration 360 / Record Payment button on
+  // each row of the Employee Taxes tab). Shape:
+  //   { open, taxCode, taxName, pending, amount, paymentMethod, note, saving }
+  const [taxPaymentDialog, setTaxPaymentDialog] = useState({ open: false });
+  const submitTaxPayment = async () => {
+    const tp = taxPaymentDialog;
+    if (!tp || !tp.taxCode) return;
+    const amt = Number(tp.amount);
+    if (!Number.isFinite(amt) || amt <= 0) {
+      toast.error(t('invalid_amount') || "Noto'g'ri summa");
+      return;
+    }
+    if (!startDate || !endDate) {
+      toast.error(t('select_period_first') || 'Davrini tanlang');
+      return;
+    }
+    setTaxPaymentDialog((p) => ({ ...p, saving: true }));
+    try {
+      await taxReportsService.recordEmployeeTaxPayment({
+        taxCode: tp.taxCode,
+        periodStart: startDate,
+        periodEnd: endDate,
+        amount: amt,
+        paymentMethod: tp.paymentMethod || 'bank_transfer',
+        note: tp.note || undefined,
+      });
+      toast.success(t('payment_recorded') || "To'lov qayd qilindi");
+      setTaxPaymentDialog({ open: false });
+      // Refetch the employee-tax report so the Pending column updates.
+      try {
+        const data = await taxReportsService.getEmployeeTaxReport(startDate, endDate);
+        setEmployeeTaxReport(data || { rows: [], total_employee: 0, total_employer: 0, total: 0 });
+      } catch { /* ignore */ }
+    } catch (e) {
+      toast.error(e?.response?.data?.message || e?.response?.data?.error?.message
+        || (t('error_occurred') || 'Xatolik'));
+      setTaxPaymentDialog((p) => ({ ...p, saving: false }));
+    }
+  };
   const [showPeriodDetails, setShowPeriodDetails] = useState(false);
   const [showFileDialog, setShowFileDialog] = useState(false);
   const [showPayDialog, setShowPayDialog] = useState(false);
@@ -124,7 +175,22 @@ export default function TaxReports() {
     if (activeTab === 'transactions') {
       loadTransactions();
     }
-  }, [activeTab]);
+    if (activeTab === 'employee-taxes') {
+      loadEmployeeTaxReport();
+    }
+  }, [activeTab, startDate, endDate]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const loadEmployeeTaxReport = async () => {
+    setEmployeeTaxLoading(true);
+    try {
+      const data = await taxReportsService.getEmployeeTaxReport(startDate, endDate);
+      setEmployeeTaxReport(data || { rows: [], total_employee: 0, total_employer: 0, total: 0 });
+    } catch (e) {
+      console.warn('Failed to load employee tax report', e);
+    } finally {
+      setEmployeeTaxLoading(false);
+    }
+  };
 
   const loadSummary = async () => {
     try {
@@ -432,6 +498,9 @@ export default function TaxReports() {
             <TabsTrigger value="overview">{t('overview') || 'Overview'}</TabsTrigger>
             <TabsTrigger value="periods">{t('report_periods') || 'Report Periods'}</TabsTrigger>
             <TabsTrigger value="transactions">{t('transactions') || 'Transactions'}</TabsTrigger>
+            <TabsTrigger value="employee-taxes">{t('employee_taxes') || 'Xodim soliqlari'}</TabsTrigger>
+            <TabsTrigger value="profit-tax">{t('profit_tax') || "Foyda solig'i"}</TabsTrigger>
+            <TabsTrigger value="tax-summary">{t('tax_summary') || 'Umumiy soliq jamlanmasi'}</TabsTrigger>
           </TabsList>
 
           <div className="flex gap-2">
@@ -737,6 +806,157 @@ export default function TaxReports() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* Employee Taxes (migration 330) — per-tax breakdown across payroll entries */}
+        <TabsContent value="employee-taxes">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                {t('employee_taxes') || 'Xodim soliqlari'}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">{t('employee_tax_total') || 'Xodimdan ushlab qolingan'}</div>
+                  <div className="text-lg font-semibold text-red-600">{formatCurrency(employeeTaxReport.total_employee || 0)}</div>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">{t('employer_tax_total') || 'Ish beruvchi xarajati'}</div>
+                  <div className="text-lg font-semibold text-amber-700">{formatCurrency(employeeTaxReport.total_employer || 0)}</div>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">{t('paid_amount') || "To'langan"}</div>
+                  <div className="text-lg font-semibold text-emerald-600">{formatCurrency(employeeTaxReport.total_paid || 0)}</div>
+                </div>
+                <div className="rounded-lg border p-3 bg-orange-50/40">
+                  <div className="text-xs text-muted-foreground">{t('pending_amount') || "To'lanishi kerak"}</div>
+                  <div className="text-lg font-semibold text-orange-600">{formatCurrency(employeeTaxReport.total_pending || 0)}</div>
+                </div>
+              </div>
+
+              {employeeTaxLoading ? (
+                <div className="py-8 text-center text-muted-foreground">{t('loading') || 'Yuklanmoqda…'}</div>
+              ) : (employeeTaxReport.rows?.length || 0) === 0 ? (
+                <div className="py-8 text-center text-muted-foreground">
+                  {t('no_employee_tax_data') || "Tanlangan davr uchun ma'lumot topilmadi"}
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{t('code') || 'Kod'}</TableHead>
+                      <TableHead>{t('name') || 'Nomi'}</TableHead>
+                      <TableHead>{t('payer') || "To'lovchi"}</TableHead>
+                      <TableHead className="text-right">{t('entries') || 'Yozuvlar'}</TableHead>
+                      <TableHead className="text-right">{t('tax_amount') || 'Hisoblangan'}</TableHead>
+                      <TableHead className="text-right">{t('paid_amount') || "To'langan"}</TableHead>
+                      <TableHead className="text-right">{t('pending_amount') || 'Qoldiq'}</TableHead>
+                      <TableHead className="text-right">{t('actions') || 'Amal'}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(employeeTaxReport.rows || []).map((row) => {
+                      const accrued = Number(row.total_amount) || 0;
+                      const paid    = Number(row.paid_amount)  || 0;
+                      const pending = Number(row.pending)      || 0;
+                      const fullyPaid = pending <= 0 && accrued > 0;
+                      return (
+                      <TableRow key={`${row.tax_code}-${row.payer}`}>
+                        <TableCell className="font-mono text-xs">{row.tax_code}</TableCell>
+                        <TableCell>{row.tax_name}</TableCell>
+                        <TableCell>
+                          {row.payer === 'employer'
+                            ? <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">{t('payer_employer') || 'Employer'}</Badge>
+                            : <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">{t('payer_employee') || 'Employee'}</Badge>}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">{row.entry_count}</TableCell>
+                        <TableCell className={`text-right font-semibold tabular-nums ${row.payer === 'employer' ? 'text-amber-700' : 'text-red-600'}`}>
+                          {formatCurrency(accrued)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums text-emerald-600">
+                          {formatCurrency(paid)}
+                        </TableCell>
+                        <TableCell className={`text-right font-semibold tabular-nums ${
+                          fullyPaid ? 'text-emerald-600' : pending > 0 ? 'text-orange-600' : 'text-slate-500'
+                        }`}>
+                          {fullyPaid ? '—' : formatCurrency(pending)}
+                          {fullyPaid && (
+                            <Badge variant="outline" className="ml-2 bg-emerald-50 text-emerald-700 border-emerald-200">
+                              {t('paid') || "To'langan"}
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            {pending > 0 && (
+                              <Button
+                                variant="default"
+                                size="sm"
+                                className="h-8 bg-orange-500 hover:bg-orange-600"
+                                onClick={() => setTaxPaymentDialog({
+                                  open: true,
+                                  taxCode: row.tax_code,
+                                  taxName: row.tax_name,
+                                  pending: pending,
+                                  amount: String(pending),
+                                  paymentMethod: 'bank_transfer',
+                                  note: '',
+                                  saving: false,
+                                })}
+                                title={t('record_tax_payment') || "To'lovni qayd qilish"}
+                              >
+                                {t('record_payment') || 'Record Payment'}
+                              </Button>
+                            )}
+                            {/* Per-tax XML export for regulator filings
+                                (NDFL→DSK quarterly, ESP→DSDMB monthly,
+                                INPS→PFO'Z monthly — §10 of the TZ). */}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={async () => {
+                                try {
+                                  await taxReportsService.exportEmployeeTaxXML({
+                                    taxCode: row.tax_code,
+                                    startDate,
+                                    endDate,
+                                  });
+                                } catch (e) {
+                                  console.error('XML export failed', e);
+                                }
+                              }}
+                              disabled={!startDate || !endDate}
+                              title={t('download_xml') || 'XML yuklab olish'}
+                            >
+                              <Download className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Profit tax — moved here from a top-level Financials tab.
+            ProfitTax is a self-contained page component that loads its
+            own data; rendering it inside a TabsContent keeps lazy
+            mounting (Radix Tabs only mounts the active tab content). */}
+        <TabsContent value="profit-tax">
+          <ProfitTax />
+        </TabsContent>
+
+        {/* Tax summary — same migration. The TaxSummary page
+            aggregates VAT + INPS + ESP + NDFL + profit + dividend
+            into one panel per §10 of TZ_Ish_Haqi_Soliq_Tolik. */}
+        <TabsContent value="tax-summary">
+          <TaxSummary />
+        </TabsContent>
       </Tabs>
 
       {/* Create Period Dialog */}
@@ -990,6 +1210,83 @@ export default function TaxReports() {
             >
               <CreditCard className="w-4 h-4 mr-2" />
               {isPaying ? (t('processing') || 'Jarayonda...') : (t('confirm_payment') || "To'lovni tasdiqlash")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Employee-tax payment dialog (migration 360). The selected
+          tax + period range is captured when the user clicks the
+          "Record Payment" button on the Employee Taxes tab; this
+          modal lets them adjust the amount (defaults to the full
+          pending balance), pick a payment method, and add a note.
+          On submit POSTs /employee-taxes/payments which posts a
+          Dr-liability / Cr-cash journal entry and refreshes the
+          report so the Pending column drops by that amount. */}
+      <Dialog open={!!taxPaymentDialog.open} onOpenChange={(o) => !o && setTaxPaymentDialog({ open: false })}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {(t('record_tax_payment') || "Soliq to'lovini qayd qilish")}
+              {taxPaymentDialog.taxName ? `: ${taxPaymentDialog.taxName}` : ''}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2 text-sm">
+            <div className="rounded-md bg-slate-50 border border-slate-200 px-3 py-2">
+              <div className="flex justify-between">
+                <span className="text-slate-500">{t('period') || 'Davr'}:</span>
+                <span className="font-mono">{startDate} — {endDate}</span>
+              </div>
+              <div className="flex justify-between mt-1">
+                <span className="text-slate-500">{t('pending_amount') || 'Qoldiq'}:</span>
+                <span className="font-mono font-semibold text-orange-600">
+                  {formatCurrency(taxPaymentDialog.pending || 0)}
+                </span>
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs">{t('payment_amount') || "To'lov summasi"} *</Label>
+              <Input
+                type="number" min={0} step="0.01"
+                value={taxPaymentDialog.amount ?? ''}
+                onChange={(e) => setTaxPaymentDialog((p) => ({ ...p, amount: e.target.value }))}
+                className="font-mono"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">{t('payment_method') || "To'lov usuli"}</Label>
+              <Select
+                value={taxPaymentDialog.paymentMethod || 'bank_transfer'}
+                onValueChange={(v) => setTaxPaymentDialog((p) => ({ ...p, paymentMethod: v }))}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="bank_transfer">{t('bank_transfer') || 'Bank o\'tkazmasi'}</SelectItem>
+                  <SelectItem value="cash">{t('cash') || 'Naqd pul'}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs">{t('note') || 'Izoh'}</Label>
+              <Textarea
+                rows={2}
+                value={taxPaymentDialog.note || ''}
+                onChange={(e) => setTaxPaymentDialog((p) => ({ ...p, note: e.target.value }))}
+                placeholder={t('payment_note_placeholder') || "To'lov haqida izoh"}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTaxPaymentDialog({ open: false })}
+                    disabled={taxPaymentDialog.saving}>
+              {t('cancel') || 'Bekor qilish'}
+            </Button>
+            <Button onClick={submitTaxPayment} disabled={taxPaymentDialog.saving}
+                    className="bg-orange-500 hover:bg-orange-600">
+              <CreditCard className="w-4 h-4 mr-2" />
+              {taxPaymentDialog.saving
+                ? (t('processing') || 'Jarayonda...')
+                : (t('confirm_payment') || "To'lovni tasdiqlash")}
             </Button>
           </DialogFooter>
         </DialogContent>
