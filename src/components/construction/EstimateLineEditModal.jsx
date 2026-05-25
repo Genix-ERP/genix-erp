@@ -41,6 +41,12 @@ export default function EstimateLineEditModal({ open, onClose, line, parent, est
     name: '',
     uom: '',
     quantity: '',
+    // `norma` doubles up: for parent works it maps to original_quantity
+    // (the smeta-anchored NORMA pill); for resources it's already covered
+    // by norm_rate below. Keeping a single field name on the form keeps
+    // the JSX simple and the save handler routes it to the right column
+    // based on isSubline.
+    norma: '',
     resource_type: '',
     material_rate: '',
     labor_rate: '',
@@ -64,6 +70,9 @@ export default function EstimateLineEditModal({ open, onClose, line, parent, est
       name: line.name || '',
       uom: line.uom || '',
       quantity: String(line.quantity ?? ''),
+      // Norma seed — parent works use original_quantity (Russian
+      // smeta NORMA), resources fall through to norm_rate later.
+      norma: String(line.original_quantity ?? '').replace('.', ','),
       resource_type: line.resource_type || '',
       material_rate: formatPriceInput(String(line.material_rate ?? 0)),
       labor_rate: formatPriceInput(String(line.labor_rate ?? 0)),
@@ -120,6 +129,13 @@ export default function EstimateLineEditModal({ open, onClose, line, parent, est
         payload.material_rate = parseFloat(parsePriceInput(form.material_rate)) || 0;
         payload.labor_rate = parseFloat(parsePriceInput(form.labor_rate)) || 0;
         payload.equipment_rate = parseFloat(parsePriceInput(form.equipment_rate)) || 0;
+        // NORMA edit for parent works — wired to original_quantity. Only
+        // send when the user typed something so we don't clobber the
+        // anchor with 0 on an otherwise unrelated save.
+        const normaStr = String(form.norma || '').trim();
+        if (normaStr !== '') {
+          payload.original_quantity = parseFloat(normaStr.replace(',', '.')) || 0;
+        }
       }
 
       await constructionService.updateEstimateLine(estimateId, line.id, payload);
@@ -216,7 +232,7 @@ export default function EstimateLineEditModal({ open, onClose, line, parent, est
           {isSubline ? (
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs text-muted-foreground">{t('shrnk_norm') || "ShRNK normasi"}</label>
+                <label className="text-xs text-muted-foreground">{t('norma') || 'Norma'}</label>
                 <Input
                   value={form.norm_rate}
                   onChange={(e) => setForm({ ...form, norm_rate: e.target.value })}
@@ -234,13 +250,26 @@ export default function EstimateLineEditModal({ open, onClose, line, parent, est
             </div>
           ) : (
             <>
-              <div>
-                <label className="text-xs text-muted-foreground">{t('quantity') || "Hajm"}</label>
-                <Input
-                  value={form.quantity}
-                  onChange={(e) => setForm({ ...form, quantity: e.target.value })}
-                  inputMode="decimal"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  {/* Norma — the imported smeta reja (original_quantity).
+                     Editable so the user can correct an import error
+                     without re-uploading the whole estimate. */}
+                  <label className="text-xs text-muted-foreground">{t('norma') || 'Norma'}</label>
+                  <Input
+                    value={form.norma}
+                    onChange={(e) => setForm({ ...form, norma: e.target.value })}
+                    inputMode="decimal"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">{t('quantity') || "Hajm"}</label>
+                  <Input
+                    value={form.quantity}
+                    onChange={(e) => setForm({ ...form, quantity: e.target.value })}
+                    inputMode="decimal"
+                  />
+                </div>
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div>

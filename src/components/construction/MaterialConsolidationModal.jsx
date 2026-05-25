@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { X, Printer, FileDown, Save } from 'lucide-react';
+import { X, Printer, FileDown, Save, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -53,6 +53,11 @@ const T = {
   all_blocks_hint: { uz: 'Bloklar bo\'yicha bo\'linmasdan, bitta jadvalda ko\'rsatish',
                      ru: 'Показать всё в одной таблице без разделения по блокам',
                      en: 'Show everything in a single table instead of splitting by block' },
+  blocks_label:    { uz: 'Bloklar',                          ru: 'Блоки',                           en: 'Blocks' },
+  blocks_count:    { uz: '{n}/{m}',                          ru: '{n}/{m}',                         en: '{n}/{m}' },
+  select_all:      { uz: 'Hammasi',                          ru: 'Все',                             en: 'All' },
+  select_none:     { uz: 'Hech qaysi',                       ru: 'Никакие',                         en: 'None' },
+  no_blocks_picked:{ uz: 'Hech qaysi blok tanlanmagan',      ru: 'Не выбрано ни одного блока',     en: 'No blocks selected' },
 };
 const tt = (key, lang) => T[key]?.[lang] || T[key]?.uz || key;
 
@@ -86,12 +91,31 @@ export default function MaterialConsolidationModal({
   // with no extra fetch.
   const [allBlocks, setAllBlocks] = useState(false);
 
+  // Per-block selection — Set of block ids included in the display/exports.
+  // Defaults to "all blocks selected" on each fresh load. The user can
+  // narrow it down via the Bloklar dropdown so the printed/Excel report
+  // only carries the subset they care about.
+  const [selectedBlockIds, setSelectedBlockIds] = useState(() => new Set());
+  const [blockPickerOpen, setBlockPickerOpen] = useState(false);
+  const blockPickerRef = useRef(null);
+
   useEffect(() => {
     if (!open || !projectId) return;
     let cancelled = false;
     setLoading(true);
     constructionService.getMaterialConsolidationReport(projectId)
-      .then((d) => { if (!cancelled) setData(d); })
+      .then((d) => {
+        if (cancelled) return;
+        setData(d);
+        // Seed the selection with every block returned. Falls back to an
+        // empty set if no blocks (then no per-block sections render and
+        // the picker disables itself).
+        const ids = new Set();
+        for (const b of (d?.blocks || [])) {
+          if (b?.id != null) ids.add(Number(b.id));
+        }
+        setSelectedBlockIds(ids);
+      })
       .catch((e) => {
         console.error('Failed to load material consolidation', e);
         toast.error(tt('load_failed', language));
@@ -100,17 +124,74 @@ export default function MaterialConsolidationModal({
     return () => { cancelled = true; };
   }, [open, projectId, language]);
 
-  // Compute project grand total. The backend already provides one but
-  // we recompute on the client so any UI-side filtering (future) stays
-  // in sync. For now this matches the backend's `total.total_amount`.
+  // Close the block picker on outside-click. Pointerdown so the close
+  // fires before any click inside the toolbar re-toggles state.
+  useEffect(() => {
+    if (!blockPickerOpen) return;
+    const handler = (e) => {
+      if (blockPickerRef.current && !blockPickerRef.current.contains(e.target)) {
+        setBlockPickerOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', handler);
+    return () => document.removeEventListener('pointerdown', handler);
+  }, [blockPickerOpen]);
+
+  // Blocks the user has actually opted-in to. When `selectedBlockIds` is
+  // empty (e.g. user deselected everything) we render nothing for the
+  // per-block sections but keep the toolbar usable — the empty-state
+  // message tells them to pick at least one.
+  const filteredBlocks = useMemo(() => {
+    if (!data) return [];
+    return (data.blocks || []).filter((b) => selectedBlockIds.has(Number(b.id)));
+  }, [data, selectedBlockIds]);
+
+  // Re-aggregate the project-wide totals from the SELECTED blocks only.
+  // Same grouping key the backend uses: (name, UOM, unit_rate). Top-ups
+  // attached to each block-group are carried over so the indented price
+  // breakdown stays intact across blocks.
+  const filteredTotalGroups = useMemo(() => {
+    if (filteredBlocks.length === 0) return [];
+    const keyOf = (name, uom, rate) =>
+      `${String(name || '').trim().toLowerCase()}|${String(uom || '').trim().toLowerCase()}|${Number(rate) || 0}`;
+    const buckets = new Map();
+    for (const blk of filteredBlocks) {
+      for (const g of (blk.groups || [])) {
+        const k = keyOf(g.name, g.uom, g.unit_rate);
+        if (!buckets.has(k)) {
+          buckets.set(k, {
+            name: g.name,
+            uom: g.uom,
+            unit_rate: Number(g.unit_rate) || 0,
+            fakt_quantity: 0,
+            fakt_amount: 0,
+            topups: [],
+          });
+        }
+        const cur = buckets.get(k);
+        cur.fakt_quantity += Number(g.fakt_quantity) || 0;
+        cur.fakt_amount += Number(g.fakt_amount) || 0;
+        if (Array.isArray(g.topups)) {
+          for (const tp of g.topups) cur.topups.push(tp);
+        }
+      }
+    }
+    return Array.from(buckets.values()).sort((a, b) =>
+      String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' }),
+    );
+  }, [filteredBlocks]);
+
+  // Compute project grand total over the selected blocks. Previously
+  // summed across every block returned by the backend; we now respect
+  // the user's per-block selection so the bottom-of-report total matches
+  // the visible sections.
   const projectTotal = useMemo(() => {
-    if (!data) return 0;
     let sum = 0;
-    for (const blk of data.blocks || []) {
+    for (const blk of filteredBlocks) {
       sum += Number(blk.total_amount) || 0;
     }
     return sum;
-  }, [data]);
+  }, [filteredBlocks]);
 
   // "All blocks" view: keep same material at the SAME price as one row
   // (sum quantities across blocks), but DIFFERENT prices stay as a
@@ -120,8 +201,11 @@ export default function MaterialConsolidationModal({
   // Any explicit backend topups are carried over so the hierarchy
   // mirrors the per-block view: one main row per material, with each
   // distinct purchase price visible underneath.
+  //
+  // Sourced from filteredTotalGroups so the per-block selection
+  // narrows the consolidated table as well.
   const mergedTotalGroups = useMemo(() => {
-    const src = data?.total?.groups || [];
+    const src = filteredTotalGroups;
     if (src.length === 0) return [];
 
     const keyOf = (name, uom) =>
@@ -176,7 +260,7 @@ export default function MaterialConsolidationModal({
       String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' })
     );
     return result;
-  }, [data]);
+  }, [filteredTotalGroups]);
 
   // ─────────────── Exports ───────────────
 
@@ -284,21 +368,22 @@ export default function MaterialConsolidationModal({
       row += 2;
     };
 
-    // Match the on-screen toggle: when "All blocks" is on, the Excel
-    // file mirrors the UI and contains ONLY the consolidated project
-    // table — with same material merged across blocks AND price
-    // variations. When off, it includes the per-block breakdown
-    // followed by the (price-distinguished) project total.
+    // Match the on-screen toggle AND the per-block selection: when
+    // "All blocks" is on, the Excel file contains ONLY the consolidated
+    // project table — with same material merged across the SELECTED
+    // blocks AND price variations. When off, it includes the per-block
+    // breakdown (selected blocks only) followed by the project total
+    // re-aggregated from the same selection.
     if (allBlocks) {
       if (mergedTotalGroups.length > 0) {
         writeBlock(tt('total_project', language), mergedTotalGroups, projectTotal);
       }
     } else {
-      (data.blocks || []).forEach((blk) => {
+      filteredBlocks.forEach((blk) => {
         writeBlock(`${tt('block_name', language)}: ${blk.name}`, blk.groups || [], blk.total_amount);
       });
-      if (data.total) {
-        writeBlock(tt('total_project', language), data.total.groups || [], data.total.total_amount);
+      if (filteredTotalGroups.length > 0) {
+        writeBlock(tt('total_project', language), filteredTotalGroups, projectTotal);
       }
     }
 
@@ -378,7 +463,20 @@ export default function MaterialConsolidationModal({
   if (!open) return null;
 
   const blocks = data?.blocks || [];
-  const totalGroups = data?.total?.groups || [];
+  // Per-block picker helpers — used by the dropdown in the toolbar.
+  const toggleBlock = (id) => {
+    setSelectedBlockIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const selectAllBlocks = () => {
+    const ids = new Set();
+    for (const b of blocks) if (b?.id != null) ids.add(Number(b.id));
+    setSelectedBlockIds(ids);
+  };
+  const clearAllBlocks = () => setSelectedBlockIds(new Set());
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose?.(); }}>
@@ -410,16 +508,67 @@ export default function MaterialConsolidationModal({
             <Button variant="ghost" size="sm" onClick={onClose}>
               <X className="w-4 h-4 mr-1" /> {t('close') || 'Yopish'}
             </Button>
-            <label
-              className="inline-flex items-center gap-2 ml-2 px-2.5 py-1.5 rounded-md border border-slate-200 cursor-pointer hover:bg-slate-50"
-              title={tt('all_blocks_hint', language)}
-            >
-              <Checkbox
-                checked={allBlocks}
-                onCheckedChange={(v) => setAllBlocks(v === true)}
-              />
-              <span className="text-sm text-slate-700">{tt('all_blocks', language)}</span>
-            </label>
+
+            {/* Per-block selection — popover with checkboxes for each
+               block. Drives display + print + Excel + Save. Defaults to
+               every block checked; user can narrow down to publish a
+               single block's materials or any subset. */}
+            <div ref={blockPickerRef} className="relative ml-2">
+              <button
+                type="button"
+                onClick={() => setBlockPickerOpen((v) => !v)}
+                disabled={blocks.length === 0}
+                className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-slate-200 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                <span>{tt('blocks_label', language)}</span>
+                <span className="font-mono text-xs text-slate-500">
+                  {tt('blocks_count', language)
+                    .replace('{n}', String(selectedBlockIds.size))
+                    .replace('{m}', String(blocks.length))}
+                </span>
+                <ChevronDown className="w-3.5 h-3.5" />
+              </button>
+              {blockPickerOpen && blocks.length > 0 && (
+                <div
+                  className="absolute left-0 top-full mt-1 z-20 bg-white border border-slate-200 rounded-md shadow-lg w-64 max-h-80 overflow-auto"
+                >
+                  <div className="flex items-center justify-between px-3 py-2 border-b border-slate-100 sticky top-0 bg-white">
+                    <button
+                      type="button"
+                      onClick={selectAllBlocks}
+                      className="text-xs text-emerald-700 hover:text-emerald-800"
+                    >
+                      {tt('select_all', language)}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={clearAllBlocks}
+                      className="text-xs text-slate-500 hover:text-slate-700"
+                    >
+                      {tt('select_none', language)}
+                    </button>
+                  </div>
+                  <ul className="py-1">
+                    {blocks.map((b) => {
+                      const id = Number(b.id);
+                      const checked = selectedBlockIds.has(id);
+                      return (
+                        <li key={id}>
+                          <label className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-slate-50 text-sm">
+                            <Checkbox
+                              checked={checked}
+                              onCheckedChange={() => toggleBlock(id)}
+                            />
+                            <span className="flex-1 truncate" title={b.name || ''}>{b.name || `#${id}`}</span>
+                          </label>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+            </div>
+
             <div className="flex-1" />
             <Button variant="outline" size="sm" onClick={handlePrint}>
               <Printer className="w-4 h-4 mr-1" /> {tt('print_btn', language)}
@@ -457,11 +606,13 @@ export default function MaterialConsolidationModal({
                   {tt('subtitle', language)}
                 </div>
 
-                {/* When "All blocks" is OFF: per-block sections + project total
-                    underneath (current behaviour). When ON: render ONLY the
-                    project-wide consolidated table — same name+UOM+price merged
-                    across every block, presented as one report. */}
-                {allBlocks ? (
+                {/* When "All blocks" is OFF: per-block sections (filtered to
+                    the user's block selection) + project total underneath.
+                    When ON: render ONLY the project-wide consolidated table —
+                    same name+UOM+price merged across the SELECTED blocks. */}
+                {selectedBlockIds.size === 0 ? (
+                  <div className="text-center text-sm text-slate-500 py-8">{tt('no_blocks_picked', language)}</div>
+                ) : allBlocks ? (
                   mergedTotalGroups.length === 0 ? (
                     <div className="text-center text-sm text-slate-500 py-8">{tt('no_materials', language)}</div>
                   ) : (
@@ -476,10 +627,10 @@ export default function MaterialConsolidationModal({
                   )
                 ) : (
                   <>
-                    {blocks.length === 0 ? (
+                    {filteredBlocks.length === 0 ? (
                       <div className="text-center text-sm text-slate-500 py-8">{tt('no_materials', language)}</div>
                     ) : (
-                      blocks.map((blk) => (
+                      filteredBlocks.map((blk) => (
                         <BlockSection
                           key={blk.id}
                           label={`${tt('block_name', language)}: ${blk.name}`}
@@ -492,12 +643,13 @@ export default function MaterialConsolidationModal({
                     )}
 
                     {/* Project-wide total section — combines same name+UOM+price
-                        across blocks, so the user gets ONE consolidated row per
-                        distinct material/price tuple at the bottom. */}
-                    {totalGroups.length > 0 && (
+                        across the SELECTED blocks, so the user gets ONE
+                        consolidated row per distinct material/price tuple at
+                        the bottom of the report. */}
+                    {filteredTotalGroups.length > 0 && (
                       <BlockSection
                         label={tt('total_project', language)}
-                        groups={totalGroups}
+                        groups={filteredTotalGroups}
                         totalAmount={projectTotal}
                         language={language}
                         totalLabel={tt('total_project', language)}

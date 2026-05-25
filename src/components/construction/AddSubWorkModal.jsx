@@ -72,9 +72,56 @@ export default function AddSubWorkModal({
       return;
     }
     const q = Number(String(qty).replace(/\s/g, '').replace(',', '.').replace(/[^\d.\-]/g, '')) || 0;
+    const trimmedCode = code.trim();
     setSaving(true);
     try {
-      if (isSection) {
+      // Code-match clone path — when the user typed a SHRNK code, ask the
+      // backend to look for an existing parent line with the same code
+      // anywhere in the project and copy its resources onto the new line.
+      // The endpoint falls back to a plain insert when no match is found,
+      // so it's safe to use it unconditionally whenever code is present.
+      if (trimmedCode) {
+        const body = isSection
+          ? {
+              source_code: trimmedCode,
+              parent_item_number: `${parentSection} › ${name.trim()}`,
+              name: name.trim(),
+              uom,
+              code: trimmedCode,
+              quantity: q,
+            }
+          : {
+              source_code: trimmedCode,
+              parent_line_id: parent?.id,
+              name: name.trim(),
+              uom,
+              code: trimmedCode,
+              quantity: q,
+              item_number: (parent?.item_number || String(parent?.id || ''))
+                ? `${parent?.item_number || parent?.id}-${nextSeq || 1}`
+                : undefined,
+            };
+        const res = await constructionService.cloneEstimateLineByCode(estimateId, body);
+        const cloned = Number(res?.cloned_resources || 0);
+        if (cloned > 0) {
+          toast.success(
+            (t('cloned_with_resources') || "Etap yaratildi va {n} ta resurs ko'chirildi")
+              .replace('{n}', String(cloned)),
+          );
+        } else if (res?.source_id) {
+          // Source matched but had no resources to copy.
+          toast.success(
+            t('cloned_source_empty')
+              || "Etap yaratildi (mos kod topildi, lekin resurslari yo'q edi)",
+          );
+        } else {
+          // No matching code in the project — fell through to a plain insert.
+          toast.success(
+            t('cloned_no_match')
+              || "Etap yaratildi (kod loyihada topilmadi — resurslar ko'chirilmadi)",
+          );
+        }
+      } else if (isSection) {
         // Sub-section / sub-stage mode — top-level line under a section
         // path. parent_item_number = "PARENT › NEW_NAME" so the
         // hierarchical grouping treats this as a new sub-stage under
@@ -82,7 +129,7 @@ export default function AddSubWorkModal({
         await constructionService.createEstimateLine(estimateId, {
           parent_line_id: 0,
           parent_item_number: `${parentSection} › ${name.trim()}`,
-          code: code.trim() || undefined,
+          code: undefined,
           name: name.trim(),
           uom,
           resource_type: '',
@@ -94,15 +141,12 @@ export default function AddSubWorkModal({
           labor_rate: 0,
           equipment_rate: 0,
         });
+        toast.success(t('stage_created') || 'Etap yaratildi');
       } else {
         const parentNum = parent?.item_number || String(parent?.id || '');
         await constructionService.createEstimateLine(estimateId, {
           parent_line_id: parent?.id,
-          // `code` is the optional shifr (e.g. "1A", "2-3", "K-1") the user
-          // can pin on a stage so it lines up with their printed Forma 2
-          // numbering. Backend (CreateEstimateLineInput) accepts it as
-          // `code` and stores it on construction_estimate_line.code.
-          code: code.trim() || undefined,
+          code: undefined,
           name: name.trim(),
           uom,
           resource_type: '',
@@ -112,8 +156,8 @@ export default function AddSubWorkModal({
           quantity: q,
           item_number: parentNum ? `${parentNum}-${nextSeq || 1}` : undefined,
         });
+        toast.success(t('stage_created') || 'Etap yaratildi');
       }
-      toast.success(t('stage_created') || 'Etap yaratildi');
       onSaved?.();
       onClose?.();
     } catch (e) {

@@ -19,6 +19,7 @@ import MaterialConsolidationModal from '@/components/construction/MaterialConsol
 import ResourcesPanel from '@/components/construction/ResourcesPanel';
 import AddResourcePickerModal from '@/components/construction/AddResourcePickerModal';
 import AddSubWorkModal from '@/components/construction/AddSubWorkModal';
+import EstimateLineEditModal from '@/components/construction/EstimateLineEditModal';
 
 // SmetaManagementTab — full match to files/Form2_Works_v2 (7).html.
 //
@@ -213,6 +214,11 @@ export default function SmetaManagementTab({ project }) {
   // original smeta plan stays immutable for audit.
   const [topupOpen, setTopupOpen] = useState(false);
   const [topupTarget, setTopupTarget] = useState(null);
+
+  // Inline-edit modal — drives the full EstimateLineEditModal for any
+  // estimate line (parent work OR resource sub-line). Carries the line
+  // being edited plus the parent for context. Set to null = closed.
+  const [editLineTarget, setEditLineTarget] = useState(null);
 
   const [form2Open, setForm2Open] = useState(false);
   // Material consolidation modal — toggled by the "Material yig'indisi"
@@ -723,6 +729,11 @@ export default function SmetaManagementTab({ project }) {
     }
 
     const sectionMap = new Map();
+    // Names of the manually-added sections we pin at the top. Captured
+    // here so the post-loop sort can leave them alone (newest-first
+    // manual at the top) and only sort the IMPORTED sections by their
+    // lines' item_number.
+    const manualPinnedNames = new Set();
 
     // Pre-seed with TOP-LEVEL sections the user explicitly added via
     // "+ Bo'lim qo'shish" (tracked by id in localStorage). Sorted by id
@@ -754,6 +765,7 @@ export default function SmetaManagementTab({ project }) {
         if (!name.toLowerCase().includes(search.toLowerCase())) continue;
       }
       sectionMap.set(name, { name, lines: [], total: 0, is_empty_manual: true });
+      manualPinnedNames.add(name);
     }
 
     for (const ln of lines) {
@@ -852,7 +864,64 @@ export default function SmetaManagementTab({ project }) {
         is_empty_manual: true,
       });
     }
-    return Array.from(sectionMap.values());
+    // Final ordering: manually-added (pinned) sections in insertion
+    // order (newest first, as pre-seeded above) followed by imported
+    // sections sorted by their min numeric item_number. Imported
+    // sections without a numeric leading row land at the end, in
+    // alphabetical order of section name to stay stable.
+    //
+    // Without this sort the imported sections came out in backend
+    // sort_order order — which left ФУНДАМЕНТЫ (rows 8–48) ahead of
+    // ЗЕМЛЯННЫЕ РАБОТЫ (rows 1–7) because that's how they landed in
+    // the file. Sorting by item_number makes the section order follow
+    // the printed smeta page numbering the user expects.
+    const allSections = Array.from(sectionMap.values());
+    const pinned = [];
+    const imported = [];
+    for (const sec of allSections) {
+      if (manualPinnedNames.has(sec.name)) pinned.push(sec);
+      else imported.push(sec);
+    }
+    const minItemNum = (sec) => {
+      let min = Infinity;
+      for (const ln of (sec.lines || [])) {
+        // item_number can be "1", "1A", "1.2", "1-3" — pull the leading
+        // numeric run as the sort key so alphanumerics still grade.
+        const raw = String(ln.item_number || '').trim();
+        const m = raw.match(/^\d+(?:\.\d+)?/);
+        if (m) {
+          const n = Number(m[0]);
+          if (Number.isFinite(n) && n < min) min = n;
+        }
+      }
+      return min;
+    };
+    imported.sort((a, b) => {
+      const ma = minItemNum(a);
+      const mb = minItemNum(b);
+      if (ma === mb) {
+        return String(a.name || '').localeCompare(String(b.name || ''));
+      }
+      return ma - mb; // Infinity values fall to the end naturally
+    });
+    // Also sort each section's sub-sections by min item_number so the
+    // hierarchy follows the printed smeta page numbering. Sub-sections
+    // without a numeric leading row fall to the end of the parent's
+    // sub-section list, alphabetically by name. Pinned sections (manual)
+    // get the same treatment for symmetry.
+    for (const sec of [...pinned, ...imported]) {
+      if (Array.isArray(sec.subSections) && sec.subSections.length > 1) {
+        sec.subSections.sort((a, b) => {
+          const ma = minItemNum(a);
+          const mb = minItemNum(b);
+          if (ma === mb) {
+            return String(a.name || '').localeCompare(String(b.name || ''));
+          }
+          return ma - mb;
+        });
+      }
+    }
+    return [...pinned, ...imported];
   }, [lines, search, sectionFilter, t, manualSectionNames, manualSectionRows, recentlyAddedSectionIds]);
 
   // ── Mutations ─────────────────────────────────────────────────────
@@ -1612,43 +1681,52 @@ export default function SmetaManagementTab({ project }) {
                       )}
                     </div>
 
-                    {!collapsed && sec.lines.map((ln) => {
-                      const subs = subByParent.get(Number(ln.id)) || [];
-                      const subStages = subs.filter(isSubStageRow);
-                      return (
-                        <React.Fragment key={ln.id}>
-                          <WorkCard
-                            line={ln}
-                            subs={subs}
-                            isOpen={openWorks.has(ln.id)}
-                            onToggle={() => toggleWork(ln.id)}
-                            qtyDraft={qtyDraft[ln.id]}
-                            setQtyDraft={(v) => setQtyDraft((d) => ({ ...d, [ln.id]: v }))}
-                            clearQtyDraft={() => setQtyDraft((d) => { const n = { ...d }; delete n[ln.id]; return n; })}
-                            commitQty={commitQty}
-                            resetQty={resetQty}
-                            removeLine={removeLine}
-                            openAddResource={openAddResource}
-                            openAddStage={openAddStage}
-                            openTopup={openTopup}
-                            removeTopup={removeTopup}
-                            t={t}
-                            isSubStage={false}
-                          />
-                          {/* Sub-stage cards — rendered as their own cards
-                             RIGHT AFTER their parent in the section list.
-                             Each gets its own expand/collapse, qty input,
-                             and resource breakdown. */}
-                          {subStages.map((ss) => (
+                    {/* Interleaved render — top-level lines and
+                       sub-sections are sorted into a SINGLE stream by
+                       their first row's item_number. So a sub-section
+                       whose work numbers start at 1 renders BEFORE a
+                       top-level work numbered 8, matching the printed
+                       smeta page order. Without this they'd be split
+                       into "all lines first, then all sub-sections"
+                       which buried row-1 sub-sections under row-47
+                       top-level lines.
+
+                       Each entry carries its sort key (leading numeric
+                       run of item_number — same parser the section
+                       useMemo uses) plus a render() function. After
+                       sort, we just call render() for each. */}
+                    {/* Interleaved render — top-level lines and
+                       sub-sections are sorted into a SINGLE stream by
+                       their first row's item_number. So a sub-section
+                       whose work numbers start at 1 renders BEFORE a
+                       top-level work numbered 8, matching the printed
+                       smeta page order. */}
+                    {!collapsed && (() => {
+                      const leadNum = (raw) => {
+                        const m = String(raw || '').trim().match(/^\d+(?:\.\d+)?/);
+                        return m ? Number(m[0]) : Infinity;
+                      };
+                      const subMinItem = (sub) => {
+                        let min = Infinity;
+                        for (const sln of (sub.lines || [])) {
+                          const n = leadNum(sln.item_number);
+                          if (n < min) min = n;
+                        }
+                        return min;
+                      };
+                      const renderLineEntry = (ln) => {
+                        const subs = subByParent.get(Number(ln.id)) || [];
+                        const subStages = subs.filter(isSubStageRow);
+                        return (
+                          <React.Fragment key={`ln-${ln.id}`}>
                             <WorkCard
-                              key={ss.id}
-                              line={ss}
-                              subs={subByParent.get(Number(ss.id)) || []}
-                              isOpen={openWorks.has(ss.id)}
-                              onToggle={() => toggleWork(ss.id)}
-                              qtyDraft={qtyDraft[ss.id]}
-                              setQtyDraft={(v) => setQtyDraft((d) => ({ ...d, [ss.id]: v }))}
-                              clearQtyDraft={() => setQtyDraft((d) => { const n = { ...d }; delete n[ss.id]; return n; })}
+                              line={ln}
+                              subs={subs}
+                              isOpen={openWorks.has(ln.id)}
+                              onToggle={() => toggleWork(ln.id)}
+                              qtyDraft={qtyDraft[ln.id]}
+                              setQtyDraft={(v) => setQtyDraft((d) => ({ ...d, [ln.id]: v }))}
+                              clearQtyDraft={() => setQtyDraft((d) => { const n = { ...d }; delete n[ln.id]; return n; })}
                               commitQty={commitQty}
                               resetQty={resetQty}
                               removeLine={removeLine}
@@ -1656,22 +1734,177 @@ export default function SmetaManagementTab({ project }) {
                               openAddStage={openAddStage}
                               openTopup={openTopup}
                               removeTopup={removeTopup}
+                              editLine={setEditLineTarget}
                               t={t}
-                              isSubStage
+                              isSubStage={false}
                             />
-                          ))}
+                            {subStages.map((ss) => (
+                              <WorkCard
+                                key={ss.id}
+                                line={ss}
+                                subs={subByParent.get(Number(ss.id)) || []}
+                                isOpen={openWorks.has(ss.id)}
+                                onToggle={() => toggleWork(ss.id)}
+                                qtyDraft={qtyDraft[ss.id]}
+                                setQtyDraft={(v) => setQtyDraft((d) => ({ ...d, [ss.id]: v }))}
+                                clearQtyDraft={() => setQtyDraft((d) => { const n = { ...d }; delete n[ss.id]; return n; })}
+                                commitQty={commitQty}
+                                resetQty={resetQty}
+                                removeLine={removeLine}
+                                openAddResource={openAddResource}
+                                openAddStage={openAddStage}
+                                openTopup={openTopup}
+                                removeTopup={removeTopup}
+                                editLine={setEditLineTarget}
+                                t={t}
+                                isSubStage
+                              />
+                            ))}
+                          </React.Fragment>
+                        );
+                      };
+                      const renderSubEntry = (sub) => (
+                        <React.Fragment key={`sub-${sub.fullName}`}>
+                          <div
+                            className="ml-6 mb-2 rounded-lg px-4 py-3 flex items-center gap-2.5 border-l-2"
+                            style={{
+                              background: C.inset,
+                              border: `1px dashed ${C.border2}`,
+                              borderLeftColor: C.teal,
+                              borderLeftWidth: 3,
+                            }}
+                          >
+                            <span className="text-[12px] text-slate-400">└</span>
+                            <span className="flex-1 text-left font-medium text-[12.5px] text-slate-700">{sub.name}</span>
+                            <span
+                              className="text-[10.5px] font-mono px-2 py-0.5 rounded"
+                              style={{ background: C.card, color: C.muted }}
+                            >
+                              {sub.lines.length} {t('works_count_suffix') || 'ish'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setAddWorkModal({
+                                sectionName: sub.fullName, name: '', uom: '', code: '',
+                              })}
+                              className="px-2 py-1 rounded text-[10.5px] font-medium flex items-center gap-1"
+                              style={{
+                                background: 'rgba(13,148,136,0.08)', color: C.teal,
+                                border: '1px solid rgba(13,148,136,0.25)',
+                              }}
+                              title={t('add_work') || "Ish qo'shish"}
+                            >
+                              <span className="text-[12px] leading-none font-bold">+</span>
+                              {t('add_work_short') || "Ish"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!estimateId) {
+                                  toast.error(t('no_estimate_for_work')
+                                    || "Bu blok uchun єдинич smeta topilmadi");
+                                  return;
+                                }
+                                setAddSubBosqichSection(sub.fullName);
+                              }}
+                              className="px-2 py-1 rounded text-[10.5px] font-medium flex items-center gap-1"
+                              style={{
+                                background: C.card, color: C.muted,
+                                border: `1px solid ${C.border2}`,
+                              }}
+                              title={t('add_substage') || "Sub-bosqich qo'shish"}
+                            >
+                              <span className="text-[12px] leading-none font-bold">+</span>
+                              {t('substage_short') || "Sub-bosqich"}
+                            </button>
+                            {canDeleteConstruction && (
+                              <button
+                                type="button"
+                                onClick={() => removeSection(sub.fullName)}
+                                className="p-1 rounded flex items-center justify-center"
+                                style={{
+                                  background: 'rgba(220,38,38,0.06)', color: C.red,
+                                  border: '1px solid rgba(220,38,38,0.25)',
+                                }}
+                                title={t('delete_substage') || "Sub-bosqichni o'chirish"}
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+                          {Array.isArray(sub.lines) && sub.lines.length > 0 && (
+                            <div className="ml-6 mb-2">
+                              {sub.lines.map((ln) => {
+                                const subs = subByParent.get(Number(ln.id)) || [];
+                                const subStages = subs.filter(isSubStageRow);
+                                return (
+                                  <React.Fragment key={ln.id}>
+                                    <WorkCard
+                                      line={ln}
+                                      subs={subs}
+                                      isOpen={openWorks.has(ln.id)}
+                                      onToggle={() => toggleWork(ln.id)}
+                                      qtyDraft={qtyDraft[ln.id]}
+                                      setQtyDraft={(v) => setQtyDraft((d) => ({ ...d, [ln.id]: v }))}
+                                      clearQtyDraft={() => setQtyDraft((d) => { const n = { ...d }; delete n[ln.id]; return n; })}
+                                      commitQty={commitQty}
+                                      resetQty={resetQty}
+                                      removeLine={removeLine}
+                                      openAddResource={openAddResource}
+                                      openAddStage={openAddStage}
+                                      openTopup={openTopup}
+                                      removeTopup={removeTopup}
+                                      editLine={setEditLineTarget}
+                                      t={t}
+                                      isSubStage={false}
+                                    />
+                                    {subStages.map((ss) => (
+                                      <WorkCard
+                                        key={ss.id}
+                                        line={ss}
+                                        subs={subByParent.get(Number(ss.id)) || []}
+                                        isOpen={openWorks.has(ss.id)}
+                                        onToggle={() => toggleWork(ss.id)}
+                                        qtyDraft={qtyDraft[ss.id]}
+                                        setQtyDraft={(v) => setQtyDraft((d) => ({ ...d, [ss.id]: v }))}
+                                        clearQtyDraft={() => setQtyDraft((d) => { const n = { ...d }; delete n[ss.id]; return n; })}
+                                        commitQty={commitQty}
+                                        resetQty={resetQty}
+                                        removeLine={removeLine}
+                                        openAddResource={openAddResource}
+                                        openAddStage={openAddStage}
+                                        openTopup={openTopup}
+                                        removeTopup={removeTopup}
+                                        editLine={setEditLineTarget}
+                                        t={t}
+                                        isSubStage
+                                      />
+                                    ))}
+                                  </React.Fragment>
+                                );
+                              })}
+                            </div>
+                          )}
                         </React.Fragment>
                       );
-                    })}
+                      const entries = [];
+                      for (const ln of (sec.lines || [])) {
+                        entries.push({ kind: 'line', sort: leadNum(ln.item_number), data: ln });
+                      }
+                      for (const sub of (sec.subSections || [])) {
+                        entries.push({ kind: 'sub', sort: subMinItem(sub), data: sub });
+                      }
+                      entries.sort((a, b) => a.sort - b.sort);
+                      return entries.map((entry) =>
+                        entry.kind === 'line' ? renderLineEntry(entry.data) : renderSubEntry(entry.data),
+                      );
+                    })()}
 
-                    {/* Sub-sections nested inside the parent. Two flavours:
-                       (a) an empty placeholder the user created via
-                       "+ Sub-bosqich" before adding any work, and
-                       (b) a real bucket with one or more work lines
-                       whose parent_item_number is "PARENT › CHILD".
-                       Both render as an indented card with a left
-                       border accent, then any work cards underneath. */}
-                    {!collapsed && Array.isArray(sec.subSections) && sec.subSections.map((sub) => (
+                    {/* Legacy sub-section render — left in place but
+                       disabled because the interleaved render above
+                       handles sub-sections inline. Kept as a fallback
+                       reference; safe to delete in a future cleanup. */}
+                    {false && !collapsed && Array.isArray(sec.subSections) && sec.subSections.map((sub) => (
                       <React.Fragment key={sub.fullName}>
                         <div
                           className="ml-6 mb-2 rounded-lg px-4 py-3 flex items-center gap-2.5 border-l-2"
@@ -1767,6 +2000,7 @@ export default function SmetaManagementTab({ project }) {
                                     openAddStage={openAddStage}
                                     openTopup={openTopup}
                                     removeTopup={removeTopup}
+                                    editLine={setEditLineTarget}
                                     t={t}
                                     isSubStage={false}
                                   />
@@ -1787,6 +2021,7 @@ export default function SmetaManagementTab({ project }) {
                                       openAddStage={openAddStage}
                                       openTopup={openTopup}
                                       removeTopup={removeTopup}
+                                      editLine={setEditLineTarget}
                                       t={t}
                                       isSubStage
                                     />
@@ -1896,6 +2131,22 @@ export default function SmetaManagementTab({ project }) {
         onClose={() => setMatConsOpen(false)}
         projectId={project?.id}
         projectName={project?.name}
+      />
+
+      {/* Generic estimate-line edit modal — opened from the pencil icon
+         on any work card or any resource sub-line. Routes the save to the
+         line's own estimate_id so multi-єдинич blocks edit the right row.
+         On save we re-load the active estimate's lines so totals/badges
+         update without a manual refresh. */}
+      <EstimateLineEditModal
+        open={!!editLineTarget}
+        onClose={() => setEditLineTarget(null)}
+        line={editLineTarget}
+        estimateId={editLineTarget ? lineEst(editLineTarget) : (estimateId ? Number(estimateId) : undefined)}
+        onSaved={() => {
+          setEditLineTarget(null);
+          loadLines(activeEstimateIds);
+        }}
       />
 
       <Dialog open={form2Open} onOpenChange={setForm2Open}>
@@ -2019,33 +2270,67 @@ export default function SmetaManagementTab({ project }) {
               toast.error(t('no_estimate_for_work') || "Smeta yo'q — avval єдинич smeta yarating");
               return;
             }
+            const code = (addWorkModal.code || '').trim();
             setAddWorkBusy(true);
             try {
-              await constructionService.createEstimateLine(Number(estimateId), {
-                // No parent line — this is a top-level work (a "ish"),
-                // not a sub-line. parent_item_number carries the section
-                // grouping (= section's name).
-                parent_line_id: 0,
-                parent_item_number: addWorkModal.sectionName,
-                name,
-                uom,
-                code: (addWorkModal.code || '').trim() || undefined,
-                // Template-mode defaults: quantity starts at 0 so the
-                // foreman fills BAJARILDI. quantity_override=true so the
-                // value the foreman types isn't re-derived from a
-                // (non-existent) parent's cascade.
-                quantity: 0,
-                quantity_override: true,
-                resource_type: '',
-                material_rate: 0,
-                labor_rate: 0,
-                equipment_rate: 0,
-                norm_rate: 0,
-                unit_price: 0,
-              });
+              if (code) {
+                // Code-match clone path — let the backend look for an
+                // existing parent line with this code anywhere in the
+                // project and copy its resources onto the new work. Falls
+                // back to a plain insert when no match is found, so it's
+                // safe to call this unconditionally when a code is set.
+                const res = await constructionService.cloneEstimateLineByCode(Number(estimateId), {
+                  source_code: code,
+                  parent_item_number: addWorkModal.sectionName,
+                  name,
+                  uom,
+                  code,
+                  quantity: 0,
+                });
+                const cloned = Number(res?.cloned_resources || 0);
+                if (cloned > 0) {
+                  toast.success(
+                    (t('cloned_with_resources') || "Ish qo'shildi va {n} ta resurs ko'chirildi")
+                      .replace('{n}', String(cloned)),
+                  );
+                } else if (res?.source_id) {
+                  toast.success(
+                    t('cloned_source_empty')
+                      || "Ish qo'shildi (mos kod topildi, lekin resurslari yo'q edi)",
+                  );
+                } else {
+                  toast.success(
+                    t('cloned_no_match')
+                      || "Ish qo'shildi (kod loyihada topilmadi — resurslar ko'chirilmadi)",
+                  );
+                }
+              } else {
+                await constructionService.createEstimateLine(Number(estimateId), {
+                  // No parent line — this is a top-level work (a "ish"),
+                  // not a sub-line. parent_item_number carries the section
+                  // grouping (= section's name).
+                  parent_line_id: 0,
+                  parent_item_number: addWorkModal.sectionName,
+                  name,
+                  uom,
+                  code: undefined,
+                  // Template-mode defaults: quantity starts at 0 so the
+                  // foreman fills BAJARILDI. quantity_override=true so the
+                  // value the foreman types isn't re-derived from a
+                  // (non-existent) parent's cascade.
+                  quantity: 0,
+                  quantity_override: true,
+                  resource_type: '',
+                  material_rate: 0,
+                  labor_rate: 0,
+                  equipment_rate: 0,
+                  norm_rate: 0,
+                  unit_price: 0,
+                });
+                toast.success(t('work_added') || "Ish qo'shildi");
+              }
               setAddWorkModal(null);
               loadLines(activeEstimateIds);
-              toast.success(t('work_added') || "Ish qo'shildi");
             } catch (e) {
               toast.error(formatApiError(e, t, 'Xatolik'));
             } finally {
@@ -2618,7 +2903,7 @@ function StatCard({ icon: Icon, variant, label, value, meta }) {
 function WorkCard({
   line, subs, isOpen, onToggle,
   qtyDraft, setQtyDraft, clearQtyDraft, commitQty, resetQty, removeLine,
-  openAddResource, openAddStage, openTopup, removeTopup, t, isSubStage,
+  openAddResource, openAddStage, openTopup, removeTopup, editLine, t, isSubStage,
 }) {
   // Resource-level top-up expansion. Collapsed by default so a row
   // with several top-ups doesn't blow up the card height; the user
@@ -2944,6 +3229,20 @@ function WorkCard({
                 {isSubStage ? (t('add_resource') || "Resurs qo'shish") : (t('extra_resource_btn') || "Qo'shimcha resurs")}
               </button>
             )}
+            {/* Edit pencil — opens the EstimateLineEditModal so the user
+                can change name, code, uom, quantity, and rates without
+                deleting and recreating the row. Hidden when locked. */}
+            {!isLocked && editLine && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); editLine(line); }}
+                title={t('edit') || 'Tahrirlash'}
+                className="w-7 h-7 rounded-[5px] flex items-center justify-center transition"
+                style={{ background: C.hover, border: `1px solid ${C.border2}`, color: C.dim }}
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+              </button>
+            )}
             {/* Sub-stages can be deleted from their own header — except
                 when locked. */}
             {isSubStage && !isLocked && (
@@ -3122,6 +3421,21 @@ function WorkCard({
                                   style={{ background: C.tealSoft, border: `1px solid ${C.border2}`, color: C.teal }}
                                 >
                                   <Plus className="w-3 h-3" />
+                                </button>
+                              )}
+                              {/* Edit pencil — opens the EstimateLineEditModal
+                                 on this resource sub-line so the user can fix
+                                 name / uom / norm / price without deleting
+                                 and re-adding. */}
+                              {editLine && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); editLine(sub); }}
+                                  title={t('edit') || 'Tahrirlash'}
+                                  className="w-7 h-7 rounded-[5px] flex items-center justify-center transition"
+                                  style={{ background: C.hover, border: `1px solid ${C.border2}`, color: C.dim }}
+                                >
+                                  <Edit3 className="w-3 h-3" />
                                 </button>
                               )}
                               <button

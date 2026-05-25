@@ -555,6 +555,13 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
   // keys by name only. resolveWorkQty + the WorkTable JSX try strict
   // first, then fall back to loose.
   const [vorPlanByName, setVorPlanByName] = useState(() => ({
+    // byItem — keyed by the row's item_number (the № column the user
+    // sees on the printed smeta). When єдинич and ВОР come from the
+    // same source XLSX their row numbers are aligned, so this gives a
+    // deterministic match even when the SAME work name+code appears
+    // in multiple sections (e.g. УСТРОЙСТВО ПОЯСОВ at rows 33, 52, 109
+    // — all with code E0603-002-01 but different planned qtys).
+    byItem: new Map(),
     strict: new Map(),
     loose: new Map(),
   }));
@@ -693,7 +700,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
         if (!matchedEst) {
           setLines([]);
           setActiveEstimateId(null);
-          setVorPlanByName({ strict: new Map(), loose: new Map() });
+          setVorPlanByName({ byItem: new Map(), strict: new Map(), loose: new Map() });
           setLoading(false);
           return;
         }
@@ -724,6 +731,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
           // Авеню Блок 2 Угловой" — see compoundKey doc above). For
           // files where Единич and ВОР disagree on section labels,
           // the loose map still rescues the lookup.
+          const byItem = new Map();
           const strict = new Map();
           const loose = new Map();
           for (const r of vorList) {
@@ -732,8 +740,38 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
             if (r.parent_line_id) continue;
             const n = normName(r.name);
             if (!n) continue;
-            const q = Number(r.quantity || 0);
+            // Read the planned figure with the SAME priority the
+            // Smetalar (EstimatesTab) tab uses to display it:
+            //   1. imported_quantity — file's literal value preserved
+            //      by migration 413 (col F on Единич / Кол-во on ВОР).
+            //   2. original_quantity — parent-only anchor from
+            //      migration 349 (for rows that predate 413).
+            //   3. live `quantity` — last fallback for legacy rows.
+            //
+            // Without this priority chain, ВОР rows whose ledger
+            // `quantity` was overwritten after import (or whose
+            // template-mode import zero'd quantity but preserved
+            // imported_quantity) feed Bosqichlar a wrong REJA — the
+            // user sees Smetalar's 0.301 but Bosqichlar's 0.1893.
+            const imp = Number(r.imported_quantity || 0);
+            const oq  = Number(r.original_quantity || 0);
+            const lq  = Number(r.quantity || 0);
+            const q = imp > 0 ? imp : (oq > 0 ? oq : lq);
             if (!(q > 0)) continue;
+
+            // byItem — keyed on item_number (the printed row #). This is
+            // the user-confirmed disambiguator for files where the same
+            // work name+code appears in multiple sections with different
+            // planned qtys. We also key on (item_number, code) so a
+            // mismatched code wouldn't accidentally hit the wrong row.
+            const itemNum = String(r.item_number || '').trim();
+            if (itemNum) {
+              const codeKey = String(r.code || '').trim().toLowerCase();
+              if (!byItem.has(itemNum)) byItem.set(itemNum, q);
+              const dualKey = `${itemNum}|${codeKey}`;
+              if (!byItem.has(dualKey)) byItem.set(dualKey, q);
+            }
+
             const key = compoundKey(r.parent_item_number, r.name, r.uom);
             // First-write-wins for strict so the original section's qty
             // sticks; later duplicates land under their own section
@@ -745,7 +783,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
             // overwrite the first and reintroduce the original bug.
             if (!loose.has(n)) loose.set(n, q);
           }
-          setVorPlanByName({ strict, loose });
+          setVorPlanByName({ byItem, strict, loose });
         } catch (e) {
           if (!cancelled) toast.error(formatApiError(e, t, 'Xatolik'));
         }
@@ -984,8 +1022,29 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
   //      custom-added rows the user entered a value on.
   const resolveWorkQty = useCallback((w) => {
     if (!w) return 0;
+    // Priority — prefer the єдинич's own anchored plan first. ВОР is
+    // the RESCUE for template-mode єдинич imports whose
+    // original_quantity is 0 (no col F value). Within the ВОР rescue
+    // path we try a row-number-based lookup FIRST (the user-confirmed
+    // disambiguator for files where the same name+code appears in
+    // multiple sections with different planned qtys), then fall back
+    // to the section+name+uom strict match, then a name-only loose
+    // match. Live `quantity` is the last-ditch fallback.
+    const origQty = Number(w.original_quantity || 0);
+    if (origQty > 0) return origQty;
+    const byItem = vorPlanByName?.byItem;
     const strict = vorPlanByName?.strict;
     const loose = vorPlanByName?.loose;
+    if (byItem) {
+      const itemNum = String(w.item_number || '').trim();
+      if (itemNum) {
+        const codeKey = String(w.code || '').trim().toLowerCase();
+        // Prefer (item_number, code) — guards against item_numbers
+        // accidentally aligning across mismatched code rows.
+        const v = Number(byItem.get(`${itemNum}|${codeKey}`) || byItem.get(itemNum) || 0);
+        if (v > 0) return v;
+      }
+    }
     if (strict) {
       const sk = compoundKey(w.parent_item_number, w.name, w.uom);
       const v = strict.get(sk) || 0;
@@ -995,8 +1054,6 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
       const v = loose.get(normName(w.name)) || 0;
       if (v > 0) return v;
     }
-    const origQty = Number(w.original_quantity || 0);
-    if (origQty > 0) return origQty;
     return Number(w.quantity || 0);
   }, [vorPlanByName]);
   const blockProg = useMemo(() => blockProgress(stages, resolveWorkQty), [stages, resolveWorkQty]);
@@ -2054,34 +2111,44 @@ function WorksTable({
             const isLocked = w.approval_status === 'confirmed_engineer';
             const isSupConfirmed = w.approval_status === 'confirmed_supervisor';
             const rowBg = isLocked ? '#F0FDF4' : (isSupConfirmed ? '#FEF7E0' : 'transparent');
-            // REJA = the planned project quantity. Sourced from the
-            // matching ВОР smeta's Miqdor (built into `vorPlanByName`
-            // upstream); falls back to the единич line's own quantity
-            // when there's no ВОР match. The lookup tries the strict
-            // (section + name + uom) key first to disambiguate Excel
-            // files where the same work name appears in multiple
-            // sub-blocks with different qtys (e.g. "Жилдом Жавохир
-            // Авеню Блок 2 Угловой"), then falls back to a name-only
-            // map for files where Единич and ВОР disagree on section
-            // labels.
-            let vorQty = 0;
-            if (vorPlanByName?.strict) {
-              vorQty = Number(vorPlanByName.strict.get(
-                compoundKey(w.parent_item_number, w.name, w.uom),
-              ) || 0);
-            }
-            if (vorQty <= 0 && vorPlanByName?.loose) {
-              vorQty = Number(vorPlanByName.loose.get(normName(w.name)) || 0);
-            }
-            // Fall back to the Единич row's `original_quantity` (col F
-            // "по проектным данным", anchored at import) BEFORE the
-            // live quantity ledger — see resolveWorkQty above for the
-            // rationale. Without this, projects without a ВОР sheet
-            // render REJA as 0 because template-mode Единич imports
-            // zero `quantity` to let the foreman fill FAKT.
+            // REJA = the planned project quantity. Priority:
+            //   1. єдинич's own original_quantity (col F anchor) — the
+            //      authoritative per-work plan the user sees on the
+            //      Smetalar tab.
+            //   2. ВОР byItem (item_number + code) — disambiguates the
+            //      common case where the same work name+code appears
+            //      in multiple sections with different planned qtys
+            //      (e.g. УСТРОЙСТВО ПОЯСОВ at rows 33, 52, 109).
+            //   3. ВОР strict (section + name + uom) — rescues when the
+            //      row numbering doesn't align.
+            //   4. ВОР loose (name only) — rescues when section labels
+            //      disagree between єдинич and ВОР.
+            //   5. live `quantity` — last fallback for legacy rows.
             const origQty = Number(w.original_quantity || 0);
             const ownQty = Number(w.quantity || 0);
-            const planQty = vorQty > 0 ? vorQty : (origQty > 0 ? origQty : ownQty);
+            let vorQty = 0;
+            if (origQty <= 0) {
+              if (vorPlanByName?.byItem) {
+                const itemNum = String(w.item_number || '').trim();
+                if (itemNum) {
+                  const codeKey = String(w.code || '').trim().toLowerCase();
+                  vorQty = Number(
+                    vorPlanByName.byItem.get(`${itemNum}|${codeKey}`)
+                    || vorPlanByName.byItem.get(itemNum)
+                    || 0
+                  );
+                }
+              }
+              if (vorQty <= 0 && vorPlanByName?.strict) {
+                vorQty = Number(vorPlanByName.strict.get(
+                  compoundKey(w.parent_item_number, w.name, w.uom),
+                ) || 0);
+              }
+              if (vorQty <= 0 && vorPlanByName?.loose) {
+                vorQty = Number(vorPlanByName.loose.get(normName(w.name)) || 0);
+              }
+            }
+            const planQty = origQty > 0 ? origQty : (vorQty > 0 ? vorQty : ownQty);
             const doneQty = Number(w.done_quantity || 0);
             const pct = planQty > 0 ? Math.min((doneQty / planQty) * 100, 100) : 0;
             const stMeta = STATUS_META[w.approval_status] || STATUS_META.pending;
