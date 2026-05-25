@@ -2,28 +2,25 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/components/contexts/AuthContext';
 import { useLanguage } from '@/components/contexts/LanguageContext';
-import { useTranslation } from '@/components/utils/translations';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import LanguageSelector from '@/components/ui/language-selector';
-import GoogleSignInButton from '@/components/ui/GoogleSignInButton';
-import { Loader2, Mail, Lock, User, Building2, Phone, ArrowLeft, CheckCircle, RefreshCw } from 'lucide-react';
+import { Loader2, Mail, Lock, Building2, Phone, ArrowLeft, RefreshCw } from 'lucide-react';
 import { authService } from '@/api/services/auth';
+import { readStoredBrandLogo, resolveBrandLogoUrl } from '@/utils/brandLogo';
+import './Login.scss';
 
 const T = {
   uz: {
-    create_account: "Hisob yaratish",
+    create_account: "Ro'yxatdan o'tish",
     sign_up_to_start: "GenixERP bilan ishlashni boshlash uchun ro'yxatdan o'ting",
+    complete_registration: "Ro'yxatni yakunlang",
+    complete_subtitle: "Boshlash uchun kompaniya nomini kiriting",
     verify_phone: "Telefonni tasdiqlang",
     code_sent_to: "Tasdiqlash kodi yuborildi:",
     first_name: "Ism",
     last_name: "Familiya",
     phone: "Telefon raqam",
     phone_placeholder: "+998 90 123 45 67",
-    email: "Elektron pochta (ixtiyoriy)",
+    email: "Elektron pochta",
     email_placeholder: "john@company.com",
     company: "Kompaniya nomi",
     company_placeholder: "Kompaniyangiz nomi",
@@ -33,10 +30,9 @@ const T = {
     confirm_placeholder: "Parolni qayta kiriting",
     continue_btn: "Davom etish",
     sending: "Yuborilmoqda...",
-    create_btn: "Hisob yaratish",
+    create_btn: "Ro'yxatdan o'tish",
     creating: "Yaratilmoqda...",
-    or: "Yoki davom eting",
-    back_to_login: "← Kirishga qaytish",
+    back_to_login: "Kirishga qaytish",
     back_to_form: "Orqaga",
     resend: "Qayta yuborish",
     resend_in: "Qayta yuborish mumkin:",
@@ -45,17 +41,20 @@ const T = {
     passwords_no_match: "Parollar mos kelmayapti",
     password_too_short: "Parol kamida 8 ta belgidan iborat bo'lishi kerak",
     phone_required: "Telefon raqam majburiy",
+    enter_full_code: "Iltimos, to'liq 6 xonali kodni kiriting",
   },
   ru: {
-    create_account: "Создать аккаунт",
+    create_account: "Регистрация",
     sign_up_to_start: "Зарегистрируйтесь для начала работы с GenixERP",
+    complete_registration: "Завершите регистрацию",
+    complete_subtitle: "Введите название компании, чтобы начать",
     verify_phone: "Подтвердите телефон",
     code_sent_to: "Код подтверждения отправлен на:",
     first_name: "Имя",
     last_name: "Фамилия",
     phone: "Номер телефона",
     phone_placeholder: "+998 90 123 45 67",
-    email: "Эл. почта (необязательно)",
+    email: "Эл. почта",
     email_placeholder: "john@company.com",
     company: "Название компании",
     company_placeholder: "Название вашей компании",
@@ -65,10 +64,9 @@ const T = {
     confirm_placeholder: "Введите пароль ещё раз",
     continue_btn: "Продолжить",
     sending: "Отправка...",
-    create_btn: "Создать аккаунт",
+    create_btn: "Зарегистрироваться",
     creating: "Создание...",
-    or: "Или продолжить с",
-    back_to_login: "← Назад к входу",
+    back_to_login: "Назад к входу",
     back_to_form: "Назад",
     resend: "Отправить снова",
     resend_in: "Повторная отправка через:",
@@ -77,17 +75,20 @@ const T = {
     passwords_no_match: "Пароли не совпадают",
     password_too_short: "Пароль должен содержать не менее 8 символов",
     phone_required: "Номер телефона обязателен",
+    enter_full_code: "Пожалуйста, введите полный 6-значный код",
   },
   en: {
-    create_account: "Create Account",
+    create_account: "Sign Up",
     sign_up_to_start: "Sign up to start using GenixERP",
+    complete_registration: "Complete registration",
+    complete_subtitle: "Enter your company name to get started",
     verify_phone: "Verify your phone",
     code_sent_to: "Verification code sent to:",
     first_name: "First Name",
     last_name: "Last Name",
     phone: "Phone Number",
     phone_placeholder: "+998 90 123 45 67",
-    email: "Email (optional)",
+    email: "Email",
     email_placeholder: "john@company.com",
     company: "Company Name",
     company_placeholder: "Your Company Inc.",
@@ -97,10 +98,9 @@ const T = {
     confirm_placeholder: "Re-enter password",
     continue_btn: "Continue",
     sending: "Sending...",
-    create_btn: "Create Account",
+    create_btn: "Sign Up",
     creating: "Creating...",
-    or: "Or continue with",
-    back_to_login: "← Back to login",
+    back_to_login: "Back to login",
     back_to_form: "Back",
     resend: "Resend code",
     resend_in: "Resend in:",
@@ -109,10 +109,12 @@ const T = {
     passwords_no_match: "Passwords do not match",
     password_too_short: "Password must be at least 8 characters",
     phone_required: "Phone number is required",
+    enter_full_code: "Please enter the complete 6-digit code",
   },
 };
 
 export default function Register() {
+  const [brandLogoUrl] = useState(() => resolveBrandLogoUrl(readStoredBrandLogo()));
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({
     firstName: '',
@@ -125,7 +127,6 @@ export default function Register() {
   });
   const [otpCode, setOtpCode] = useState(['', '', '', '', '', '']);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSendingOTP, setIsSendingOTP] = useState(false);
   const [countdown, setCountdown] = useState(0);
@@ -173,27 +174,6 @@ export default function Register() {
     }
   };
 
-  const handleGoogleRegister = async (credential) => {
-    setError('');
-    setIsLoading(true);
-    const result = await loginWithGoogle(credential);
-    if (result.success) {
-      setShouldNavigate(true);
-    } else if (result.needsCompletion) {
-      setGoogleStep({ credential, user: result.googleUser });
-      setFormData(prev => ({
-        ...prev,
-        firstName: result.googleUser.first_name || '',
-        lastName: result.googleUser.last_name || '',
-        email: result.googleUser.email || '',
-      }));
-      setIsLoading(false);
-    } else {
-      setError(result.error);
-      setIsLoading(false);
-    }
-  };
-
   const handleGoogleComplete = async (e) => {
     e.preventDefault();
     if (!googleStep || !formData.companyName.trim()) return;
@@ -209,7 +189,6 @@ export default function Register() {
     setIsSendingOTP(true);
     try {
       const result = await authService.sendOTP(formData.phone, 'registration', language);
-      setSuccess('');
       setCountdown(60);
       if (result?.dev_otp_code) {
         setOtpCode(result.dev_otp_code.split(''));
@@ -248,7 +227,7 @@ export default function Register() {
     e.preventDefault();
     setError('');
     const otp = otpCode.join('');
-    if (otp.length !== 6) { setError('Please enter the complete 6-digit code'); return; }
+    if (otp.length !== 6) { setError(L.enter_full_code); return; }
     setIsLoading(true);
     const result = await registerWithOTP({
       firstName: formData.firstName,
@@ -271,137 +250,202 @@ export default function Register() {
     }
   };
 
-  const inputCls = "pl-10 h-10 bg-slate-50/50 border-slate-200 focus:ring-2 focus:ring-[var(--genix-blue)]/20 focus:border-[var(--genix-blue)]";
+  const title = googleStep ? L.complete_registration : step === 1 ? L.create_account : L.verify_phone;
+  const subtitle = googleStep ? L.complete_subtitle
+    : step === 1 ? L.sign_up_to_start
+    : null;
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4 relative">
-      <style>{`:root { --genix-navy:#0B1426; --genix-blue:#0EA5E9; --genix-purple:#8B5CF6; }`}</style>
+    <div className="login-page">
+      <div className="login-page__lang"><LanguageSelector /></div>
 
-      <div className="absolute top-4 right-4"><LanguageSelector /></div>
+      <div className="login-card login-card--wide">
+        <div className="login-card__header">
+          <img src={brandLogoUrl} alt="Logo" className="login-card__logo" />
+          <h1 className="login-card__title">{title}</h1>
+          {subtitle && <p className="login-card__subtitle">{subtitle}</p>}
+          {!subtitle && step === 2 && (
+            <p className="login-card__subtitle">
+              {L.code_sent_to} <strong>{formData.phone}</strong>
+            </p>
+          )}
+        </div>
 
-      <Card className="w-full max-w-md shadow-xl border-0 bg-white/90 backdrop-blur-xl">
-        <CardHeader className="text-center pt-5 pb-2">
-          <img
-            src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68d244cb8a392237a5acfbd9/a049d6898_Logo.png"
-            alt="Genix Logo"
-            className="w-32 object-contain mx-auto"
-            style={{ height: '56px', marginBottom: '12px' }}
-          />
-          <CardTitle className="text-2xl font-bold text-[var(--genix-navy)]">
-            {googleStep ? 'Complete Registration' : step === 1 ? L.create_account : L.verify_phone}
-          </CardTitle>
-          <CardDescription className="text-slate-500">
-            {googleStep ? 'Enter your company name to get started'
-              : step === 1 ? L.sign_up_to_start
-              : <>{L.code_sent_to} <span className="font-medium text-slate-700">{formData.phone}</span></>}
-          </CardDescription>
-        </CardHeader>
+        <div className="login-card__body">
 
-        <CardContent className="pt-4">
-          {/* Google complete step */}
+          {/* Google completion step */}
           {googleStep ? (
-            <form onSubmit={handleGoogleComplete} className="space-y-4">
-              {error && <Alert variant="destructive" className="bg-red-50 border-red-200"><AlertDescription className="text-red-700">{error}</AlertDescription></Alert>}
-              <div className="p-3 bg-slate-50 rounded-lg text-sm text-slate-600">
-                <p className="font-medium text-slate-800">{googleStep.user.first_name} {googleStep.user.last_name}</p>
-                <p>{googleStep.user.email}</p>
+            <form className="login-form" onSubmit={handleGoogleComplete}>
+              {error && <div className="login-error" role="alert">{error}</div>}
+
+              <div className="login-note login-note--muted">
+                <strong>{googleStep.user.first_name} {googleStep.user.last_name}</strong>
+                {googleStep.user.email}
               </div>
-              <div className="space-y-2">
-                <Label className="text-slate-700">{L.company}</Label>
-                <div className="relative">
-                  <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <Input name="companyName" placeholder={L.company_placeholder} value={formData.companyName} onChange={handleChange} className={inputCls} required autoFocus />
+
+              <div className="login-form__field">
+                <label htmlFor="companyName" className="login-form__label">{L.company}</label>
+                <div className="login-form__input-wrap">
+                  <Building2 className="login-form__icon" />
+                  <input
+                    id="companyName"
+                    name="companyName"
+                    className="login-form__input"
+                    placeholder={L.company_placeholder}
+                    value={formData.companyName}
+                    onChange={handleChange}
+                    required
+                    autoFocus
+                  />
                 </div>
               </div>
-              <Button type="submit" disabled={isLoading || !formData.companyName.trim()} className="w-full h-11 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white">
-                {isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{L.creating}</> : L.create_btn}
-              </Button>
+
+              <button type="submit" disabled={isLoading || !formData.companyName.trim()} className="login-form__submit">
+                {isLoading ? <><Loader2 size={18} className="login-form__spinner" />{L.creating}</> : L.create_btn}
+              </button>
             </form>
 
           ) : step === 1 ? (
             /* Registration form */
-            <form onSubmit={handleSubmitForm} className="space-y-4">
-              {error && <Alert variant="destructive" className="bg-red-50 border-red-200"><AlertDescription className="text-red-700">{error}</AlertDescription></Alert>}
+            <form className="login-form" onSubmit={handleSubmitForm}>
+              {error && <div className="login-error" role="alert">{error}</div>}
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label className="text-slate-700">{L.first_name}</Label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <Input name="firstName" placeholder="John" value={formData.firstName} onChange={handleChange} className={inputCls} required />
+              <div className="login-form__row">
+                <div className="login-form__field">
+                  <label htmlFor="firstName" className="login-form__label">{L.first_name}</label>
+                  <div className="login-form__input-wrap">
+                    <input
+                      id="firstName"
+                      name="firstName"
+                      className="login-form__input login-form__input--plain"
+                      placeholder="John"
+                      value={formData.firstName}
+                      onChange={handleChange}
+                      required
+                    />
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-slate-700">{L.last_name}</Label>
-                  <Input name="lastName" placeholder="Doe" value={formData.lastName} onChange={handleChange} className="h-10 bg-slate-50/50 border-slate-200" required />
+                <div className="login-form__field">
+                  <label htmlFor="lastName" className="login-form__label">{L.last_name}</label>
+                  <div className="login-form__input-wrap">
+                    <input
+                      id="lastName"
+                      name="lastName"
+                      className="login-form__input login-form__input--plain"
+                      placeholder="Doe"
+                      value={formData.lastName}
+                      onChange={handleChange}
+                      required
+                    />
+                  </div>
                 </div>
               </div>
 
-              {/* Phone — required */}
-              <div className="space-y-2">
-                <Label className="text-slate-700">{L.phone} *</Label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <Input name="phone" placeholder={L.phone_placeholder} value={formData.phone} onChange={handleChange} className={inputCls} required />
+              <div className="login-form__field">
+                <label htmlFor="phone" className="login-form__label">{L.phone} *</label>
+                <div className="login-form__input-wrap">
+                  <Phone className="login-form__icon" />
+                  <input
+                    id="phone"
+                    name="phone"
+                    className="login-form__input"
+                    placeholder={L.phone_placeholder}
+                    value={formData.phone}
+                    onChange={handleChange}
+                    required
+                  />
                 </div>
               </div>
 
-              {/* Email — optional */}
-              <div className="space-y-2">
-                <Label className="text-slate-700">{L.email}</Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <Input name="email" placeholder={L.email_placeholder} value={formData.email} onChange={handleChange} className={inputCls} />
+              <div className="login-form__field">
+                <label htmlFor="email" className="login-form__label">{L.email}</label>
+                <div className="login-form__input-wrap">
+                  <Mail className="login-form__icon" />
+                  <input
+                    id="email"
+                    name="email"
+                    type="email"
+                    className="login-form__input"
+                    placeholder={L.email_placeholder}
+                    value={formData.email}
+                    onChange={handleChange}
+                  />
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label className="text-slate-700">{L.company}</Label>
-                <div className="relative">
-                  <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <Input name="companyName" placeholder={L.company_placeholder} value={formData.companyName} onChange={handleChange} className={inputCls} required />
+              <div className="login-form__field">
+                <label htmlFor="companyName" className="login-form__label">{L.company}</label>
+                <div className="login-form__input-wrap">
+                  <Building2 className="login-form__icon" />
+                  <input
+                    id="companyName"
+                    name="companyName"
+                    className="login-form__input"
+                    placeholder={L.company_placeholder}
+                    value={formData.companyName}
+                    onChange={handleChange}
+                    required
+                  />
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label className="text-slate-700">{L.password}</Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <Input name="password" type="password" placeholder={L.password_placeholder} value={formData.password} onChange={handleChange} className={inputCls} required minLength={8} />
+              <div className="login-form__row">
+                <div className="login-form__field">
+                  <label htmlFor="password" className="login-form__label">{L.password}</label>
+                  <div className="login-form__input-wrap">
+                    <Lock className="login-form__icon" />
+                    <input
+                      id="password"
+                      name="password"
+                      type="password"
+                      className="login-form__input"
+                      placeholder={L.password_placeholder}
+                      value={formData.password}
+                      onChange={handleChange}
+                      required
+                      minLength={8}
+                    />
+                  </div>
+                </div>
+
+                <div className="login-form__field">
+                  <label htmlFor="confirmPassword" className="login-form__label">{L.confirm_password}</label>
+                  <div className="login-form__input-wrap">
+                    <Lock className="login-form__icon" />
+                    <input
+                      id="confirmPassword"
+                      name="confirmPassword"
+                      type="password"
+                      className="login-form__input"
+                      placeholder={L.confirm_placeholder}
+                      value={formData.confirmPassword}
+                      onChange={handleChange}
+                      required
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label className="text-slate-700">{L.confirm_password}</Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <Input name="confirmPassword" type="password" placeholder={L.confirm_placeholder} value={formData.confirmPassword} onChange={handleChange} className={inputCls} required />
-                </div>
-              </div>
-
-              <Button type="submit" disabled={isLoading} className="w-full h-11 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white">
-                {isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{L.sending}</> : L.continue_btn}
-              </Button>
-
+              <button type="submit" disabled={isLoading} className="login-form__submit">
+                {isLoading ? <><Loader2 size={18} className="login-form__spinner" />{L.sending}</> : L.continue_btn}
+              </button>
             </form>
 
           ) : (
             /* OTP verification step */
-            <form onSubmit={handleVerifyAndRegister} className="space-y-6">
-              {error && <Alert variant="destructive" className="bg-red-50 border-red-200"><AlertDescription className="text-red-700">{error}</AlertDescription></Alert>}
+            <form className="login-form" onSubmit={handleVerifyAndRegister}>
+              {error && <div className="login-error" role="alert">{error}</div>}
               {devOtpCode && (
-                <Alert className="bg-amber-50 border-amber-200">
-                  <AlertDescription className="text-amber-700 text-sm">
-                    <span className="font-semibold">Dev Mode:</span> OTP — <span className="font-mono font-bold">{devOtpCode}</span>
-                  </AlertDescription>
-                </Alert>
+                <div className="login-note login-note--dev">
+                  Dev Mode — OTP: <code>{devOtpCode}</code>
+                </div>
               )}
 
-              <div className="space-y-4">
-                <Label className="text-slate-700 text-center block">{L.enter_code}</Label>
-                <div className="flex justify-center gap-2">
+              <div className="login-form__field">
+                <label className="login-form__label login-form__label--center">{L.enter_code}</label>
+                <div className="login-otp" onPaste={handleOtpPaste}>
                   {otpCode.map((digit, index) => (
-                    <Input
+                    <input
                       key={index}
                       ref={el => otpInputRefs.current[index] = el}
                       type="text"
@@ -410,45 +454,47 @@ export default function Register() {
                       value={digit}
                       onChange={(e) => handleOtpChange(index, e.target.value)}
                       onKeyDown={(e) => handleOtpKeyDown(index, e)}
-                      onPaste={index === 0 ? handleOtpPaste : undefined}
-                      className="w-12 h-14 text-center text-2xl font-bold bg-slate-50/50 border-slate-200 focus:ring-2 focus:ring-[var(--genix-blue)]/20 focus:border-[var(--genix-blue)]"
+                      className="login-otp__input"
                       autoFocus={index === 0}
+                      aria-label={`Digit ${index + 1}`}
                     />
                   ))}
                 </div>
-                <p className="text-xs text-slate-400 text-center">{L.code_expires}</p>
+                <p className="login-form__hint">{L.code_expires}</p>
               </div>
 
-              <div className="text-center">
+              <div className="login-form__center">
                 {countdown > 0 ? (
-                  <p className="text-sm text-slate-500">{L.resend_in} <span className="font-medium text-slate-700">{countdown}s</span></p>
+                  <p className="login-form__hint">{L.resend_in} <strong>{countdown}s</strong></p>
                 ) : (
-                  <Button type="button" variant="ghost" onClick={sendOTP} disabled={isSendingOTP} className="text-[var(--genix-blue)]">
-                    {isSendingOTP ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                  <button type="button" className="login-form__ghost" onClick={sendOTP} disabled={isSendingOTP}>
+                    {isSendingOTP ? <Loader2 size={16} className="login-form__spinner" /> : <RefreshCw size={16} />}
                     {L.resend}
-                  </Button>
+                  </button>
                 )}
               </div>
 
-              <Button type="submit" disabled={isLoading || otpCode.join('').length !== 6} className="w-full h-11 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white">
-                {isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{L.creating}</> : L.create_btn}
-              </Button>
+              <button type="submit" disabled={isLoading || otpCode.join('').length !== 6} className="login-form__submit">
+                {isLoading ? <><Loader2 size={18} className="login-form__spinner" />{L.creating}</> : L.create_btn}
+              </button>
 
-              <Button type="button" variant="ghost" onClick={() => { setStep(1); setOtpCode(['','','','','','']); setError(''); }} className="w-full text-slate-600">
-                <ArrowLeft className="w-4 h-4 mr-2" />{L.back_to_form}
-              </Button>
+              <button
+                type="button"
+                className="login-back"
+                onClick={() => { setStep(1); setOtpCode(['', '', '', '', '', '']); setError(''); }}
+              >
+                <ArrowLeft size={16} />{L.back_to_form}
+              </button>
             </form>
           )}
 
           {(step === 1 || googleStep) && (
-            <div className="mt-4 text-center">
-              <Link to="/login" className="inline-flex items-center text-sm text-slate-600 hover:text-[var(--genix-blue)]">
-                <ArrowLeft className="w-4 h-4 mr-1" />{L.back_to_login}
-              </Link>
-            </div>
+            <Link to="/login" className="login-back">
+              <ArrowLeft size={16} />{L.back_to_login}
+            </Link>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }
