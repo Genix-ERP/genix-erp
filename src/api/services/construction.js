@@ -753,8 +753,17 @@ export const constructionService = {
     return response.data.data;
   },
 
-  async getEstimate(id) {
-    const response = await apiClient.get(`/construction/estimates/${id}`);
+  async getEstimate(id, opts = {}) {
+    // opts.includeManual — when explicitly set to false, the backend
+    // hides lines added via the Smeta boshqaruvi / Bosqichlar UI
+    // (migration 417's is_manual flag). The Smetalar tab passes false
+    // so its read-only "what the file said" view doesn't show
+    // user-added rows.
+    const params = {};
+    if (opts && opts.includeManual === false) {
+      params.include_manual = 'false';
+    }
+    const response = await apiClient.get(`/construction/estimates/${id}`, { params });
     return response.data.data;
   },
 
