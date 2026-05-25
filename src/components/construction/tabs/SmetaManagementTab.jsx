@@ -882,11 +882,15 @@ export default function SmetaManagementTab({ project }) {
       if (manualPinnedNames.has(sec.name)) pinned.push(sec);
       else imported.push(sec);
     }
+    // No re-sort for imported top-level sections — they stay in
+    // the order the import wrote them, which mirrors the printed
+    // page numbering by construction (lines are pushed in
+    // file-row order). Re-sorting was misclassifying mixed
+    // structures; the user's requirement is "manuals at top,
+    // imports unchanged".
     const minItemNum = (sec) => {
       let min = Infinity;
       for (const ln of (sec.lines || [])) {
-        // item_number can be "1", "1A", "1.2", "1-3" — pull the leading
-        // numeric run as the sort key so alphanumerics still grade.
         const raw = String(ln.item_number || '').trim();
         const m = raw.match(/^\d+(?:\.\d+)?/);
         if (m) {
@@ -896,14 +900,6 @@ export default function SmetaManagementTab({ project }) {
       }
       return min;
     };
-    imported.sort((a, b) => {
-      const ma = minItemNum(a);
-      const mb = minItemNum(b);
-      if (ma === mb) {
-        return String(a.name || '').localeCompare(String(b.name || ''));
-      }
-      return ma - mb; // Infinity values fall to the end naturally
-    });
     // Also sort each section's sub-sections so manually-added ones
     // pin to the top (newest first) and imported sub-sections sort by
     // their min item_number. Without the manual-pin step, an empty
@@ -911,10 +907,12 @@ export default function SmetaManagementTab({ project }) {
     // landed at the end of its parent's content — past every imported
     // row — which is the opposite of what the user expects when they
     // create a sub-stage and want to see it right away.
-    // See the render-side isManualSub for why we DON'T consult
-    // manualSectionNames here — every imported section name is
-    // also in that list because the smeta import auto-creates a
-    // construction_stages row per section. Heuristics-only.
+    // Strict manual-detection — see render-side isManualSub for the
+    // reasoning. We never resort imported sub-sections by item_number
+    // any more: the user wants imported order preserved exactly as
+    // the file dictates, and the heuristic was misclassifying
+    // imported єдинич works as manual when they lacked numeric
+    // item_numbers.
     const recentlyAddedSet = new Set(
       (recentlyAddedSectionIds || []).map(Number),
     );
@@ -932,25 +930,20 @@ export default function SmetaManagementTab({ project }) {
       if (sub.is_empty_manual) return true;
       const lines = sub.lines || [];
       if (lines.length === 0) return true;
-      if (lines.every((ln) => ln.is_manual === true)) return true;
-      return lines.every((ln) => {
-        const raw = String(ln.item_number || '').trim();
-        return !raw || !/^\d+$/.test(raw);
-      });
+      return lines.every((ln) => ln.is_manual === true);
     };
     for (const sec of [...pinned, ...imported]) {
       if (Array.isArray(sec.subSections) && sec.subSections.length > 1) {
-        sec.subSections.sort((a, b) => {
-          const aManual = isManualSubData(a);
-          const bManual = isManualSubData(b);
-          if (aManual !== bManual) return aManual ? -1 : 1;
-          const ma = minItemNum(a);
-          const mb = minItemNum(b);
-          if (ma === mb) {
-            return String(a.name || '').localeCompare(String(b.name || ''));
-          }
-          return ma - mb;
-        });
+        // Stable partition: manuals first (in their existing order),
+        // imports after (in their existing insertion order). No
+        // alphabetical / item_number reshuffle for either bucket.
+        const manualOnes = [];
+        const importedOnes = [];
+        for (const sub of sec.subSections) {
+          if (isManualSubData(sub)) manualOnes.push(sub);
+          else importedOnes.push(sub);
+        }
+        sec.subSections = [...manualOnes, ...importedOnes];
       }
     }
     return [...pinned, ...imported];
@@ -1947,28 +1940,27 @@ export default function SmetaManagementTab({ project }) {
                         </React.Fragment>
                       );
                       // Manual sub-sections pin to the top. Detection
-                      // chain (each is a strong-enough signal on its own):
+                      // chain — every signal here is a STRICT marker
+                      // that the sub-section came from the UI, not the
+                      // import path:
                       //
-                      //   1. is_empty_manual placeholder (pre-seeded).
-                      //   2. Sub-section has zero lines (empty bucket).
-                      //   3. Every line carries is_manual = TRUE
+                      //   1. Construction_stages row id in
+                      //      recentlyAddedSectionIds (localStorage of
+                      //      explicit "+ Bo'lim qo'shish" additions).
+                      //   2. is_empty_manual placeholder (pre-seeded).
+                      //   3. Empty bucket (zero lines).
+                      //   4. EVERY line carries is_manual = TRUE
                       //      (migration 417 + backend writes).
-                      //   4. HEURISTIC — every line lacks a leading-
-                      //      numeric item_number. Imported єдинич lines
-                      //      have item numbers like "1", "27", "395".
-                      //      Lines added via the UI either lack one or
-                      //      use a parent#-seq / free-form string that
-                      //      won't match /^\d+$/.
                       //
-                      // NOTE: we deliberately do NOT consult
-                      // manualSectionNames here. The smeta import path
-                      // auto-creates construction_stages rows for every
-                      // section it detects, so EVERY imported section
-                      // name ends up in that list — and a naive
-                      // .includes() check would match all 60 sections
-                      // as "manual", defeating the pin. Only the
-                      // heuristics above reliably distinguish manual
-                      // from imported.
+                      // The earlier item_number-based heuristic was
+                      // removed — it false-positived for imported єдинич
+                      // works that happen to lack a numeric item_number
+                      // (common when the source file uses SHRNK codes
+                      // as identifiers). Users on production who haven't
+                      // run migration 417 + rebuilt the backend will
+                      // need to do so for UI-added sub-sections to pin
+                      // correctly; new adds in the current session still
+                      // pin via recentlyAddedSectionIds.
                       const recentlyAdded = new Set(
                         (recentlyAddedSectionIds || []).map(Number),
                       );
@@ -1981,38 +1973,33 @@ export default function SmetaManagementTab({ project }) {
                       }
                       const isManualSub = (sub) => {
                         const full = String(sub.fullName || '').trim();
-                        // The user's own recent additions (tracked in
-                        // localStorage) are always pinned, even if the
-                        // heuristic would miss them.
                         const mid = fullNameToManualId.get(full);
                         if (mid != null && recentlyAdded.has(mid)) return true;
                         if (sub.is_empty_manual) return true;
                         const lines = sub.lines || [];
                         if (lines.length === 0) return true;
-                        if (lines.every((ln) => ln.is_manual === true)) return true;
-                        return lines.every((ln) => {
-                          const raw = String(ln.item_number || '').trim();
-                          return !raw || !/^\d+$/.test(raw);
-                        });
+                        return lines.every((ln) => ln.is_manual === true);
                       };
+                      // Manual sub-sections render first (preserved in
+                      // their existing order). Imported sub-sections and
+                      // top-level lines render in their file order — no
+                      // re-sorting. The user wants imported rows kept
+                      // exactly where the import put them.
                       const manualSubs = [];
-                      const entries = [];
+                      const importedEntries = [];
                       for (const ln of (sec.lines || [])) {
-                        entries.push({ kind: 'line', sort: leadNum(ln.item_number), data: ln });
+                        importedEntries.push({ kind: 'line', data: ln });
                       }
                       for (const sub of (sec.subSections || [])) {
                         if (isManualSub(sub)) {
                           manualSubs.push(sub);
                         } else {
-                          entries.push({ kind: 'sub', sort: subMinItem(sub), data: sub });
+                          importedEntries.push({ kind: 'sub', data: sub });
                         }
                       }
-                      entries.sort((a, b) => a.sort - b.sort);
-                      // Manual sub-sections render first; everything else
-                      // follows in item_number order.
                       return [
                         ...manualSubs.map((sub) => renderSubEntry(sub)),
-                        ...entries.map((entry) =>
+                        ...importedEntries.map((entry) =>
                           entry.kind === 'line' ? renderLineEntry(entry.data) : renderSubEntry(entry.data),
                         ),
                       ];

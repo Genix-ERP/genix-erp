@@ -965,17 +965,17 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
     // have works, so they need their progress/cost from derived data
     // but their position must still be "pinned at top".
     //
-    // A stage counts as manual when ANY of the following holds:
+    // A stage counts as manual when EITHER:
     //   1. Its name matches a construction_stages row tracked in
-    //      localStorage (manualByName) — most precise signal.
+    //      localStorage (manualByName) — explicit user-add this session.
     //   2. Every work + sub-stage carries is_manual = TRUE (migration
     //      417 + backend writes).
-    //   3. HEURISTIC fallback — none of the works look imported. An
-    //      imported єдинич/ВОР work always has a pure-numeric
-    //      item_number ("1", "27", "395"). User-added ones either
-    //      lack item_number entirely or use a parent#-seq / free-form
-    //      string that doesn't match /^\d+$/. Catches stages added
-    //      in older sessions whose localStorage tracking was lost.
+    //
+    // The earlier item_number-based heuristic was removed because it
+    // false-positived for imported єдинич/ВОР works that lack a
+    // pure-numeric item_number (common in files that use SHRNK codes
+    // as the row identifier). Production users wanted imports left
+    // in their original order — the heuristic was reshuffling them.
     const looksManualStage = (ds) => {
       const allWorks = [];
       const visit = (w) => {
@@ -987,12 +987,8 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
       };
       for (const w of (ds.works || [])) visit(w);
       for (const ss of (ds.subStages || [])) visit(ss);
-      if (allWorks.length === 0) return true; // empty stage = pinned anyway
-      if (allWorks.every((w) => w.is_manual === true)) return true;
-      return allWorks.every((w) => {
-        const raw = String(w?.item_number || '').trim();
-        return !raw || !/^\d+$/.test(raw);
-      });
+      if (allWorks.length === 0) return true;
+      return allWorks.every((w) => w.is_manual === true);
     };
 
     const pinnedDerived = [];
@@ -1003,10 +999,6 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
       if (mid != null) {
         pinnedDerived.push({ ...ds, manual_stage_id: mid });
       } else if (looksManualStage(ds)) {
-        // Heuristic match — no localStorage id, but the works look
-        // user-added. Pin it with a synthetic ordering key (0 so it
-        // sorts AFTER stages that DO have a localStorage id, which
-        // are intentionally newest-first).
         pinnedDerived.push({ ...ds, manual_stage_id: 0 });
       } else {
         restDerived.push(ds);
@@ -1039,39 +1031,9 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
     userAddedEmpty.sort(byNewest);
     pinnedDerived.sort(byNewest);
 
-    // Sort the imported (non-pinned) stages by the minimum numeric
-    // item_number of their works AND any nested sub-stages. So a stage
-    // whose works start at row 1 lands above one whose works start at
-    // row 8 — same rule the Smeta boshqaruvi tab uses for sections,
-    // keeping the two tabs visually aligned.
-    const leadNum = (raw) => {
-      const m = String(raw || '').trim().match(/^\d+(?:\.\d+)?/);
-      return m ? Number(m[0]) : Infinity;
-    };
-    const stageMinItem = (st) => {
-      let min = Infinity;
-      const visit = (work) => {
-        const n = leadNum(work?.item_number);
-        if (n < min) min = n;
-        // Sub-stages on Bosqichlar carry their own item_numbers too
-        // (e.g. "13-1") — scan them so a sub-stage at "1-3" still
-        // contributes its leading 1 to the stage's min.
-        if (work && Array.isArray(work.subStages)) {
-          for (const ss of work.subStages) visit(ss);
-        }
-      };
-      for (const w of (st.works || [])) visit(w);
-      for (const ss of (st.subStages || [])) visit(ss);
-      return min;
-    };
-    restDerived.sort((a, b) => {
-      const ma = stageMinItem(a);
-      const mb = stageMinItem(b);
-      if (ma === mb) {
-        return String(a.name || '').localeCompare(String(b.name || ''));
-      }
-      return ma - mb;
-    });
+    // Imported stages stay in their derivedStages order — that's
+    // the order deriveStages() built them, which mirrors the file
+    // sequence. No re-sort.
 
     // Top: empty extras (no works yet) — most recent first.
     // Middle: user-added stages that now have works — most recent first.
