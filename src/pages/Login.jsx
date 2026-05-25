@@ -146,7 +146,7 @@ export default function Login() {
 
           <div className="login-card__body">
             {error && (
-              <div className="login-error" style={{ marginBottom: '1rem' }}>
+              <div className="login-error login-error--spaced" role="alert">
                 {error}
               </div>
             )}
@@ -175,7 +175,7 @@ export default function Login() {
               onClick={handleBackToLogin}
               disabled={isLoading}
             >
-              <ArrowLeft style={{ width: 16, height: 16 }} />
+              <ArrowLeft size={16} />
               {t('back_to_login')}
             </button>
           </div>
@@ -199,12 +199,13 @@ export default function Login() {
             className="login-card__logo"
           />
           <h1 className="login-card__title">{t('welcome_back')}</h1>
+          <p className="login-card__subtitle">{t('sign_in_to_continue')}</p>
         </div>
 
         <div className="login-card__body">
           <form className="login-form" onSubmit={handleSubmit}>
             {error && (
-              <div className="login-error">{error}</div>
+              <div className="login-error" role="alert">{error}</div>
             )}
 
             <div className="login-form__field">
@@ -266,13 +267,14 @@ export default function Login() {
                   placeholder={t('enter_password')}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="login-form__input"
+                  className="login-form__input login-form__input--with-toggle"
                   required
                 />
                 <button
                   type="button"
+                  className="login-form__toggle"
                   onClick={() => setShowPassword(!showPassword)}
-                  style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: '#94a3b8', display: 'flex', alignItems: 'center' }}
+                  aria-label={showPassword ? t('hide_password') : t('show_password')}
                   tabIndex={-1}
                 >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -280,8 +282,8 @@ export default function Login() {
               </div>
             </div>
 
-            <div style={{ textAlign: 'right', marginTop: -4 }}>
-              <Link to="/forgot-password" style={{ fontSize: 13, color: '#0EA5E9', textDecoration: 'none' }}>
+            <div className="login-form__meta">
+              <Link to="/forgot-password" className="login-form__link">
                 {t('set_password') || "Parol o'rnatish"}
               </Link>
             </div>
@@ -293,7 +295,7 @@ export default function Login() {
             >
               {isLoading ? (
                 <>
-                  <Loader2 style={{ width: 16, height: 16, animation: 'spin 1s linear infinite' }} />
+                  <Loader2 size={18} className="login-form__spinner" />
                   {t('signing_in')}
                 </>
               ) : (
@@ -302,6 +304,11 @@ export default function Login() {
             </button>
           </form>
 
+          <div className="login-divider"><span>{t('or')}</span></div>
+
+          <Link to="/register" className="login-form__register">
+            {t('sign_up')}
+          </Link>
         </div>
       </div>
     </div>
