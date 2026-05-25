@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { hrService } from "@/api/services/hr";
 import { aiService } from "@/api/services/ai";
 import apiClient from "@/api/client";
+import { formatPhoneInput, parsePhoneInput, formatPriceInput, parsePriceInput } from "@/utils/formatCurrency";
 import { useToast } from "@/components/ui/use-toast";
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -80,7 +81,6 @@ import { useInstalledApps } from "@/components/contexts/InstalledAppsContext";
 import { useEmployeePermissions, AVAILABLE_MODULES } from "@/components/contexts/EmployeePermissionsContext";
 import { PERMISSION_MATRIX } from "@/config/permissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
-import { formatPriceInput, parsePriceInput, formatPhoneInput } from '@/utils/formatCurrency';
 
 export default function HR() {
   const { language } = useLanguage();
@@ -112,6 +112,7 @@ export default function HR() {
   const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submittingRef = useRef(false);
   const [isAssessingRisk, setIsAssessingRisk] = useState(false);
   const [employeeDeductions, setEmployeeDeductions] = useState([]);
   const [salaryCalc, setSalaryCalc] = useState(null);
@@ -191,6 +192,7 @@ export default function HR() {
     phone: '+998',
     job_title: '',
     job_position_id: '',
+    role_id: '',
     department: '',
     hire_date: new Date().toISOString().split('T')[0],
     salary: '',
@@ -401,6 +403,7 @@ Only return the JSON, no other text.`;
   }, [employees]);
 
   const handleAddEmployee = async () => {
+    if (submittingRef.current) return;
     if (!newEmployee.full_name || !newEmployee.phone) {
       toast({
         title: t('error') || 'Xato',
@@ -410,6 +413,7 @@ Only return the JSON, no other text.`;
       return;
     }
 
+    submittingRef.current = true;
     setIsSubmitting(true);
     try {
       // Backend auto-creates user account when employee is created
@@ -446,20 +450,6 @@ Only return the JSON, no other text.`;
         }
       }
 
-      // Assign role to employee (auto-applies permissions)
-      if (newEmployee.job_title && createdEmployee?.id) {
-        const selectedRole = roles.find(r => r.name === newEmployee.job_title);
-        if (selectedRole) {
-          try {
-            await apiClient.post(`/roles/${selectedRole.id}/assign`, {
-              employee_id: createdEmployee.id,
-            });
-          } catch (roleErr) {
-            console.error("Error assigning role:", roleErr);
-          }
-        }
-      }
-
       toast({
         title: t('success') || 'Muvaffaqiyatli',
         description: t('employee_created_success') || 'Xodim va foydalanuvchi hisobi yaratildi.',
@@ -468,6 +458,7 @@ Only return the JSON, no other text.`;
       setShowAddModal(false);
       setNewEmployee({
         full_name: '', email: '', phone: '+998', job_title: '',
+        job_position_id: '', role_id: '',
         department: '', hire_date: new Date().toISOString().split('T')[0],
         salary: '', status: 'active', performance_score: 3,
         turnover_risk: 'low', permission: 'important', organization_ids: activeCompany?.id ? [activeCompany.id] : []
@@ -481,6 +472,7 @@ Only return the JSON, no other text.`;
         variant: 'destructive',
       });
     } finally {
+      submittingRef.current = false;
       setIsSubmitting(false);
     }
   };
@@ -521,8 +513,13 @@ Only return the JSON, no other text.`;
   };
 
   const handleEditEmployee = async (employee) => {
+    let phone = employee.phone || '+998';
+    if (phone && !phone.startsWith('+')) {
+      phone = phone.startsWith('998') ? '+' + phone : '+998' + phone;
+    }
     setSelectedEmployee({
       ...employee,
+      phone,
       salary: employee.salary || '',
       organization_ids: [],
       _orig_org_ids: []
@@ -1165,9 +1162,9 @@ Only return the JSON, no other text.`;
                 <div className="space-y-1">
                   <Label className="text-xs">{t('phone')} *</Label>
                   <Input
-                    value={newEmployee.phone}
-                    onChange={e => setNewEmployee({...newEmployee, phone: e.target.value})}
-                    placeholder="+998"
+                    value={formatPhoneInput(newEmployee.phone)}
+                    onChange={e => setNewEmployee({...newEmployee, phone: parsePhoneInput(e.target.value)})}
+                    placeholder="+998 XX XXX XXXX"
                   />
                 </div>
                 <div className="space-y-1">
@@ -1463,9 +1460,9 @@ Only return the JSON, no other text.`;
                   <div className="space-y-2">
                     <Label>{t('phone')}</Label>
                     <Input
-                      value={selectedEmployee.phone}
-                      onChange={e => setSelectedEmployee({...selectedEmployee, phone: e.target.value})}
-                      placeholder="+998"
+                      value={formatPhoneInput(selectedEmployee.phone)}
+                      onChange={e => setSelectedEmployee({...selectedEmployee, phone: parsePhoneInput(e.target.value)})}
+                      placeholder="+998 XX XXX XXXX"
                     />
                   </div>
                 </div>

@@ -93,9 +93,11 @@ export default function CompanySettings() {
     email: "",
     legal_address: "",    // Yuridik manzil
     notes: "",            // Izoh
+    logo_url: "",         // Company logo URL
     currency: "UZS",
     is_active: true
   });
+  const [uploadingLogo, setUploadingLogo] = useState(false);
 
   const [addFormData, setAddFormData] = useState({
     company_name: "",
@@ -182,11 +184,42 @@ export default function CompanySettings() {
       email: company.email || "",
       legal_address: company.legal_address || "",
       notes: company.notes || "",
+      logo_url: company.logo_url || "",
       currency: company.currency || "UZS",
       is_active: company.is_active !== false
     });
     setError(null);
     setShowEditForm(true);
+  };
+
+  const handleLogoUpload = async (e, setter) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error(t('logo_too_large') || "Logo hajmi 5MB dan oshmasin");
+      return;
+    }
+    setUploadingLogo(true);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const apiClient = (await import('@/api/client')).default;
+      const res = await apiClient.post('/files/upload', form, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      const url = res.data?.data?.url || res.data?.url || res.data?.data?.path || '';
+      if (url) {
+        setter(prev => ({ ...prev, logo_url: url }));
+        toast.success(t('logo_uploaded') || "Logo yuklandi");
+      } else {
+        toast.error(t('logo_upload_failed') || "Logo yuklashda xatolik");
+      }
+    } catch (err) {
+      console.error('Logo upload failed:', err);
+      toast.error(t('logo_upload_failed') || "Logo yuklashda xatolik");
+    } finally {
+      setUploadingLogo(false);
+    }
   };
 
   const handleEditSubmit = async (e) => {
@@ -857,6 +890,43 @@ export default function CompanySettings() {
                   </div>
                 )}
 
+              </div>
+            </div>
+
+            {/* Logo & Branding */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">{t('logo_branding') || 'Logo va brend'}</h3>
+              <div className="flex items-start gap-4">
+                <div className="w-24 h-24 rounded-lg border-2 border-dashed border-slate-200 flex items-center justify-center bg-slate-50 overflow-hidden shrink-0">
+                  {formData.logo_url ? (
+                    <img src={formData.logo_url} alt="Logo" className="w-full h-full object-contain" />
+                  ) : (
+                    <Building2 className="w-8 h-8 text-slate-300" />
+                  )}
+                </div>
+                <div className="flex-1 space-y-2">
+                  <Label>{t('company_logo') || 'Kompaniya logosi'}</Label>
+                  <p className="text-xs text-slate-500">{t('logo_hint') || 'PNG, JPG. Max 5MB. Hujjatlarda (hisob-faktura, bayonnoma) ko\'rsatiladi.'}</p>
+                  <div className="flex gap-2">
+                    <Input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleLogoUpload(e, setFormData)}
+                      disabled={uploadingLogo}
+                      className="max-w-xs"
+                    />
+                    {formData.logo_url && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setFormData({ ...formData, logo_url: "" })}
+                      >
+                        {t('remove') || "O'chirish"}
+                      </Button>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
 

@@ -52,6 +52,8 @@ export {
   PrintPreviewModal,
   PrintSettingsModal,
   BatchPrintModal,
+  usePrintDocument,
+  mapCompanyToPrintInfo,
 } from "./DocumentPrint";
 
 // Recurring Transactions

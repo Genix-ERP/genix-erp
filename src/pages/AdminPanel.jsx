@@ -19,9 +19,10 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Plus, Search, Shield, Users, Settings, Activity, AlertTriangle, CheckCircle, XCircle,
   Mail, Trash2, Ban, Clock, Gift, Calendar, CreditCard, UserX, UserCheck, AlertCircle,
-  DollarSign, Package, Briefcase, Crown, Sparkles
+  DollarSign, Package, Briefcase, Crown, Sparkles, Eye, Building2, Phone, Receipt
 } from 'lucide-react';
 import { format, differenceInDays, addDays, parseISO } from 'date-fns';
+import { formatPhoneDisplay } from '@/utils/formatCurrency';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import PermissionsManagement from '@/components/admin/PermissionsManagement';
@@ -79,6 +80,78 @@ export default function AdminPanel() {
     duration: 12 // months
   });
 
+  // Company/tenant state
+  const [tenants, setTenants] = useState([]);
+  const [filteredTenants, setFilteredTenants] = useState([]);
+  const [tenantSearch, setTenantSearch] = useState('');
+  const [tenantStatusFilter, setTenantStatusFilter] = useState('all');
+  const [pricing, setPricing] = useState({ price_per_user_monthly: 0, price_per_user_yearly: 0 });
+  const [selectedTenant, setSelectedTenant] = useState(null);
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+  const [checkoutData, setCheckoutData] = useState({ users: 1, billing: 'monthly' });
+  const [checkoutUrl, setCheckoutUrl] = useState(null);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [showTenantDetailsModal, setShowTenantDetailsModal] = useState(false);
+  const [tenantDetails, setTenantDetails] = useState(null);
+  const [tenantDetailsLoading, setTenantDetailsLoading] = useState(false);
+
+  const formatTenantStatus = (s) => {
+    const map = {
+      active: { uz: 'Faol', ru: 'Активный', en: 'Active' },
+      trialing: { uz: 'Sinov', ru: 'Триал', en: 'Trial' },
+      past_due: { uz: "To'lov kutilmoqda", ru: 'Просрочено', en: 'Past Due' },
+      expired: { uz: 'Muddati tugagan', ru: 'Истёк', en: 'Expired' },
+      cancelled: { uz: 'Bekor qilingan', ru: 'Отменено', en: 'Cancelled' },
+    };
+    const v = map[s];
+    return v ? (v[language] || v.en) : s;
+  };
+
+  const formatPaymentStatus = (s) => {
+    const map = {
+      success: { uz: 'Muvaffaqiyatli', ru: 'Успешно', en: 'Success' },
+      pending: { uz: 'Kutilmoqda', ru: 'В ожидании', en: 'Pending' },
+      error: { uz: 'Xatolik', ru: 'Ошибка', en: 'Error' },
+      revert: { uz: 'Bekor qilingan', ru: 'Возврат', en: 'Reverted' },
+    };
+    const v = map[s];
+    return v ? (v[language] || v.en) : (s || '—');
+  };
+
+  const formatPlan = (plan) => {
+    if (!plan) return '-';
+    // "1users_monthly" → "1 user · monthly"
+    const m = plan.match(/^(\d+)users?_(.+)$/);
+    if (m) {
+      const usersWord = language === 'uz' ? 'foyd.' : language === 'ru' ? 'польз.' : (m[1] === '1' ? 'user' : 'users');
+      const periodMap = {
+        monthly: { uz: 'oylik', ru: 'месячный', en: 'monthly' },
+        '3months': { uz: '3 oy', ru: '3 мес.', en: '3 months' },
+        '6months': { uz: '6 oy', ru: '6 мес.', en: '6 months' },
+        yearly: { uz: 'yillik', ru: 'годовой', en: 'yearly' },
+      };
+      const p = periodMap[m[2]];
+      const periodStr = p ? (p[language] || p.en) : m[2];
+      return `${m[1]} ${usersWord} · ${periodStr}`;
+    }
+    return plan;
+  };
+
+  const openTenantDetails = async (tenant) => {
+    setSelectedTenant(tenant);
+    setShowTenantDetailsModal(true);
+    setTenantDetails(null);
+    setTenantDetailsLoading(true);
+    try {
+      const resp = await apiClient.get(`/admin/tenants/${tenant.id}`);
+      setTenantDetails(resp.data?.data || resp.data);
+    } catch (err) {
+      console.error('Failed to load tenant details', err);
+      toast({ title: 'Failed to load details', variant: 'destructive' });
+    }
+    setTenantDetailsLoading(false);
+  };
+
   // Filter users when filters change
   useEffect(() => {
     let filtered = users;
@@ -97,6 +170,25 @@ export default function AdminPanel() {
     setFilteredUsers(filtered);
   }, [users, searchQuery, roleFilter, statusFilter]);
 
+  // Filter tenants
+  useEffect(() => {
+    let filtered = tenants;
+    if (tenantStatusFilter !== 'all') {
+      filtered = filtered.filter(t => t.subscription_status === tenantStatusFilter);
+    }
+    if (tenantSearch) {
+      const q = tenantSearch.toLowerCase();
+      filtered = filtered.filter(t =>
+        t.name?.toLowerCase().includes(q) ||
+        t.code?.toLowerCase().includes(q) ||
+        t.owner_name?.toLowerCase().includes(q) ||
+        t.owner_email?.toLowerCase().includes(q) ||
+        t.owner_phone?.toLowerCase().includes(q)
+      );
+    }
+    setFilteredTenants(filtered);
+  }, [tenants, tenantSearch, tenantStatusFilter]);
+
   const [loadError, setLoadError] = useState(null);
 
   const loadData = async () => {
@@ -108,8 +200,19 @@ export default function AdminPanel() {
         return;
       }
 
+      // Fetch tenants and pricing
+      const [usersResp, tenantsResp, plansResp] = await Promise.all([
+        apiClient.get('/admin/users'),
+        apiClient.get('/admin/tenants'),
+        apiClient.get('/subscription/plans').catch(() => ({ data: { data: {} } }))
+      ]);
+      setTenants(tenantsResp.data?.data || []);
+      if (plansResp.data?.data) {
+        setPricing(plansResp.data.data);
+      }
+
       // Fetch all system users from the backend API
-      const response = await apiClient.get('/admin/users');
+      const response = usersResp;
       const backendUsers = response.data?.data || [];
 
       // Map backend response to expected format (tenant owners only)
@@ -504,7 +607,8 @@ export default function AdminPanel() {
         <Tabs defaultValue="users" className="w-full">
           <TabsList className="w-full bg-white/80 backdrop-blur-sm p-1.5 rounded-xl border border-slate-200/60 shadow-lg flex flex-wrap justify-start gap-1 h-auto">
             <TabsTrigger value="users" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
-              <span>{t('users_tab')}</span>
+              <Briefcase className="w-4 h-4" />
+              <span>{language === 'uz' ? 'Kompaniyalar' : language === 'ru' ? 'Компании' : 'Companies'}</span>
             </TabsTrigger>
             <TabsTrigger value="subscriptions" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
               <span>{t('subscriptions')}</span>
@@ -523,51 +627,79 @@ export default function AdminPanel() {
 
           {/* Users Tab - Enhanced */}
           <TabsContent value="users" className="mt-6">
+            {/* Dashboard Stats */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+              <Card className="bg-white/80 backdrop-blur-sm">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-blue-100"><Briefcase className="w-5 h-5 text-blue-600" /></div>
+                    <div>
+                      <p className="text-2xl font-bold">{tenants.length}</p>
+                      <p className="text-xs text-slate-500">{language === 'uz' ? 'Jami kompaniyalar' : 'Total Companies'}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="bg-white/80 backdrop-blur-sm">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-green-100"><CheckCircle className="w-5 h-5 text-green-600" /></div>
+                    <div>
+                      <p className="text-2xl font-bold">{tenants.filter(t => t.subscription_status === 'active').length}</p>
+                      <p className="text-xs text-slate-500">{language === 'uz' ? 'Faol obunalar' : 'Active Subscriptions'}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="bg-white/80 backdrop-blur-sm">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-amber-100"><Clock className="w-5 h-5 text-amber-600" /></div>
+                    <div>
+                      <p className="text-2xl font-bold">{tenants.filter(t => t.subscription_status === 'trialing').length}</p>
+                      <p className="text-xs text-slate-500">{language === 'uz' ? 'Sinov muddatida' : 'Trialing'}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="bg-white/80 backdrop-blur-sm">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-red-100"><AlertTriangle className="w-5 h-5 text-red-600" /></div>
+                    <div>
+                      <p className="text-2xl font-bold">{tenants.filter(t => ['past_due', 'expired'].includes(t.subscription_status)).length}</p>
+                      <p className="text-xs text-slate-500">{language === 'uz' ? 'Muddati tugagan' : 'Expired/Past Due'}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
             <Card className="bg-white/80 backdrop-blur-sm">
               <CardHeader className="border-b">
                 <div className="flex items-center justify-between">
-                  <CardTitle>{t('user_management')}</CardTitle>
-                  <Button onClick={() => setShowInviteModal(true)} className="bg-gradient-to-r from-indigo-600 to-purple-600">
-                    <Plus className="w-4 h-4 mr-2" /> {t('invite_user')}
-                  </Button>
+                  <CardTitle>{language === 'uz' ? 'Kompaniyalarni boshqarish' : 'Company Management'}</CardTitle>
                 </div>
                 <div className="flex gap-3 mt-4">
                   <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <Input
-                      placeholder={t('search_users')}
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder={language === 'uz' ? 'Kompaniyalarni qidirish...' : 'Search companies...'}
+                      value={tenantSearch}
+                      onChange={(e) => setTenantSearch(e.target.value)}
                       className="pl-9"
                     />
                   </div>
-                  <Select value={roleFilter} onValueChange={setRoleFilter}>
-                    <SelectTrigger className="w-full sm:w-[150px]">
+                  <Select value={tenantStatusFilter} onValueChange={setTenantStatusFilter}>
+                    <SelectTrigger className="w-full sm:w-[160px]">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">{t('all_roles')}</SelectItem>
-                      <SelectItem value="system_admin">{t('system_admin')}</SelectItem>
-                      <SelectItem value="admin">{t('administrator')}</SelectItem>
-                      <SelectItem value="manager">{t('manager')}</SelectItem>
-                      <SelectItem value="finance_manager">{t('finance_manager')}</SelectItem>
-                      <SelectItem value="sales_manager">{t('sales_manager')}</SelectItem>
-                      <SelectItem value="inventory_manager">{t('inventory_manager')}</SelectItem>
-                      <SelectItem value="hr_manager">{t('hr_manager')}</SelectItem>
-                      <SelectItem value="user">{t('user')}</SelectItem>
-                      <SelectItem value="limited_user">{t('limited_user')}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger className="w-full sm:w-[130px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">{t('all_status')}</SelectItem>
-                      <SelectItem value="trial">{t('trial')}</SelectItem>
-                      <SelectItem value="active">{t('active')}</SelectItem>
-                      <SelectItem value="expired">{t('expired')}</SelectItem>
-                      <SelectItem value="blocked">{t('blocked')}</SelectItem>
+                      <SelectItem value="all">{language === 'uz' ? 'Barcha holatlar' : 'All Status'}</SelectItem>
+                      <SelectItem value="active">{language === 'uz' ? 'Faol' : 'Active'}</SelectItem>
+                      <SelectItem value="trialing">{language === 'uz' ? 'Sinov' : 'Trial'}</SelectItem>
+                      <SelectItem value="past_due">{language === 'uz' ? 'To\'lov kutilmoqda' : 'Past Due'}</SelectItem>
+                      <SelectItem value="expired">{language === 'uz' ? 'Muddati tugagan' : 'Expired'}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -577,195 +709,127 @@ export default function AdminPanel() {
                   <div className="flex items-center justify-center py-16">
                     <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
                   </div>
-                ) : loadError ? (
-                  <div className="flex flex-col items-center justify-center py-16 text-center">
-                    <div className="text-red-500 mb-4">
-                      <AlertTriangle className="w-12 h-12" />
-                    </div>
-                    <p className="text-lg font-medium text-slate-900 mb-2">{t('failed_to_load_users')}</p>
-                    <p className="text-sm text-red-600 mb-4">{loadError}</p>
-                    <Button onClick={loadData} variant="outline">
-                      {t('retry')}
-                    </Button>
-                  </div>
                 ) : (
                   <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow className="bg-slate-50">
-                          <TableHead>{t('user_column')}</TableHead>
-                          <TableHead>{t('contact')}</TableHead>
-                          <TableHead>{t('role_plan')}</TableHead>
-                          <TableHead>{t('status')}</TableHead>
-                          <TableHead>{t('subscription')}</TableHead>
-                          <TableHead>{t('actions')}</TableHead>
+                          <TableHead>{language === 'uz' ? 'Kompaniya' : 'Company'}</TableHead>
+                          <TableHead>{language === 'uz' ? 'Egasi' : 'Owner'}</TableHead>
+                          <TableHead>{language === 'uz' ? 'Foydalanuvchilar' : 'Users'}</TableHead>
+                          <TableHead>{language === 'uz' ? 'Holat' : 'Status'}</TableHead>
+                          <TableHead>{language === 'uz' ? 'Ro\'yxatdan o\'tgan' : 'Registered'}</TableHead>
+                          <TableHead>{language === 'uz' ? 'Amallar' : 'Actions'}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {filteredUsers.map((user) => {
-                          const subInfo = getSubscriptionInfo(user);
-                          const userStatus = user.subscription_status || 'trial';
-                          const userPlan = user.subscription_plan || 'free_trial';
+                        {filteredTenants.map((tenant) => {
+                          const statusColors = {
+                            active: 'bg-green-100 text-green-800',
+                            trialing: 'bg-amber-100 text-amber-800',
+                            past_due: 'bg-orange-100 text-orange-800',
+                            expired: 'bg-red-100 text-red-800',
+                            cancelled: 'bg-slate-100 text-slate-800',
+                          };
+                          const statusLabels = {
+                            active: language === 'uz' ? 'Faol' : 'Active',
+                            trialing: language === 'uz' ? 'Sinov' : 'Trial',
+                            past_due: language === 'uz' ? 'To\'lov kutilmoqda' : 'Past Due',
+                            expired: language === 'uz' ? 'Muddati tugagan' : 'Expired',
+                            cancelled: language === 'uz' ? 'Bekor qilingan' : 'Cancelled',
+                          };
                           return (
-                            <TableRow key={user.id} className={`hover:bg-slate-50 ${user.is_blocked ? 'opacity-60' : ''}`}>
+                            <TableRow key={tenant.id} className={`hover:bg-slate-50 ${!tenant.is_active ? 'opacity-60' : ''}`}>
                               <TableCell>
                                 <div className="flex items-center gap-3">
-                                  <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold relative">
-                                    {user.full_name?.charAt(0) || 'U'}
-                                    {user.is_blocked && (
-                                      <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
-                                        <Ban className="w-3 h-3 text-white" />
-                                      </div>
-                                    )}
+                                  <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-lg flex items-center justify-center text-white font-bold text-sm">
+                                    {tenant.name?.charAt(0) || 'C'}
                                   </div>
                                   <div>
-                                    <p className="font-medium">{user.full_name}</p>
-                                    {user.created_date && (
-                                      <p className="text-xs text-slate-500">
-                                        {format(new Date(user.created_date), 'MMM dd, yyyy')}
-                                      </p>
-                                    )}
+                                    <p className="font-medium">{tenant.name}</p>
+                                    <p className="text-xs text-slate-500">{tenant.code}</p>
                                   </div>
                                 </div>
                               </TableCell>
                               <TableCell>
-                                <p className="text-sm">{user.email}</p>
-                                {user.phone_number && (
-                                  <p className="text-xs text-slate-500">{user.phone_number}</p>
+                                <p className="text-sm font-medium">{tenant.owner_name || '-'}</p>
+                                {tenant.owner_email && (
+                                  <p className="text-xs text-slate-500">{tenant.owner_email}</p>
+                                )}
+                                {tenant.owner_phone && (
+                                  <p className="text-xs text-slate-500">{formatPhoneDisplay(tenant.owner_phone)}</p>
+                                )}
+                                {!tenant.owner_email && !tenant.owner_phone && (
+                                  <p className="text-xs text-slate-400">-</p>
                                 )}
                               </TableCell>
                               <TableCell>
-                                <div className="space-y-1">
-                                  <Badge className={getRoleBadgeColor(user.role)}>
-                                    {getRoleDisplayName(user.role)}
-                                  </Badge>
-                                  {/* Only show plan badge if not on free trial (to avoid duplication with status) */}
-                                  {userPlan !== 'free_trial' && (
-                                    <Badge className={getPlanBadgeColor(userPlan)}>
-                                      {getPlanDisplayName(userPlan)}
-                                    </Badge>
+                                <div className="flex items-center gap-1">
+                                  <Users className="w-4 h-4 text-slate-400" />
+                                  <span className="font-medium">{tenant.user_count}</span>
+                                  {tenant.paid_users > 0 && (
+                                    <span className="text-xs text-slate-400">/ {tenant.paid_users} {language === 'uz' ? 'pullik' : 'paid'}</span>
                                   )}
                                 </div>
                               </TableCell>
                               <TableCell>
-                                <Badge className={getStatusBadgeColor(userStatus)}>
-                                  {userStatus === 'trial' ? t('free_trial') : t(userStatus)}
-                                </Badge>
-                                {user.is_blocked && (
-                                  <Badge className="ml-1 bg-red-100 text-red-800">{t('blocked')}</Badge>
-                                )}
+                                {(() => {
+                                  let status = tenant.subscription_status;
+                                  let daysLeft = null;
+                                  // Check if trial actually expired
+                                  if (status === 'trialing' && tenant.trial_ends_at) {
+                                    daysLeft = differenceInDays(new Date(tenant.trial_ends_at), new Date());
+                                    if (daysLeft < 0) status = 'expired';
+                                  }
+                                  if (status === 'active' && tenant.account_clear_at) {
+                                    daysLeft = differenceInDays(new Date(tenant.account_clear_at), new Date());
+                                    if (daysLeft < 0) status = 'expired';
+                                  }
+                                  return (
+                                    <>
+                                      <Badge className={statusColors[status] || 'bg-slate-100 text-slate-600'}>
+                                        {statusLabels[status] || status}
+                                      </Badge>
+                                      {daysLeft !== null && (
+                                        <p className={`text-xs mt-1 ${daysLeft < 0 ? 'text-red-500' : daysLeft < 7 ? 'text-orange-500' : 'text-slate-500'}`}>
+                                          {daysLeft > 0
+                                            ? `${daysLeft} ${language === 'uz' ? 'kun qoldi' : 'days left'}`
+                                            : `${Math.abs(daysLeft)} ${language === 'uz' ? 'kun oldin tugagan' : 'days ago'}`}
+                                        </p>
+                                      )}
+                                    </>
+                                  );
+                                })()}
                               </TableCell>
                               <TableCell>
-                                {subInfo.daysRemaining !== null ? (
-                                  <div className="text-sm">
-                                    <p className={subInfo.isExpiring ? 'text-orange-600 font-semibold' : 'text-slate-600'}>
-                                      {subInfo.daysRemaining > 0 ? `${subInfo.daysRemaining} ${t('days_left')}` : t('expired')}
-                                    </p>
-                                    {(user.trial_end_date || user.subscription_end_date) && (
-                                      <p className="text-xs text-slate-500">
-                                        {t('ends')}: {format(parseISO(user.trial_end_date || user.subscription_end_date), 'MMM dd, yyyy')}
-                                      </p>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <span className="text-xs text-slate-500">{t('no_expiry')}</span>
-                                )}
+                                <p className="text-sm">{format(new Date(tenant.created_at), 'dd.MM.yyyy')}</p>
                               </TableCell>
                               <TableCell>
-                                {user.id !== currentUser?.id && (
-                                  <div className="flex gap-1">
-                                    <Select 
-                                      value={user.role} 
-                                      onValueChange={(value) => updateUserRole(user.id, value)}
-                                    >
-                                      <SelectTrigger className="h-8 w-full sm:w-[120px] text-xs">
-                                        <SelectValue />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="system_admin">{t('system_admin')}</SelectItem>
-                                        <SelectItem value="admin">{t('administrator')}</SelectItem>
-                                        <SelectItem value="manager">{t('manager')}</SelectItem>
-                                        <SelectItem value="finance_manager">{t('finance_manager')}</SelectItem>
-                                        <SelectItem value="sales_manager">{t('sales_manager')}</SelectItem>
-                                        <SelectItem value="inventory_manager">{t('inventory_manager')}</SelectItem>
-                                        <SelectItem value="hr_manager">{t('hr_manager')}</SelectItem>
-                                        <SelectItem value="user">{t('user')}</SelectItem>
-                                        <SelectItem value="limited_user">{t('limited_user')}</SelectItem>
-                                      </SelectContent>
-                                    </Select>
-
-                                    <Button 
-                                      size="sm" 
-                                      variant="outline"
-                                      onClick={() => {
-                                        setSelectedUser(user);
-                                        setShowUpgradeModal(true);
-                                      }}
-                                      className="text-purple-600 hover:text-purple-700"
-                                      title={t('upgrade_plan')}
-                                    >
-                                      <CreditCard className="w-3 h-3" />
-                                    </Button>
-
-                                    {userStatus === 'trial' && (
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => {
-                                          setSelectedUser(user);
-                                          setShowExtendTrialModal(true);
-                                        }}
-                                        title={t('extend_trial')}
-                                      >
-                                        <Gift className="w-3 h-3" />
-                                      </Button>
-                                    )}
-
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => {
-                                        setSelectedUser(user);
-                                        setShowBlockModal(true);
-                                      }}
-                                      className={user.is_blocked ? 'text-green-600 hover:text-green-700' : 'text-orange-600 hover:text-orange-700'}
-                                      title={user.is_blocked ? t('unblock_user') : t('block_user')}
-                                    >
-                                      {user.is_blocked ? <UserCheck className="w-3 h-3" /> : <Ban className="w-3 h-3" />}
-                                    </Button>
-
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => {
-                                        setSelectedUser(user);
-                                        setShowDeleteModal(true);
-                                      }}
-                                      className="text-red-600 hover:text-red-700"
-                                      title={t('delete_user')}
-                                    >
-                                      <Trash2 className="w-3 h-3" />
-                                    </Button>
-                                  </div>
-                                )}
-                                {user.id === currentUser?.id && (
-                                  <div className="flex items-center gap-2">
-                                    <Badge variant="outline" className="text-xs">{t('you')}</Badge>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => {
-                                        setSelectedUser(user);
-                                        setShowUpgradeModal(true);
-                                      }}
-                                      className="text-purple-600 hover:text-purple-700"
-                                      title={t('upgrade_plan')}
-                                    >
-                                      <CreditCard className="w-3 h-3 mr-1" />
-                                      <span className="text-xs">{t('upgrade')}</span>
-                                    </Button>
-                                  </div>
-                                )}
+                                <div className="flex gap-1">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => openTenantDetails(tenant)}
+                                    className="text-blue-600 hover:text-blue-700"
+                                    title={language === 'uz' ? 'Batafsil' : 'Details'}
+                                  >
+                                    <Eye className="w-3 h-3" />
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      setSelectedTenant(tenant);
+                                      setCheckoutData({ users: tenant.user_count || 1, billing: 'monthly' });
+                                      setCheckoutUrl(null);
+                                      setShowSubscriptionModal(true);
+                                    }}
+                                    className="text-purple-600 hover:text-purple-700"
+                                    title={language === 'uz' ? 'Obuna faollashtirish' : 'Activate Subscription'}
+                                  >
+                                    <CreditCard className="w-3 h-3" />
+                                  </Button>
+                                </div>
                               </TableCell>
                             </TableRow>
                           );
@@ -1501,6 +1565,368 @@ export default function AdminPanel() {
                 </Button>
               </div>
             </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Company Subscription Modal (Multicard Pricing) */}
+        <Dialog open={showSubscriptionModal} onOpenChange={setShowSubscriptionModal}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <CreditCard className="w-5 h-5" />
+                {language === 'uz' ? 'Obunani faollashtirish' : 'Activate Subscription'}
+              </DialogTitle>
+            </DialogHeader>
+            {selectedTenant && (
+              <div className="space-y-4">
+                <div className="p-3 bg-slate-50 rounded-lg">
+                  <p className="font-medium">{selectedTenant.name}</p>
+                  <p className="text-sm text-slate-500">{selectedTenant.owner_email}</p>
+                  <Badge className="mt-1">{selectedTenant.subscription_status}</Badge>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-sm font-medium">{language === 'uz' ? 'Foydalanuvchilar soni' : 'Number of Users'}</label>
+                    <Input
+                      type="number"
+                      min="1"
+                      value={checkoutData.users}
+                      onChange={(e) => setCheckoutData(prev => ({ ...prev, users: parseInt(e.target.value) || 1 }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">{language === 'uz' ? 'Muddat' : 'Duration'}</label>
+                    <Select value={checkoutData.billing} onValueChange={(v) => setCheckoutData(prev => ({ ...prev, billing: v }))}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="monthly">{language === 'uz' ? '1 oy' : '1 Month'}</SelectItem>
+                        <SelectItem value="3months">{language === 'uz' ? '3 oy' : '3 Months'}</SelectItem>
+                        <SelectItem value="6months">{language === 'uz' ? '6 oy' : '6 Months'}</SelectItem>
+                        <SelectItem value="yearly">{language === 'uz' ? '12 oy (1 yil)' : '12 Months (1 Year)'}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-purple-50 rounded-lg space-y-2">
+                  {(() => {
+                    const monthsMap = { monthly: 1, '3months': 3, '6months': 6, yearly: 12 };
+                    const months = monthsMap[checkoutData.billing] || 1;
+                    const pricePerUser = checkoutData.billing === 'yearly'
+                      ? (pricing.price_per_user_yearly || 0)
+                      : (pricing.price_per_user_monthly || 0);
+                    const total = pricePerUser * months * checkoutData.users;
+                    return (
+                      <>
+                        <div className="flex justify-between text-sm">
+                          <span>{language === 'uz' ? 'Narx (1 foydalanuvchi/oy)' : 'Price per user/month'}</span>
+                          <span className="font-medium">{pricePerUser.toLocaleString()} so'm</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span>{language === 'uz' ? 'Foydalanuvchilar' : 'Users'}</span>
+                          <span>x {checkoutData.users}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span>{language === 'uz' ? 'Muddat' : 'Duration'}</span>
+                          <span>x {months} {language === 'uz' ? 'oy' : 'months'}</span>
+                        </div>
+                        <div className="border-t pt-2 flex justify-between font-bold text-lg">
+                          <span>{language === 'uz' ? 'Jami' : 'Total'}</span>
+                          <span className="text-purple-700">{total.toLocaleString()} so'm</span>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+
+                {checkoutUrl && (
+                  <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <p className="text-sm font-medium text-green-800 mb-1">{language === 'uz' ? 'To\'lov havolasi tayyor!' : 'Payment link ready!'}</p>
+                    <a href={checkoutUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline break-all">
+                      {checkoutUrl}
+                    </a>
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-2">
+                  <Button
+                    onClick={async () => {
+                      setCheckoutLoading(true);
+                      try {
+                        // Manual activation: set tenant as active with paid_users and duration
+                        const monthsMap = { monthly: 1, '3months': 3, '6months': 6, yearly: 12 };
+                        const months = monthsMap[checkoutData.billing] || 1;
+                        await apiClient.put(`/admin/tenants/${selectedTenant.id}/activate`, {
+                          paid_users: checkoutData.users,
+                          months: months,
+                        });
+                        toast({ title: language === 'uz' ? 'Obuna faollashtirildi!' : 'Subscription activated!' });
+                        setShowSubscriptionModal(false);
+                        loadData();
+                      } catch (err) {
+                        toast({ title: err.response?.data?.error?.message || 'Error', variant: 'destructive' });
+                      }
+                      setCheckoutLoading(false);
+                    }}
+                    disabled={checkoutLoading || checkoutData.users < 1}
+                    className="w-full bg-gradient-to-r from-green-600 to-emerald-600"
+                  >
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    {language === 'uz' ? 'Qo\'lda faollashtirish (naqd to\'lov)' : 'Manual Activate (cash payment)'}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={async () => {
+                      setCheckoutLoading(true);
+                      try {
+                        const resp = await apiClient.post('/subscription/checkout', {
+                          users: checkoutData.users,
+                          billing: checkoutData.billing,
+                        }, {
+                          headers: { 'X-Tenant-ID': selectedTenant.id }
+                        });
+                        const url = resp.data?.data?.checkout_url;
+                        if (url) {
+                          setCheckoutUrl(url);
+                        } else {
+                          toast({ title: 'Failed to create checkout', variant: 'destructive' });
+                        }
+                      } catch (err) {
+                        toast({ title: err.response?.data?.error?.message || 'Error', variant: 'destructive' });
+                      }
+                      setCheckoutLoading(false);
+                    }}
+                    disabled={checkoutLoading || checkoutData.users < 1}
+                    className="w-full"
+                  >
+                    <CreditCard className="w-4 h-4 mr-2" />
+                    {language === 'uz' ? 'To\'lov havolasini yaratish (Multicard)' : 'Generate Payment Link (Multicard)'}
+                  </Button>
+                  <Button variant="ghost" onClick={() => setShowSubscriptionModal(false)} className="w-full text-slate-500">
+                    {language === 'uz' ? 'Bekor qilish' : 'Cancel'}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Tenant Details Modal */}
+        <Dialog open={showTenantDetailsModal} onOpenChange={setShowTenantDetailsModal}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-blue-600" />
+                {language === 'uz' ? 'Kompaniya tafsilotlari' : language === 'ru' ? 'Детали компании' : 'Company details'}
+                {selectedTenant && <Badge variant="outline" className="ml-2">{selectedTenant.name}</Badge>}
+              </DialogTitle>
+            </DialogHeader>
+
+            {tenantDetailsLoading ? (
+              <div className="py-12 text-center text-slate-500">
+                {language === 'uz' ? 'Yuklanmoqda...' : 'Loading...'}
+              </div>
+            ) : tenantDetails ? (
+              <div className="space-y-5 py-2">
+                {/* Tenant overview */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="p-3 bg-blue-50 rounded-lg">
+                    <p className="text-xs text-slate-500">{language === 'uz' ? 'Kod' : 'Code'}</p>
+                    <p className="font-semibold text-sm">{tenantDetails.tenant?.code}</p>
+                  </div>
+                  <div className="p-3 bg-purple-50 rounded-lg">
+                    <p className="text-xs text-slate-500">{language === 'uz' ? 'Reja' : 'Plan'}</p>
+                    <p className="font-semibold text-sm">{formatPlan(tenantDetails.tenant?.subscription_plan)}</p>
+                  </div>
+                  <div className="p-3 bg-emerald-50 rounded-lg">
+                    <p className="text-xs text-slate-500">{language === 'uz' ? 'Holat' : 'Status'}</p>
+                    <p className="font-semibold text-sm">{formatTenantStatus(tenantDetails.tenant?.subscription_status)}</p>
+                  </div>
+                  <div className="p-3 bg-amber-50 rounded-lg">
+                    <p className="text-xs text-slate-500">{language === 'uz' ? 'Pullik foydalanuvchilar' : 'Paid users'}</p>
+                    <p className="font-semibold text-sm">{tenantDetails.tenant?.paid_users || 0}</p>
+                  </div>
+                </div>
+
+                {/* Dates */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="p-3 border rounded-lg">
+                    <p className="text-xs text-slate-500">{language === 'uz' ? "Ro'yxatdan o'tgan" : 'Registered'}</p>
+                    <p className="text-sm font-medium">{tenantDetails.tenant?.created_at ? format(new Date(tenantDetails.tenant.created_at), 'dd.MM.yyyy') : '-'}</p>
+                  </div>
+                  <div className="p-3 border rounded-lg">
+                    <p className="text-xs text-slate-500">{language === 'uz' ? 'Trial tugaydi' : 'Trial ends'}</p>
+                    <p className="text-sm font-medium">{tenantDetails.tenant?.trial_ends_at ? format(new Date(tenantDetails.tenant.trial_ends_at), 'dd.MM.yyyy') : '-'}</p>
+                  </div>
+                  <div className="p-3 border rounded-lg">
+                    <p className="text-xs text-slate-500">{language === 'uz' ? 'Hisob tugaydi' : 'Account expires'}</p>
+                    <p className="text-sm font-medium">
+                      {tenantDetails.tenant?.account_clear_at ? format(new Date(tenantDetails.tenant.account_clear_at), 'dd.MM.yyyy') : '-'}
+                      {tenantDetails.tenant?.account_clear_at && (() => {
+                        const days = differenceInDays(new Date(tenantDetails.tenant.account_clear_at), new Date());
+                        return <span className={`ml-2 text-xs ${days < 0 ? 'text-red-500' : days < 7 ? 'text-orange-500' : 'text-slate-400'}`}>
+                          ({days >= 0 ? `${days} ${language === 'uz' ? 'kun qoldi' : 'days left'}` : `${Math.abs(days)} ${language === 'uz' ? 'kun oldin tugagan' : 'days ago'}`})
+                        </span>;
+                      })()}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Counts strip */}
+                <div className="flex gap-3">
+                  <div className="flex-1 p-3 bg-slate-50 rounded-lg flex items-center gap-3">
+                    <Users className="w-5 h-5 text-blue-500" />
+                    <div>
+                      <p className="text-xs text-slate-500">{language === 'uz' ? 'Foydalanuvchilar' : 'Users'}</p>
+                      <p className="font-bold">{tenantDetails.user_count || 0}</p>
+                    </div>
+                  </div>
+                  <div className="flex-1 p-3 bg-slate-50 rounded-lg flex items-center gap-3">
+                    <Briefcase className="w-5 h-5 text-purple-500" />
+                    <div>
+                      <p className="text-xs text-slate-500">{language === 'uz' ? 'Xodimlar' : 'Employees'}</p>
+                      <p className="font-bold">{tenantDetails.employee_count || 0}</p>
+                    </div>
+                  </div>
+                  <div className="flex-1 p-3 bg-slate-50 rounded-lg flex items-center gap-3">
+                    <Building2 className="w-5 h-5 text-emerald-500" />
+                    <div>
+                      <p className="text-xs text-slate-500">{language === 'uz' ? 'Kompaniyalar' : 'Companies'}</p>
+                      <p className="font-bold">{tenantDetails.org_count || 0}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Organizations */}
+                {tenantDetails.organizations?.length > 0 && (
+                  <div>
+                    <p className="text-sm font-semibold mb-2 flex items-center gap-2">
+                      <Building2 className="w-4 h-4" /> {language === 'uz' ? 'Kompaniyalar' : 'Companies'}
+                    </p>
+                    <div className="border rounded-lg overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-slate-50">
+                            <TableHead className="text-xs">{language === 'uz' ? 'Nomi' : 'Name'}</TableHead>
+                            <TableHead className="text-xs">{language === 'uz' ? 'Kod' : 'Code'}</TableHead>
+                            <TableHead className="text-xs">{language === 'uz' ? 'Valyuta' : 'Currency'}</TableHead>
+                            <TableHead className="text-xs">{language === 'uz' ? 'Faol' : 'Active'}</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {tenantDetails.organizations.map(o => (
+                            <TableRow key={o.id}>
+                              <TableCell className="text-sm font-medium">{o.name}</TableCell>
+                              <TableCell className="text-xs text-slate-500">{o.code}</TableCell>
+                              <TableCell className="text-xs">{o.currency}</TableCell>
+                              <TableCell>
+                                {o.is_active
+                                  ? <Badge className="bg-green-100 text-green-700 text-xs">✓</Badge>
+                                  : <Badge className="bg-slate-100 text-slate-500 text-xs">×</Badge>}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Users */}
+                <div>
+                  <p className="text-sm font-semibold mb-2 flex items-center gap-2">
+                    <Users className="w-4 h-4" /> {language === 'uz' ? 'Foydalanuvchilar' : 'Users'} ({tenantDetails.users?.length || 0})
+                  </p>
+                  <div className="border rounded-lg overflow-hidden max-h-[300px] overflow-y-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-slate-50">
+                          <TableHead className="text-xs">{language === 'uz' ? 'F.I.O' : 'Name'}</TableHead>
+                          <TableHead className="text-xs">{language === 'uz' ? 'Aloqa' : 'Contact'}</TableHead>
+                          <TableHead className="text-xs">{language === 'uz' ? 'Rol' : 'Role'}</TableHead>
+                          <TableHead className="text-xs">{language === 'uz' ? "So'nggi kirish" : 'Last login'}</TableHead>
+                          <TableHead className="text-xs">{language === 'uz' ? 'Holat' : 'Status'}</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {(tenantDetails.users || []).map(u => (
+                          <TableRow key={u.id}>
+                            <TableCell className="text-sm font-medium">{`${u.first_name} ${u.last_name}`.trim() || '-'}</TableCell>
+                            <TableCell className="text-xs">
+                              {u.email && <div className="text-slate-600">{u.email}</div>}
+                              {u.phone && <div className="text-slate-500 flex items-center gap-1"><Phone className="w-3 h-3" />{formatPhoneDisplay(u.phone)}</div>}
+                            </TableCell>
+                            <TableCell className="text-xs text-slate-500">{u.role_name || '-'}</TableCell>
+                            <TableCell className="text-xs text-slate-500">{u.last_login ? format(new Date(u.last_login), 'dd.MM.yyyy HH:mm') : '-'}</TableCell>
+                            <TableCell>
+                              {u.is_active
+                                ? <Badge className="bg-green-100 text-green-700 text-xs">{language === 'uz' ? 'Faol' : 'Active'}</Badge>
+                                : <Badge className="bg-slate-100 text-slate-500 text-xs">{language === 'uz' ? 'Nofaol' : 'Inactive'}</Badge>}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+
+                {/* Payment history */}
+                <div>
+                  <p className="text-sm font-semibold mb-2 flex items-center gap-2">
+                    <Receipt className="w-4 h-4" /> {language === 'uz' ? "To'lovlar tarixi" : 'Payment history'} ({tenantDetails.payments?.length || 0})
+                  </p>
+                  {(tenantDetails.payments || []).length === 0 ? (
+                    <div className="text-center py-6 bg-slate-50 rounded-lg text-sm text-slate-500">
+                      {language === 'uz' ? "To'lovlar yo'q" : 'No payments yet'}
+                    </div>
+                  ) : (
+                    <div className="border rounded-lg overflow-hidden max-h-[260px] overflow-y-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-slate-50">
+                            <TableHead className="text-xs">{language === 'uz' ? 'Sana' : 'Date'}</TableHead>
+                            <TableHead className="text-xs">{language === 'uz' ? 'Reja' : 'Plan'}</TableHead>
+                            <TableHead className="text-xs text-right">{language === 'uz' ? 'Summa' : 'Amount'}</TableHead>
+                            <TableHead className="text-xs">{language === 'uz' ? 'Karta' : 'Card'}</TableHead>
+                            <TableHead className="text-xs">{language === 'uz' ? 'Holat' : 'Status'}</TableHead>
+                            <TableHead className="text-xs">Receipt</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {tenantDetails.payments.map(p => (
+                            <TableRow key={p.id}>
+                              <TableCell className="text-xs">{format(new Date(p.created_at), 'dd.MM.yyyy HH:mm')}</TableCell>
+                              <TableCell className="text-xs">{formatPlan(p.plan)}</TableCell>
+                              <TableCell className="text-xs text-right font-medium">{Number(p.amount_uzs).toLocaleString()} {language === 'uz' ? "so'm" : 'UZS'}</TableCell>
+                              <TableCell className="text-xs text-slate-500">
+                                {p.card_pan ? `${(p.ps || '').toUpperCase()} ${p.card_pan}` : '-'}
+                              </TableCell>
+                              <TableCell>
+                                <Badge className={`text-xs ${
+                                  p.status === 'success' ? 'bg-green-100 text-green-700'
+                                  : p.status === 'pending' ? 'bg-amber-100 text-amber-700'
+                                  : p.status === 'error' ? 'bg-red-100 text-red-700'
+                                  : p.status === 'revert' ? 'bg-orange-100 text-orange-700'
+                                  : 'bg-slate-100 text-slate-500'
+                                }`}>{formatPaymentStatus(p.status)}</Badge>
+                              </TableCell>
+                              <TableCell className="text-xs">
+                                {p.receipt_url
+                                  ? <a href={p.receipt_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{language === 'uz' ? "Ko'rish" : 'View'}</a>
+                                  : '-'}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : null}
           </DialogContent>
         </Dialog>
 
