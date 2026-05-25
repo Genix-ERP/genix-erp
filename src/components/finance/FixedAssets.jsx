@@ -1192,8 +1192,8 @@ export default function FixedAssets() {
                 >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="1000">1000 - Kassa</SelectItem>
-                    <SelectItem value="1010">1010 - Bank</SelectItem>
+                    <SelectItem value="5010">5010 - Kassa</SelectItem>
+                    <SelectItem value="5110">5110 - Bank</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

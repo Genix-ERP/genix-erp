@@ -33,6 +33,69 @@ import { useTranslation } from '@/components/utils/translations';
 // =====================================================
 // ВОР PARSER
 // =====================================================
+//
+// Output shape — every item carries its own `parent_item_number` which
+// IS the section/stage path the row belongs to. To preserve the
+// hierarchy that the spreadsheet implies (СЕКЦИЯ №1 → ПЕРЕКРЫТИЕ →
+// МОНОЛИТНЫЕ УЧАСТКИ → ...) we encode the path with a single delimiter
+// HIERARCHY_DELIM. The downstream UI (StagesTabV2.deriveStages) splits
+// on the delimiter to nest sub-stages under their parent stages without
+// requiring a schema change.
+//
+// Heuristics for the level of a header row:
+//   • Top-level (sections):  "СЕКЦИЯ", "РАЗДЕЛ"
+//   • Sub-stages:            keywords that mark sub-elements of a major
+//                            structural element — МОНОЛИТНЫЕ УЧАСТКИ,
+//                            ПОЯСА, ДИАФРАГМЫ, МЕТАЛЛИЧЕСКАЯ … etc.
+//                            When matched, the sub-stage attaches to the
+//                            most recent stage; if there's no current
+//                            stage the sub-stage is promoted to a stage.
+//   • Stage (default):       any other section-like row.
+//
+// The keyword list below was derived from the common BOP estimate files
+// in /files_estimates (Жилдом Саттепо Авеню Блок 1.xlsx etc).
+const HIERARCHY_DELIM = ' › ';
+const SUB_STAGE_PATTERNS = [
+  /^МОНОЛИТНЫЕ\s+УЧАСТКИ/i,
+  /^ПОЯСА$/i,
+  /^ДИАФРАГМ/i,
+  /^МЕТАЛЛИЧЕСКАЯ\s/i,
+  /^МЕТАЛЛИЧЕСКИЙ\s/i,
+  /^КРЕПЕЖНЫЙ/i,
+  /^ПЛАН\s+ПОКРЫТИЯ/i,
+  // Interior-finishing sub-rooms (Гостиная, Ванная, Прихожая, …)
+  /^(ГОСТИННАЯ|ГОСТИНАЯ|ВАННАЯ|ПРИХОЖАЯ|СПАЛЬНЯ|ОБЩАЯ|КУХНЯ|МАГАЗИН|ТЕХ\.?ПОМЕЩЕНИЯ?)/i,
+];
+function isSubStageHeader(name) {
+  if (!name) return false;
+  return SUB_STAGE_PATTERNS.some((re) => re.test(name));
+}
+const TOP_SECTION_PATTERNS = [/^СЕКЦИЯ/i, /^РАЗДЕЛ/i];
+function isTopSectionHeader(name) {
+  if (!name) return false;
+  return TOP_SECTION_PATTERNS.some((re) => re.test(name));
+}
+
+// Robust cell-to-number converter. The Excel imports here are
+// Russian-locale files where decimal numbers display with a COMMA
+// ("10,272" = 10.272). If a cell is text-formatted (common when
+// users hand-edit XLSX), sheet_to_json returns it as a string, and
+// the raw parseFloat truncates at the comma — "10,272" becomes 10,
+// and "0,618" becomes 0. That's exactly how original_quantity could
+// end up at 0 on the єдинич side and REJA renders 0 in Bosqichlar.
+//
+// This helper handles all three observed shapes:
+//   • JS number cell                         → returned as-is.
+//   • string "10,272" or "10 272,5"          → comma→dot, whitespace
+//                                              stripped, parseFloat.
+//   • null / undefined / empty / "—"         → 0.
+function toNum(v) {
+  if (v == null || v === '') return 0;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+  const s = String(v).replace(/[\s ]/g, '').replace(',', '.');
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : 0;
+}
 
 function parseVOR(workbook) {
   // Find ВОР sheet
@@ -81,9 +144,38 @@ function parseVOR(workbook) {
     }
   }
 
-  // Parse data rows starting from row 12 (index 11)
+  // Parse data rows starting from row 12 (index 11). The ВОР sheet has
+  // up to three header levels: top-level sections (СЕКЦИЯ / РАЗДЕЛ),
+  // stages, and sub-stages. We track the current header at each level
+  // so every work row carries its full path in `parent_item_number`.
+  //
+  // The path is rebuilt on every header-level change. A new top-level
+  // section resets stage + sub-stage; a new stage resets sub-stage; a
+  // new sub-stage just sits under the current stage.
   const sections = [];
+  let currentTopSection = '';
+  let currentStage = '';
+  let currentSubStage = '';
   let currentSection = { name: objectName || 'Imported', items: [] };
+  // Helper to materialise the section bucket for the current path.
+  // Sections are bucketed by their full path so works under different
+  // sub-stages don't collapse into the same bucket downstream.
+  const pathOf = () => {
+    const parts = [];
+    if (currentTopSection) parts.push(currentTopSection);
+    if (currentStage)      parts.push(currentStage);
+    if (currentSubStage)   parts.push(currentSubStage);
+    return parts.join(HIERARCHY_DELIM) || (objectName || 'Imported');
+  };
+  const flushSection = () => {
+    if (currentSection.items.length > 0) {
+      sections.push(currentSection);
+    }
+  };
+  const startSection = () => {
+    flushSection();
+    currentSection = { name: pathOf(), items: [] };
+  };
 
   for (let i = 11; i < rawData.length; i++) {
     const row = rawData[i];
@@ -93,7 +185,8 @@ function parseVOR(workbook) {
     const colB = row[1] != null ? String(row[1]).trim() : '';
     const colC = row[2] != null ? String(row[2]).trim() : '';
     const colD = row[3] != null ? String(row[3]).trim() : '';
-    const colE = row[4] != null ? parseFloat(row[4]) : 0;
+    // toNum handles Russian comma-decimal text cells safely.
+    const colE = toNum(row[4]);
 
     // Skip empty description rows
     if (!colC) continue;
@@ -122,13 +215,20 @@ function parseVOR(workbook) {
     const isSectionHeader = isClassicHeader || isNumberedHeader;
 
     if (isSectionHeader) {
-      // Start new section if current one has items
-      if (currentSection.items.length > 0) {
-        sections.push(currentSection);
-        currentSection = { name: colC, items: [] };
+      // Decide which level of the header hierarchy this row sits at.
+      if (isTopSectionHeader(colC)) {
+        currentTopSection = colC;
+        currentStage      = '';
+        currentSubStage   = '';
+      } else if (isSubStageHeader(colC) && currentStage) {
+        // Genuine sub-stage: attaches under the current stage.
+        currentSubStage = colC;
       } else {
-        currentSection.name = colC;
+        // Default: a regular stage. Resets sub-stage.
+        currentStage    = colC;
+        currentSubStage = '';
       }
+      startSection();
       continue;
     }
 
@@ -220,10 +320,26 @@ function parseEdinich(workbook) {
     }
   }
 
-  // Parse data rows starting from row 12 (index 11)
+  // Parse data rows starting from row 12 (index 11). See parseVOR above
+  // for the rationale behind the three-level hierarchy bookkeeping —
+  // same idea here, just adapted to the единич sheet.
   const sections = [];
+  let currentTopSection = '';
+  let currentStage = '';
+  let currentSubStage = '';
   let currentSection = { name: objectName || 'Imported', items: [] };
   let lastParentNumber = '';
+  const pathOf = () => {
+    const parts = [];
+    if (currentTopSection) parts.push(currentTopSection);
+    if (currentStage)      parts.push(currentStage);
+    if (currentSubStage)   parts.push(currentSubStage);
+    return parts.join(HIERARCHY_DELIM) || (objectName || 'Imported');
+  };
+  const startSection = () => {
+    if (currentSection.items.length > 0) sections.push(currentSection);
+    currentSection = { name: pathOf(), items: [] };
+  };
 
   for (let i = 11; i < rawData.length; i++) {
     const row = rawData[i];
@@ -233,8 +349,13 @@ function parseEdinich(workbook) {
     const colB = row[1] != null ? String(row[1]).trim() : '';
     const colC = row[2] != null ? String(row[2]).trim() : '';
     const colD = row[3] != null ? String(row[3]).trim() : '';
-    const colE = row[4] != null ? parseFloat(row[4]) : 0;
-    const colF = row[5] != null ? parseFloat(row[5]) : 0;
+    // toNum handles Russian comma-decimal cells and text-formatted
+    // numbers — raw parseFloat would truncate "10,272" to 10 and
+    // ultimately store original_quantity = 0, which is the root cause
+    // of REJA showing 0 in Bosqichlar for files imported from
+    // Russian-locale Excel.
+    const colE = toNum(row[4]);
+    const colF = toNum(row[5]);
 
     if (!colC) continue;
     if (colC.toUpperCase().includes('ИТОГО')) continue;
@@ -242,14 +363,19 @@ function parseEdinich(workbook) {
     // Section headers: merged cells (C spans into D+) with no item number,
     // OR numbered rows with no UOM/quantity and uppercase text
     const isMergedHeader = mergedSectionRows.has(i) && !colA;
-    const isNumberedHeader = colA && /^\d+$/.test(colA) && !colD && (colE === 0 || isNaN(colE)) && colC.length > 5 && colC === colC.toUpperCase() && !/\d{2,}/.test(colC);
+    const isNumberedHeader = colA && /^\d+$/.test(colA) && !colD && (colE === 0) && colC.length > 5 && colC === colC.toUpperCase() && !/\d{2,}/.test(colC);
     if (isMergedHeader || isNumberedHeader) {
-      if (currentSection.items.length > 0) {
-        sections.push(currentSection);
-        currentSection = { name: colC, items: [] };
+      if (isTopSectionHeader(colC)) {
+        currentTopSection = colC;
+        currentStage      = '';
+        currentSubStage   = '';
+      } else if (isSubStageHeader(colC) && currentStage) {
+        currentSubStage = colC;
       } else {
-        currentSection.name = colC;
+        currentStage    = colC;
+        currentSubStage = '';
       }
+      startSection();
       continue;
     }
 
@@ -258,12 +384,28 @@ function parseEdinich(workbook) {
       const hasCode = colB && colB !== 'С';
       lastParentNumber = colA;
 
+      // TEMPLATE MODE: parent works always start at quantity = 0 — the
+      // user fills it in manually via the Bajarildi field. We capture
+      // the file's "по проектным данным" total (colF) into a separate
+      // `norma_quantity` so the Smeta boshqaruvi NORMA pill has a
+      // reference value to display ("the original imported norm")
+      // even though the live `quantity` ledger column starts at 0.
+      // Without this the pill renders "—" and the user has no anchor
+      // to compare against the value they type into Bajarildi.
+      // Children's per-unit norm is captured below in
+      // `quantity_per_unit`; child.quantity stays 0 so the cascade
+      // `parent.qty × norm` resolves to 0 too.
       currentSection.items.push({
         item_number: colA,
         code: colB,
         name: colC,
         uom: colD,
-        quantity: isNaN(colE) ? 0 : colE,
+        quantity: 0,
+        // colF is already a clean number via toNum (handles comma-
+        // decimal). Old code used `isNaN(colF) ? 0 : colF` which was
+        // a workaround for parseFloat's NaN on bad input; toNum
+        // already guarantees a finite number.
+        norma_quantity: colF,
         quantity_per_unit: 0,
         is_parent: hasCode,
         resource_type: '',
@@ -272,20 +414,50 @@ function parseEdinich(workbook) {
       continue;
     }
 
-    // Child/resource rows: empty A and B, follow a parent row
-    if (!colA && !colB && lastParentNumber) {
+    // Child/resource rows — TWO shapes seen in real estimates:
+    //
+    //   shape A: empty A AND empty B (older Block 1-style files).
+    //   shape B: dotted item-number like "1.1", "1.2", "2.1" in colA
+    //            with the resource's normative code (numeric) in colB
+    //            (Block 3 / Saatepo Avenyu-style files).
+    //
+    // Without shape B we silently dropped ~1400 resource rows per
+    // estimate, which made every work display "0 resurs" in the Smeta
+    // boshqaruvi tab and broke the auto-reservation pipeline. Shape B
+    // is now treated identically to shape A: norm_rate goes in colE,
+    // total quantity in colF, parent is the part before the dot.
+    const dottedMatch = colA && /^(\d+)\.\d+$/.exec(colA);
+    if ((!colA && !colB && lastParentNumber) || dottedMatch) {
       const resourceType = detectResourceType(colD);
+      const parentNum = dottedMatch ? dottedMatch[1] : lastParentNumber;
 
+      // TEMPLATE MODE for child resources: only the per-unit norm
+      // (column E "на. ед. измерения") is used by the cascade math
+      // (child.quantity = parent.quantity × norm). Column F's "по
+      // проектным данным" — the file's pre-computed total for THIS
+      // particular project — is captured into `norma_quantity` as a
+      // DISPLAY-ONLY anchor. It is NOT used in any calculation; the
+      // live cascade still drives child.quantity from parent qty +
+      // norm_rate. We just want the user to be able to see what the
+      // source file said for each resource row in the Smetalar list,
+      // alongside the parent's project total. Without this, sub-rows
+      // in the Единич table display "0" because templateMode zeroes
+      // the live `quantity` ledger.
       currentSection.items.push({
-        item_number: '',
-        code: '',
+        item_number: dottedMatch ? colA : '', // keep "1.1" so it round-trips
+        code: dottedMatch ? colB : '',         // resource normative code
         name: colC,
         uom: colD,
-        quantity: isNaN(colF) ? 0 : colF,
-        quantity_per_unit: isNaN(colE) ? 0 : colE,
+        quantity: 0,
+        // Display-only: file's project total for this resource row
+        // (e.g. 300.1696 ЧЕЛ-Ч for a 25.035 × 1000 М3 work). Passed
+        // through to the backend as imported_quantity (migration 413).
+        // colE/colF already cleaned by toNum.
+        norma_quantity: colF,
+        quantity_per_unit: colE,
         is_parent: false,
         resource_type: resourceType,
-        parent_item_number: lastParentNumber,
+        parent_item_number: parentNum,
       });
       continue;
     }
@@ -295,6 +467,40 @@ function parseEdinich(workbook) {
     sections.push(currentSection);
   }
 
+  // Post-pass: derive any missing parent `norma_quantity` from its
+  // children. In some Russian Excel templates the parent row's col F
+  // (по проектным данным) is left blank — only the child resource rows
+  // carry their project totals. Without this fallback REJA / Miqdor on
+  // the parent renders as 0 for those files.
+  //
+  // Math: for a child resource, the file relation is
+  //   child.colF (project total) = parent.qty × child.colE (per-unit norm)
+  // so parent.qty = child.colF / child.colE. We pick the first child
+  // whose colE > 0 to do the inversion (children with empty norms can't
+  // help). If no usable child exists we leave the parent at 0 — there's
+  // no way to derive it from the data we have.
+  for (const sec of sections) {
+    if (!Array.isArray(sec.items)) continue;
+    for (let i = 0; i < sec.items.length; i++) {
+      const it = sec.items[i];
+      // Only parents whose own col F was empty/zero get patched.
+      if (it.is_parent !== undefined && !it.is_parent) continue;
+      if (Number(it.norma_quantity) > 0) continue;
+      const parentNumStr = String(it.item_number || '').trim();
+      if (!parentNumStr) continue;
+      for (let j = i + 1; j < sec.items.length; j++) {
+        const child = sec.items[j];
+        if (String(child.parent_item_number || '') !== parentNumStr) break;
+        const childTotal = Number(child.norma_quantity || 0);
+        const perUnit    = Number(child.quantity_per_unit || 0);
+        if (childTotal > 0 && perUnit > 0) {
+          it.norma_quantity = childTotal / perUnit;
+          break;
+        }
+      }
+    }
+  }
+
   return { sections, objectName };
 }
 
@@ -302,14 +508,56 @@ function parseEdinich(workbook) {
 // РЕСУРС PARSER
 // =====================================================
 
+// detectResourceSection — returns BOTH the broad resource_type bucket
+// (labor / equipment / material) and the material sub-bucket
+// (standard / cable / equipment) used by the v23 chips.
+//
+// The original implementation collapsed every material-side section
+// down to a single string, which is why КАБЕЛЬНАЯ ПРОДУКЦИЯ rows ended
+// up in "Stroyamaterial 7%" and ОБОРУДОВАНИЕ rows collided with the
+// СТРОИТЕЛЬНЫЕ МАШИНЫ bucket. The Госкомархитектстрой regulation
+// requires three different overhead %'s for these (7 / 3.2 / 1.5 / 2),
+// so they MUST be tracked as distinct material_type values.
+//
+// Returns null when the text is not a recognised section header.
 function detectResourceSection(text) {
   if (!text) return null;
   const upper = text.toUpperCase();
-  if (upper.includes('ТРУДОВЫЕ РЕСУРСЫ') || upper.includes('ТРУДОВЫХ РЕСУРС')) return 'labor';
-  if (upper.includes('СТРОИТЕЛЬНЫЕ МАШИНЫ') || upper.includes('СТРОИТЕЛЬНЫХ МАШИН')) return 'equipment';
-  if (upper.includes('МАТЕРИАЛЬНЫЕ РЕСУРСЫ') || upper.includes('МАТЕРИАЛЬНЫХ РЕСУРС')) return 'material';
-  if (upper.includes('КАБЕЛЬНАЯ ПРОДУКЦИЯ') || upper.includes('КАБЕЛЬНОЙ ПРОДУКЦИИ')) return 'material';
-  if (upper.includes('ОБОРУДОВАНИЕ') || upper.includes('ОБОРУДОВАНИ')) return 'equipment';
+  if (upper.includes('ТРУДОВЫЕ РЕСУРСЫ') || upper.includes('ТРУДОВЫХ РЕСУРС')) {
+    return { resourceType: 'labor', materialType: null };
+  }
+  // СТРОИТЕЛЬНЫЕ МАШИНЫ И МЕХАНИЗМЫ → Mashina tab (МАШ.-Ч hours).
+  // Note we use resource_type='equipment' here only because that's the
+  // historical convention for МАШ.-Ч rows; it has nothing to do with
+  // material_type='equipment' (which is for оборудование items).
+  if (upper.includes('СТРОИТЕЛЬНЫЕ МАШИНЫ') || upper.includes('СТРОИТЕЛЬНЫХ МАШИН')) {
+    return { resourceType: 'equipment', materialType: null };
+  }
+  if (upper.includes('КАБЕЛЬНАЯ ПРОДУКЦИЯ') || upper.includes('КАБЕЛЬНОЙ ПРОДУКЦИИ')) {
+    return { resourceType: 'material', materialType: 'cable' };
+  }
+  if (upper.includes('ОБОРУДОВАНИЕ') || upper.includes('ОБОРУДОВАНИ')) {
+    return { resourceType: 'material', materialType: 'equipment' };
+  }
+  if (upper.includes('МАТЕРИАЛЬНЫЕ РЕСУРСЫ') || upper.includes('МАТЕРИАЛЬНЫХ РЕСУРС')) {
+    return { resourceType: 'material', materialType: 'standard' };
+  }
+  return null;
+}
+
+// Fallback classifier — runs per-item when the section header didn't
+// disambiguate (Блок 1 has only one big МАТЕРИАЛЬНЫЕ РЕСУРСЫ bucket
+// even though some files mix in cable/equipment items inline). Returns
+// 'cable' / 'equipment' / null. The keyword lists are intentionally
+// conservative — false negatives are easy to fix from the per-row
+// dropdown later, false positives are not.
+const CABLE_NAME_RE = /\b(КАБЕЛ|ПРОВОД(?!\s*НЫЙ\s*РАСЧ)|ВВГ|ВВГНГ|АВВГ|КГ-|ПВ-1|ПВ-3|СИП-|ПУГВ|ПУНП|ПВС|ШВВП|ППГ|ВРГ)/i;
+const EQUIPMENT_NAME_RE = /(ШКАФ\b|ЩИТ\b|ЩИТОК|ЩМП|ВРУ-|УРЩ-|АВТОМАТ\.?\s+ВЫКЛ|РОЗЕТКА|ВЫКЛЮЧАТЕЛЬ\b|СВЕТИЛЬНИК|СЧ[ЕЁ]ТЧИК|ЛАМПА\b|ДАТЧИК\b|НАСОС\b|КОТ[ЕЁ]Л\b|КРАН\s+ШАРОВ|ВЕНТИЛЯТОР\b|РАДИАТОР\b|ТЕПЛОСЧ[ЕЁ]ТЧИК|ЗАДВИЖКА|ОБОРУДОВАНИ)/i;
+function classifyMaterialByName(name) {
+  if (!name) return null;
+  const u = String(name).toUpperCase();
+  if (CABLE_NAME_RE.test(u)) return 'cable';
+  if (EQUIPMENT_NAME_RE.test(u)) return 'equipment';
   return null;
 }
 
@@ -340,7 +588,47 @@ function parseResurs(workbook) {
   }
 
   const sections = [];
-  let currentSection = { name: objectName || 'Resurslar', items: [], resourceType: 'material' };
+  // currentSection tracks BOTH the broad bucket and the material sub-bucket.
+  // materialType is null for non-material sections (labor / machines).
+  let currentSection = {
+    name: objectName || 'Resurslar',
+    items: [],
+    resourceType: 'material',
+    materialType: 'standard',
+  };
+
+  // Imported-budget capture. The Ресурс sheet ends with a small block of
+  // summary rows that carry the canonical project budget — we sum them
+  // into the dedicated fields below so the Reja vs Fakt page can show
+  // the real budget instead of computing it from per-line plan totals.
+  //
+  //   ИТОГО ПО СТРОИТЕЛЬНЫМ МАТЕРИАЛАМ      → materialBudget
+  //   ТРАНСПОРТНЫЕ РАСХОДЫ НА МАТЕРИАЛЫ    → transportBudget
+  //   ИТОГО ПРЯМЫЕ ЗАТРАТЫ                  → budgetTotal (the headline)
+  //
+  // The transport row also appears mid-sheet as per-section overhead
+  // (which the parser already skips). The bottom block is identifiable
+  // because it sits AFTER all the section data and its label appears in
+  // colB or colC with no item number in colA.
+  let materialBudget = 0;
+  let transportBudget = 0;
+  let budgetTotal = 0;
+
+  // Pull the numeric total off a summary row. The total can live in
+  // colE/F/G depending on the file — pick the first numeric one we find,
+  // preferring the right-most column (that's where the file lays the
+  // grand total). Falls back to scanning the whole row so weird padding
+  // (extra empty columns) still works.
+  const pickSummaryAmount = (row) => {
+    if (!Array.isArray(row)) return 0;
+    for (let c = row.length - 1; c >= 4; c--) {
+      const cell = row[c];
+      if (cell == null || cell === '') continue;
+      const n = typeof cell === 'number' ? cell : parseFloat(String(cell).replace(/[\s ]/g, '').replace(',', '.'));
+      if (!isNaN(n) && n > 0) return n;
+    }
+    return 0;
+  };
 
   for (let i = 11; i < rawData.length; i++) {
     const row = rawData[i];
@@ -350,25 +638,74 @@ function parseResurs(workbook) {
     const colB = row[1] != null ? String(row[1]).trim() : '';
     const colC = row[2] != null ? String(row[2]).trim() : '';
     const colD = row[3] != null ? String(row[3]).trim() : '';
-    const colE = row[4] != null ? parseFloat(row[4]) : 0;
-    const colF = row[5] != null ? parseFloat(row[5]) : 0;
-    const colG = row[6] != null ? parseFloat(row[6]) : 0;
+    // toNum handles Russian comma-decimal text cells safely.
+    const colE = toNum(row[4]);
+    const colF = toNum(row[5]);
+    const colG = toNum(row[6]);
 
     // Skip empty description
     if (!colC && !colB) continue;
 
-    // Check for ИТОГО rows
+    // Check for ИТОГО rows AND the per-section "ТРАНСПОРТНЫЕ РАСХОДЫ"
+    // subtotals — those are calculated overhead lines that should never
+    // be persisted as items.
     const textToCheck = (colC || colB || '').toUpperCase();
-    if (textToCheck.includes('ИТОГО')) continue;
+    if (textToCheck.includes('ИТОГО')) {
+      // Capture the file's bottom-summary totals on the way through.
+      // Only the bottom-block ИТОГО rows carry the project-wide totals
+      // we want; per-section ИТОГО (which always have data above and
+      // below them) are also caught here, but their numbers are smaller
+      // than the project total so the MAX-style assignment below is
+      // self-correcting on real files.
+      const amount = pickSummaryAmount(row);
+      if (amount > 0) {
+        if (textToCheck.includes('ПРЯМЫЕ') && textToCheck.includes('ЗАТРАТ')) {
+          // Headline: the WHOLE direct-cost budget for this estimate.
+          if (amount > budgetTotal) budgetTotal = amount;
+        } else if (textToCheck.includes('СТРОИТЕЛЬНЫМ') && textToCheck.includes('МАТЕРИАЛ')) {
+          // Material-only sub-total (excludes transport / labor / machines).
+          if (amount > materialBudget) materialBudget = amount;
+        }
+      }
+      continue;
+    }
+    if (textToCheck.includes('ТРАНСПОРТНЫЕ') && textToCheck.includes('РАСХОД')) {
+      // Pick up only the BOTTOM transport-overhead row — i.e. the one
+      // that sums materials project-wide. The parser walks top-to-bottom,
+      // so the LAST one we see is the project-level total. Overwriting
+      // every time achieves that without needing extra book-keeping.
+      const amount = pickSummaryAmount(row);
+      if (amount > 0) transportBudget = amount;
+      continue;
+    }
 
-    // Detect section header (resource type group) or numbered section header
-    const sectionType = detectResourceSection(colC);
+    // Detect section header (resource type group) or numbered section header.
+    // detectResourceSection now returns { resourceType, materialType }.
+    //
+    // CRITICAL: only treat the row as a typed section header when it
+    // ACTUALLY looks like one — empty item number AND empty UOM. The
+    // keyword check is a substring match (we want "КАБЕЛЬНОЙ ПРОДУКЦИИ"
+    // to register), so without this guard a genuine line item like
+    // "КРАНЫ НА АВТОМОБИЛЬНОМ ХОДУ ПРИ РАБОТЕ НА МОНТАЖЕ ТЕХНОЛОГИЧЕСКОГО
+    // ОБОРУДОВАНИЯ" (a МАШ.-Ч machine entry) would re-classify every
+    // following line as a material/equipment row.
+    const looksLikeHeaderRow = !colA && !colD;
+    const sectionMeta = looksLikeHeaderRow ? detectResourceSection(colC) : null;
     const isNumberedSectionHeader = colA && /^\d+$/.test(colA) && !colD && (colE === 0 || isNaN(colE)) && colC.length > 5 && colC === colC.toUpperCase() && !/\d{2,}/.test(colC);
-    if (sectionType || isNumberedSectionHeader) {
+    if (sectionMeta || isNumberedSectionHeader) {
       if (currentSection.items.length > 0) {
         sections.push(currentSection);
       }
-      currentSection = { name: colC, items: [], resourceType: sectionType || currentSection.resourceType };
+      currentSection = {
+        name: colC,
+        items: [],
+        resourceType: sectionMeta?.resourceType || currentSection.resourceType,
+        // Inherit current material sub-bucket on numbered (non-typed)
+        // headers so a sub-section under КАБЕЛЬНАЯ ПРОДУКЦИЯ stays cable.
+        materialType: sectionMeta
+          ? sectionMeta.materialType
+          : currentSection.materialType,
+      };
       continue;
     }
 
@@ -379,6 +716,22 @@ function parseResurs(workbook) {
     const unitPrice = isNaN(colF) ? 0 : colF;
     const total = isNaN(colG) ? 0 : colG;
 
+    // Material-type resolution:
+    //   1. Section's explicit material_type wins (КАБЕЛЬНАЯ ПРОДУКЦИЯ →
+    //      'cable', ОБОРУДОВАНИЕ → 'equipment', МАТЕРИАЛЬНЫЕ РЕСУРСЫ →
+    //      'standard').
+    //   2. If the section is just "МАТЕРИАЛЬНЫЕ РЕСУРСЫ" (one big bucket
+    //      like in Блок 1), let the item-name fallback try to spot the
+    //      occasional cable or equipment line mixed in.
+    let materialType = null;
+    if (currentSection.resourceType === 'material') {
+      materialType = currentSection.materialType || 'standard';
+      if (materialType === 'standard') {
+        const guess = classifyMaterialByName(colC);
+        if (guess) materialType = guess;
+      }
+    }
+
     currentSection.items.push({
       item_number: colA,
       code: '',
@@ -388,6 +741,7 @@ function parseResurs(workbook) {
       unit_price: unitPrice,
       total_price: total,
       resource_type: currentSection.resourceType,
+      material_type: materialType,
     });
   }
 
@@ -395,7 +749,21 @@ function parseResurs(workbook) {
     sections.push(currentSection);
   }
 
-  return { sections, objectName };
+  // If ИТОГО ПРЯМЫЕ ЗАТРАТЫ wasn't on the sheet (some older Ресурс
+  // exports skip the grand-total row), fall back to materials + transport.
+  // This still beats the per-line summation in the Reja vs Fakt handler
+  // because it includes transport overhead.
+  if (budgetTotal === 0 && (materialBudget > 0 || transportBudget > 0)) {
+    budgetTotal = materialBudget + transportBudget;
+  }
+
+  return {
+    sections,
+    objectName,
+    budgetTotal,
+    materialBudget,
+    transportBudget,
+  };
 }
 
 // =====================================================
@@ -870,8 +1238,20 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
   const [file, setFile] = useState(null);
   const [workbook, setWorkbook] = useState(null);
   const [availableSheets, setAvailableSheets] = useState([]);
+  // `selectedType` is the type currently focused in the preview (step 3).
+  // `selectedTypes` is the full set the user has ticked for import.
+  // Keeping them separate means every downstream render that references
+  // `selectedType` (e.g. the preview table branch) keeps working while the
+  // outer flow iterates over `selectedTypes` on import.
   const [selectedType, setSelectedType] = useState(null);
+  const [selectedTypes, setSelectedTypes] = useState([]);
   const [parsedData, setParsedData] = useState(null);
+  // Per-type parsed results so we can switch the preview between types
+  // without re-parsing. Keys are 'vor' | 'edinich' | 'resurs' | 'svod'.
+  const [parsedResults, setParsedResults] = useState({});
+  // Per-type estimate names so the user can name each one. Keyed the
+  // same way. Svod uses the project name and doesn't need this.
+  const [estimateNames, setEstimateNames] = useState({});
   const [expandedSections, setExpandedSections] = useState({});
   const [estimateName, setEstimateName] = useState('');
   const [selectedBuildingId, setSelectedBuildingId] = useState('');
@@ -886,7 +1266,10 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
     setWorkbook(null);
     setAvailableSheets([]);
     setSelectedType(null);
+    setSelectedTypes([]);
     setParsedData(null);
+    setParsedResults({});
+    setEstimateNames({});
     setExpandedSections({});
     setEstimateName('');
     setSelectedBuildingId('');
@@ -905,16 +1288,81 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
 
     try {
       const data = await selectedFile.arrayBuffer();
-      const wb = XLSX.read(data, { type: 'array' });
+      const bytes = new Uint8Array(data);
+
+      const decodeQuotedPrintable = (s) =>
+        s.replace(/=\r?\n/g, '').replace(/=([0-9A-Fa-f]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
+
+      const tryParseString = (text) => {
+        if (!text || text.length < 10) return null;
+        try {
+          const w = XLSX.read(text, { type: 'string' });
+          if (w && w.SheetNames && w.SheetNames.length > 0) return w;
+        } catch { /* try next */ }
+        return null;
+      };
+
+      let wb = null;
+
+      // 1) Native binary (xlsx/xls/binary csv/etc.)
+      try { wb = XLSX.read(data, { type: 'array' }); } catch { /* fall through */ }
+
+      // 2) Text with multiple encodings (HTML, SpreadsheetML XML, CSV)
+      if (!wb) {
+        const candidates = [];
+        if (bytes[0] === 0xFF && bytes[1] === 0xFE) candidates.push(['utf-16le', 2]);
+        else if (bytes[0] === 0xFE && bytes[1] === 0xFF) candidates.push(['utf-16be', 2]);
+        else if (bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) candidates.push(['utf-8', 3]);
+        else candidates.push(['utf-8', 0], ['utf-16le', 0], ['windows-1251', 0]);
+
+        for (const [enc, offset] of candidates) {
+          let text;
+          try { text = new TextDecoder(enc, { fatal: false }).decode(bytes.slice(offset)); }
+          catch { continue; }
+          wb = tryParseString(text);
+          if (wb) break;
+
+          // MHTML — extract embedded HTML and decode quoted-printable if needed
+          if (/MIME-Version\s*:|Content-Type\s*:\s*multipart/i.test(text.slice(0, 2000))) {
+            const start = text.search(/<html[\s>]/i);
+            const endIdx = text.toLowerCase().lastIndexOf('</html>');
+            if (start >= 0 && endIdx > start) {
+              let html = text.slice(start, endIdx + 7);
+              if (/=\r?\n|=[0-9A-Fa-f]{2}/.test(html)) html = decodeQuotedPrintable(html);
+              wb = tryParseString(html);
+              if (wb) break;
+            }
+          }
+
+          // Plain HTML where there IS a <table> — try parsing even if SheetJS picked another path
+          if (/<table/i.test(text)) {
+            wb = tryParseString(text);
+            if (wb) break;
+          }
+        }
+      }
+
+      if (!wb) {
+        const head = new TextDecoder('utf-8', { fatal: false }).decode(bytes.slice(0, 80))
+          .replace(/[\x00-\x1F]/g, '·');
+        setErrors([
+          "Faylni o'qib bo'lmadi — bu Excel (.xlsx/.xls), HTML jadval yoki MHTML emas.",
+          `Hajmi: ${(selectedFile.size / 1024).toFixed(1)} KB · boshlanishi: "${head.slice(0, 60)}"`,
+          "Excel'da oching va File → Save As → Excel Workbook (.xlsx) qilib qayta saqlang.",
+        ]);
+        return;
+      }
       setWorkbook(wb);
 
       const sheets = detectSheets(wb);
       setAvailableSheets(sheets);
 
-      // Auto-select ВОР if available
+      // Auto-select ВОР if available. Single-element selection matches the
+      // old default; the user can tick additional checkboxes in step 2.
       const vorSheet = sheets.find((s) => s.type === 'vor' && s.enabled);
       if (vorSheet) {
         setSelectedType('vor');
+        setSelectedTypes(['vor']);
       }
 
       if (sheets.length === 0) {
@@ -923,7 +1371,14 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
         setStep(2);
       }
     } catch (error) {
-      setErrors(["Faylni o'qishda xatolik: " + error.message]);
+      const msg = String(error?.message || error);
+      if (msg.includes('Invalid HTML') || msg.includes('could not find <table>')) {
+        setErrors([
+          "Fayl Excel emas (HTML ko'rinishida saqlangan, lekin jadval yo'q). Excel'da oching va File → Save As → Excel Workbook (.xlsx) qilib qayta saqlang.",
+        ]);
+      } else {
+        setErrors(["Faylni o'qishda xatolik: " + msg]);
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -939,47 +1394,80 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
     e.preventDefault();
   };
 
-  // Step 2: Parse selected sheet type
+  // Pure parser dispatcher — no side effects, so we can reuse it both for
+  // the single-type path and the multi-type loop.
+  const parseByType = (type) => {
+    if (type === 'vor')      return parseVOR(workbook);
+    if (type === 'edinich')  return parseEdinich(workbook);
+    if (type === 'resurs')   return parseResurs(workbook);
+    if (type === 'svod')     return parseSvod(workbook);
+    return null;
+  };
+
+  const isParsedOk = (type, result) => {
+    if (!result) return false;
+    if (type === 'svod')  return Array.isArray(result.categories) && result.categories.length > 0;
+    return Array.isArray(result.sections) && result.sections.length > 0;
+  };
+
+  // Step 2: Parse every selected type. Results are stashed in
+  // `parsedResults` keyed by type so the preview can flip between them
+  // without re-parsing. Per-type names are seeded here too.
   const handleParseSheet = () => {
-    if (!workbook || !selectedType) return;
+    if (!workbook) return;
+    // Honour the multi-select, but fall back to single selectedType so
+    // legacy callers keep working.
+    const types = (selectedTypes && selectedTypes.length > 0)
+      ? selectedTypes
+      : (selectedType ? [selectedType] : []);
+    if (types.length === 0) return;
+
     setIsProcessing(true);
     setErrors([]);
 
     try {
-      let result = null;
-      if (selectedType === 'vor') {
-        result = parseVOR(workbook);
-      } else if (selectedType === 'edinich') {
-        result = parseEdinich(workbook);
-      } else if (selectedType === 'resurs') {
-        result = parseResurs(workbook);
-      } else if (selectedType === 'svod') {
-        result = parseSvod(workbook);
-      }
-
-      if (!result) {
-        setErrors(["Ma'lumot topilmadi. Fayl formati to'g'ri ekanligini tekshiring."]);
-        setIsProcessing(false);
-        return;
-      }
-
-      // Svod has categories, others have sections
-      if (selectedType === 'svod') {
-        if (!result.categories || result.categories.length === 0) {
-          setErrors(["Ma'lumot topilmadi. Fayl formati to'g'ri ekanligini tekshiring."]);
-          setIsProcessing(false);
-          return;
+      const results = {};
+      const names = {};
+      const failed = [];
+      for (const type of types) {
+        const result = parseByType(type);
+        if (!isParsedOk(type, result)) {
+          failed.push(type);
+          continue;
         }
-      } else if (!result.sections || result.sections.length === 0) {
-        setErrors(["Ma'lumot topilmadi. Fayl formati to'g'ri ekanligini tekshiring."]);
+        results[type] = result;
+        names[type] = type === 'svod'
+          ? (result.projectName || '')
+          : (result.objectName || '');
+      }
+
+      if (Object.keys(results).length === 0) {
+        setErrors([
+          "Ma'lumot topilmadi. Fayl formati to'g'ri ekanligini tekshiring."
+          + (failed.length ? ` (${failed.join(', ')})` : ''),
+        ]);
         setIsProcessing(false);
         return;
       }
+      if (failed.length > 0) {
+        // Non-fatal: we still proceed with the types that parsed, but
+        // surface the problem so the user knows some sheets were skipped.
+        setErrors([
+          `Quyidagi turlar uchun ma'lumot topilmadi, o'tkazib yuborildi: ${failed.join(', ')}`,
+        ]);
+      }
 
-      setParsedData(result);
-      setEstimateName(selectedType === 'svod' ? (result.projectName || '') : (result.objectName || ''));
-      // Expand first section by default
-      if (result.sections && result.sections.length > 0) {
+      setParsedResults(results);
+      setEstimateNames(names);
+
+      // Pick the first successfully-parsed type as the initial preview
+      // focus. Prefer the user's previously-selected type if it's still
+      // valid so the UI doesn't jump unexpectedly.
+      const firstType = results[selectedType] ? selectedType : Object.keys(results)[0];
+      setSelectedType(firstType);
+      setParsedData(results[firstType]);
+      setEstimateName(names[firstType] || '');
+      if (results[firstType]?.sections?.length > 0) {
         setExpandedSections({ 0: true });
       }
       setStep(3);
@@ -990,93 +1478,282 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
     }
   };
 
-  // Step 3 → Step 4: Execute import
+  // Switch the preview to a different parsed type without leaving step 3.
+  // Saves the current type's editable estimate name first so it isn't
+  // lost if the user comes back to it.
+  const switchPreviewType = (type) => {
+    if (!parsedResults[type]) return;
+    setEstimateNames((prev) => ({ ...prev, [selectedType]: estimateName }));
+    setSelectedType(type);
+    setParsedData(parsedResults[type]);
+    setEstimateName(estimateNames[type] || '');
+    setExpandedSections(parsedResults[type]?.sections?.length > 0 ? { 0: true } : {});
+  };
+
+  // Build the per-type payload for `onImport` from a parsed result.
+  // Extracted so the multi-type loop below can reuse the exact same
+  // transformation that the single-type flow used to do inline.
+  //
+  // IMPORTANT: every item inherits its containing section's `name` as
+  // its `parent_item_number` unless the parser already gave it a
+  // hand-tagged value (e.g. единич's resource children that point at
+  // their numeric parent line). Without this fallback every section
+  // collapses into a single anonymous bucket on the backend, which is
+  // why the v2 Bosqichlar tab showed only "Boshqalar" with all 277
+  // works after import.
+  const buildImportPayloadFor = (type, result, nameOverride) => {
+    const allLines = [];
+    let sortIdx = 0;
+    let importedCount = 0;
+    // TEMPLATE MODE applies only to Единич (and the resource catalog).
+    // ВОР is the source of the planned project Miqdor — those values
+    // need to be preserved verbatim because the Bosqichlar tab now
+    // sources its REJA column from the ВОР row matched by name. If we
+    // strip ВОР quantities to 0 too, REJA stays at 0 across the
+    // workflow.
+    const templateMode = String(type || '').toLowerCase() !== 'vor';
+    const isEdinich = String(type || '').toLowerCase() === 'edinich';
+    for (const section of result.sections || []) {
+      if (!section.items || section.items.length === 0) continue;
+      const sectionPath = section.name || '';
+      // Display-only "imported" capture (migration 413). Two sources:
+      //   • Ресурс sheet — item.quantity (Количество) + item.total_price
+      //     (Сметная стоимость в базисном уровне) are the file's verbatim
+      //     numbers and ARE the headline columns the user wants to see.
+      //   • Единич sheet — item.norma_quantity (column F "по проектным
+      //     данным") is the file's per-row project total. For parent
+      //     works it's the work volume (e.g. 25.035 × 1000 М3); for child
+      //     resources it's the resource consumption (e.g. 300.1696 ЧЕЛ-Ч).
+      //     Without this, Единич sub-rows display "0" in the Smetalar
+      //     list because templateMode zeroes the live `quantity` ledger.
+      // ВОР keeps its quantity in the live ledger, so it doesn't need a
+      // parallel display field — but inheriting `norma_quantity` if the
+      // parser ever sets it costs nothing.
+      const isResurs = String(type || '').toLowerCase() === 'resurs';
+      for (const item of section.items) {
+        sortIdx++;
+        const unitPrice = item.unit_price || 0;
+        const rt = item.resource_type || '';
+        // Resurs: file Количество. Other sheets: norma_quantity (Единич's
+        // colF). undefined ⇒ NULL in DB; the UI falls back to
+        // original_quantity / live quantity for legacy rows.
+        let importedQuantity;
+        if (isResurs && item.quantity != null) {
+          importedQuantity = Number(item.quantity) || 0;
+        } else if (item.norma_quantity != null && Number(item.norma_quantity) > 0) {
+          importedQuantity = Number(item.norma_quantity);
+        } else {
+          importedQuantity = undefined;
+        }
+        // Total cost is Resurs-only — Единич/ВОР have no per-row cost
+        // total in their source sheets.
+        const importedTotal = isResurs && item.total_price != null
+          ? Number(item.total_price) || 0
+          : undefined;
+        allLines.push({
+          name: item.name,
+          uom: item.uom || 'шт',
+          // Единич / Ресурс → 0 (the foreman's Bajarildi field drives
+          // the cascade). ВОР → keep the file's Miqdor so the planned
+          // project volume survives the round-trip.
+          quantity: templateMode ? 0 : Number(item.quantity || 0),
+          // Migration 400 — file values preserved verbatim for display
+          // only. NEVER consumed by any cost / cascade / ledger code
+          // path; rendered alongside the live columns in EstimatesTab so
+          // the user can see what the source file said.
+          imported_quantity: importedQuantity,
+          imported_total: importedTotal,
+          // Norma anchor (migration 349). Parents in template mode keep
+          // the file's planned project quantity (colF) as the
+          // original_quantity even though the live quantity is 0; the
+          // Smeta boshqaruvi NORMA pill reads this. Children pass 0
+          // (their norm-driven quantity is computed from parent on the
+          // fly, no anchor needed). Non-template (ВОР) imports omit
+          // it so the trigger defaults to the live quantity, matching
+          // pre-existing behaviour.
+          original_quantity: templateMode
+            ? Number(item.norma_quantity || 0)
+            : undefined,
+          material_rate: rt === 'material' ? unitPrice : 0,
+          labor_rate: rt === 'labor' ? unitPrice : 0,
+          equipment_rate: rt === 'equipment' ? unitPrice : 0,
+          code: item.code || '',
+          item_number: item.item_number || '',
+          resource_type: rt,
+          // norm_rate (per parent unit) — the единич parser sets this in
+          // `quantity_per_unit` for child resource rows. We carry it
+          // through so the Bosqichlar tab can compute live consumption
+          // as `parent.done_quantity × norm_rate` when the foreman types.
+          norm_rate: item.quantity_per_unit || 0,
+          // Material sub-bucket — defaults to 'standard' on the backend
+          // when omitted; the РЕСУРС parser fills this in based on the
+          // section header (КАБЕЛЬНАЯ ПРОДУКЦИЯ → 'cable', ОБОРУДОВАНИЕ
+          // → 'equipment') so the new resource gets bucketed into the
+          // right Stroyamaterial / Uskuna / Kabel chip on import.
+          material_type: item.material_type || undefined,
+          // Use the parser's explicit value first (resource sub-lines
+          // point at their numeric parent), otherwise fall back to the
+          // section path so the v2 hierarchy survives the round-trip.
+          parent_item_number: item.parent_item_number || sectionPath,
+          sort_order: sortIdx,
+        });
+
+        // Direct-material works (shifr "С" in the source file) have
+        // no labor/machine breakdown — the work IS the material. The
+        // file lists them as a single line and stops, which means
+        // after import the work shows "0 resurs" and zero cost. To
+        // drive the smeta math correctly we auto-attach a single
+        // material child that mirrors the parent: same name + uom,
+        // norm_rate = 1 so the cascade sets child.qty = parent.qty,
+        // and the post-import resource-price propagation pipeline
+        // (matches by name against the Ресурс catalog) fills in the
+        // unit_rate on the backend. Only fires for Единич imports —
+        // ВОР keeps standalone "С" rows as project-qty entries, and
+        // the Ресурс sheet has no "С" rows of its own.
+        const codeStr = String(item.code || '').trim().toUpperCase();
+        if (
+          isEdinich
+          && codeStr === 'С'
+          && item.item_number
+          && !item.parent_item_number  // skip if it's already a child
+        ) {
+          sortIdx++;
+          // norm_rate = 1 because the work IS the material (1:1 ratio).
+          // The user enters the work qty as the total project amount
+          // (e.g. 6.316 T of armatura), and the cascade gives
+          // child.qty = work.qty × 1 = 6.316 T — which matches both
+          // the source file's project qty and the ВОР's REJA.
+          allLines.push({
+            name: item.name,
+            uom: item.uom || 'шт',
+            quantity: 0,
+            material_rate: 0,
+            labor_rate: 0,
+            equipment_rate: 0,
+            code: '',
+            item_number: '',
+            resource_type: 'material',
+            norm_rate: 1,
+            material_type: item.material_type || undefined,
+            parent_item_number: item.item_number,
+            sort_order: sortIdx,
+          });
+        }
+      }
+      importedCount += section.items.length;
+    }
+    const sectionNames = (result.sections || [])
+      .filter((s) => s.items?.length > 0 && s.name)
+      .map((s) => s.name);
+    return {
+      lines: allLines,
+      sectionNames,
+      importedCount,
+      sectionCount: result.sections?.length || 0,
+      defaultName: nameOverride || result.objectName || result.sections?.[0]?.name || 'Imported',
+      // Imported budget totals — populated only by parseResurs (the only
+      // sheet that carries project-wide totals at the bottom). Other
+      // parsers leave these as 0/undefined so the existing Reja-jami
+      // computation stays in charge.
+      budgetTotal: Number(result.budgetTotal || 0),
+      materialBudget: Number(result.materialBudget || 0),
+      transportBudget: Number(result.transportBudget || 0),
+    };
+  };
+
+  // Step 3 → Step 4: Execute import. Iterates over every type the user
+  // ticked in step 2 so a single file can seed multiple estimates in one
+  // click. Svod is handled via the dedicated `onImportSvod` callback; all
+  // other types go through `onImport` one-by-one.
   const handleImport = async () => {
-    // Svod doesn't require building selection
-    if (!parsedData || (selectedType !== 'svod' && !selectedBuildingId)) {
+    // Honour the multi-select, but fall back to the single focused type.
+    const types = (selectedTypes && selectedTypes.length > 0)
+      ? selectedTypes.filter((t) => parsedResults[t])
+      : (selectedType && parsedResults[selectedType] ? [selectedType] : []);
+    if (types.length === 0) {
+      setErrors(["Import uchun tur tanlanmagan"]);
+      return;
+    }
+
+    // Non-svod types need a building; if at least one non-svod type is
+    // selected, building is required.
+    const anyNonSvod = types.some((t) => t !== 'svod');
+    if (anyNonSvod && !selectedBuildingId) {
       setErrors(["Binoni tanlang"]);
       return;
     }
+
+    // Commit any in-flight name edit on the focused tab before we loop.
+    const names = { ...estimateNames, [selectedType]: estimateName };
 
     setIsProcessing(true);
     setErrors([]);
     setStep(4);
 
     try {
-      if (selectedType === 'svod') {
-        // Svod import: flatten cross-tab into rows
-        const rows = [];
-        for (const cat of parsedData.categories) {
-          for (const buildingName of parsedData.buildings) {
-            rows.push({
-              row_number: cat.row_number,
-              category_name: cat.name,
-              building_column: buildingName,
-              amount: cat.amounts[buildingName] || 0,
-            });
+      let totalLines = 0;
+      let totalSections = 0;
+      let estimatesCreated = 0;
+      let svodImported = false;
+      const buildingId = selectedBuildingId === 'project' ? 0 : parseInt(selectedBuildingId);
+      const subcontractId = selectedSubcontractId ? parseInt(selectedSubcontractId) : undefined;
+
+      for (const type of types) {
+        const result = parsedResults[type];
+        if (!result) continue;
+
+        if (type === 'svod') {
+          // Svod cross-tab → flat rows, like the old single-type branch.
+          const rows = [];
+          for (const cat of result.categories || []) {
+            for (const buildingName of result.buildings || []) {
+              rows.push({
+                row_number: cat.row_number,
+                category_name: cat.name,
+                building_column: buildingName,
+                amount: cat.amounts?.[buildingName] || 0,
+              });
+            }
           }
+          if (onImportSvod) await onImportSvod(rows);
+          svodImported = true;
+          totalLines += result.categories?.length || 0;
+          continue;
         }
 
-        await onImportSvod(rows);
-
-        setImportResult({
-          success: true,
-          count: parsedData.categories.length,
-          sections: 1,
-          isSvod: true,
+        const payload = buildImportPayloadFor(type, result, names[type]);
+        if (payload.lines.length === 0) continue;
+        await onImport({
+          estimateName: payload.defaultName,
+          buildingId,
+          sourceType: type,
+          // Forwarding the uploaded file name lets the backend's Forma 2
+          // auto-create dedupe by it — every estimate type extracted from
+          // this same file merges into the same Forma 2 draft.
+          sourceFileName: file?.name || '',
+          lines: payload.lines,
+          sectionNames: payload.sectionNames,
+          subcontractId,
+          // Imported budget — Ресурс sheet only. The handler forwards
+          // these to the backend so the Reja vs Fakt page can show the
+          // file's grand total instead of a derived sum.
+          budgetTotal: payload.budgetTotal,
+          materialBudget: payload.materialBudget,
+          transportBudget: payload.transportBudget,
         });
-      } else {
-        const buildingId = selectedBuildingId === 'project' ? 0 : parseInt(selectedBuildingId);
-        let importedCount = 0;
-
-        // Merge all sections into a single estimate with all lines
-        const allLines = [];
-        let sortIdx = 0;
-        for (const section of parsedData.sections) {
-          if (section.items.length === 0) continue;
-          for (const item of section.items) {
-            sortIdx++;
-            const unitPrice = item.unit_price || 0;
-            const rt = item.resource_type || '';
-            allLines.push({
-              name: item.name,
-              uom: item.uom || 'шт',
-              quantity: item.quantity || 0,
-              material_rate: rt === 'material' ? unitPrice : 0,
-              labor_rate: rt === 'labor' ? unitPrice : 0,
-              equipment_rate: rt === 'equipment' ? unitPrice : 0,
-              code: item.code || '',
-              item_number: item.item_number || '',
-              resource_type: rt,
-              parent_item_number: item.parent_item_number || '',
-              sort_order: sortIdx,
-            });
-          }
-          importedCount += section.items.length;
-        }
-
-        if (allLines.length > 0) {
-          // Collect section names for auto-creating stages
-          const sectionNames = parsedData.sections
-            .filter(s => s.items.length > 0 && s.name)
-            .map(s => s.name);
-
-          await onImport({
-            estimateName: estimateName || parsedData.objectName || parsedData.sections[0]?.name || 'Imported',
-            buildingId,
-            sourceType: selectedType,
-            lines: allLines,
-            sectionNames,
-            subcontractId: selectedSubcontractId ? parseInt(selectedSubcontractId) : undefined,
-          });
-        }
-
-        setImportResult({
-          success: true,
-          count: importedCount,
-          sections: parsedData.sections.length,
-        });
+        totalLines += payload.importedCount;
+        totalSections += payload.sectionCount;
+        estimatesCreated += 1;
       }
+
+      setImportResult({
+        success: true,
+        count: totalLines,
+        sections: totalSections,
+        estimatesCreated,
+        isSvod: svodImported && estimatesCreated === 0, // keep old message shape when svod-only
+        typeCount: types.length,
+      });
     } catch (error) {
       setErrors(["Import xatolik: " + error.message]);
       setImportResult({ success: false });
@@ -1108,13 +1785,13 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
 
         {/* Step indicators */}
         <div className="flex items-center gap-2 text-xs text-slate-500 pb-2 border-b">
-          <span className={step >= 1 ? 'text-blue-600 font-medium' : ''}>1. Fayl yuklash</span>
+          <span className={step >= 1 ? 'text-blue-600 font-medium' : ''}>{t('import_step_upload') || '1. Fayl yuklash'}</span>
           <ArrowRight className="w-3 h-3" />
-          <span className={step >= 2 ? 'text-blue-600 font-medium' : ''}>2. Tur tanlash</span>
+          <span className={step >= 2 ? 'text-blue-600 font-medium' : ''}>{t('import_step_select_type') || '2. Tur tanlash'}</span>
           <ArrowRight className="w-3 h-3" />
-          <span className={step >= 3 ? 'text-blue-600 font-medium' : ''}>3. Ko'rish</span>
+          <span className={step >= 3 ? 'text-blue-600 font-medium' : ''}>{t('import_step_preview') || "3. Ko'rish"}</span>
           <ArrowRight className="w-3 h-3" />
-          <span className={step >= 4 ? 'text-blue-600 font-medium' : ''}>4. Import</span>
+          <span className={step >= 4 ? 'text-blue-600 font-medium' : ''}>{t('import_step_import') || '4. Import'}</span>
         </div>
 
         {/* Errors */}
@@ -1196,69 +1873,100 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
             </p>
 
             <div className="space-y-2">
-              <Label>Import turini tanlang:</Label>
-              {availableSheets.map((sheet) => (
-                <div
-                  key={sheet.type}
-                  className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                    selectedType === sheet.type
-                      ? 'border-blue-500 bg-blue-50'
-                      : sheet.enabled
-                      ? 'border-slate-200 hover:border-slate-300'
-                      : 'border-slate-100 bg-slate-50 opacity-50 cursor-not-allowed'
-                  }`}
-                  onClick={() => sheet.enabled && setSelectedType(sheet.type)}
-                >
+              {/* Multi-select: user can tick any combination of detected
+                  types. Each ticked type will end up as its own estimate
+                  after import (svod stays a summary import as before). */}
+              <Label>Import turlari (bir nechtasini tanlashingiz mumkin):</Label>
+              {availableSheets.map((sheet) => {
+                const isChecked = selectedTypes.includes(sheet.type);
+                const isFocused = selectedType === sheet.type;
+                const toggle = () => {
+                  if (!sheet.enabled) return;
+                  setSelectedTypes((prev) => {
+                    const next = prev.includes(sheet.type)
+                      ? prev.filter((t) => t !== sheet.type)
+                      : [...prev, sheet.type];
+                    // Keep `selectedType` consistent with the set so the
+                    // preview focus is always on a currently-checked type.
+                    if (next.length === 0) setSelectedType(null);
+                    else if (!next.includes(selectedType)) setSelectedType(next[next.length - 1]);
+                    else if (!selectedType) setSelectedType(next[0]);
+                    return next;
+                  });
+                };
+                return (
                   <div
-                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                      selectedType === sheet.type ? 'border-blue-500' : 'border-slate-300'
+                    key={sheet.type}
+                    className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
+                      !sheet.enabled
+                        ? 'border-slate-100 bg-slate-50 opacity-50 cursor-not-allowed'
+                        : isChecked
+                        ? (isFocused ? 'border-blue-500 bg-blue-50' : 'border-blue-300 bg-blue-50/40')
+                        : 'border-slate-200 hover:border-slate-300 cursor-pointer'
                     }`}
+                    onClick={toggle}
                   >
-                    {selectedType === sheet.type && (
-                      <div className="w-2 h-2 rounded-full bg-blue-500" />
-                    )}
-                  </div>
-                  <div className="flex-1">
-                    <div>
-                      <span className="font-medium text-sm">
-                        {language === 'uz'
-                          ? { vor: "Ishlar ro'yxati (ВОР)", edinich: 'Batafsil miqdor (Единич)', resurs: 'Resurslar (Ресурс)', svod: 'Svod' }[sheet.type] || sheet.label
-                          : sheet.label
-                        }
-                      </span>
-                      <span className="text-xs text-slate-500 ml-2">({sheet.name})</span>
-                    </div>
-                    {typeDescriptions[sheet.type] && (
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        {language === 'uz' ? typeDescriptions[sheet.type].uz : typeDescriptions[sheet.type].ru}
-                      </p>
-                    )}
-                  </div>
-                  {sheet.enabled && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-xs h-7 px-2 text-slate-500 hover:text-slate-700"
-                      onClick={(e) => { e.stopPropagation(); downloadTemplate(sheet.type); }}
-                      title={language === 'uz' ? 'Namuna yuklab olish' : 'Скачать шаблон'}
+                    {/* Square checkbox (multi-select), not a radio. */}
+                    <div
+                      className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
+                        isChecked ? 'border-blue-500 bg-blue-500' : 'border-slate-300'
+                      }`}
                     >
-                      <Download className="w-3.5 h-3.5" />
-                    </Button>
-                  )}
-                  {!sheet.enabled && (
-                    <Badge variant="secondary" className="text-xs">
-                      Tez kunda
-                    </Badge>
-                  )}
-                </div>
-              ))}
+                      {isChecked && (
+                        <svg className="w-3 h-3 text-white" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <div>
+                        <span className="font-medium text-sm">
+                          {language === 'uz'
+                            ? { vor: "Ishlar ro'yxati (ВОР)", edinich: 'Batafsil miqdor (Единич)', resurs: 'Resurslar (Ресурс)', svod: 'Svod' }[sheet.type] || sheet.label
+                            : sheet.label
+                          }
+                        </span>
+                        <span className="text-xs text-slate-500 ml-2">({sheet.name})</span>
+                      </div>
+                      {typeDescriptions[sheet.type] && (
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          {language === 'uz' ? typeDescriptions[sheet.type].uz : typeDescriptions[sheet.type].ru}
+                        </p>
+                      )}
+                    </div>
+                    {sheet.enabled && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-xs h-7 px-2 text-slate-500 hover:text-slate-700"
+                        onClick={(e) => { e.stopPropagation(); downloadTemplate(sheet.type); }}
+                        title={language === 'uz' ? 'Namuna yuklab olish' : 'Скачать шаблон'}
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                      </Button>
+                    )}
+                    {!sheet.enabled && (
+                      <Badge variant="secondary" className="text-xs">
+                        Tez kunda
+                      </Badge>
+                    )}
+                  </div>
+                );
+              })}
+              {selectedTypes.length > 1 && (
+                <p className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded px-3 py-2 mt-2">
+                  {language === 'uz'
+                    ? `${selectedTypes.length} tur tanlangan — keyingi qadamda har biri uchun alohida smeta yaratiladi.`
+                    : `Выбрано ${selectedTypes.length} типа — на следующем шаге создастся отдельная смета для каждого.`}
+                </p>
+              )}
             </div>
 
             <div className="flex justify-between pt-4">
               <Button variant="outline" onClick={() => setStep(1)}>
-                <ArrowLeft className="w-4 h-4 mr-1" /> Orqaga
+                <ArrowLeft className="w-4 h-4 mr-1" /> {t('import_back') || 'Orqaga'}
               </Button>
-              <Button onClick={handleParseSheet} disabled={!selectedType || isProcessing}>
+              <Button onClick={handleParseSheet} disabled={selectedTypes.length === 0 || isProcessing}>
                 {isProcessing ? (
                   <Loader2 className="w-4 h-4 mr-1 animate-spin" />
                 ) : (
@@ -1273,11 +1981,45 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
         {/* Step 3: Preview + Configure */}
         {step === 3 && parsedData && (
           <div className="flex-1 flex flex-col min-h-0 space-y-3">
+            {/* Type switcher — lets the user jump between previews of the
+                types they ticked in step 2 without leaving step 3. Hidden
+                when only one type is selected so the UI isn't noisy for
+                the single-type case. */}
+            {Object.keys(parsedResults).length > 1 && (
+              <div className="flex flex-wrap gap-1.5 p-1 bg-slate-50 rounded-lg border">
+                {Object.keys(parsedResults).map((type) => {
+                  const r = parsedResults[type];
+                  const active = selectedType === type;
+                  const count = type === 'svod'
+                    ? (r.categories?.length || 0)
+                    : (r.sections?.reduce((s, sec) => s + (sec.items?.length || 0), 0) || 0);
+                  const label = language === 'uz'
+                    ? { vor: 'ВОР', edinich: 'Единич', resurs: 'Ресурс', svod: 'Свод' }[type] || type
+                    : { vor: 'ВОР', edinich: 'Единич', resurs: 'Ресурс', svod: 'Свод' }[type] || type;
+                  return (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => switchPreviewType(type)}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                        active
+                          ? 'bg-white text-blue-700 shadow-sm border border-blue-200'
+                          : 'text-slate-600 hover:bg-white hover:text-slate-900'
+                      }`}
+                    >
+                      {label}
+                      <span className="ml-1.5 text-slate-400">({count})</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
             <div className="flex items-center justify-between">
               <div className="text-sm text-slate-600">
-                <span className="font-medium">{totalItems}</span> qator
+                <span className="font-medium">{totalItems}</span> {t('rows_count_suffix') || 'qator'}
                 {selectedType !== 'svod' && (
-                  <>, <span className="font-medium">{parsedData.sections?.length || 0}</span> bo'lim</>
+                  <>, <span className="font-medium">{parsedData.sections?.length || 0}</span> {t('sections_count_suffix') || "bo'lim"}</>
                 )}
                 {selectedType === 'svod' && parsedData.buildings && (
                   <>, <span className="font-medium">{parsedData.buildings.length}</span> bino</>
@@ -1301,17 +2043,17 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
             {/* Building selector (not needed for svod) */}
             {selectedType !== 'svod' && (
               <div className="flex items-center gap-2">
-                <Label className="text-sm shrink-0">Bino:</Label>
+                <Label className="text-sm shrink-0">{t('building') || 'Bino'}:</Label>
                 <select
                   value={selectedBuildingId}
                   onChange={(e) => setSelectedBuildingId(e.target.value)}
                   className="border rounded-md px-3 py-1.5 text-sm max-w-xs"
                 >
-                  <option value="">Binoni tanlang...</option>
+                  <option value="">{t('select_building_placeholder') || 'Binoni tanlang...'}</option>
                   <option value="project">Butun loyiha</option>
                   {buildings.map((b) => (
                     <option key={b.id} value={b.id}>
-                      {b.code ? `${b.code} - ${b.name}` : b.name}
+                      {b.name}
                     </option>
                   ))}
                 </select>
@@ -1394,7 +2136,7 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
                       )}
                       <span className="font-medium text-sm">{section.name}</span>
                       <Badge variant="secondary" className="text-xs">
-                        {section.items.length} qator
+                        {section.items.length} {t('rows_count_suffix') || 'qator'}
                       </Badge>
                     </div>
 
@@ -1462,18 +2204,38 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
 
             <div className="flex justify-between pt-2">
               <Button variant="outline" onClick={() => setStep(2)}>
-                <ArrowLeft className="w-4 h-4 mr-1" /> Orqaga
+                <ArrowLeft className="w-4 h-4 mr-1" /> {t('import_back') || 'Orqaga'}
               </Button>
               <Button
                 onClick={handleImport}
-                disabled={(selectedType !== 'svod' && !selectedBuildingId) || isProcessing}
+                disabled={
+                  // Building is required only if at least one non-svod
+                  // type is in the selection set.
+                  (selectedTypes.some((t) => t !== 'svod') && !selectedBuildingId) ||
+                  isProcessing
+                }
               >
                 {isProcessing ? (
                   <Loader2 className="w-4 h-4 mr-1 animate-spin" />
                 ) : (
                   <CheckCircle className="w-4 h-4 mr-1" />
                 )}
-                Import ({totalItems} qator)
+                {(() => {
+                  // Aggregate line count across every parsed type so the
+                  // button reflects the full import scope, not just the
+                  // currently-focused preview.
+                  const total = Object.entries(parsedResults).reduce((acc, [type, r]) => {
+                    if (!r) return acc;
+                    if (type === 'svod') return acc + (r.categories?.length || 0);
+                    return acc + (r.sections?.reduce((s, sec) => s + (sec.items?.length || 0), 0) || 0);
+                  }, 0);
+                  const typeCount = Object.keys(parsedResults).length;
+                  const importLabel = t('import_button_label') || 'Import';
+                  const rowsSuffix = t('rows_count_suffix') || 'qator';
+                  return typeCount > 1
+                    ? `${importLabel} (${typeCount} ${t('types_count_suffix') || 'tur'}, ${total} ${rowsSuffix})`
+                    : `${importLabel} (${total} ${rowsSuffix})`;
+                })()}
               </Button>
             </div>
           </div>
@@ -1492,10 +2254,17 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
                 <CheckCircle className="w-12 h-12 text-green-500 mx-auto" />
                 <p className="text-lg font-medium text-slate-800">{t('import_success') || "Import muvaffaqiyatli!"}</p>
                 <p className="text-sm text-slate-600">
-                  {importResult.isSvod
-                    ? `${importResult.count} ${t('categories_imported') || "kategoriya import qilindi"}`
-                    : `${importResult.count} ${t('lines_imported') || "qator import qilindi"}`
-                  }
+                  {importResult.isSvod ? (
+                    `${importResult.count} ${t('categories_imported') || "kategoriya import qilindi"}`
+                  ) : (importResult.estimatesCreated || 0) > 1 ? (
+                    // Multi-type path: mention both the estimate count and
+                    // the total line count so the user can see what landed.
+                    language === 'uz'
+                      ? `${importResult.estimatesCreated} ta smeta, ${importResult.count} qator import qilindi`
+                      : `Импортировано ${importResult.estimatesCreated} смет, ${importResult.count} строк`
+                  ) : (
+                    `${importResult.count} ${t('lines_imported') || "qator import qilindi"}`
+                  )}
                 </p>
                 <Button onClick={handleClose} className="mt-4">
                   {t('close') || "Yopish"}

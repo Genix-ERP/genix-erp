@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -14,6 +15,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Plus, Trash2, ChevronDown, ChevronRight, ChevronLeft, Package, Wrench, Edit, TrendingUp, TrendingDown, Minus, AlertTriangle, Download, Clock, Printer, ShieldCheck, Users, Truck } from 'lucide-react';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
+import { sortBuildings } from '@/utils/naturalSort';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { toast } from 'sonner';
@@ -36,6 +38,13 @@ const RejaFaktTab = ({ project }) => {
   const pageSize = 20;
 
   // Filters
+  // `buildingFilter` is the id (as string) of the active building tab, the
+  // literal `'all'` sentinel for the Hammasi pill (show everything across
+  // blocks), or `null` before the buildings list has settled. The effect
+  // below auto-selects the first real building when one arrives — users can
+  // switch back to `'all'` via the Hammasi pill.
+  const [buildingFilter, setBuildingFilter] = useState(null);
+  const [buildings, setBuildings] = useState([]);
   const [stageFilter, setStageFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [onlyOverBudget, setOnlyOverBudget] = useState(false);
@@ -91,10 +100,8 @@ const RejaFaktTab = ({ project }) => {
         setInventoryProducts(Object.values(map));
       })
       .catch(() => setInventoryProducts([]));
-    // Load stages
-    constructionService.listStages(project.id)
-      .then(d => setAllStages(d || []))
-      .catch(() => setAllStages([]));
+    // Stages are loaded below by a dedicated effect that scopes them to the
+    // active building tab (so the stage dropdown only shows relevant stages).
     // Load reservations for this project
     inventoryService.listReservations({ project_id: project.id })
       .then(d => setReservations(d || []))
@@ -110,9 +117,13 @@ const RejaFaktTab = ({ project }) => {
 
   const load = useCallback(async () => {
     if (!project?.id) return;
+    // Wait for the buildings list (and the auto-select) before fetching.
+    if (buildingFilter == null) return;
     setLoading(true);
     try {
-      const params = {};
+      // 'all' → no building_id filter; backend returns data for every block.
+      const params =
+        buildingFilter === 'all' ? {} : { building_id: buildingFilter };
       if (stageFilter !== 'all') params.stage_id = stageFilter;
       if (statusFilter !== 'all') params.status = statusFilter;
       const result = await constructionService.getRejaFakt(project.id, params);
@@ -122,9 +133,62 @@ const RejaFaktTab = ({ project }) => {
     } finally {
       setLoading(false);
     }
-  }, [project?.id, stageFilter, statusFilter]);
+  }, [project?.id, buildingFilter, stageFilter, statusFilter]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Load buildings once per project — drives the tab row above the filters.
+  useEffect(() => {
+    if (!project?.id) return;
+    let cancelled = false;
+    constructionService.listBuildings(project.id)
+      // Natural-sort so the block tab row renders "block 1 / block 2 /
+      // block 10" instead of the raw backend order.
+      .then((rows) => { if (!cancelled) setBuildings(sortBuildings(Array.isArray(rows) ? rows : [])); })
+      .catch(() => { if (!cancelled) setBuildings([]); });
+    return () => { cancelled = true; };
+  }, [project?.id]);
+
+  // Auto-select the first building when buildings arrive. Also re-pick if
+  // the current selection disappeared after a reload. `'all'` is a valid
+  // user-chosen value (Hammasi pill) and is preserved.
+  useEffect(() => {
+    if (!buildings || buildings.length === 0) {
+      if (buildingFilter !== null) setBuildingFilter(null);
+      return;
+    }
+    if (buildingFilter === 'all') return;
+    const exists =
+      buildingFilter != null &&
+      buildings.some((b) => String(b.id) === String(buildingFilter));
+    if (!exists) setBuildingFilter(String(buildings[0].id));
+  }, [buildings, buildingFilter]);
+
+  // Scope the stage dropdown to the active building. For 'all', pull
+  // project-wide stages so the Bosqich dropdown isn't empty.
+  useEffect(() => {
+    if (!project?.id || buildingFilter == null) {
+      setAllStages([]);
+      return;
+    }
+    let cancelled = false;
+    const req =
+      buildingFilter === 'all'
+        ? constructionService.listStages(project.id)
+        : constructionService.listStages(project.id, { buildingId: buildingFilter });
+    req
+      .then((d) => { if (!cancelled) setAllStages(d || []); })
+      .catch(() => { if (!cancelled) setAllStages([]); });
+    return () => { cancelled = true; };
+  }, [project?.id, buildingFilter]);
+
+  // Reset the stage filter when the active block changes, so we never keep
+  // a stage that doesn't belong to the newly selected block.
+  useEffect(() => {
+    setStageFilter('all');
+    setSubStageFilter('all');
+    setCurrentPage(1);
+  }, [buildingFilter]);
 
   // Budget warning toasts — show once when data first loads
   useEffect(() => {
@@ -460,6 +524,44 @@ const RejaFaktTab = ({ project }) => {
           @page { margin: 1cm; size: landscape; }
         }
       `}</style>
+      {/* Building/block tabs: Hammasi (all blocks) + one pill per block.
+          Hammasi clears the building_id filter so the summary cards and
+          stage list aggregate across every block; individual pills still
+          scope the view to a single block. */}
+      {buildings.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setBuildingFilter('all')}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+              buildingFilter === 'all'
+                ? 'bg-slate-900 text-white border-slate-900'
+                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            {t('all') || 'Hammasi'}
+          </button>
+          {buildings.map((b) => {
+            const active = String(buildingFilter) === String(b.id);
+            return (
+              <button
+                key={b.id}
+                type="button"
+                onClick={() => setBuildingFilter(String(b.id))}
+                title={b.code || b.name}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                  active
+                    ? 'bg-slate-900 text-white border-slate-900'
+                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                {b.name || b.code || `#${b.id}`}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* Filters */}
       <div className="flex flex-wrap gap-3 items-end">
         <div className="w-48">
@@ -541,20 +643,12 @@ const RejaFaktTab = ({ project }) => {
           <CardContent className="p-4">
             <p className="text-xs text-slate-500">{t('rf_plan_total')}</p>
             <p className="text-xl font-bold text-blue-600">{formatCurrency(summary.plan_total || 0)}</p>
-            <div className="flex gap-2 text-[10px] text-slate-400 mt-1">
-              <span>{t('rf_materials_short')} {formatCurrency(summary.material_plan_total || 0)}</span>
-              <span>{t('rf_equipment_short')} {formatCurrency(summary.equipment_plan_total || 0)}</span>
-            </div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <p className="text-xs text-slate-500">{t('rf_fact_total')}</p>
             <p className="text-xl font-bold">{formatCurrency(summary.fact_total || 0)}</p>
-            <div className="flex gap-2 text-[10px] text-slate-400 mt-1">
-              <span>{t('rf_materials_short')} {formatCurrency(summary.material_fact_total || 0)}</span>
-              <span>{t('rf_equipment_short')} {formatCurrency(summary.equipment_fact_total || 0)}</span>
-            </div>
           </CardContent>
         </Card>
         <Card className={diffBg(summary.difference)}>
@@ -631,7 +725,13 @@ const RejaFaktTab = ({ project }) => {
                         {t('rf_over')}
                       </Badge>
                     )}
-                    {stage.difference >= 0 && stagePct > 90 && stagePct <= 100 && (
+                    {/* Amber "approaching" warning — fires only when
+                        Fakt is strictly less than Reja but already past
+                        90% of the budget. Excluding the exactly-equal
+                        case (difference > 0 instead of >= 0) avoids the
+                        noisy "byudjet oshgan" badge appearing on rows
+                        where Reja and Fakt match perfectly. */}
+                    {stage.difference > 0 && stagePct > 90 && stagePct <= 100 && (
                       <Badge className="bg-amber-100 text-amber-700 flex items-center gap-1">
                         <AlertTriangle className="w-3 h-3" />
                         {t('rf_warning')}
@@ -658,24 +758,57 @@ const RejaFaktTab = ({ project }) => {
 
                   return (
                     <div key={sub.id} className="border-t">
-                      {/* Sub-stage header */}
+                      {/* Sub-stage header — name on the left, three
+                          fixed-width columns on the right (plan, fact,
+                          diff icon). The currency strings carry inner
+                          spaces ("83 451 810 so'm") and used to wrap
+                          when the work name was long, knocking values
+                          out of the grid the user expected. The
+                          min-w-0 + flex-1 wrap on the left makes the
+                          name truncate to one line; whitespace-nowrap
+                          on each value keeps the right column rigid. */}
                       <button
-                        className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-50 transition-colors text-left"
+                        className="w-full flex items-center justify-between gap-4 px-4 py-3 hover:bg-slate-50 transition-colors text-left"
                         onClick={() => toggleSubStage(sub.id)}
                       >
-                        <div className="flex items-center gap-3">
-                          {isExpanded ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
-                          <span className="font-medium text-sm">{sub.name}</span>
-                          <Badge variant="outline" className="text-xs">
-                            {materials.length} {t('rf_materials_short')} / {equipment.length} {t('rf_equipment_short')}
-                          </Badge>
-                          {sub.difference < 0 && <AlertTriangle className="w-3.5 h-3.5 text-red-500" />}
-                          {sub.difference >= 0 && subPct > 90 && <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />}
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          {isExpanded ? <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />}
+                          {/* Budget-status indicator placed BEFORE the
+                              name so it stays anchored on the left even
+                              when the work title wraps across multiple
+                              lines. Two states only:
+                                • difference < 0  → over-budget (red)
+                                • difference > 0 AND subPct > 90 → close
+                                  to busting the budget (amber)
+                              When reja == fakt exactly (difference == 0)
+                              there's nothing to warn about — both the
+                              red and amber paths skip, so no icon shows.
+                              The previous condition `difference >= 0`
+                              caught the equal case and produced an amber
+                              warning at exactly-on-budget, which the
+                              user reported as noise. */}
+                          {sub.difference < 0 && (
+                            <AlertTriangle className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                          )}
+                          {sub.difference > 0 && subPct > 90 && (
+                            <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                          )}
+                          <span className="font-medium text-sm break-words">{sub.name}</span>
                         </div>
-                        <div className="flex items-center gap-4 text-xs">
-                          <span className="text-blue-600">{formatCurrency(sub.plan_total)}</span>
-                          <span>{formatCurrency(sub.fact_total)}</span>
-                          <span className={`font-medium ${diffColor(sub.difference)}`}>
+                        <div className="flex items-center gap-2 text-xs shrink-0">
+                          <span
+                            className="text-blue-600 text-right whitespace-nowrap tabular-nums"
+                            style={{ minWidth: 140 }}
+                          >
+                            {formatCurrency(sub.plan_total)}
+                          </span>
+                          <span
+                            className="text-right whitespace-nowrap tabular-nums"
+                            style={{ minWidth: 140 }}
+                          >
+                            {formatCurrency(sub.fact_total)}
+                          </span>
+                          <span className={`font-medium w-5 flex justify-center ${diffColor(sub.difference)}`}>
                             <DiffIcon diff={sub.difference} />
                           </span>
                         </div>
@@ -1069,13 +1202,13 @@ const RejaFaktTab = ({ project }) => {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label>{t('rf_plan_qty')}</Label>
-                  <Input type="number" step="0.0001" min="0" value={materialForm.plan_quantity}
-                    onChange={e => setMaterialForm(f => ({ ...f, plan_quantity: e.target.value }))} />
+                  <NumberInput value={materialForm.plan_quantity}
+                    onChange={raw => setMaterialForm(f => ({ ...f, plan_quantity: raw }))} />
                 </div>
                 <div>
                   <Label>{t('rf_fact_qty')}</Label>
-                  <Input type="number" step="0.0001" min="0" value={materialForm.fact_quantity}
-                    onChange={e => setMaterialForm(f => ({ ...f, fact_quantity: e.target.value }))} />
+                  <NumberInput value={materialForm.fact_quantity}
+                    onChange={raw => setMaterialForm(f => ({ ...f, fact_quantity: raw }))} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -1156,8 +1289,8 @@ const RejaFaktTab = ({ project }) => {
                 </div>
                 <div>
                   <Label>{t('quantity') || 'Miqdor'}</Label>
-                  <Input type="number" step="0.01" min="0" value={equipmentForm.plan_quantity}
-                    onChange={e => setEquipmentForm(f => ({ ...f, plan_quantity: e.target.value }))} />
+                  <NumberInput value={equipmentForm.plan_quantity}
+                    onChange={raw => setEquipmentForm(f => ({ ...f, plan_quantity: raw }))} />
                 </div>
                 <div>
                   <Label>{t('rf_unit_price') || 'Narxi'}</Label>
@@ -1230,8 +1363,8 @@ const RejaFaktTab = ({ project }) => {
                 </div>
                 <div>
                   <Label>{t('quantity') || 'Miqdor'}</Label>
-                  <Input type="number" step="0.01" min="0" value={equipmentForm.plan_quantity}
-                    onChange={e => setEquipmentForm(f => ({ ...f, plan_quantity: e.target.value }))} />
+                  <NumberInput value={equipmentForm.plan_quantity}
+                    onChange={raw => setEquipmentForm(f => ({ ...f, plan_quantity: raw }))} />
                 </div>
                 <div>
                   <Label>{t('rf_unit_price') || 'Narxi'}</Label>
@@ -1266,13 +1399,13 @@ const RejaFaktTab = ({ project }) => {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label>{t('rf_plan_qty')}</Label>
-                  <Input type="number" step="0.01" min="0" value={equipmentForm.plan_quantity}
-                    onChange={e => setEquipmentForm(f => ({ ...f, plan_quantity: e.target.value }))} />
+                  <NumberInput value={equipmentForm.plan_quantity}
+                    onChange={raw => setEquipmentForm(f => ({ ...f, plan_quantity: raw }))} />
                 </div>
                 <div>
                   <Label>{t('rf_fact_qty')}</Label>
-                  <Input type="number" step="0.01" min="0" value={equipmentForm.fact_quantity}
-                    onChange={e => setEquipmentForm(f => ({ ...f, fact_quantity: e.target.value }))} />
+                  <NumberInput value={equipmentForm.fact_quantity}
+                    onChange={raw => setEquipmentForm(f => ({ ...f, fact_quantity: raw }))} />
                 </div>
               </div>
               <div>

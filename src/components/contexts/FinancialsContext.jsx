@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { financeService, salesService } from '@/api/services';
 import { useCompany } from './CompanyContext';
+import { useEmployeePermissions } from './EmployeePermissionsContext';
 import { isDemoMode, checkBackendHealth, API_BASE_URL } from '@/config/dataMode';
 import { useAdminSettings } from './AdminSettingsContext';
 
@@ -189,6 +190,7 @@ const sampleExchangeDiffs = [
 export function FinancialsProvider({ children }) {
   const { activeCompany } = useCompany();
   const { getSetting } = useAdminSettings();
+  const { canAccessModule, isAdmin } = useEmployeePermissions();
   const [journalEntries, setJournalEntries] = useState([]);
   const [journalLines, setJournalLines] = useState([]);
   const [vendorBills, setVendorBills] = useState([]);
@@ -336,29 +338,40 @@ export function FinancialsProvider({ children }) {
       setBackendAvailable(isAvailable);
       if (isAvailable) {
         try {
+          // Gate every backend call by the user's actual module permissions.
+          // Without these gates, FinancialsContext fires ~22 list endpoints on
+          // every page mount, and any user without finance/sales/purchase
+          // access gets a wall of 403s in the console. Admins skip all gates.
+          const allow = (m) => isAdmin || canAccessModule(m);
+          const skip  = () => Promise.resolve([]);
+          const skipP = () => Promise.resolve({ data: [] });
+          const finance = allow('finance');
+          const sales   = allow('sales');
+          const purch   = allow('purchase');
+
           const [entries, invoicesResponse, accountsData, paymentsData, taxRatesData, accountTypesData, vendorBillsData, bankAccountsData, cashTransactionsData, currenciesData, exchangeRatesData, fiscalYearsData, fiscalPeriodsData, budgetsData, budgetLinesData, fixedAssetsData, journalsData, cashRegistersData, cashOrdersData, reconciliationActsData, exchangeDiffsData, paymentJournalsData] = await Promise.all([
-            financeService.listJournalEntries({ limit: 1000 }).catch(() => []),
-            salesService.listInvoices().catch(() => []),
-            financeService.listAccounts({ organization_id: activeCompany.id }).catch(() => []),
-            financeService.listPayments({ limit: 100 }).catch(() => []),
-            financeService.listTaxRates().catch(() => []),
-            financeService.listAccountTypes().catch(() => []),
-            financeService.listPurchaseInvoices().catch(() => ({ data: [] })),
-            financeService.listBankAccounts().catch(() => []),
-            financeService.listCashTransactions().catch(() => []),
-            financeService.listCurrencies().catch(() => []),
-            financeService.listExchangeRates().catch(() => []),
-            financeService.listFiscalYears().catch(() => []),
-            financeService.listFiscalPeriods().catch(() => []),
-            financeService.listBudgets().catch(() => []),
-            financeService.listBudgetLines().catch(() => []),
-            financeService.listFixedAssets().catch(() => []),
-            financeService.listJournals().catch(() => []),
-            financeService.listCashRegisters().catch(() => []),
-            financeService.listCashOrders().catch(() => []),
-            financeService.listReconciliationActs().catch(() => []),
-            financeService.listExchangeDiffs().catch(() => []),
-            financeService.listPaymentJournals().catch(() => [])
+            finance ? financeService.listJournalEntries({ limit: 1000 }).catch(() => []) : skip(),
+            sales   ? salesService.listInvoices().catch(() => [])                         : skip(),
+            finance ? financeService.listAccounts({ organization_id: activeCompany.id, limit: 500 }).catch(() => []) : skip(),
+            finance ? financeService.listPayments({ limit: 100 }).catch(() => [])         : skip(),
+            finance ? financeService.listTaxRates().catch(() => [])                       : skip(),
+            finance ? financeService.listAccountTypes().catch(() => [])                   : skip(),
+            purch   ? financeService.listPurchaseInvoices().catch(() => ({ data: [] }))   : skipP(),
+            finance ? financeService.listBankAccounts().catch(() => [])                   : skip(),
+            finance ? financeService.listCashTransactions().catch(() => [])               : skip(),
+            finance ? financeService.listCurrencies().catch(() => [])                     : skip(),
+            finance ? financeService.listExchangeRates().catch(() => [])                  : skip(),
+            finance ? financeService.listFiscalYears().catch(() => [])                    : skip(),
+            finance ? financeService.listFiscalPeriods().catch(() => [])                  : skip(),
+            finance ? financeService.listBudgets().catch(() => [])                        : skip(),
+            finance ? financeService.listBudgetLines().catch(() => [])                    : skip(),
+            (finance || allow('assets')) ? financeService.listFixedAssets().catch(() => []) : skip(),
+            finance ? financeService.listJournals().catch(() => [])                       : skip(),
+            finance ? financeService.listCashRegisters().catch(() => [])                  : skip(),
+            finance ? financeService.listCashOrders().catch(() => [])                     : skip(),
+            finance ? financeService.listReconciliationActs().catch(() => [])             : skip(),
+            finance ? financeService.listExchangeDiffs().catch(() => [])                  : skip(),
+            finance ? financeService.listPaymentJournals().catch(() => [])                : skip()
           ]);
           setJournalEntries(entries || []);
           // Handle paginated response - could be array directly or { items: [...] }
@@ -447,7 +460,7 @@ export function FinancialsProvider({ children }) {
     } finally {
       setIsLoading(false);
     }
-  }, [activeCompany, loadFromLocalStorage]);
+  }, [activeCompany, loadFromLocalStorage, canAccessModule, isAdmin]);
 
   useEffect(() => { loadData(); }, [loadData]);
 

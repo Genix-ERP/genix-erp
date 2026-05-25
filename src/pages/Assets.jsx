@@ -78,8 +78,23 @@ export default function Assets() {
     purchase_cost: '',
     salvage_value: 0,
     useful_life_years: 5,
-    depreciation_method: 'straight_line'
+    depreciation_method: 'straight_line',
+    supplier_name: '',
+    // Default to "credit" so purchase posts AP instead of immediately draining
+    // the cash/bank account. User settles the debt later via the Pay button.
+    payment_method: 'credit',
   });
+
+  // Pay-asset modal state
+  const [showPayModal, setShowPayModal] = useState(false);
+  const [assetToPay, setAssetToPay] = useState(null);
+  const [payForm, setPayForm] = useState({
+    amount: '',
+    method: 'cash',
+    paid_at: new Date().toISOString().split('T')[0],
+    note: '',
+  });
+  const [isPaying, setIsPaying] = useState(false);
 
   // Calculate depreciation for all assets - memoize to prevent infinite loops
   const assets = useMemo(() => {
@@ -133,12 +148,50 @@ export default function Assets() {
         purchase_cost: '',
         salvage_value: 0,
         useful_life_years: 5,
-        depreciation_method: 'straight_line'
+        depreciation_method: 'straight_line',
+        supplier_name: '',
+        payment_method: 'credit',
       });
     } catch (error) {
       console.error('Error creating asset:', error);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // Open the pay modal for a specific asset, prefilling the remaining debt.
+  const openPayModal = (asset) => {
+    const totalPaid = Number(asset.total_paid) || 0;
+    const remaining = Math.max(0, Number(asset.purchase_cost || asset.acquisition_cost || 0) - totalPaid);
+    setAssetToPay(asset);
+    setPayForm({
+      amount: remaining ? String(remaining) : '',
+      method: 'cash',
+      paid_at: new Date().toISOString().split('T')[0],
+      note: '',
+    });
+    setShowPayModal(true);
+  };
+
+  const handleRecordPayment = async () => {
+    if (!assetToPay) return;
+    const amt = parseFloat(payForm.amount);
+    if (!amt || amt <= 0) return;
+    setIsPaying(true);
+    try {
+      await financeService.recordAssetPayment(assetToPay.id, {
+        amount: amt,
+        method: payForm.method,
+        paid_at: payForm.paid_at,
+        note: payForm.note,
+      });
+      setShowPayModal(false);
+      setAssetToPay(null);
+      await refreshData();
+    } catch (error) {
+      console.error('Error recording asset payment:', error);
+    } finally {
+      setIsPaying(false);
     }
   };
 
@@ -604,6 +657,18 @@ export default function Assets() {
                                 <Wrench className="w-4 h-4" />
                               </Button>
                             )}
+                            {canUpdate(MODULES.ASSETS) && asset.payment_method === 'credit' &&
+                              (Number(asset.purchase_cost || asset.acquisition_cost || 0) - Number(asset.total_paid || 0)) > 0 && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                                onClick={() => openPayModal(asset)}
+                                title={t('record_payment') || "To'lov qilish"}
+                              >
+                                <DollarSign className="w-4 h-4" />
+                              </Button>
+                            )}
                             <Button size="sm" variant="ghost" onClick={() => openHistoryModal(asset)} title={t('history') || 'Tarix'}>
                               <History className="w-4 h-4 text-purple-500" />
                             </Button>
@@ -717,6 +782,30 @@ export default function Assets() {
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium mb-1 block">{t('supplier') || 'Yetkazib beruvchi'}</label>
+                  <Input
+                    placeholder={t('supplier') || 'Yetkazib beruvchi'}
+                    value={newAsset.supplier_name}
+                    onChange={(e) => setNewAsset({...newAsset, supplier_name: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-1 block">{t('payment_method') || "To'lov turi"}</label>
+                  <Select value={newAsset.payment_method} onValueChange={(value) => setNewAsset({...newAsset, payment_method: value})}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="credit">{t('on_credit') || 'Qarzga'}</SelectItem>
+                      <SelectItem value="cash">{t('cash') || 'Naqd'}</SelectItem>
+                      <SelectItem value="bank">{t('bank') || 'Bank'}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
               <div className="flex gap-3 pt-4">
                 <Button variant="outline" onClick={() => setShowCreateModal(false)} className="flex-1">
                   {t('cancel')}
@@ -727,6 +816,92 @@ export default function Assets() {
                   disabled={!newAsset.asset_name || !newAsset.purchase_cost || isSubmitting}
                 >
                   {isSubmitting ? t('adding') : t('add_asset')}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Pay Asset Modal — records a payment against a credit-purchased asset
+             (debits Accounts Payable, credits the chosen cash/bank account). */}
+        <Dialog open={showPayModal} onOpenChange={(open) => { setShowPayModal(open); if (!open) setAssetToPay(null); }}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>{t('record_payment') || "To'lov qilish"}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              {assetToPay && (
+                <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
+                  <div className="font-medium text-slate-800">{assetToPay.asset_name || assetToPay.name}</div>
+                  <div className="mt-1 flex justify-between text-slate-600">
+                    <span>{t('purchase_cost')}</span>
+                    <span className="font-medium">{formatCurrency(Number(assetToPay.purchase_cost || assetToPay.acquisition_cost || 0))}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-600">
+                    <span>{t('paid') || "To'langan"}</span>
+                    <span className="font-medium">{formatCurrency(Number(assetToPay.total_paid || 0))}</span>
+                  </div>
+                  <div className="flex justify-between font-semibold text-red-600">
+                    <span>{t('remaining_debt') || "Qoldiq qarz"}</span>
+                    <span>{formatCurrency(Math.max(0, Number(assetToPay.purchase_cost || assetToPay.acquisition_cost || 0) - Number(assetToPay.total_paid || 0)))}</span>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="text-sm font-medium mb-1 block">{t('amount') || 'Summa'} *</label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={payForm.amount}
+                  onChange={(e) => setPayForm({ ...payForm, amount: e.target.value })}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium mb-1 block">{t('payment_method') || "To'lov turi"} *</label>
+                  <Select value={payForm.method} onValueChange={(value) => setPayForm({ ...payForm, method: value })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cash">{t('cash') || 'Naqd'}</SelectItem>
+                      <SelectItem value="bank">{t('bank') || 'Bank'}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-1 block">{t('paid_at') || "To'lov sanasi"} *</label>
+                  <Input
+                    type="date"
+                    value={payForm.paid_at}
+                    onChange={(e) => setPayForm({ ...payForm, paid_at: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium mb-1 block">{t('note') || 'Izoh'}</label>
+                <Input
+                  placeholder={t('note') || 'Izoh'}
+                  value={payForm.note}
+                  onChange={(e) => setPayForm({ ...payForm, note: e.target.value })}
+                />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <Button variant="outline" onClick={() => setShowPayModal(false)} className="flex-1">
+                  {t('cancel')}
+                </Button>
+                <Button
+                  onClick={handleRecordPayment}
+                  className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
+                  disabled={!payForm.amount || parseFloat(payForm.amount) <= 0 || isPaying}
+                >
+                  {isPaying ? (t('saving') || '...') : (t('pay') || "To'lash")}
                 </Button>
               </div>
             </div>

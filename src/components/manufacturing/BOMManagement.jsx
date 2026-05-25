@@ -14,6 +14,7 @@ import { useManufacturing } from '@/components/contexts/ManufacturingContext';
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { inventoryService, bomsService, workCentersService } from '@/api/services';
+import ProductCombobox from "@/components/shared/ProductCombobox";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { toast } from 'sonner';
 
@@ -162,6 +163,7 @@ export default function BOMManagement() {
       });
       setNewComponent({
         component_id: '',
+        component_name: '',
         quantity: 0,
         unit: 'pcs'
       });
@@ -603,25 +605,20 @@ export default function BOMManagement() {
                 </div>
                 <div>
                   <label className="text-sm font-medium mb-1 block">{t('product')} *</label>
-                  <Select
+                  <ProductCombobox
+                    products={products.filter(p => p.id && (p.can_be_sold || p.is_sellable))}
                     value={newBom.product_id}
                     onValueChange={(value) => setNewBom({...newBom, product_id: value})}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={t('select_product')} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {products.filter(product => product.id).map((product) => (
-                        <SelectItem key={product.id} value={product.id}>
-                          {product.name} ({product.sku || product.code || 'No SKU'})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder={t('select_product')}
+                    t={t}
+                  />
                 </div>
               </div>
               <div>
-                <label className="text-sm font-medium mb-1 block">{language === 'uz' ? 'Tayyor mahsulot ombori' : language === 'ru' ? 'Склад готовой продукции' : 'Finished Goods Warehouse'}</label>
+                <label className="text-sm font-medium mb-1 block">
+                  {language === 'uz' ? 'Tayyor mahsulot ombori' : language === 'ru' ? 'Склад готовой продукции' : 'Finished Goods Warehouse'}
+                  <span className="text-red-500 ml-1">*</span>
+                </label>
                 <Select
                   value={newBom.warehouse_id || ''}
                   onValueChange={(value) => setNewBom({...newBom, warehouse_id: value})}
@@ -638,6 +635,19 @@ export default function BOMManagement() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            <div className="flex items-center gap-2 py-2">
+              <input
+                type="checkbox"
+                id="bom_has_split_output"
+                checked={newBom.has_split_output || false}
+                onChange={(e) => setNewBom({...newBom, has_split_output: e.target.checked})}
+                className="w-4 h-4 accent-slate-700 cursor-pointer"
+              />
+              <label htmlFor="bom_has_split_output" className="text-sm font-medium cursor-pointer select-none">
+                {language === 'uz' ? "Bo'lib chiqarish (ommaviy → qadoqlangan mahsulotlar)" : language === 'ru' ? 'Разделённый выпуск (опт → упаковка)' : 'Split output (bulk → packaged products)'}
+              </label>
             </div>
 
             {/* Tabs for Components and Operations */}
@@ -658,28 +668,21 @@ export default function BOMManagement() {
                 {/* Add Component Form */}
                 <div className="p-4 bg-slate-50 rounded-lg space-y-3">
                   <div className="grid grid-cols-3 gap-3">
-                    <Select
+                    <ProductCombobox
+                      products={products.filter(p => p.id)}
                       value={newComponent.component_id}
-                      onValueChange={(value) => {
-                        const selectedProduct = products.find(p => p.id === value);
+                      onValueChange={(value, product) => {
+                        const selectedProduct = product || products.find(p => p.id === value);
                         setNewComponent({
                           ...newComponent,
                           component_id: value,
+                          component_name: selectedProduct?.name || '',
                           unit: selectedProduct?.unit_name || selectedProduct?.purchase_unit_name || 'pcs'
                         });
                       }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={t('select_component')} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {products.filter(product => product.id).map((product) => (
-                          <SelectItem key={product.id} value={product.id}>
-                            {product.name} ({product.sku || product.code || 'No SKU'})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      placeholder={t('select_component')}
+                      t={t}
+                    />
                     <Input
                       type="text"
                       inputMode="decimal"
@@ -718,7 +721,7 @@ export default function BOMManagement() {
                           const component = products.find(p => p.id === line.component_id);
                           return (
                             <TableRow key={index}>
-                              <TableCell>{component?.name || line.component_id}</TableCell>
+                              <TableCell>{line.component_name || component?.name || line.component_id}</TableCell>
                               <TableCell>{line.quantity}</TableCell>
                               <TableCell>{line.unit}</TableCell>
                               <TableCell>
@@ -857,7 +860,7 @@ export default function BOMManagement() {
               <Button
                 onClick={handleCreateBom}
                 className="flex-1 bg-gradient-to-r from-slate-700 to-slate-800"
-                disabled={!newBom.name || !newBom.product_id || isSubmitting}
+                disabled={!newBom.name || !newBom.product_id || !newBom.warehouse_id || isSubmitting}
               >
                 {isSubmitting ? t('saving') : t('create_bom')}
               </Button>
@@ -888,25 +891,20 @@ export default function BOMManagement() {
                   </div>
                   <div>
                     <label className="text-sm font-medium mb-1 block">{t('product')} *</label>
-                    <Select
+                    <ProductCombobox
+                      products={products.filter(p => p.id && (p.can_be_sold || p.is_sellable))}
                       value={editBom.product_id}
                       onValueChange={(value) => setEditBom({...editBom, product_id: value})}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={t('select_product')} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {products.filter(product => product.id).map((product) => (
-                          <SelectItem key={product.id} value={product.id}>
-                            {product.name} ({product.sku || product.code || 'No SKU'})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      placeholder={t('select_product')}
+                      t={t}
+                    />
                   </div>
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">{language === 'uz' ? 'Tayyor mahsulot ombori' : language === 'ru' ? 'Склад готовой продукции' : 'Finished Goods Warehouse'}</label>
+                  <label className="text-sm font-medium mb-1 block">
+                    {language === 'uz' ? 'Tayyor mahsulot ombori' : language === 'ru' ? 'Склад готовой продукции' : 'Finished Goods Warehouse'}
+                    <span className="text-red-500 ml-1">*</span>
+                  </label>
                   <Select
                     value={editBom.warehouse_id || ''}
                     onValueChange={(value) => setEditBom({...editBom, warehouse_id: value})}
@@ -923,6 +921,19 @@ export default function BOMManagement() {
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+
+              <div className="flex items-center gap-2 py-2">
+                <input
+                  type="checkbox"
+                  id="edit_bom_has_split_output"
+                  checked={editBom.has_split_output || false}
+                  onChange={(e) => setEditBom({...editBom, has_split_output: e.target.checked})}
+                  className="w-4 h-4 accent-slate-700 cursor-pointer"
+                />
+                <label htmlFor="edit_bom_has_split_output" className="text-sm font-medium cursor-pointer select-none">
+                  {language === 'uz' ? "Bo'lib chiqarish (ommaviy → qadoqlangan mahsulotlar)" : language === 'ru' ? 'Разделённый выпуск (опт → упаковка)' : 'Split output (bulk → packaged products)'}
+                </label>
               </div>
 
               {/* Tabs for Components and Operations */}
@@ -943,28 +954,21 @@ export default function BOMManagement() {
                   {/* Add Component Form */}
                   <div className="p-4 bg-slate-50 rounded-lg space-y-3">
                     <div className="grid grid-cols-3 gap-3">
-                      <Select
+                      <ProductCombobox
+                        products={products.filter(p => p.id)}
                         value={editComponent.component_id}
-                        onValueChange={(value) => {
-                          const selectedProduct = products.find(p => p.id === value);
+                        onValueChange={(value, product) => {
+                          const selectedProduct = product || products.find(p => p.id === value);
                           setEditComponent({
                             ...editComponent,
                             component_id: value,
+                            component_name: selectedProduct?.name || '',
                             unit: selectedProduct?.unit_name || selectedProduct?.purchase_unit_name || editComponent.unit
                           });
                         }}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder={t('select_component')} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {products.filter(product => product.id).map((product) => (
-                            <SelectItem key={product.id} value={product.id}>
-                              {product.name} ({product.sku || product.code || 'No SKU'})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        placeholder={t('select_component')}
+                        t={t}
+                      />
                       <Input
                         type="text"
                         inputMode="decimal"
@@ -1003,7 +1007,7 @@ export default function BOMManagement() {
                             const component = products.find(p => p.id === line.component_id);
                             return (
                               <TableRow key={index}>
-                                <TableCell>{component?.name || line.component_name || line.component_id}</TableCell>
+                                <TableCell>{line.component_name || component?.name || line.component_id}</TableCell>
                                 <TableCell>{line.quantity}</TableCell>
                                 <TableCell>{line.unit || line.unit_of_measure}</TableCell>
                                 <TableCell>
@@ -1142,7 +1146,7 @@ export default function BOMManagement() {
                 <Button
                   onClick={handleUpdateBom}
                   className="flex-1 bg-gradient-to-r from-slate-700 to-slate-800"
-                  disabled={isSubmitting || !editBom.name || !editBom.product_id}
+                  disabled={isSubmitting || !editBom.name || !editBom.product_id || !editBom.warehouse_id}
                 >
                   {isSubmitting ? t('saving') : t('update_bom')}
                 </Button>
@@ -1188,6 +1192,23 @@ export default function BOMManagement() {
                   <label className="text-sm font-medium text-slate-500">{t('type')}</label>
                   <p>{getBomTypeLabel(viewBom.bom_type || 'manufacturing')}</p>
                 </div>
+                <div className="col-span-2">
+                  <label className="text-sm font-medium text-slate-500">
+                    {language === 'uz' ? 'Tayyor mahsulot ombori' : language === 'ru' ? 'Склад готовой продукции' : 'Finished Goods Warehouse'}
+                  </label>
+                  <p>
+                    {viewBom.warehouse_name
+                      || (warehouses.find((w) => w.id === viewBom.warehouse_id)?.name)
+                      || '-'}
+                  </p>
+                </div>
+                {viewBom.has_split_output && (
+                  <div className="col-span-2">
+                    <Badge className="bg-purple-100 text-purple-700">
+                      {language === 'uz' ? "Bo'lib chiqarish" : language === 'ru' ? 'Разделённый выпуск' : 'Split output'}
+                    </Badge>
+                  </div>
+                )}
               </div>
 
               {/* Tabs for Components and Operations */}

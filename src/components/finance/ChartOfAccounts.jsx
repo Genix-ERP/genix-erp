@@ -176,9 +176,24 @@ export default function ChartOfAccounts() {
     return filtered;
   }, [accounts, searchQuery, typeFilter]);
 
-  // Calculate totals by type (category from backend)
-  // Only sum leaf accounts (non-parent) to avoid double-counting parent + children
-  // Contra-asset accounts (normal_balance=credit) reduce the asset total
+  // Calculate totals by type (category from backend).
+  // Only sum leaf accounts (non-parent) to avoid double-counting parent + children.
+  //
+  // Sign convention: accounts.current_balance is stored in the universal DR-CR
+  // convention (debit minus credit), so credit-normal categories (liability,
+  // equity, revenue) carry negative values when in their normal healthy state.
+  // To match how the Asosiy panel dashboard displays these (positive numbers
+  // for income, equity, etc., matching what non-accountants expect), we flip
+  // the sign for accounts whose normal_balance is 'credit'. After the flip
+  // every category is summed in its "natural" positive direction:
+  //   - Aktiv +X     → assets owned
+  //   - Majburiyat +X → liabilities owed
+  //   - Kapital +X   → equity recognized
+  //   - Daromad +X   → revenue earned
+  //   - Xarajat +X   → expenses incurred
+  // Contra-asset accounts (normal_balance=credit but category=asset, e.g.,
+  // accumulated depreciation) still reduce the asset total — their natural
+  // sign is the opposite of what they reduce, so we subtract abs().
   const totals = useMemo(() => {
     const parentIds = new Set(accounts.filter(a => a.parent_id).map(a => a.parent_id));
     const result = { asset: 0, liability: 0, equity: 0, revenue: 0, expense: 0 };
@@ -186,12 +201,21 @@ export default function ChartOfAccounts() {
       // Skip parent accounts to avoid double-counting
       if (parentIds.has(acc.id)) return;
       const category = acc.category || acc.type;
-      if (result[category] !== undefined) {
-        if (isContraAsset(acc)) {
-          result[category] -= Math.abs(acc.current_balance || 0);
-        } else {
-          result[category] += acc.current_balance || 0;
-        }
+      if (result[category] === undefined) return;
+      const rawBalance = acc.current_balance || 0;
+      if (isContraAsset(acc)) {
+        // Contra-asset: subtracts from gross asset total (e.g., 4910
+        // Shubhali qarzlar zaxirasi). Same as before.
+        result[category] -= Math.abs(rawBalance);
+      } else if (acc.normal_balance === 'credit') {
+        // Credit-normal accounts (liability/equity/revenue): flip sign so
+        // a healthy negative DR-CR balance displays as a positive natural
+        // amount.
+        result[category] -= rawBalance;
+      } else {
+        // Debit-normal accounts (asset/expense): raw balance already
+        // matches the natural display sign.
+        result[category] += rawBalance;
       }
     });
     return result;
@@ -338,17 +362,54 @@ export default function ChartOfAccounts() {
     return accountTypes.find(t => t.value === type) || accountTypes[0];
   };
 
+  const getNatureLabel = (nature) => {
+    const labels = {
+      ACTIVE: language === 'ru' ? 'Активный' : language === 'en' ? 'Active' : 'Aktiv',
+      PASSIVE: language === 'ru' ? 'Пассивный' : language === 'en' ? 'Passive' : 'Passiv',
+      ACTIVE_PASSIVE: language === 'ru' ? 'Актив-пассив' : language === 'en' ? 'Active-Passive' : 'Aktiv-passiv',
+    };
+    return labels[nature] || nature;
+  };
+
+  const getNatureColor = (nature) => {
+    const colors = {
+      ACTIVE: 'bg-blue-50 text-blue-700',
+      PASSIVE: 'bg-rose-50 text-rose-700',
+      ACTIVE_PASSIVE: 'bg-violet-50 text-violet-700',
+    };
+    return colors[nature] || 'bg-slate-50 text-slate-700';
+  };
+
+  const getAnalyticsLabels = (analyticsJson) => {
+    try {
+      const arr = typeof analyticsJson === 'string' ? JSON.parse(analyticsJson) : analyticsJson;
+      if (!Array.isArray(arr) || arr.length === 0) return null;
+      const labels = {
+        kontragent: language === 'ru' ? 'Контрагент' : 'Kontragent',
+        shartnoma: language === 'ru' ? 'Договор' : 'Shartnoma',
+        ombor: language === 'ru' ? 'Склад' : 'Ombor',
+        xodim: language === 'ru' ? 'Сотрудник' : 'Xodim',
+        mjm: language === 'ru' ? 'ЕИ' : 'MJM',
+      };
+      return arr.map(a => labels[a] || a);
+    } catch { return null; }
+  };
+
   const renderAccountRow = (account, level = 0) => {
     const hasChildren = account.children && account.children.length > 0;
     const isExpanded = expandedAccounts.has(account.id);
     const contraAsset = isContraAsset(account);
     const typeInfo = getTypeInfo(account.category || account.type);
     const TypeIcon = typeInfo.icon;
-    const displayName = language === 'uz' && account.name_uz ? account.name_uz : account.name;
+    const isGroup = account.is_leaf === false;
+    const displayName = language === 'ru' && account.name_ru ? account.name_ru
+      : language === 'en' && account.name_en ? account.name_en
+      : account.name_uz || account.name;
+    const analyticsLabels = getAnalyticsLabels(account.analytics_types);
 
     return (
       <React.Fragment key={account.id}>
-        <TableRow className="hover:bg-slate-50 transition-colors">
+        <TableRow className={`hover:bg-slate-50 transition-colors ${isGroup ? 'bg-slate-50/50' : ''}`}>
           <TableCell className="font-mono text-sm">
             <div className="flex items-center gap-2" style={{ paddingLeft: `${level * 24}px` }}>
               {hasChildren ? (
@@ -365,29 +426,53 @@ export default function ChartOfAccounts() {
               ) : (
                 <span className="w-6" />
               )}
-              <span className="text-slate-600">{account.code}</span>
+              <span className={`${isGroup ? 'font-bold text-slate-800' : 'text-slate-600'}`}>{account.code}</span>
             </div>
           </TableCell>
           <TableCell>
             <div className="flex items-center gap-2">
-              <span className="font-medium text-slate-900">{displayName}</span>
+              <span className={`${isGroup ? 'font-bold text-slate-900' : 'font-medium text-slate-900'}`}>{displayName}</span>
+              {isGroup && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 uppercase tracking-wide">
+                  {language === 'ru' ? 'Группа' : 'Guruh'}
+                </span>
+              )}
+              {analyticsLabels && (
+                <div className="flex gap-1">
+                  {analyticsLabels.map((label, i) => (
+                    <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600">
+                      {label}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           </TableCell>
           <TableCell>
-            {contraAsset ? (
-              <Badge className="bg-amber-100 text-amber-800 flex items-center gap-1 w-fit">
-                <AlertTriangle className="w-3 h-3" />
-                {t('contra_asset') || 'Contra-Asset'}
-              </Badge>
-            ) : (
-              <Badge className={`${typeInfo.color} flex items-center gap-1 w-fit`}>
-                <TypeIcon className="w-3 h-3" />
-                {typeInfo.label}
-              </Badge>
-            )}
+            <div className="flex items-center gap-1.5">
+              {contraAsset ? (
+                <Badge className="bg-amber-100 text-amber-800 flex items-center gap-1 w-fit">
+                  <AlertTriangle className="w-3 h-3" />
+                  {t('contra_asset') || 'Contra-Asset'}
+                </Badge>
+              ) : (
+                <Badge className={`${typeInfo.color} flex items-center gap-1 w-fit`}>
+                  <TypeIcon className="w-3 h-3" />
+                  {typeInfo.label}
+                </Badge>
+              )}
+              {account.account_nature && (
+                <span className={`text-[10px] px-1.5 py-0.5 rounded ${getNatureColor(account.account_nature)}`}>
+                  {getNatureLabel(account.account_nature)}
+                </span>
+              )}
+            </div>
           </TableCell>
           <TableCell className="text-right font-semibold tabular-nums whitespace-nowrap">
-            {formatCurrency(hasChildren ? (account.aggregated_balance ?? account.current_balance ?? 0) : (account.current_balance || 0))}
+            {isGroup
+              ? formatCurrency(account.aggregated_balance ?? account.current_balance ?? 0)
+              : formatCurrency(account.current_balance || 0)
+            }
           </TableCell>
           <TableCell>
             <Badge variant={account.is_active ? "default" : "secondary"}>
@@ -396,12 +481,12 @@ export default function ChartOfAccounts() {
           </TableCell>
           <TableCell>
             <div className="flex items-center gap-1">
-              {canUpdate(MODULES.FINANCIALS) && (
+              {canUpdate(MODULES.FINANCIALS) && account.is_leaf !== false && (
                 <Button variant="ghost" size="sm" onClick={() => openEditModal(account)}>
                   <Edit2 className="w-4 h-4 text-slate-500" />
                 </Button>
               )}
-              {canDelete(MODULES.FINANCIALS) && (
+              {canDelete(MODULES.FINANCIALS) && account.is_leaf !== false && (
                 <Button variant="ghost" size="sm" onClick={() => handleDeleteClick(account)}>
                   <Trash2 className="w-4 h-4 text-red-500" />
                 </Button>
@@ -409,7 +494,9 @@ export default function ChartOfAccounts() {
             </div>
           </TableCell>
         </TableRow>
-        {hasChildren && isExpanded && account.children.map(child => renderAccountRow(child, level + 1))}
+        {hasChildren && isExpanded && account.children
+          .sort((a, b) => (a.code || '').localeCompare(b.code || ''))
+          .map(child => renderAccountRow(child, level + 1))}
       </React.Fragment>
     );
   };

@@ -807,8 +807,8 @@ export default function Warehouses() {
               </div>
             </div>
 
-            {/* Odoo-style Warehouse Operations */}
-            <div className="pt-4 border-t border-slate-200">
+            {/* Warehouse Operations section hidden — simplified to 1-step */}
+            <div className="pt-4 border-t border-slate-200" style={{display: 'none'}}>
               <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
                 {t('warehouse_operations') || 'Warehouse Operations'}
               </h4>
@@ -1115,7 +1115,7 @@ export default function Warehouses() {
                 <div className="mt-4">
                   <LabelWithHelp
                     label={t('parent_location') || 'Parent Location'}
-                    helpText={t('help_parent_location') || "Iyerarxik tuzilma yaratish uchun ota joylashuvni tanlang. Masalan: Zona > Yo'lak > Stelling > Javon > Quti."}
+                    helpText={t('help_parent_location') || "Iyerarxik tuzilma yaratish uchun ota joylashuvni tanlang. Zona > Yo'lak > Stelling > Javon > Quti."}
                   />
                   <Select
                     value={locationForm.parent_id || '__none__'}

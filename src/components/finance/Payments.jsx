@@ -921,7 +921,16 @@ export default function Payments() {
                 </div>
               )}
 
-              <div className="flex gap-2 pt-4">
+              {/* Print Receipt - prominent button */}
+              <Button
+                onClick={() => handlePrintReceipt(selectedPayment)}
+                className="w-full h-12 text-base font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md mt-2"
+              >
+                <Printer className="w-5 h-5 mr-3" />
+                {t('print_receipt')}
+              </Button>
+
+              <div className="flex gap-2 pt-2">
                 {(selectedPayment.status === 'draft' || selectedPayment.status === 'pending') && canUpdate(MODULES.FINANCIALS) && (
                   <Button
                     onClick={() => {
@@ -934,14 +943,6 @@ export default function Payments() {
                     {t('confirm_payment')}
                   </Button>
                 )}
-                <Button
-                  variant="outline"
-                  onClick={() => handlePrintReceipt(selectedPayment)}
-                  className="flex-1"
-                >
-                  <Printer className="w-4 h-4 mr-2" />
-                  {t('print_receipt')}
-                </Button>
                 <Button
                   variant="outline"
                   onClick={() => setShowDetailModal(false)}
@@ -1209,13 +1210,14 @@ export default function Payments() {
                               <Eye className="w-4 h-4 text-slate-500" />
                             </Button>
                             <Button
-                              variant="ghost"
+                              variant="outline"
                               size="sm"
                               onClick={() => handlePrintReceipt(payment)}
-                              className="h-8 w-8 p-0"
+                              className="h-8 px-2 gap-1 border-blue-200 text-blue-600 hover:bg-blue-50 hover:border-blue-300"
                               title={t('print_receipt')}
                             >
-                              <Printer className="w-4 h-4 text-slate-500" />
+                              <Printer className="w-4 h-4" />
+                              <span className="text-xs font-medium hidden sm:inline">{t('print_receipt')}</span>
                             </Button>
                             {(payment.status === 'draft' || payment.status === 'pending') && canUpdate(MODULES.FINANCIALS) && (
                               <Button

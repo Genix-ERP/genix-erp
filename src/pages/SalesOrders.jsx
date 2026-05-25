@@ -24,10 +24,12 @@ import {
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from "@/components/ui/command";
+import { cn } from "@/lib/utils";
 import {
   Plus, Search, ShoppingBag, TrendingUp, Package, DollarSign, Truck,
   CheckCircle, FileText, Receipt, RotateCcw, Tag, BarChart3, Upload, Download, Eye, Printer, Trash2, X,
-  LayoutDashboard, Building2, Edit, ToggleLeft, ToggleRight, MessageSquareWarning, ChevronDown
+  LayoutDashboard, Building2, Edit, ToggleLeft, ToggleRight, MessageSquareWarning, ChevronDown, Check
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
@@ -39,6 +41,7 @@ import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { usePermissions } from "@/hooks/usePermissions";
 import ProductCombobox from "@/components/shared/ProductCombobox";
+import CustomerCombobox from "@/components/shared/CustomerCombobox";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useAdminSettings } from '@/components/contexts/AdminSettingsContext';
 import { useFinancials } from '@/components/contexts/FinancialsContext';
@@ -69,7 +72,7 @@ export default function SalesOrders() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { activeCompany } = useCompany();
-  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
+  const { canCreate, canUpdate, canDelete, canRead, MODULES } = usePermissions();
   const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
   const { salesOrders = [], createSalesOrder, updateSalesOrder, isLoading: ordersLoading, refreshData: refreshModulesData } = useModules();
   const { customers = [] } = useCustomers();
@@ -197,13 +200,27 @@ export default function SalesOrders() {
     // Build table data from order lines if available
     const lines = order.lines || [];
     const tableData = lines.length > 0
-      ? lines.map((line, idx) => ({
-          no: idx + 1,
-          description: line.description || line.product_name || '-',
-          quantity: line.quantity || 0,
-          unit_price: formatCurrency(line.unit_price || 0),
-          total: formatCurrency((line.quantity || 0) * (line.unit_price || 0)),
-        }))
+      ? lines.map((line, idx) => {
+          // Prefer the product's canonical name (from the products
+          // JOIN in the backend) as the primary label — this is
+          // *this* company's name for the product. Fall back to the
+          // line description for legacy lines without product_id.
+          // alt_name is the matching product in the *other* company
+          // (via search_key), so it carries the counterparty's name
+          // for the same item. Printing both lets each side recognise
+          // what was sold/bought on intercompany documents.
+          const primary = line.product_name || line.description || '-';
+          const description = line.alt_name && line.alt_name !== primary
+            ? `${primary}\n(${line.alt_name})`
+            : primary;
+          return {
+            no: idx + 1,
+            description,
+            quantity: line.quantity || 0,
+            unit_price: formatCurrency(line.unit_price || 0),
+            total: formatCurrency((line.quantity || 0) * (line.unit_price || 0)),
+          };
+        })
       : [{ no: 1, description: t('no_items'), quantity: '-', unit_price: '-', total: '-' }];
 
     return {
@@ -211,12 +228,11 @@ export default function SalesOrders() {
       title: t('sales_order'),
       documentNumber: order.order_number,
       documentDate: order.order_date ? format(new Date(order.order_date), 'dd.MM.yyyy') : '',
+      orientation: 'landscape',
       headerFields: [
         { label: t('customer'), value: order.customer_name },
         { label: t('delivery_date'), value: order.delivery_date || order.expected_date ? format(new Date(order.delivery_date || order.expected_date), 'dd.MM.yyyy') : '-' },
         ...(order.vehicle_number ? [{ label: t('vehicle_number') || 'Moshina raqami', value: order.vehicle_number }] : []),
-        { label: t('status'), value: t(order.status) },
-        { label: t('payment_status'), value: t(order.payment_status) },
       ],
       tableColumns: [
         { key: 'no', label: '№', width: 10 },
@@ -232,6 +248,14 @@ export default function SalesOrders() {
         { label: t('shipping'), value: formatCurrency(order.shipping_amount || order.shipping_cost || 0) },
         { label: t('total'), value: formatCurrency(order.total_amount || 0), bold: true },
       ],
+      customCompany: activeCompany ? {
+        name: activeCompany.company_name || localStorage.getItem("company_name") || "Yuksalish ERP",
+        address: localStorage.getItem("company_address") || "Toshkent, O'zbekiston",
+        phone: localStorage.getItem("company_phone") || "+998 XX XXX XX XX",
+        email: localStorage.getItem("company_email") || "info@genix.uz",
+        inn: localStorage.getItem("company_inn") || "123456789",
+        logo: localStorage.getItem("company_logo") || null,
+      } : null,
     };
   };
 
@@ -314,8 +338,8 @@ export default function SalesOrders() {
   // Carriers list for selection
   const [carriers, setCarriers] = useState([]);
 
-  // Intercompany projects (loaded when customer has source_organization_id)
-  const [intercompanyProjects, setIntercompanyProjects] = useState([]);
+  // All intercompany projects (from orgs we sell to)
+  const [allIntercompanyProjects, setAllIntercompanyProjects] = useState([]);
   const [loadingIntercompanyProjects, setLoadingIntercompanyProjects] = useState(false);
 
   // Track if delivery date was manually set (for new order)
@@ -357,10 +381,44 @@ export default function SalesOrders() {
         console.error('Failed to fetch carriers:', error);
       }
     };
+    const fetchIntercompanyProjects = async () => {
+      // Find all intercompany customers (those with source_organization_id)
+      const intercompanyCustomers = (customers || []).filter(c => c.source_organization_id);
+      if (intercompanyCustomers.length === 0) return;
+
+      // /projects/by-organization is gated by projects:read on the backend.
+      // A user with sales but no projects access would 403 on every
+      // intercompany customer; skip the fetch and just leave the
+      // intercompany-projects list empty (the UI handles that).
+      if (!canRead(MODULES.PROJECTS)) return;
+
+      setLoadingIntercompanyProjects(true);
+      try {
+        const allProjects = [];
+        for (const customer of intercompanyCustomers) {
+          const res = await apiClient.get('/projects/by-organization', {
+            params: { organization_id: customer.source_organization_id }
+          });
+          const projects = res.data?.data || [];
+          // Tag each project with the customer info for auto-selection
+          projects.forEach(p => {
+            p._customer_id = customer.id;
+            p._customer_name = customer.company_name || customer.name || '';
+          });
+          allProjects.push(...projects);
+        }
+        setAllIntercompanyProjects(allProjects);
+      } catch (error) {
+        console.error('Failed to fetch intercompany projects:', error);
+      } finally {
+        setLoadingIntercompanyProjects(false);
+      }
+    };
     fetchProducts();
     fetchWarehouses();
     fetchCarriers();
-  }, []);
+    fetchIntercompanyProjects();
+  }, [customers]);
 
   // Calculate delivery date based on product lead times
   const calculateDeliveryDate = useCallback((orderLines, orderDate) => {
@@ -758,6 +816,8 @@ export default function SalesOrders() {
       setDiscountCodeInput('');
       setDiscountValidation({ valid: false, message: '' });
       addAuditLog('create', 'new', orderData.order_number || `SO-${Date.now()}`);
+      // Refresh orders list so the new SO appears without manual page reload
+      try { await refreshModulesData?.(); } catch { /* non-blocking */ }
     } catch (error) {
       console.error('Error creating sales order:', error);
       console.error('Error response:', error.response?.data);
@@ -812,6 +872,12 @@ export default function SalesOrders() {
       setShowEditModal(false);
       setEditingOrder(null);
       addAuditLog('update', editingOrder.id, editingOrder.order_number);
+      // Refresh from the server so the list reflects the updated customer
+      // / lines / totals. updateSalesOrder() already merges the API
+      // response into local state, but the merge only covers fields the
+      // single-order endpoint returns — a full reload is the safest way
+      // to pick up joined fields (customer name, warehouse name, etc).
+      try { await refreshModulesData?.(); } catch { /* non-blocking */ }
     } catch (error) {
       console.error('Error updating sales order:', error);
     }
@@ -870,7 +936,10 @@ export default function SalesOrders() {
     setDiscountCodeInput('');
     setDiscountValidation({ valid: false, message: '' });
     setIsDeliveryDateManual(false);
-    setIntercompanyProjects([]);
+    // The state is named `allIntercompanyProjects`; an earlier rename missed
+    // this reset call, which threw `setIntercompanyProjects is not defined`
+    // whenever the new-order dialog closed.
+    setAllIntercompanyProjects([]);
   };
 
   // Helper: check stock for order lines, returns { issues, inStock, outOfStock }
@@ -1142,9 +1211,57 @@ export default function SalesOrders() {
     });
   };
 
+  // Enrich each order line with `alt_names` = other products in the
+  // tenant that share the same search_key. This powers the
+  // dual-name print (seller's "Eshik Hi tech" + buyer's internal
+  // "ПБ-5.9*100а" below it) so both parties see a name they
+  // recognize on the printed document.
+  const enrichLinesWithAltNames = async (lines) => {
+    if (!Array.isArray(lines) || lines.length === 0) return lines;
+    // Collect unique search_keys from the seller's products
+    const keyByLine = new Map();
+    for (const line of lines) {
+      const prod = products.find(p => p.id === line.product_id);
+      const key = prod?.search_key;
+      if (key) keyByLine.set(line, key);
+    }
+    const uniqueKeys = [...new Set(keyByLine.values())];
+    if (uniqueKeys.length === 0) return lines;
+
+    // Fetch counterparty matches per unique key in parallel.
+    // `exclude_organization_id` keeps the seller's own products out
+    // of the result — we only want the OTHER org's name for the
+    // same material, which is what the buyer recognises on the PDF.
+    const keyToMatches = new Map();
+    await Promise.all(uniqueKeys.map(async (k) => {
+      try {
+        const res = await apiClient.get('/products/by-search-key', {
+          params: {
+            key: k,
+            ...(activeCompany?.id ? { exclude_organization_id: activeCompany.id } : {}),
+          },
+        });
+        const list = res.data?.data?.products ?? res.data?.products ?? [];
+        keyToMatches.set(k, list);
+      } catch { /* ignore failed key */ }
+    }));
+
+    // Attach the first counterparty match's name as alt_name
+    return lines.map(line => {
+      const key = keyByLine.get(line);
+      if (!key) return line;
+      const matches = keyToMatches.get(key) || [];
+      const alt = matches.find(m => m.id !== line.product_id && m.name);
+      return alt ? { ...line, alt_name: alt.name } : line;
+    });
+  };
+
   const handlePrintOrder = async (order) => {
     try {
       const fullOrder = await salesService.getOrder(order.id);
+      if (fullOrder.lines) {
+        fullOrder.lines = await enrichLinesWithAltNames(fullOrder.lines);
+      }
       setSelectedOrder(fullOrder);
       setShowPrintPreview(true);
     } catch (error) {
@@ -1517,7 +1634,14 @@ export default function SalesOrders() {
 
         {/* Create Order Modal */}
         <Dialog open={showCreateModal} onOpenChange={(open) => { setShowCreateModal(open); if (!open) resetOrderForm(); }}>
-          <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+          {/* Prevent accidental dismissal via outside-click or Escape so
+              users don't lose half-filled forms. Closing requires the X
+              button or Cancel button. */}
+          <DialogContent
+            className="max-w-6xl max-h-[90vh] overflow-y-auto"
+            onPointerDownOutside={(e) => e.preventDefault()}
+            onEscapeKeyDown={(e) => e.preventDefault()}
+          >
             <DialogHeader>
               <DialogTitle>{t('create_new_order')}</DialogTitle>
             </DialogHeader>
@@ -1525,10 +1649,11 @@ export default function SalesOrders() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>{t('customer')} *</Label>
-                  <Select
+                  <CustomerCombobox
+                    customers={customers}
                     value={newOrder.customer_id || ''}
-                    onValueChange={async (value) => {
-                      const customer = customers.find(c => c.id === value);
+                    onValueChange={(value, customer) => {
+                      if (!customer) customer = customers.find(c => c.id === value);
                       setNewOrder({
                         ...newOrder,
                         customer_id: value,
@@ -1536,35 +1661,91 @@ export default function SalesOrders() {
                         project_id: '',
                         project_name: '',
                       });
-                      // If customer is intercompany (has source_organization_id), fetch their projects
-                      setIntercompanyProjects([]);
-                      if (customer?.source_organization_id) {
-                        setLoadingIntercompanyProjects(true);
-                        try {
-                          const res = await apiClient.get('/projects/by-organization', {
-                            params: { organization_id: customer.source_organization_id }
-                          });
-                          setIntercompanyProjects(res.data?.data || []);
-                        } catch (err) {
-                          console.error('Failed to fetch intercompany projects:', err);
-                        } finally {
-                          setLoadingIntercompanyProjects(false);
-                        }
-                      }
                     }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={t('select_customer') || 'Select customer'} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {customers.map((customer) => (
-                        <SelectItem key={customer.id} value={customer.id}>
-                          {customer.company_name || customer.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder={t('select_customer') || 'Mijozni tanlang'}
+                    t={t}
+                  />
                 </div>
+                {/* Project selector — only for intercompany customers or project-first flow */}
+                {(() => {
+                  // Determine which projects to show
+                  const selectedCustomer = customers.find(c => c.id === newOrder.customer_id);
+                  const isIntercompany = selectedCustomer?.source_organization_id;
+
+                  // If customer selected and is intercompany — filter projects for that customer
+                  // If no customer selected — show all intercompany projects (project-first flow)
+                  // If customer selected but NOT intercompany — hide project selector
+                  if (newOrder.customer_id && !isIntercompany) return null;
+
+                  const visibleProjects = newOrder.customer_id
+                    ? allIntercompanyProjects.filter(p => p._customer_id === newOrder.customer_id)
+                    : allIntercompanyProjects;
+
+                  if (visibleProjects.length === 0 && !newOrder.customer_id) return null;
+
+                  return (
+                    <div>
+                      <Label>{t('project') || 'Loyiha'} {isIntercompany && <span className="text-red-500">*</span>}</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            className="w-full justify-between font-normal h-9 px-3 text-sm"
+                          >
+                            <span className="truncate">
+                              {newOrder.project_id
+                                ? (() => {
+                                    const p = allIntercompanyProjects.find(p => p.id === newOrder.project_id);
+                                    return p ? `${p.project_code} — ${p.project_name}` : newOrder.project_name;
+                                  })()
+                                : (t('select_project') || 'Loyihani tanlang')}
+                            </span>
+                            <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[400px] p-0" align="start">
+                          <Command shouldFilter={true}>
+                            <CommandInput placeholder={t('search') || "Qidirish..."} />
+                            <CommandList>
+                              <CommandEmpty>{t('not_found') || "Topilmadi"}</CommandEmpty>
+                              <CommandGroup>
+                                {visibleProjects.map((project) => (
+                                  <CommandItem
+                                    key={project.id}
+                                    value={`${project.project_code} ${project.project_name} ${project._customer_name}`}
+                                    onSelect={() => {
+                                      setNewOrder({
+                                        ...newOrder,
+                                        project_id: project.id,
+                                        project_name: project.project_name || '',
+                                        customer_id: project._customer_id,
+                                        customer_name: project._customer_name,
+                                      });
+                                    }}
+                                  >
+                                    <Check
+                                      className={cn(
+                                        "mr-2 h-4 w-4",
+                                        newOrder.project_id === project.id ? "opacity-100" : "opacity-0"
+                                      )}
+                                    />
+                                    <div className="truncate">
+                                      <span className="font-medium">{project.project_code} — {project.project_name}</span>
+                                      {!newOrder.customer_id && (
+                                        <span className="text-xs text-slate-500 ml-2">({project._customer_name})</span>
+                                      )}
+                                    </div>
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -1641,50 +1822,6 @@ export default function SalesOrders() {
                 </div>
               </div>
 
-              {/* Intercompany Project Selection */}
-              {(() => {
-                const selectedCustomer = customers.find(c => c.id === newOrder.customer_id);
-                if (!selectedCustomer?.source_organization_id) return null;
-                return (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Building2 className="w-4 h-4 text-blue-600" />
-                      <Label className="text-sm font-semibold text-blue-800">
-                        {t('intercompany_project') || 'Kompaniyalararo loyiha'} <span className="text-red-500">*</span>
-                      </Label>
-                    </div>
-                    <p className="text-xs text-blue-600 mb-2">
-                      {t('intercompany_project_hint') || "Buyurtma qaysi loyihaga tegishli ekanligini tanlang"}
-                    </p>
-                    <Select
-                      value={newOrder.project_id || ''}
-                      onValueChange={(value) => {
-                        const project = intercompanyProjects.find(p => p.id === value);
-                        setNewOrder({
-                          ...newOrder,
-                          project_id: value,
-                          project_name: project?.project_name || '',
-                        });
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={
-                          loadingIntercompanyProjects
-                            ? (t('loading') || 'Loading...')
-                            : (t('select_project') || 'Loyihani tanlang')
-                        } />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {intercompanyProjects.map((project) => (
-                          <SelectItem key={project.id} value={project.id}>
-                            {project.project_code} — {project.project_name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                );
-              })()}
 
               {/* Order Lines */}
               <div className="border-t pt-4">
@@ -1834,11 +1971,6 @@ export default function SalesOrders() {
                       {line.variant_name && (
                         <div className="text-xs text-slate-500 pl-1">
                           {t('variant')}: {line.variant_name}
-                        </div>
-                      )}
-                      {line.product?.has_delivery && (
-                        <div className="flex items-center gap-1.5 text-xs px-2 py-1 rounded mt-1 bg-blue-50 text-blue-600 border border-blue-200">
-                          <span>🚚 {t('delivery_price') || 'Yetkazib berish'}: {formatCurrency(line.product.delivery_price || 0)}</span>
                         </div>
                       )}
                       {(() => {
@@ -2303,7 +2435,11 @@ export default function SalesOrders() {
         {/* Edit Order Modal */}
         {editingOrder && (
           <Dialog open={showEditModal} onOpenChange={(open) => { setShowEditModal(open); if (!open) { setEditingOrder(null); setIsEditDeliveryDateManual(false); } }}>
-            <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+            <DialogContent
+              className="max-w-6xl max-h-[90vh] overflow-y-auto"
+              onPointerDownOutside={(e) => e.preventDefault()}
+              onEscapeKeyDown={(e) => e.preventDefault()}
+            >
               <DialogHeader>
                 <DialogTitle>{t('edit_order')} - {editingOrder.order_number}</DialogTitle>
               </DialogHeader>
@@ -2538,11 +2674,6 @@ export default function SalesOrders() {
                         {line.packaging_name && (
                           <div className="text-xs text-slate-500 pl-1">
                             {t('packaging')}: {line.packaging_name} ({line.packaging_qty || 1} × {line.packaging_unit_qty || 1} = {line.quantity} {t('units') || 'units'})
-                          </div>
-                        )}
-                        {line.product?.has_delivery && (
-                          <div className="flex items-center gap-1.5 text-xs px-2 py-1 rounded mt-1 bg-blue-50 text-blue-600 border border-blue-200">
-                            <span>🚚 {t('delivery_price') || 'Yetkazib berish'}: {formatCurrency(line.product.delivery_price || 0)}</span>
                           </div>
                         )}
                         {(() => {

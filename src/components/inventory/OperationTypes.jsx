@@ -1351,7 +1351,7 @@ export default function OperationTypes() {
                     step="0.5"
                     value={editingStep.max_duration_hours}
                     onChange={(e) => setEditingStep({ ...editingStep, max_duration_hours: e.target.value })}
-                    placeholder={"Masalan: 24"}
+                    placeholder={"24"}
                   />
                 </div>
                 <div>

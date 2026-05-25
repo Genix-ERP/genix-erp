@@ -7,7 +7,8 @@ import {
   Kanban, Phone, Mail, Calendar, User, Building, Target,
   Loader2, AlertCircle, Pencil, Trash2, MoreVertical,
   PhoneCall, Clock, CheckCircle, XCircle, UserPlus, Plus,
-  GripVertical, Settings2, Trophy, ThumbsDown, X
+  GripVertical, Settings2, Trophy, ThumbsDown, X,
+  ChevronDown, ChevronUp, Bell, CalendarDays, CheckCircle2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,7 +25,8 @@ import { useTranslation } from "@/components/utils/translations";
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { useCompany } from "@/components/contexts/CompanyContext";
-import { pipelineStagesService } from "@/api/services/crm";
+import { pipelineStagesService, activitiesService } from "@/api/services/crm";
+import { leadsService } from "@/api/services/leads";
 
 // Portal for dragged cards
 const PortalAwareItem = ({ provided, snapshot, children }) => {
@@ -142,6 +144,96 @@ export default function LeadsKanban({
   // Add modal
   const [addModal, setAddModal] = useState(false);
   const [addForm, setAddForm] = useState({ name: '', color: 'blue', is_won: false, is_lost: false });
+
+  // Lead detail modal — opens when the user clicks a lead card body.
+  // Holds the lead being viewed and an optional click guard so a drag
+  // gesture doesn't accidentally open the detail modal too.
+  const [leadDetailModal, setLeadDetailModal] = useState({ open: false, lead: null });
+  // Audit logs for the lead currently shown in the detail modal —
+  // moved here from the Edit Lead form so the change history is
+  // visible during the read-only view rather than buried inside the
+  // edit dialog.
+  const [leadDetailAuditLogs, setLeadDetailAuditLogs] = useState([]);
+  const [leadDetailHistoryOpen, setLeadDetailHistoryOpen] = useState(false);
+
+  // Scheduled follow-ups for the lead being viewed. Each item is a
+  // CRM activity (call/meeting/email/follow_up) created via the
+  // structured "Schedule follow-up" panel in LeadForm. We fetch on
+  // detail-modal open and refresh after marking-completed.
+  const [leadDetailFollowups, setLeadDetailFollowups] = useState([]);
+  const [followupsLoading, setFollowupsLoading] = useState(false);
+
+  const refreshFollowups = useCallback(async (leadId) => {
+    if (!leadId) return;
+    setFollowupsLoading(true);
+    try {
+      const list = await activitiesService.list(companyId, { lead_id: leadId, limit: 50 });
+      // Filter on the client to be safe — list endpoint may not honor lead_id
+      // depending on backend behavior. Sort upcoming/planned first by date.
+      const items = (Array.isArray(list) ? list : []).filter(
+        (a) => a.lead_id === leadId
+      );
+      items.sort((a, b) => {
+        const da = new Date(a.start_datetime || a.reminder_datetime || a.created_at).getTime();
+        const db = new Date(b.start_datetime || b.reminder_datetime || b.created_at).getTime();
+        return da - db;
+      });
+      setLeadDetailFollowups(items);
+    } catch (err) {
+      console.warn('Failed to fetch follow-ups:', err);
+      setLeadDetailFollowups([]);
+    } finally {
+      setFollowupsLoading(false);
+    }
+  }, [companyId]);
+
+  // Fetch audit logs + follow-ups whenever the detail modal opens for
+  // a different lead. Uses the same `leadsService.getAuditLogs(id)`
+  // the Edit Lead form was using, plus activitiesService.list filtered
+  // by lead_id for the scheduled follow-ups list.
+  useEffect(() => {
+    if (!leadDetailModal.open || !leadDetailModal.lead?.id) {
+      setLeadDetailAuditLogs([]);
+      setLeadDetailHistoryOpen(false);
+      setLeadDetailFollowups([]);
+      return;
+    }
+    leadsService
+      .getAuditLogs(leadDetailModal.lead.id)
+      .then((logs) => setLeadDetailAuditLogs(Array.isArray(logs) ? logs : []))
+      .catch(() => setLeadDetailAuditLogs([]));
+    refreshFollowups(leadDetailModal.lead.id);
+  }, [leadDetailModal.open, leadDetailModal.lead?.id, refreshFollowups]);
+
+  // Mark a follow-up as completed (status='completed') — keeps the row
+  // in the list (so users can see it was done) but greys it out.
+  const handleCompleteFollowup = async (activityId) => {
+    try {
+      await activitiesService.update(activityId, { status: 'completed' }, companyId);
+      if (leadDetailModal.lead?.id) refreshFollowups(leadDetailModal.lead.id);
+    } catch (err) {
+      console.warn('Failed to complete follow-up:', err);
+    }
+  };
+
+  // Field-label + value-formatter helpers for the change-history list,
+  // matching the formatting that used to live inside LeadForm.
+  const detailFieldLabels = {
+    contact_name: t('contact_name'),
+    company_name: t('company_name'),
+    email: t('email'),
+    phone: t('phone'),
+    status: t('status'),
+    source: t('source'),
+    notes: t('notes'),
+    assigned_to: t('sales_person'),
+    expected_value: t('expected_value'),
+  };
+  const detailFormatFieldValue = (field, value) => {
+    if (value === null || value === undefined || value === '') return '—';
+    if (field === 'status' || field === 'source') return t(value) || value;
+    return String(value);
+  };
 
   // Seed defaults for this org if none exist (handles new orgs created after migrations)
   const seedDefaultsForOrg = useCallback(async () => {
@@ -380,23 +472,25 @@ export default function LeadsKanban({
 
     if (type === 'STAGE') {
       if (source.index === destination.index) return;
-      // Optimistic reorder
-      let reordered;
-      setStageList(prev => {
-        const sorted = [...prev].sort((a, b) => a.sequence - b.sequence);
-        const [moved] = sorted.splice(source.index, 1);
-        sorted.splice(destination.index, 0, moved);
-        reordered = sorted.map((s, i) => ({ ...s, sequence: i }));
-        return reordered;
-      });
-      // Persist each stage's new sequence to backend
-      if (reordered) {
-        reordered.forEach(s => {
-          pipelineStagesService.update(s.id, { sequence: s.sequence }, companyId).catch(e => {
-            console.warn('Failed to update stage sequence:', e);
-          });
+      // Compute the reordered list synchronously OUTSIDE of setState.
+      // (React 18 batches state updates and the updater function isn't
+      // guaranteed to run before the next line of this handler — the
+      // previous version assigned `reordered` inside the updater and
+      // then checked it on the very next line, which left it as
+      // `undefined` and silently skipped the PUT requests, so
+      // sequences never persisted to the backend.)
+      const sorted = [...stageList].sort((a, b) => a.sequence - b.sequence);
+      const [moved] = sorted.splice(source.index, 1);
+      sorted.splice(destination.index, 0, moved);
+      const reordered = sorted.map((s, i) => ({ ...s, sequence: i }));
+      // Optimistic UI update.
+      setStageList(reordered);
+      // Persist each stage's new sequence to the backend.
+      reordered.forEach(s => {
+        pipelineStagesService.update(s.id, { sequence: s.sequence }, companyId).catch(e => {
+          console.warn('Failed to update stage sequence:', e);
         });
-      }
+      });
       return;
     }
 
@@ -410,11 +504,19 @@ export default function LeadsKanban({
       leads: prev.leads.map(l => String(l.id) === String(draggableId) ? { ...l, status: newStatus } : l)
     }));
     if (onUpdateLead) onUpdateLead({ ...lead, status: newStatus });
-  }, [kanbanState.leads, onUpdateLead, companyId]);
+  }, [kanbanState.leads, onUpdateLead, companyId, stageList]);
 
   // --- Lead Card ---
   const LeadCard = useCallback(({ lead, isUpdating }) => (
-    <Card className="bg-white hover:shadow-lg transition-all duration-200 cursor-grab active:cursor-grabbing relative shadow-sm group">
+    <Card
+      className="bg-white hover:shadow-lg transition-all duration-200 cursor-grab active:cursor-grabbing relative shadow-sm group"
+      // Card body click → open detail modal. The dropdown menu uses
+      // stopPropagation so its actions don't double-fire this handler.
+      // For drag gestures, react-beautiful-dnd consumes the pointer
+      // events past a movement threshold so click won't fire after a
+      // real drag.
+      onClick={() => setLeadDetailModal({ open: true, lead })}
+    >
       {isUpdating && (
         <div className="absolute inset-0 bg-white/90 flex items-center justify-center rounded-lg z-10">
           <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
@@ -737,6 +839,407 @@ export default function LeadsKanban({
           t('add') || 'Add',
           false, null
         )}
+      </Dialog>
+
+      {/* Lead Detail Modal — opens on lead-card click. Read-only view
+          with action shortcuts (Call / Edit / Delete) that dispatch to
+          the existing handlers passed in from the parent. */}
+      <Dialog
+        open={leadDetailModal.open}
+        onOpenChange={(open) => { if (!open) setLeadDetailModal({ open: false, lead: null }); }}
+      >
+        <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col p-0 gap-0">
+          <DialogHeader className="px-6 pt-6 pb-3 border-b flex-shrink-0">
+            <DialogTitle className="flex items-center gap-2">
+              <User className="w-5 h-5" />
+              {t('lead_details')}
+            </DialogTitle>
+          </DialogHeader>
+          {leadDetailModal.lead && (() => {
+            const lead = leadDetailModal.lead;
+            const stage = stageList.find(s => s.code === lead.status || s.id === lead.stage_id);
+            return (
+              <>
+              <div className="space-y-5 py-4 px-6 overflow-y-auto flex-1 min-h-0">
+                {/* Header — name, company, stage badge */}
+                <div className="flex items-start gap-3">
+                  <div className="w-12 h-12 bg-gradient-to-br from-[var(--genix-blue)] to-[var(--genix-purple)] rounded-full flex items-center justify-center flex-shrink-0">
+                    <User className="w-6 h-6 text-white" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-lg font-semibold text-slate-900 truncate">
+                      {lead.contact_name || lead.name || '—'}
+                    </h3>
+                    <p className="text-sm text-slate-500 flex items-center gap-1 truncate">
+                      <Building className="w-3.5 h-3.5 flex-shrink-0" />
+                      {lead.company_name || t('no_company')}
+                    </p>
+                    {stage && (
+                      <Badge variant="outline" className="mt-1 text-xs">
+                        {stage.custom_name || stage.name}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+
+                {/* Contact information */}
+                <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                  <div className="text-xs font-semibold text-slate-700 uppercase tracking-wide mb-2">
+                    {t('contact_information')}
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2 text-sm">
+                      <Mail className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                      {lead.email
+                        ? <a href={`mailto:${lead.email}`} className="text-blue-600 hover:underline truncate">{lead.email}</a>
+                        : <span className="text-slate-400 italic">{t('no_email')}</span>}
+                    </div>
+                    <div className="flex items-center gap-2 text-sm">
+                      <Phone className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                      {lead.phone
+                        ? <a href={`tel:${lead.phone}`} className="text-blue-600 hover:underline">{lead.phone}</a>
+                        : <span className="text-slate-400 italic">{t('no_phone')}</span>}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Additional information */}
+                <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                  <div className="text-xs font-semibold text-slate-700 uppercase tracking-wide mb-2">
+                    {t('additional_information')}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <div className="text-xs text-slate-500 mb-0.5">{t('source') || 'Source'}</div>
+                      <div className="text-slate-800">
+                        {lead.source ? (t(lead.source) || lead.source) : <span className="text-slate-400 italic">{t('no_source')}</span>}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-500 mb-0.5">{t('created') || 'Created'}</div>
+                      <div className="text-slate-800 flex items-center gap-1">
+                        <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                        {lead.created_at ? new Date(lead.created_at).toLocaleDateString() : '—'}
+                      </div>
+                    </div>
+                    {lead.updated_at && (
+                      <div className="col-span-2">
+                        <div className="text-xs text-slate-500 mb-0.5">{t('updated') || 'Updated'}</div>
+                        <div className="text-slate-800 flex items-center gap-1">
+                          <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                          {new Date(lead.updated_at).toLocaleDateString()}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Notes & follow-ups — both kinds of activities live
+                    in the same list. Scheduled follow-ups (call /
+                    meeting / email with a datetime) fire reminder
+                    notifications via the backend worker; notes are
+                    free-text comments saved without a schedule. We
+                    split them into two visual groups so it's clear
+                    which ones still need action. */}
+                {(() => {
+                  // Only render scheduled-style activities here. Notes
+                  // are merged into the Change History timeline below
+                  // instead of getting their own section.
+                  const isNote = (a) => a.activity_type === 'note';
+                  const followups = leadDetailFollowups.filter(a => !isNote(a));
+
+                  return (
+                    <>
+                      {/* Scheduled follow-ups */}
+                      <div className="border-t pt-3">
+                        <div className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-2">
+                          <Bell className="w-4 h-4 text-[var(--genix-blue)]" />
+                          {t('scheduled_followups') || 'Scheduled follow-ups'}
+                          {followups.length > 0 && (
+                            <span className="text-xs font-normal text-slate-500">
+                              ({followups.length})
+                            </span>
+                          )}
+                        </div>
+
+                        {followupsLoading ? (
+                          <div className="text-xs text-slate-500 flex items-center gap-2">
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            {t('loading') || 'Loading...'}
+                          </div>
+                        ) : followups.length === 0 ? (
+                          <div className="text-xs text-slate-500 italic">
+                            {t('no_followups') || 'No follow-ups scheduled. Add one when editing this lead.'}
+                          </div>
+                        ) : (
+                          <div className="space-y-2 max-h-60 overflow-y-auto">
+                            {followups.map((act) => {
+                              const due = act.start_datetime || act.reminder_datetime;
+                              const dueDate = due ? new Date(due) : null;
+                              const isPast = dueDate && dueDate.getTime() < Date.now();
+                              const isCompleted = act.status === 'completed';
+                              const isCancelled = act.status === 'cancelled';
+                              const ActionIcon = act.activity_type === 'call' ? Phone
+                                : act.activity_type === 'meeting' ? CalendarDays
+                                : act.activity_type === 'email' ? Mail
+                                : Bell;
+                              return (
+                                <div
+                                  key={act.id}
+                                  className={`border rounded-lg p-3 text-sm flex items-start gap-3 ${
+                                    isCompleted ? 'bg-slate-50 opacity-60' :
+                                    isCancelled ? 'bg-slate-50 opacity-50 line-through' :
+                                    isPast ? 'bg-amber-50 border-amber-200' :
+                                    'bg-white'
+                                  }`}
+                                >
+                                  <ActionIcon className={`w-4 h-4 mt-0.5 flex-shrink-0 ${
+                                    isCompleted ? 'text-slate-400' :
+                                    isPast ? 'text-amber-600' :
+                                    'text-[var(--genix-blue)]'
+                                  }`} />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="font-medium text-slate-800">
+                                        {t(`action_${act.activity_type === 'follow_up' ? 'other' : act.activity_type}`) ||
+                                          act.activity_type}
+                                      </span>
+                                      {isCompleted && (
+                                        <span className="text-xs text-green-700 bg-green-50 px-2 py-0.5 rounded">
+                                          {t('completed') || 'Completed'}
+                                        </span>
+                                      )}
+                                      {!isCompleted && !isCancelled && isPast && (
+                                        <span className="text-xs text-amber-700 bg-amber-100 px-2 py-0.5 rounded">
+                                          {t('overdue') || 'Overdue'}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {dueDate && (
+                                      <div className="text-xs text-slate-600 mt-0.5 flex items-center gap-1">
+                                        <Clock className="w-3 h-3" />
+                                        {dueDate.toLocaleString(undefined, { hour12: false })}
+                                      </div>
+                                    )}
+                                    {act.description && (
+                                      <div className="text-xs text-slate-700 mt-1 whitespace-pre-wrap">
+                                        {act.description}
+                                      </div>
+                                    )}
+                                  </div>
+                                  {!isCompleted && !isCancelled && (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="ghost"
+                                      className="flex-shrink-0 h-7 px-2 text-green-700 hover:text-green-800 hover:bg-green-50"
+                                      onClick={() => handleCompleteFollowup(act.id)}
+                                      title={t('mark_completed') || 'Mark completed'}
+                                    >
+                                      <CheckCircle2 className="w-4 h-4" />
+                                    </Button>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+
+                    </>
+                  );
+                })()}
+
+                {/* Unified Change History — merges audit-log diffs and
+                    note-type activities into a single chronological
+                    timeline. Each entry is either:
+                      • a field-change row (from audit_log) with old → new diffs
+                      • a note row (from activities where activity_type='note')
+                    Sorted desc by created_at so the newest is at the top.
+                    Notes used to live in their own "Izohlar" section but
+                    the user wanted them rolled into the change-history
+                    timeline so all lead activity is in one place. */}
+                {(() => {
+                  // Build the unified timeline.
+                  const noteEntries = leadDetailFollowups
+                    .filter(a => a.activity_type === 'note')
+                    .map(a => ({
+                      kind: 'note',
+                      id: `note_${a.id}`,
+                      created_at: a.created_at,
+                      user_name: a.created_by_name || null,
+                      description: a.description || '',
+                    }));
+
+                  const auditEntries = leadDetailAuditLogs
+                    .map(log => {
+                      const oldVals = typeof log.old_values === 'string'
+                        ? JSON.parse(log.old_values || '{}')
+                        : (log.old_values || {});
+                      const newVals = typeof log.new_values === 'string'
+                        ? JSON.parse(log.new_values || '{}')
+                        : (log.new_values || {});
+                      const changedFields = Object.keys(newVals).filter(
+                        // 'notes' is excluded because notes are now
+                        // stored as separate `activities` (note-type)
+                        // and the lead's notes column is always cleared
+                        // on save — so the diffs are just noise.
+                        k => !['updated_at', 'id', 'company_id', 'tenant_id', 'created_at', 'notes'].includes(k)
+                          && JSON.stringify(oldVals[k]) !== JSON.stringify(newVals[k])
+                      );
+                      if (changedFields.length === 0) return null;
+                      return {
+                        kind: 'audit',
+                        id: `audit_${log.id}`,
+                        created_at: log.created_at,
+                        user_name: log.user_name || log.user_email,
+                        oldVals,
+                        newVals,
+                        changedFields,
+                      };
+                    })
+                    .filter(Boolean);
+
+                  const timeline = [...noteEntries, ...auditEntries].sort(
+                    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                  );
+
+                  if (timeline.length === 0) return null;
+
+                  return (
+                    <div className="border-t pt-3">
+                      <button
+                        type="button"
+                        className="flex items-center gap-2 text-sm font-medium text-slate-700 hover:text-slate-900 w-full"
+                        onClick={() => setLeadDetailHistoryOpen(o => !o)}
+                      >
+                        <Clock className="w-4 h-4" />
+                        {t('change_history') || "Change history"} ({timeline.length})
+                        {leadDetailHistoryOpen
+                          ? <ChevronUp className="w-4 h-4 ml-auto" />
+                          : <ChevronDown className="w-4 h-4 ml-auto" />}
+                      </button>
+                      {leadDetailHistoryOpen && (
+                        <div className="mt-3 space-y-3 max-h-60 overflow-y-auto">
+                          {timeline.map((entry) => {
+                            if (entry.kind === 'note') {
+                              return (
+                                <div
+                                  key={entry.id}
+                                  className="border border-amber-200 bg-amber-50/60 rounded-lg p-3 text-sm"
+                                >
+                                  <div className="flex items-center justify-between mb-2">
+                                    <span className="font-medium text-slate-800 flex items-center gap-1.5">
+                                      <Pencil className="w-3.5 h-3.5 text-amber-600" />
+                                      {entry.user_name || t('action_note') || 'Note'}
+                                    </span>
+                                    <span className="text-xs text-slate-500">
+                                      {entry.created_at ? new Date(entry.created_at).toLocaleString(undefined, { hour12: false }) : ''}
+                                    </span>
+                                  </div>
+                                  <div className="text-slate-800 whitespace-pre-wrap text-xs">
+                                    {entry.description || '—'}
+                                  </div>
+                                </div>
+                              );
+                            }
+                            return (
+                              <div key={entry.id} className="border rounded-lg p-3 bg-slate-50 text-sm">
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="font-medium text-slate-800">
+                                    {entry.user_name}
+                                  </span>
+                                  <span className="text-xs text-slate-500">
+                                    {new Date(entry.created_at).toLocaleString(undefined, { hour12: false })}
+                                  </span>
+                                </div>
+                                <div className="space-y-1">
+                                  {entry.changedFields.map(field => (
+                                    <div key={field} className="flex flex-wrap gap-1 text-xs">
+                                      <span className="font-medium text-slate-600">
+                                        {detailFieldLabels[field] || field}:
+                                      </span>
+                                      <span className="text-red-600 line-through">
+                                        {detailFormatFieldValue(field, entry.oldVals[field])}
+                                      </span>
+                                      <span className="text-slate-400">&rarr;</span>
+                                      <span className="text-green-600">
+                                        {detailFormatFieldValue(field, entry.newVals[field])}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+              </div>
+              {/* Sticky action footer — pinned to the bottom of the
+                  modal regardless of how tall the body grows. Buttons
+                  wrap onto multiple rows if the viewport is narrow so
+                  Close stays visible even with long Uzbek labels. */}
+              <div className="flex flex-wrap gap-2 justify-end px-6 py-3 border-t bg-white flex-shrink-0">
+                {canDelete(MODULES.CUSTOMERS) && onDeleteLead && (
+                  <Button
+                    variant="outline"
+                    type="button"
+                    onClick={() => {
+                      const target = leadDetailModal.lead;
+                      setLeadDetailModal({ open: false, lead: null });
+                      onDeleteLead(target);
+                    }}
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 gap-2"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    {t('delete') || 'Delete'}
+                  </Button>
+                )}
+                {canUpdate(MODULES.CUSTOMERS) && onCallLead && lead.phone && (
+                  <Button
+                    variant="outline"
+                    type="button"
+                    onClick={() => {
+                      const target = leadDetailModal.lead;
+                      setLeadDetailModal({ open: false, lead: null });
+                      onCallLead(target);
+                    }}
+                    className="text-green-600 hover:text-green-700 hover:bg-green-50 border-green-200 gap-2"
+                  >
+                    <PhoneCall className="w-4 h-4" />
+                    {t('call') || 'Call'}
+                  </Button>
+                )}
+                {canUpdate(MODULES.CUSTOMERS) && onEditLead && (
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      const target = leadDetailModal.lead;
+                      setLeadDetailModal({ open: false, lead: null });
+                      onEditLead(target);
+                    }}
+                    className="gap-2 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90"
+                  >
+                    <Pencil className="w-4 h-4" />
+                    {t('edit') || 'Edit'}
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  type="button"
+                  onClick={() => setLeadDetailModal({ open: false, lead: null })}
+                >
+                  {t('close') || 'Close'}
+                </Button>
+              </div>
+              </>
+            );
+          })()}
+        </DialogContent>
       </Dialog>
     </div>
   );

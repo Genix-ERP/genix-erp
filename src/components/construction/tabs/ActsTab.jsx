@@ -13,6 +13,7 @@ import { Plus, Trash2, CheckCircle, XCircle, ArrowLeft, FileText, Eye, Download,
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import Loader from '@/components/ui/loader';
 import { UploadFile } from '@/api/integrations';
 import { toast } from 'sonner';
 
@@ -64,8 +65,8 @@ const ActsTab = ({ project }) => {
       setActTypes([
         { value: 'acceptance', label: 'Qabul qilish', color: 'bg-green-100 text-green-700' },
         { value: 'defect', label: 'Nuqson', color: 'bg-red-100 text-red-700' },
-        { value: 'ks2', label: 'KS-2', color: 'bg-blue-100 text-blue-700' },
-        { value: 'ks3', label: 'KS-3', color: 'bg-purple-100 text-purple-700' },
+        { value: 'ks2', label: 'Forma 2', color: 'bg-blue-100 text-blue-700' },
+        { value: 'ks3', label: 'Forma 3', color: 'bg-purple-100 text-purple-700' },
         { value: 'hidden_work', label: 'Yashirin ish', color: 'bg-amber-100 text-amber-700' },
       ]);
     } finally {
@@ -483,7 +484,7 @@ const ActsTab = ({ project }) => {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="text-center py-8 text-slate-400">{t('loading') || 'Yuklanmoqda...'}</div>
+            <Loader />
           ) : (acts || []).length === 0 ? (
             <div className="text-center py-12">
               <FileText className="w-16 h-16 text-slate-300 mx-auto mb-4" />
@@ -592,7 +593,13 @@ const ActsTab = ({ project }) => {
               <div className="mt-2 flex flex-wrap gap-3">
                 {form.photos.map((file, idx) => (
                   <div key={idx} className="relative w-20 h-20 rounded-lg overflow-hidden border border-slate-200 group">
-                    <img src={URL.createObjectURL(file)} alt="" className="w-full h-full object-cover" />
+                    <img
+                      src={URL.createObjectURL(file)}
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
+                      className="w-full h-full object-cover"
+                    />
                     <button
                       type="button"
                       onClick={() => setForm(f => ({ ...f, photos: f.photos.filter((_, i) => i !== idx) }))}
@@ -637,7 +644,7 @@ const ActsTab = ({ project }) => {
               <Input
                 value={newTypeLabel}
                 onChange={e => setNewTypeLabel(e.target.value)}
-                placeholder={"Masalan: Sinov akti"}
+                placeholder={"Sinov akti"}
                 onKeyDown={e => { if (e.key === 'Enter') handleCreateActType(); }}
               />
             </div>

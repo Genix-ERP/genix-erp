@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { hrService, purchaseService, salesService, financeService, procurementService, projectsService } from '@/api/services';
 import { useCompany } from './CompanyContext';
+import { useEmployeePermissions } from './EmployeePermissionsContext';
 import { checkBackendHealth } from '@/config/dataMode';
 
 // Storage key for permissions only (still using localStorage)
@@ -29,7 +30,8 @@ const APP_MODULES = [
   { id: 'assets', nameKey: 'assets', icon: 'Monitor', appId: 'assets' },
   { id: 'expenses', nameKey: 'expenses', icon: 'Receipt', appId: 'expenses' },
   { id: 'payroll', nameKey: 'payroll', icon: 'DollarSign', appId: 'payroll' },
-  { id: 'contracts', nameKey: 'contracts', icon: 'FileText', appId: 'contracts' }
+  { id: 'contracts', nameKey: 'contracts', icon: 'FileText', appId: 'contracts' },
+  { id: 'director_dashboard', nameKey: 'director_dashboard', icon: 'BarChart3', appId: 'director_dashboard' }
 ];
 
 const ALL_MODULES = [...CORE_MODULES, ...APP_MODULES];
@@ -38,6 +40,7 @@ const ModulesContext = createContext();
 
 export function ModulesProvider({ children }) {
   const { activeCompany } = useCompany();
+  const { canAccessModule, isAdmin } = useEmployeePermissions();
   const [employees, setEmployees] = useState([]);
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [salesOrders, setSalesOrders] = useState([]);
@@ -79,7 +82,16 @@ export function ModulesProvider({ children }) {
         return;
       }
 
-      // Load all data from API in parallel
+      // Load all data from API in parallel.
+      // Each call is gated by the user's actual module permission. Without
+      // this gating, ModulesContext was firing every backend list endpoint
+      // on every page mount and producing a wall of red 403s in the
+      // network tab for anything the user wasn't permissioned for
+      // (e.g. payroll-periods, contracts, sales orders). Admins skip all
+      // gates and load everything.
+      const allow = (moduleId) => isAdmin || canAccessModule(moduleId);
+      const skip = () => Promise.resolve([]);
+
       const [
         empData,
         poData,
@@ -90,14 +102,18 @@ export function ModulesProvider({ children }) {
         assetsData,
         payrollsData
       ] = await Promise.all([
-        hrService.listEmployees().catch(err => { console.warn('Employees API error:', err); return []; }),
-        purchaseService.listOrders().catch(err => { console.warn('PO API error:', err); return []; }),
-        salesService.listOrders({ page_size: 1000 }).catch(err => { console.warn('SO API error:', err); return []; }),
-        projectsService.listProjects().catch(err => { console.warn('Projects API error:', err); return []; }),
-        procurementService.listContracts().catch(err => { console.warn('Contracts API error:', err); return []; }),
-        financeService.listExpenses().catch(err => { console.warn('Expenses API error:', err); return []; }),
-        financeService.listFixedAssets().catch(err => { console.warn('Assets API error:', err); return []; }),
-        hrService.listPayrollPeriods().catch(err => { console.warn('Payroll API error:', err); return []; })
+        allow('hr')          ? hrService.listEmployees().catch(err => { console.warn('Employees API error:', err); return []; })            : skip(),
+        allow('purchase')    ? purchaseService.listOrders().catch(err => { console.warn('PO API error:', err); return []; })                : skip(),
+        allow('sales')       ? salesService.listOrders({ page_size: 1000 }).catch(err => { console.warn('SO API error:', err); return []; }) : skip(),
+        allow('projects')    ? projectsService.listProjects().catch(err => { console.warn('Projects API error:', err); return []; })        : skip(),
+        allow('contracts') || allow('purchase')
+                             ? procurementService.listContracts().catch(err => { console.warn('Contracts API error:', err); return []; })   : skip(),
+        allow('expenses') || allow('finance')
+                             ? financeService.listExpenses().catch(err => { console.warn('Expenses API error:', err); return []; })         : skip(),
+        allow('assets') || allow('finance')
+                             ? financeService.listFixedAssets().catch(err => { console.warn('Assets API error:', err); return []; })        : skip(),
+        allow('hr') || allow('payroll')
+                             ? hrService.listPayrollPeriods().catch(err => { console.warn('Payroll API error:', err); return []; })         : skip()
       ]);
 
       // Helper to safely extract array from API response
@@ -173,7 +189,7 @@ export function ModulesProvider({ children }) {
     } finally {
       setIsLoading(false);
     }
-  }, [activeCompany]);
+  }, [activeCompany, canAccessModule, isAdmin]);
 
   useEffect(() => {
     loadData();
@@ -336,7 +352,10 @@ export function ModulesProvider({ children }) {
       location: data.location,
       custodian_name: data.custodian_name,
       warranty_expiry: data.warranty_expiry,
-      notes: data.notes
+      notes: data.notes,
+      supplier_id: data.supplier_id,
+      supplier_name: data.supplier_name,
+      payment_method: data.payment_method,
     };
     const result = await financeService.createFixedAsset(apiData);
     if (result && result.id) {
@@ -420,7 +439,10 @@ export function ModulesProvider({ children }) {
       payment_method: data.payment_method,
       reference: data.reference || data.claim_number,
       reimbursable: data.reimbursable || false,
-      notes: data.notes
+      notes: data.notes,
+      // Profit-tax recognition flag — forwarded when caller provides it;
+      // backend defaults to TRUE otherwise (migration 336).
+      ...(data.is_recognized !== undefined && { is_recognized: Boolean(data.is_recognized) }),
     };
     const result = await financeService.createExpense(apiData);
     if (result && result.id) {
@@ -452,7 +474,8 @@ export function ModulesProvider({ children }) {
       reference: data.reference,
       reimbursable: data.reimbursable,
       notes: data.notes,
-      status: data.status
+      status: data.status,
+      ...(data.is_recognized !== undefined && { is_recognized: Boolean(data.is_recognized) }),
     };
     const result = await financeService.updateExpense(id, apiData);
     if (result) {
@@ -481,6 +504,18 @@ export function ModulesProvider({ children }) {
       return result;
     }
     throw new Error('Failed to approve expense');
+  }, []);
+
+  // Flip the profit-tax recognition flag on a single expense. Uses the
+  // dedicated PATCH /expenses/:id/recognize endpoint (see §7.2 of
+  // ТЗ_Ish_Haqi_Soliq_Tolik.docx) and mirrors the change locally so the
+  // Expenses table re-colours immediately without a full reload.
+  const recognizeExpense = useCallback(async (id, isRecognized) => {
+    const result = await financeService.recognizeExpense(id, isRecognized);
+    setExpenses(prev =>
+      prev.map(e => (e.id === id ? { ...e, ...(result || {}), is_recognized: Boolean(isRecognized) } : e))
+    );
+    return result;
   }, []);
 
   // Payroll CRUD (maps to payroll periods in backend) - API only
@@ -517,7 +552,11 @@ export function ModulesProvider({ children }) {
             total_deductions: data.total_deductions || 0,
             net_salary: data.net_pay || 0,
             payment_method: data.payment_method || 'bank_transfer',
-            status: 'calculated'
+            status: 'calculated',
+            // migration 330: pass through the list of tax IDs the user X-ed out in
+            // the payroll modal. If the caller didn't supply the field, we send
+            // undefined so the server uses its default (apply all active taxes).
+            excluded_tax_ids: Array.isArray(data.excluded_tax_ids) ? data.excluded_tax_ids : undefined,
           });
         } catch (entryError) {
           console.warn('Failed to create payroll entry:', entryError);
@@ -528,6 +567,7 @@ export function ModulesProvider({ children }) {
         ...periodResult,
         payroll_number: periodResult.period_code,
         period_name: periodResult.period_name,
+        employee_id: data.employee_id || periodResult.employee_id || '',
         employee_name: data.employee_name || periodResult.period_name, // Store employee name for display
         pay_period_start: periodResult.start_date,
         pay_period_end: periodResult.end_date,
@@ -720,7 +760,7 @@ export function ModulesProvider({ children }) {
     // Asset methods
     createAsset, updateAsset, deleteAsset, disposeAsset,
     // Expense methods
-    createExpense, updateExpense, deleteExpense, approveExpense,
+    createExpense, updateExpense, deleteExpense, approveExpense, recognizeExpense,
     // Payroll methods
     createPayroll, updatePayroll, deletePayroll, processPayroll,
     // Contract methods

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Check, ChevronDown } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Check, ChevronDown, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -11,11 +11,54 @@ import {
   CommandGroup,
   CommandItem,
 } from "@/components/ui/command";
+import apiClient from "@/api/client";
 
-export default function ProductCombobox({ products = [], value, onValueChange, placeholder = "Mahsulot tanlang", t = (k) => k }) {
+// `valueLabel` (optional): pre-known display name for the current `value`.
+// Use this when the parent has the product's name in hand (e.g. fetched
+// alongside an order line) but the product itself isn't in `products` —
+// happens on edit screens where `products` is paginated or filtered by
+// org and may not include the line's product. Without this fallback
+// the combobox renders the placeholder even when a real id is selected.
+export default function ProductCombobox({ products: initialProducts = [], value, valueLabel, onValueChange, placeholder = "Mahsulot tanlang", t = (k) => k }) {
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
+  // Remember the last selected product so the label stays after search clears
+  const [lastSelected, setLastSelected] = useState(null);
+  const debounceRef = useRef(null);
 
-  const selectedProduct = products.find((p) => p.id === value);
+  // Use initial products when no search, search results when searching
+  const displayProducts = search.length >= 2 ? searchResults : initialProducts;
+  const selectedProduct = [...initialProducts, ...searchResults, ...(lastSelected ? [lastSelected] : [])].find((p) => p.id === value);
+
+  // Clear lastSelected when value is externally cleared
+  useEffect(() => {
+    if (!value) setLastSelected(null);
+  }, [value]);
+
+  // Server-side search with debounce
+  useEffect(() => {
+    if (search.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    debounceRef.current = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const res = await apiClient.get('/products', { params: { search, limit: 50 } });
+        setSearchResults(res.data?.data || []);
+      } catch {
+        setSearchResults([]);
+      }
+      setIsSearching(false);
+    }, 300);
+
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [search]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -24,39 +67,110 @@ export default function ProductCombobox({ products = [], value, onValueChange, p
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className="w-full justify-between font-normal h-9 px-3 text-sm"
+          // Truncation chain that actually works inside a flex row
+          // with an unconstrained Tailwind Button:
+          //  - max-w-full + overflow-hidden on the Button itself
+          //    (so it can never exceed its column even if a child
+          //    insists on its intrinsic width)
+          //  - inline style on the span: min-width:0, flex:1,
+          //    overflow:hidden, text-overflow:ellipsis, white-space:nowrap
+          //    (Tailwind's `truncate` sometimes loses to shadcn
+          //    Button's intrinsic flex-children sizing — explicit
+          //    inline styles win every cascade fight)
+          className="w-full max-w-full overflow-hidden justify-between font-normal h-9 px-3 text-sm"
         >
-          <span className="truncate">
-            {selectedProduct ? selectedProduct.name : placeholder}
+          <span
+            className="text-left"
+            style={{
+              minWidth: 0,
+              flex: '1 1 0%',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              display: 'block',
+            }}
+          >
+            {selectedProduct ? selectedProduct.name : (value && valueLabel ? valueLabel : placeholder)}
           </span>
           <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[300px] p-0" align="start">
-        <Command>
-          <CommandInput placeholder={t('search') || "Qidirish..."} />
-          <CommandList>
-            <CommandEmpty>{t('not_found') || "Topilmadi"}</CommandEmpty>
-            <CommandGroup>
-              {products.map((product) => (
-                <CommandItem
-                  key={product.id}
-                  value={product.name}
-                  onSelect={() => {
-                    onValueChange(product.id);
-                    setOpen(false);
-                  }}
-                >
-                  <Check
-                    className={cn(
-                      "mr-2 h-4 w-4",
-                      value === product.id ? "opacity-100" : "opacity-0"
-                    )}
-                  />
-                  {product.name}
-                </CommandItem>
-              ))}
-            </CommandGroup>
+      {/* noPortal=true: ProductCombobox is almost always used inside a
+          Radix Dialog (sales order modal, purchase order modal, stock
+          transfer modal, ...). When the popover renders through the
+          default Portal, it lands outside the Dialog tree where
+          react-remove-scroll (used by Radix Dialog) blocks wheel
+          events — the list looks scrollable but mouse wheel does
+          nothing. Rendering inline keeps it as a descendant of the
+          Dialog so wheel events flow through.
+          See popover.jsx for the noPortal escape hatch. */}
+      <PopoverContent noPortal className="w-[320px] p-0" align="start">
+        <Command shouldFilter={false}>
+          <CommandInput
+            placeholder={t('search') || "Qidirish..."}
+            value={search}
+            onValueChange={setSearch}
+          />
+          {/* Inline style (rather than className) so we beat cmdk's
+              default `max-h-[300px]` regardless of Tailwind class ordering.
+              className was getting silently overridden inside the dialog
+              and the list stayed un-scrollable past the first ~9 items. */}
+          <CommandList style={{ maxHeight: 340, overflowY: 'auto' }}>
+            {isSearching ? (
+              <div className="flex items-center justify-center py-6">
+                <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
+              </div>
+            ) : displayProducts.length === 0 ? (
+              <CommandEmpty>{search.length >= 2 ? (t('not_found') || "Topilmadi") : (t('type_to_search') || "Qidirish uchun yozing...")}</CommandEmpty>
+            ) : (
+              <CommandGroup>
+                {displayProducts.map((product) => (
+                  <CommandItem
+                    key={product.id}
+                    value={product.id}
+                    // Native HTML tooltip — reveals the full product name on
+                    // hover when the truncated label hides part of it.
+                    title={product.name}
+                    // Inline styles so the row clips inside the popover
+                    // width and the child span actually truncates. Without
+                    // overflow:hidden + min-width:0 on a flex child, the
+                    // text just extends past the container and Tailwind's
+                    // `truncate` becomes a no-op.
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      overflow: 'hidden',
+                      minWidth: 0,
+                    }}
+                    onSelect={() => {
+                      setLastSelected(product);
+                      onValueChange(product.id, product);
+                      setOpen(false);
+                      setSearch("");
+                    }}
+                  >
+                    <Check
+                      className={cn(
+                        "mr-2 h-4 w-4 shrink-0",
+                        value === product.id ? "opacity-100" : "opacity-0"
+                      )}
+                    />
+                    <span
+                      style={{
+                        minWidth: 0,
+                        flex: '1 1 0%',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        display: 'block',
+                      }}
+                    >
+                      {product.name}
+                    </span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
           </CommandList>
         </Command>
       </PopoverContent>

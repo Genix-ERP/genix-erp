@@ -1,6 +1,7 @@
 
 
 import React from "react";
+import { createPortal } from "react-dom";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import {
@@ -27,10 +28,12 @@ import {
   Cog,
   Ship,
   Building2,
+  BarChart3,
   Sparkles,
   Phone
 } from "lucide-react";
 import UserMenu from "@/components/ui/user-menu";
+import NotificationBell from "@/components/ui/NotificationBell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -62,8 +65,6 @@ import { FinancialsProvider } from "@/components/contexts/FinancialsContext";
 import { ModulesProvider } from "@/components/contexts/ModulesContext";
 import { AIProvider } from "@/components/contexts/AIContext";
 import { SubscriptionProvider } from "@/components/contexts/SubscriptionContext";
-import TrialBanner from "@/components/ui/TrialBanner";
-import PaymentWall from "@/components/ui/PaymentWall";
 import { CompanyProvider } from "@/components/contexts/CompanyContext";
 import { RolesProvider } from "@/components/contexts/RolesContext";
 import { ProcurementProvider } from "@/components/contexts/ProcurementContext";
@@ -71,16 +72,19 @@ import { SalesProvider } from "@/components/contexts/SalesContext";
 import { ManufacturingProvider } from "@/components/contexts/ManufacturingContext";
 import { HRProvider } from "@/components/contexts/HRContext";
 import { ProjectsProvider } from "@/components/contexts/ProjectsContext";
-import { AdminSettingsProvider } from "@/components/contexts/AdminSettingsContext";
+import { AdminSettingsProvider, useAdminSettings } from "@/components/contexts/AdminSettingsContext";
+import { resolveBrandLogoUrl, readStoredBrandLogo } from "@/utils/brandLogo";
 import { CargoProvider } from "@/components/contexts/CargoContext";
 import { ConstructionProvider } from "@/components/contexts/ConstructionContext";
 import { useTranslation } from "@/components/utils/translations";
+import { renderNotification } from "@/utils/notificationCatalog";
 import { useAuth } from "@/components/contexts/AuthContext";
 import { useInventory } from "@/components/contexts/InventoryContext";
 import { useModules } from "@/components/contexts/ModulesContext";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { useEmployeePermissions } from "@/components/contexts/EmployeePermissionsContext";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import apiClient from "@/api/client";
 
 // Navigation link that closes mobile sidebar on click
 function NavLink({ item, isActive }) {
@@ -126,23 +130,26 @@ function LayoutContent({ children, currentPageName }) {
   const location = useLocation();
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { installedApps, isAppInstalled } = useInstalledApps();
+  const { isAppInstalled, isAppHiddenInActiveCompany } = useInstalledApps();
   const [searchQuery, setSearchQuery] = React.useState("");
   const [isAIChatOpen, setIsAIChatOpen] = React.useState(false);
   const [isPhoneOpen, setIsPhoneOpen] = React.useState(false);
   const [aiInitialPrompt, setAIInitialPrompt] = React.useState(null);
-  const [paymentWallOpen, setPaymentWallOpen] = React.useState(false);
+  const [unreadCount, setUnreadCount] = React.useState(0);
+  const [notifDropdownOpen, setNotifDropdownOpen] = React.useState(false);
+  const [recentNotifications, setRecentNotifications] = React.useState([]);
   const { user: currentUser, logout, isSiteAdmin, isOwner } = useAuth();
-  const { canAccessModule, isAdmin, isLoading: permissionsLoading } = useEmployeePermissions();
+  const { canAccessModule, isAdmin } = useEmployeePermissions();
+  const { settings: adminSettings } = useAdminSettings();
+  // Always fall back to the public localStorage cache when settings don't
+  // (yet) have a logo. The cache is only updated after an authoritative
+  // backend response, so it doesn't get stale-cleared during initial mount.
+  const settingsLogo = adminSettings?.general?.company?.logo_url || null;
+  const brandLogoUrl = resolveBrandLogoUrl(settingsLogo || readStoredBrandLogo());
 
-  // Set browser title based on language
+  // Set browser title
   React.useEffect(() => {
-    const titles = {
-      uz: "Genix ERP — Sun'iy intellekt orqali biznes boshqaruvi",
-      ru: "Genix ERP — Система управления бизнесом на основе ИИ",
-      en: "Genix ERP — AI-Powered Business Management System",
-    };
-    document.title = titles[language] || titles.en;
+    document.title = "Genix";
   }, [language]);
 
   // Force re-render when user role changes by including user in dependency tracking
@@ -161,6 +168,48 @@ function LayoutContent({ children, currentPageName }) {
       delete window.openAIChat;
     };
   }, []);
+
+  // Poll unread notification count every 30s. Uses the shared axios
+  // client so the baseURL (VITE_API_URL) and auth/tenant headers come
+  // from the same interceptors as the rest of the app — avoids leaking
+  // a stray localhost:8080 fallback into production builds.
+  const fetchUnreadCount = React.useCallback(async () => {
+    if (!localStorage.getItem('accessToken')) return;
+    try {
+      const res = await apiClient.get('/notifications/unread-count');
+      setUnreadCount(res.data?.data?.count || 0);
+    } catch (e) { /* silent */ }
+  }, []);
+
+  const fetchRecentNotifications = React.useCallback(async () => {
+    if (!localStorage.getItem('accessToken')) return;
+    try {
+      const res = await apiClient.get('/notifications', { params: { is_read: false } });
+      setRecentNotifications((res.data?.data || []).slice(0, 8));
+    } catch (e) { /* silent */ }
+  }, []);
+
+  const markAllRead = React.useCallback(async () => {
+    if (!localStorage.getItem('accessToken')) return;
+    try {
+      await apiClient.put('/notifications/read-all');
+      setUnreadCount(0);
+      setRecentNotifications([]);
+    } catch (e) { /* silent */ }
+  }, []);
+
+  React.useEffect(() => {
+    fetchUnreadCount();
+    const interval = setInterval(fetchUnreadCount, 30000);
+    return () => clearInterval(interval);
+  }, [fetchUnreadCount]);
+
+  // Fetch recent notifications when dropdown opens
+  React.useEffect(() => {
+    if (notifDropdownOpen) {
+      fetchRecentNotifications();
+    }
+  }, [notifDropdownOpen, fetchRecentNotifications]);
 
   // Get data for dynamic AI insights
   const { items: inventory } = useInventory();
@@ -193,7 +242,7 @@ function LayoutContent({ children, currentPageName }) {
       title: t("inventory"),
       url: createPageUrl("Inventory"),
       icon: Package,
-      badge: "3",
+      badge: null,
       moduleId: 'inventory'
     },
     'crm': {
@@ -266,6 +315,11 @@ function LayoutContent({ children, currentPageName }) {
       badge: null,
       moduleId: 'expenses'
     },
+    // NOTE: ТЗ_Ish_Haqi_Soliq_Tolik.docx §8.1 lists "Фойда солиғи" as a
+    // TAB ("Солиқ ҳисоби") inside an existing screen, not a standalone
+    // sidebar module. The route /profit-tax still exists so the page can
+    // be linked from inside another page (Financials/Expenses), but we
+    // don't surface it as a top-level sidebar entry.
     'payroll': {
       title: t("payroll"),
       url: createPageUrl("Payroll"),
@@ -293,6 +347,13 @@ function LayoutContent({ children, currentPageName }) {
       icon: Building2,
       badge: null,
       moduleId: 'construction'
+    },
+    'director_dashboard': {
+      title: t("director_dashboard") || 'Direktor paneli',
+      url: createPageUrl("DirectorDashboard"),
+      icon: BarChart3,
+      badge: null,
+      moduleId: 'director_dashboard'
     }
   }), [t]);
 
@@ -341,21 +402,28 @@ function LayoutContent({ children, currentPageName }) {
     // Add Dashboard first (always visible)
     dynamicItems.push(coreNavigationItems[0]);
 
-    // Add installed app modules - only if user has permission to access
+    // Add app modules based on installation status and permissions
+    const isPrivilegedUser = isAdmin || isUserSiteAdmin || isUserOwner;
     Object.keys(appNavigationMap).forEach(appId => {
       // Skip POS here, we'll add it separately after sales_orders
       if (appId === 'pos') return;
 
       const appConfig = appNavigationMap[appId];
-      // Check if app is installed AND user has permission to access the module
-      // Admins, site admins, and owners always have access
-      const hasAccess = isAdmin || isUserSiteAdmin || isUserOwner || canAccessModule(appConfig.moduleId);
-      if (isAppInstalled(appId) && hasAccess) {
+      const installed = isAppInstalled(appId);
+      const hasModulePermission = canAccessModule(appConfig.moduleId);
+      // Per-org hide override (migration 386). Even if the app is
+      // installed tenant-wide and the user has permission, an admin
+      // can hide specific apps inside specific companies (e.g. the
+      // Cargo subsidiary doesn't show Construction).
+      const hiddenInActiveCompany = isAppHiddenInActiveCompany(appId);
+
+      // Privileged users: show if app is installed (they have access to everything)
+      // Employees: show if they have explicit module permission (permission implies installation)
+      const hasAccess = isPrivilegedUser || hasModulePermission;
+      const shouldShow = isPrivilegedUser ? installed : (installed || hasModulePermission);
+
+      if (shouldShow && hasAccess && !hiddenInActiveCompany) {
         dynamicItems.push(appConfig);
-        // POS temporarily hidden - uncomment when ready
-        // if (appId === 'sales_orders' && appNavigationMap['pos']) {
-        //   dynamicItems.push(appNavigationMap['pos']);
-        // }
       }
     });
 
@@ -384,7 +452,7 @@ function LayoutContent({ children, currentPageName }) {
     dynamicItems.push(coreNavigationItems[2]);
 
     return dynamicItems;
-  }, [coreNavigationItems, adminNavigationItems, appNavigationMap, isAdmin, isUserSiteAdmin, isUserOwner, userRole, canAccessModule, isAppInstalled, t]);
+  }, [coreNavigationItems, adminNavigationItems, appNavigationMap, isAdmin, isUserSiteAdmin, isUserOwner, userRole, canAccessModule, isAppInstalled, isAppHiddenInActiveCompany, t]);
 
   const filteredNavigationItems = React.useMemo(() => {
     if (!searchQuery.trim()) return navigationItems;
@@ -396,7 +464,7 @@ function LayoutContent({ children, currentPageName }) {
 
   return (
     <SidebarProvider>
-      <div className="min-h-screen flex w-full bg-gradient-to-br from-slate-50 to-slate-100">
+      <div className="min-h-screen flex w-full bg-gradient-to-br from-white to-slate-100">
         <style>
           {`
             :root {
@@ -407,7 +475,7 @@ function LayoutContent({ children, currentPageName }) {
               --genix-green: #10B981;
               --genix-orange: #F59E0B;
             }
-            .genix-logo-transparent {
+            .brand-logo-transparent {
               mix-blend-mode: multiply;
               filter: contrast(1.1);
             }
@@ -415,12 +483,12 @@ function LayoutContent({ children, currentPageName }) {
         </style>
         
         <Sidebar className="border-r border-slate-200/60 bg-white/80 backdrop-blur-xl" role="navigation" aria-label="Main navigation">
-          <SidebarHeader className="border-b border-slate-100 px-4 py-5">
-            <div className="flex items-center justify-center h-10 overflow-hidden">
+          <SidebarHeader className="border-b border-slate-100 px-4 py-3">
+            <div className="flex items-center justify-center w-full overflow-hidden">
               <img
-                src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68d244cb8a392237a5acfbd9/a049d6898_Logo.png"
-                alt="Genix"
-                className="h-[120px] w-auto object-contain genix-logo-transparent"
+                src={brandLogoUrl}
+                alt="Logo"
+                className="w-full max-w-[96px] h-auto object-contain brand-logo-transparent"
               />
             </div>
           </SidebarHeader>
@@ -458,7 +526,6 @@ function LayoutContent({ children, currentPageName }) {
         </Sidebar>
 
         <main className="flex-1 flex flex-col min-w-0" aria-label="Main content">
-          <TrialBanner onPayClick={() => setPaymentWallOpen(true)} />
           <header className="bg-white/80 backdrop-blur-xl border-b border-slate-200/60 px-4 md:px-6 py-4 shadow-sm" role="banner">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
@@ -467,6 +534,7 @@ function LayoutContent({ children, currentPageName }) {
                   <h1 className="text-xl md:text-2xl font-bold text-[var(--genix-navy)]">
                     {currentPageName === 'AdminPanel' ? t('admin_panel') :
                      currentPageName === 'AIAssistant' ? t('ai_assistant') :
+                     currentPageName === 'DirectorDashboard' ? t('director_dashboard') :
                      (t(currentPageName?.toLowerCase()) || t("dashboard"))}
                   </h1>
                 </div>
@@ -495,11 +563,7 @@ function LayoutContent({ children, currentPageName }) {
                 >
                   <Phone className="w-4 h-4 md:w-5 md:h-5" />
                 </Button>
-                <Link to={createPageUrl("Notifications")}>
-                  <Button variant="ghost" size="icon" className="relative hover:bg-slate-100 rounded-full transition-all duration-200">
-                    <Bell className="w-4 h-4 md:w-5 md:h-5" />
-                  </Button>
-                </Link>
+                <NotificationBell />
                 {/* Company Switcher next to profile - Odoo style */}
                 <div className="hidden md:flex items-center gap-1.5 ml-1">
                   <div className="w-px h-6 bg-slate-200"></div>
@@ -517,9 +581,6 @@ function LayoutContent({ children, currentPageName }) {
           </div>
         </main>
       </div>
-
-      {/* Payment Wall (auto-shows when trial expires; can also be opened early) */}
-      <PaymentWall visible={paymentWallOpen} onClose={() => setPaymentWallOpen(false)} />
 
       {/* Phone Widget */}
       <PhoneWidget

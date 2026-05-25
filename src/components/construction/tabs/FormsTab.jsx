@@ -4,15 +4,18 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import Loader from '@/components/ui/loader';
 import { Plus, Trash2, CheckCircle, XCircle, ArrowLeft, FileText, Zap, Eye, Download, PenLine, Ban, Loader2, ChevronUp, ChevronDown, Send, Save, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { sortBuildings } from '@/utils/naturalSort';
 import { toast } from 'sonner';
 
 const TYPE_COLORS = {
@@ -26,6 +29,19 @@ const STATE_COLORS = {
   pending: 'bg-yellow-100 text-yellow-700',
   signed: 'bg-green-100 text-green-700',
   cancelled: 'bg-red-100 text-red-700',
+};
+
+// Acts created before the KS → Forma rename carry "KS2-001" / "KS3-001" style
+// names in the DB. Backend migration 327 + the updated prefix in
+// construction_acts.go cover new rows and the Type label, but existing names
+// stay as-is. This helper rewrites them for display so the Name column reads
+// "Forma 2-001" / "Forma 3-001" consistently. Only the leading KS[-]?[23]
+// token is replaced — any suffix (e.g. "-001", " #5") is preserved.
+const displayActName = (name) => {
+  if (!name || typeof name !== 'string') return name;
+  return name
+    .replace(/^KS[-_ ]?2\b/, 'Forma 2')
+    .replace(/^KS[-_ ]?3\b/, 'Forma 3');
 };
 
 const EMPTY_FORM = {
@@ -63,9 +79,31 @@ const FormsTab = ({ project }) => {
   const { t } = useTranslation(language);
   const { formatCurrency } = useCurrencyFormatter();
 
+  // Validate required client fields in a given form object
+  const REQUIRED_CLIENT_FIELDS = ['client_name', 'client_stir', 'client_bank_name', 'client_bank_account', 'client_mfo', 'client_address'];
+  const CLIENT_FIELD_LABELS = {
+    client_name: language === 'ru' ? 'Наименование заказчика' : language === 'uz' ? 'Buyurtmachi nomi' : 'Client Name',
+    client_stir: language === 'ru' ? 'ИНН (СТИР)' : 'STIR (TIN)',
+    client_bank_name: language === 'ru' ? 'Название банка' : language === 'uz' ? 'Bank nomi' : 'Bank Name',
+    client_bank_account: language === 'ru' ? 'Расчётный счёт' : language === 'uz' ? 'Hisob raqami' : 'Settlement Account',
+    client_mfo: 'MFO',
+    client_address: language === 'ru' ? 'Юридический адрес' : language === 'uz' ? 'Yuridik manzil' : 'Legal Address',
+  };
+
+  const validateClientFields = (formData) => {
+    const missing = REQUIRED_CLIENT_FIELDS.filter(f => !formData?.[f]?.trim());
+    if (missing.length === 0) return null;
+    const labels = missing.map(f => CLIENT_FIELD_LABELS[f] || f).join(', ');
+    return language === 'ru'
+      ? `Заполните данные заказчика: ${labels}`
+      : language === 'uz'
+        ? `Buyurtmachi ma'lumotlarini to'ldiring: ${labels}`
+        : `Fill in client details: ${labels}`;
+  };
+
   const TYPE_LABELS = {
-    ks2: t('forma_2') || 'Forma 2 (KS-2)',
-    ks3: t('forma_3') || 'Forma 3 (KS-3)',
+    ks2: t('forma_2') || 'Forma 2',
+    ks3: t('forma_3') || 'Forma 3',
     hidden_work: t('forma_19') || 'Forma 19',
   };
 
@@ -115,17 +153,38 @@ const FormsTab = ({ project }) => {
   const [editRowForm, setEditRowForm] = useState({});
   const [buildings, setBuildings] = useState([]);
 
-  // Auto-generate modals
+  // Client requisite defaults from project
+  const defaultClientFields = {
+    client_name: project?.client_name || '',
+    client_phone: project?.client_phone || '',
+    client_address: project?.client_address || '',
+    client_bank_name: project?.client_bank_name || '',
+    client_bank_account: project?.client_bank_account || '',
+    client_mfo: project?.client_mfo || '',
+    client_stir: project?.client_stir || '',
+    client_okonh: project?.client_okonh || '',
+    contract_number: project?.contract_number || '',
+    object_full_name: project?.object_full_name || '',
+    client_director_name: project?.client_director_name || '',
+    client_chief_accountant_name: project?.client_chief_accountant_name || '',
+  };
+
+  // Auto-generate modals — building_id '' = project-wide; otherwise scoped to that building
   const [showAutoGenModal, setShowAutoGenModal] = useState(false);
-  const [autoGenForm, setAutoGenForm] = useState({ subcontract_id: '', period_from: '', period_to: '' });
+  const [autoGenForm, setAutoGenForm] = useState({ subcontract_id: '', building_id: '', period_from: '', period_to: '', ...defaultClientFields });
   const [autoGenSaving, setAutoGenSaving] = useState(false);
   const [autoGenPreview, setAutoGenPreview] = useState(null); // preview data, null = not yet fetched
   const [autoGenLoadingPreview, setAutoGenLoadingPreview] = useState(false);
   const [showAutoGenConfirm, setShowAutoGenConfirm] = useState(false);
+  const [showAutoGenClientFields, setShowAutoGenClientFields] = useState(false);
 
   const [showGenF3Modal, setShowGenF3Modal] = useState(false);
-  const [genF3Form, setGenF3Form] = useState({ subcontract_id: '', period_from: '', period_to: '' });
+  const [genF3Form, setGenF3Form] = useState({ subcontract_id: '', building_id: '', period_from: '', period_to: '', ...defaultClientFields });
   const [genF3Saving, setGenF3Saving] = useState(false);
+  const [showGenF3ClientFields, setShowGenF3ClientFields] = useState(false);
+
+  // Forms list filter — reuses the same dropdown UI as the generate dialogs
+  const [filterBuildingId, setFilterBuildingId] = useState('');
 
   // Detail view state
   const [selectedAct, setSelectedAct] = useState(null);
@@ -158,6 +217,9 @@ const FormsTab = ({ project }) => {
     try {
       const params = {};
       if (filters.state) params.state = filters.state;
+      // Server-side building filter applies to Forma 2 + Forma 3. Forma 19
+      // already has its own building_id from migration so it respects it too.
+      if (filterBuildingId) params.building_id = filterBuildingId;
 
       const [f2s, f3s, f19s, subData, stagesData, buildingsData] = await Promise.all([
         (!filters.act_type || filters.act_type === 'ks2') ? constructionService.listF2(project.id, params).catch(() => []) : Promise.resolve([]),
@@ -170,13 +232,14 @@ const FormsTab = ({ project }) => {
       setActs([...(f2s || []), ...(f3s || []), ...(f19s || [])]);
       setSubcontracts(subData || []);
       setStages(stagesData || []);
-      setBuildings(buildingsData || []);
+      // Natural-sort ("block 1 / block 2 / block 10" order).
+      setBuildings(sortBuildings(buildingsData || []));
     } catch (e) {
       console.error('Failed to load forms:', e);
     } finally {
       setLoading(false);
     }
-  }, [project?.id, filters]);
+  }, [project?.id, filters, filterBuildingId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -435,6 +498,8 @@ const FormsTab = ({ project }) => {
 
   // Step 1: fetch preview only (no DB write)
   const handleAutoGeneratePreview = async () => {
+    const clientError = validateClientFields(autoGenForm);
+    if (clientError) { toast.error(clientError); setShowAutoGenClientFields(true); return; }
     if (!autoGenForm.period_from || !autoGenForm.period_to) {
       toast.error("Davrni kiriting"); return;
     }
@@ -442,6 +507,7 @@ const FormsTab = ({ project }) => {
     try {
       const preview = await constructionService.previewAutoGenerateKS2(project.id, {
         subcontract_id: autoGenForm.subcontract_id ? Number(autoGenForm.subcontract_id) : 0,
+        building_id: autoGenForm.building_id ? Number(autoGenForm.building_id) : 0,
         period_from: autoGenForm.period_from,
         period_to: autoGenForm.period_to,
       });
@@ -464,12 +530,25 @@ const FormsTab = ({ project }) => {
     try {
       await constructionService.autoGenerateKS2(project.id, {
         subcontract_id: autoGenForm.subcontract_id ? Number(autoGenForm.subcontract_id) : 0,
+        building_id: autoGenForm.building_id ? Number(autoGenForm.building_id) : 0,
         period_from: autoGenForm.period_from,
         period_to: autoGenForm.period_to,
+        client_name: autoGenForm.client_name,
+        client_phone: autoGenForm.client_phone,
+        client_address: autoGenForm.client_address,
+        client_bank_name: autoGenForm.client_bank_name,
+        client_bank_account: autoGenForm.client_bank_account,
+        client_mfo: autoGenForm.client_mfo,
+        client_stir: autoGenForm.client_stir,
+        client_okonh: autoGenForm.client_okonh,
+        contract_number: autoGenForm.contract_number,
+        object_full_name: autoGenForm.object_full_name,
+        client_director_name: autoGenForm.client_director_name,
+        client_chief_accountant_name: autoGenForm.client_chief_accountant_name,
       });
       setShowAutoGenConfirm(false);
       setAutoGenPreview(null);
-      toast.success('KS-2 avtomatik yaratildi');
+      toast.success('Forma 2 avtomatik yaratildi');
       load();
     } catch (e) {
       toast.error(e?.response?.data?.error?.message || e?.response?.data?.message || 'Xatolik yuz berdi');
@@ -486,6 +565,8 @@ const FormsTab = ({ project }) => {
   };
 
   const handleGenerateF3 = async () => {
+    const clientError = validateClientFields(genF3Form);
+    if (clientError) { toast.error(clientError); setShowGenF3ClientFields(true); return; }
     if (!genF3Form.period_from || !genF3Form.period_to) {
       toast.error("Davrni kiriting"); return;
     }
@@ -493,11 +574,24 @@ const FormsTab = ({ project }) => {
     try {
       await constructionService.generateF3(project.id, {
         subcontract_id: genF3Form.subcontract_id ? Number(genF3Form.subcontract_id) : 0,
+        building_id: genF3Form.building_id ? Number(genF3Form.building_id) : 0,
         period_from: genF3Form.period_from,
         period_to: genF3Form.period_to,
+        client_name: genF3Form.client_name,
+        client_phone: genF3Form.client_phone,
+        client_address: genF3Form.client_address,
+        client_bank_name: genF3Form.client_bank_name,
+        client_bank_account: genF3Form.client_bank_account,
+        client_mfo: genF3Form.client_mfo,
+        client_stir: genF3Form.client_stir,
+        client_okonh: genF3Form.client_okonh,
+        contract_number: genF3Form.contract_number,
+        object_full_name: genF3Form.object_full_name,
+        client_director_name: genF3Form.client_director_name,
+        client_chief_accountant_name: genF3Form.client_chief_accountant_name,
       });
       setShowGenF3Modal(false);
-      toast.success('KS-3 (Forma 3) yaratildi');
+      toast.success('Forma 3 yaratildi');
       load();
     } catch (e) {
       toast.error(e?.response?.data?.error?.message || e?.response?.data?.message || 'Xatolik yuz berdi');
@@ -595,7 +689,7 @@ const FormsTab = ({ project }) => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${act.name || 'act'}.pdf`;
+      a.download = `${displayActName(act.name) || 'act'}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
@@ -661,11 +755,24 @@ const FormsTab = ({ project }) => {
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
+    // Guard against a malformed deleteTarget: without a numeric id the
+    // service helpers would build URLs like `/construction/acts/undefined`
+    // and the backend would return 400. Fail loudly in the UI instead so
+    // a regression (e.g., a caller not wired to `id`) surfaces immediately.
+    if (deleteTarget.id == null) {
+      toast.error(t('error_occurred') || "Xatolik yuz berdi");
+      setDeleteTarget(null);
+      return;
+    }
     try {
+      // `deleteF2(projectId, f2Id)` and `deleteF19(projectId, actId)` both
+      // require the project id as their first argument. Passing only one
+      // argument was the source of the DELETE /construction/acts/undefined
+      // 400s seen in the backend logs.
       if (deleteTarget.act_type === 'ks2') {
-        await constructionService.deleteF2(deleteTarget.id);
+        await constructionService.deleteF2(project?.id, deleteTarget.id);
       } else if (deleteTarget.act_type === 'hidden_work') {
-        await constructionService.deleteF19(deleteTarget.id);
+        await constructionService.deleteF19(project?.id, deleteTarget.id);
       }
       setDeleteTarget(null);
       if (selectedAct?.id === deleteTarget.id) setSelectedAct(null);
@@ -930,17 +1037,17 @@ const FormsTab = ({ project }) => {
                           <td className="py-2 px-3">{row.material_name}</td>
                           <td className="py-2 px-3">{row.unit}</td>
                           <td className="py-2 px-3 text-right">
-                            <Input type="number" step="0.01" value={editRowForm.boshi} onChange={e => setEditRowForm(f => ({ ...f, boshi: e.target.value }))} className="w-20 h-7 text-right text-sm" onClick={e => e.stopPropagation()} />
+                            <NumberInput value={editRowForm.boshi} onChange={raw => setEditRowForm(f => ({ ...f, boshi: raw }))} className="w-20 h-7 text-right text-sm" onClick={e => e.stopPropagation()} />
                           </td>
                           <td className="py-2 px-3 text-right">
-                            <Input type="number" step="0.01" value={editRowForm.keldi} onChange={e => setEditRowForm(f => ({ ...f, keldi: e.target.value }))} className="w-20 h-7 text-right text-sm" onClick={e => e.stopPropagation()} />
+                            <NumberInput value={editRowForm.keldi} onChange={raw => setEditRowForm(f => ({ ...f, keldi: raw }))} className="w-20 h-7 text-right text-sm" onClick={e => e.stopPropagation()} />
                           </td>
                           <td className="py-2 px-3 text-right">
-                            <Input type="number" step="0.01" value={editRowForm.sarf} onChange={e => setEditRowForm(f => ({ ...f, sarf: e.target.value }))} className="w-20 h-7 text-right text-sm" onClick={e => e.stopPropagation()} onKeyDown={e => { if (e.key === 'Enter') saveF19Row(row.id); if (e.key === 'Escape') cancelEditF19Row(); }} />
+                            <NumberInput value={editRowForm.sarf} onChange={raw => setEditRowForm(f => ({ ...f, sarf: raw }))} className="w-20 h-7 text-right text-sm" onClick={e => e.stopPropagation()} onKeyDown={e => { if (e.key === 'Enter') saveF19Row(row.id); if (e.key === 'Escape') cancelEditF19Row(); }} />
                           </td>
                           <td className="py-2 px-3 text-right">{editQoldi.toFixed(2)}</td>
                           <td className="py-2 px-3 text-right">
-                            <Input type="number" step="0.01" value={editRowForm.cost_price} onChange={e => setEditRowForm(f => ({ ...f, cost_price: e.target.value }))} className="w-24 h-7 text-right text-sm" onClick={e => e.stopPropagation()} />
+                            <NumberInput value={editRowForm.cost_price} onChange={raw => setEditRowForm(f => ({ ...f, cost_price: raw }))} className="w-24 h-7 text-right text-sm" onClick={e => e.stopPropagation()} />
                           </td>
                           <td className="py-2 px-3 text-right font-medium">{formatCurrency(editSumma)}</td>
                           <td className="py-2 px-3">
@@ -1010,9 +1117,9 @@ const FormsTab = ({ project }) => {
               <div><Label>{t('material_name') || 'Material nomi'} *</Label><Input value={changeRowForm.material_name} onChange={e => setChangeRowForm(f => ({ ...f, material_name: e.target.value }))} placeholder="Material nomi" /></div>
               <div><Label>{t('unit') || 'Birlik'} *</Label><Input value={changeRowForm.unit} onChange={e => setChangeRowForm(f => ({ ...f, unit: e.target.value }))} placeholder="dona, kg, m3..." /></div>
               <div className="grid grid-cols-3 gap-3">
-                <div><Label>{t('keldi') || 'Keldi'}</Label><Input type="number" step="0.01" value={changeRowForm.keldi} onChange={e => setChangeRowForm(f => ({ ...f, keldi: e.target.value }))} /></div>
-                <div><Label>{t('sarf') || 'Sarflandi'}</Label><Input type="number" step="0.01" value={changeRowForm.sarf} onChange={e => setChangeRowForm(f => ({ ...f, sarf: e.target.value }))} /></div>
-                <div><Label>{t('price') || 'Narx'}</Label><Input type="number" step="0.01" value={changeRowForm.cost_price} onChange={e => setChangeRowForm(f => ({ ...f, cost_price: e.target.value }))} /></div>
+                <div><Label>{t('keldi') || 'Keldi'}</Label><NumberInput value={changeRowForm.keldi} onChange={raw => setChangeRowForm(f => ({ ...f, keldi: raw }))} /></div>
+                <div><Label>{t('sarf') || 'Sarflandi'}</Label><NumberInput value={changeRowForm.sarf} onChange={raw => setChangeRowForm(f => ({ ...f, sarf: raw }))} /></div>
+                <div><Label>{t('price') || 'Narx'}</Label><NumberInput value={changeRowForm.cost_price} onChange={raw => setChangeRowForm(f => ({ ...f, cost_price: raw }))} /></div>
               </div>
               <div><Label>{t('change_reason') || "O'zgarish sababi"} *</Label>
                 <Select value={changeRowForm.change_reason || ''} onValueChange={v => setChangeRowForm(f => ({ ...f, change_reason: v }))}>
@@ -1041,7 +1148,7 @@ const FormsTab = ({ project }) => {
             <Button variant="outline" size="sm" onClick={() => setSelectedAct(null)}>
               <ArrowLeft className="w-4 h-4 mr-1" /> {t('back') || 'Ortga'}
             </Button>
-            <h3 className="text-lg font-semibold">{selectedAct.name}</h3>
+            <h3 className="text-lg font-semibold">{displayActName(selectedAct.name)}</h3>
             {selectedAct.act_number && <span className="text-sm text-slate-500">#{selectedAct.act_number}</span>}
             <Badge className={TYPE_COLORS[selectedAct.act_type]}>{TYPE_LABELS[selectedAct.act_type] || selectedAct.act_type}</Badge>
             <Badge className={STATE_COLORS[selectedAct.state]}>{STATE_LABELS[selectedAct.state] || selectedAct.state}</Badge>
@@ -1140,11 +1247,9 @@ const FormsTab = ({ project }) => {
                               <td className="py-2 px-3 text-right text-slate-500">{line.qty_smeta || '—'}</td>
                               <td className="py-2 px-3 text-right">
                                 {isEditing ? (
-                                  <Input
-                                    type="number"
-                                    step="0.0001"
+                                  <NumberInput
                                     value={editLineForm.qty_period}
-                                    onChange={e => setEditLineForm(f => ({ ...f, qty_period: e.target.value }))}
+                                    onChange={raw => setEditLineForm(f => ({ ...f, qty_period: raw }))}
                                     onKeyDown={e => { if (e.key === 'Enter') saveEditLine(selectedAct.id, line.id); if (e.key === 'Escape') cancelEditLine(); }}
                                     className="w-28 h-7 text-right text-sm"
                                     autoFocus
@@ -1345,9 +1450,23 @@ const FormsTab = ({ project }) => {
               <SelectTrigger className="w-40"><SelectValue placeholder={t('all_types') || 'Barcha turlar'} /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">{t('all_types') || 'Barcha turlar'}</SelectItem>
-                <SelectItem value="ks2">{t('forma_2') || 'Forma 2 (KS-2)'}</SelectItem>
-                <SelectItem value="ks3">{t('forma_3') || 'Forma 3 (KS-3)'}</SelectItem>
+                <SelectItem value="ks2">{t('forma_2') || 'Forma 2'}</SelectItem>
+                <SelectItem value="ks3">{t('forma_3') || 'Forma 3'}</SelectItem>
                 <SelectItem value="hidden_work">{t('forma_19') || 'Forma 19'}</SelectItem>
+              </SelectContent>
+            </Select>
+            {/* Building filter — restricts the list to one building. */}
+            <Select value={filterBuildingId || 'all'} onValueChange={v => setFilterBuildingId(v === 'all' ? '' : v)}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder={language === 'ru' ? 'Все здания' : language === 'uz' ? 'Barcha binolar' : 'All buildings'} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{language === 'ru' ? 'Все здания' : language === 'uz' ? 'Barcha binolar' : 'All buildings'}</SelectItem>
+                {(buildings || []).map(b => (
+                  <SelectItem key={b.id} value={String(b.id)}>
+                    {b.code ? `${b.code} — ${b.name}` : b.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <Select value={filters.state || 'all'} onValueChange={v => setFilters(f => ({ ...f, state: v === 'all' ? '' : v }))}>
@@ -1360,8 +1479,8 @@ const FormsTab = ({ project }) => {
                 <SelectItem value="cancelled">{t('cancelled') || 'Bekor qilingan'}</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline" onClick={() => setShowAutoGenModal(true)}><Zap className="w-4 h-4 mr-2" /> {t('auto_ks2') || 'KS-2 avto'}</Button>
-            <Button variant="outline" onClick={() => setShowGenF3Modal(true)}><FileText className="w-4 h-4 mr-2" /> {t('gen_ks3') || 'KS-3 yaratish'}</Button>
+            <Button variant="outline" onClick={() => { setAutoGenForm({ subcontract_id: '', building_id: '', period_from: '', period_to: '', ...defaultClientFields }); setShowAutoGenClientFields(false); setShowAutoGenModal(true); }}><Zap className="w-4 h-4 mr-2" /> {t('auto_ks2') || 'Forma 2 avto'}</Button>
+            <Button variant="outline" onClick={() => { setGenF3Form({ subcontract_id: '', building_id: '', period_from: '', period_to: '', ...defaultClientFields }); setShowGenF3ClientFields(false); setShowGenF3Modal(true); }}><FileText className="w-4 h-4 mr-2" /> {t('gen_ks3') || 'Forma 3 yaratish'}</Button>
             <Button variant="outline" className="text-orange-600 border-orange-300" onClick={() => { setF19CreateForm({ building_id: '', period_from: '', period_to: '', notes: '' }); setShowF19CreateModal(true); }}>
               <Plus className="w-4 h-4 mr-2" /> {t('create_f19') || 'Forma 19'}
             </Button>
@@ -1370,7 +1489,7 @@ const FormsTab = ({ project }) => {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="text-center py-8 text-slate-400">{t('loading') || 'Yuklanmoqda...'}</div>
+            <Loader />
           ) : (acts || []).length === 0 ? (
             <div className="text-center py-12">
               <FileText className="w-16 h-16 text-slate-300 mx-auto mb-4" />
@@ -1386,6 +1505,9 @@ const FormsTab = ({ project }) => {
                     </th>
                     <th className="text-left py-2 px-3 cursor-pointer select-none" onClick={() => handleSort('act_type')}>
                       {t('type') || 'Turi'}<SortIndicator field="act_type" />
+                    </th>
+                    <th className="text-left py-2 px-3 cursor-pointer select-none" onClick={() => handleSort('building_name')}>
+                      {language === 'ru' ? 'Здание' : language === 'uz' ? 'Bino' : 'Building'}<SortIndicator field="building_name" />
                     </th>
                     <th className="text-left py-2 px-3 cursor-pointer select-none" onClick={() => handleSort('period_from')}>
                       {t('period') || 'Davr'}<SortIndicator field="period_from" />
@@ -1409,8 +1531,13 @@ const FormsTab = ({ project }) => {
                     const paginatedItems = sortedActs.slice((currentPage - 1) * pageSize, currentPage * pageSize);
                     return paginatedItems.map(act => (
                     <tr key={act.id} className="border-b hover:bg-slate-50">
-                      <td className="py-2 px-3 font-medium">{act.name}{act.act_number ? ` #${act.act_number}` : ''}</td>
+                      <td className="py-2 px-3 font-medium">{displayActName(act.name)}{act.act_number ? ` #${act.act_number}` : ''}</td>
                       <td className="py-2 px-3"><Badge className={TYPE_COLORS[act.act_type]}>{TYPE_LABELS[act.act_type] || act.act_type}</Badge></td>
+                      <td className="py-2 px-3 text-slate-600 whitespace-nowrap">
+                        {act.building_name
+                          ? (act.building_code ? `${act.building_code} — ${act.building_name}` : act.building_name)
+                          : <span className="text-slate-400 italic">{language === 'ru' ? 'проект' : language === 'uz' ? 'loyiha' : 'project-wide'}</span>}
+                      </td>
                       <td className="py-2 px-3 whitespace-nowrap">{act.period_from ? `${act.period_from} — ${act.period_to}` : (act.works_start_date ? `${act.works_start_date} — ${act.works_end_date}` : '—')}</td>
                       <td className="py-2 px-3">{act.subcontract_name || '—'}</td>
                       <td className="py-2 px-3 text-right font-medium whitespace-nowrap">{formatCurrency(act.amount_total_with_vat || act.amount_total || 0)}</td>
@@ -1464,7 +1591,7 @@ const FormsTab = ({ project }) => {
               <Select value={form.act_type || ''} onValueChange={v => setForm(f => ({ ...f, act_type: v }))}>
                 <SelectTrigger><SelectValue placeholder="Tanlang" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="ks2">Forma 2 (KS-2)</SelectItem>
+                  <SelectItem value="ks2">Forma 2</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1545,11 +1672,9 @@ const FormsTab = ({ project }) => {
                 </div>
                 <div>
                   <Label className="text-xs">Qaytarilgan materiallar / Возврат материалов</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
+                  <NumberInput
                     value={form.f2_materials_returned}
-                    onChange={e => setForm(f => ({ ...f, f2_materials_returned: e.target.value }))}
+                    onChange={raw => setForm(f => ({ ...f, f2_materials_returned: raw }))}
                   />
                   <p className="text-[10px] text-slate-500 mt-1">Umumiy summadan chegiriladi</p>
                 </div>
@@ -1567,9 +1692,7 @@ const FormsTab = ({ project }) => {
               <div>
                 <Label className="text-base font-semibold">{t('estimate_lines') || 'Smeta qatorlari'}</Label>
                 {estimateLinesLoading ? (
-                  <div className="flex items-center gap-2 py-4 text-slate-400">
-                    <Loader2 className="w-4 h-4 animate-spin" /> {t('loading') || 'Yuklanmoqda...'}
-                  </div>
+                  <Loader className="py-4" size="w-4 h-4" />
                 ) : estimateLines.length === 0 ? (
                   <p className="text-sm text-slate-400 py-2">{t('no_estimate_lines') || 'Smeta qatorlari topilmadi'}</p>
                 ) : (
@@ -1624,60 +1747,45 @@ const FormsTab = ({ project }) => {
                               <td className="py-2 px-2 text-right">{formatCurrency(line.unit_rate)}</td>
                               <td className="py-2 px-2 text-right">
                                 {isSelected ? (
-                                  <Input
-                                    type="number"
-                                    step="0.0001"
-                                    min="0"
+                                  <NumberInput
                                     value={selectedLine?.qty_period || ''}
-                                    onChange={e => updateSelectedLineQty(line.estimate_line_id, e.target.value)}
+                                    onChange={raw => updateSelectedLineQty(line.estimate_line_id, raw)}
                                     className="w-24 h-7 text-right text-sm"
                                   />
                                 ) : '—'}
                               </td>
                               <td className="py-2 px-2 text-right">
                                 {isSelected ? (
-                                  <Input
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
+                                  <NumberInput
                                     value={selectedLine?.labor_amount || ''}
-                                    onChange={e => updateSelectedLineField(line.estimate_line_id, 'labor_amount', parseFloat(e.target.value) || 0)}
+                                    onChange={raw => updateSelectedLineField(line.estimate_line_id, 'labor_amount', raw === '' ? 0 : parseFloat(raw) || 0)}
                                     className="w-24 h-7 text-right text-xs"
                                   />
                                 ) : '—'}
                               </td>
                               <td className="py-2 px-2 text-right">
                                 {isSelected ? (
-                                  <Input
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
+                                  <NumberInput
                                     value={selectedLine?.equipment_amount || ''}
-                                    onChange={e => updateSelectedLineField(line.estimate_line_id, 'equipment_amount', parseFloat(e.target.value) || 0)}
+                                    onChange={raw => updateSelectedLineField(line.estimate_line_id, 'equipment_amount', raw === '' ? 0 : parseFloat(raw) || 0)}
                                     className="w-24 h-7 text-right text-xs"
                                   />
                                 ) : '—'}
                               </td>
                               <td className="py-2 px-2 text-right">
                                 {isSelected ? (
-                                  <Input
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
+                                  <NumberInput
                                     value={selectedLine?.materials_amount || ''}
-                                    onChange={e => updateSelectedLineField(line.estimate_line_id, 'materials_amount', parseFloat(e.target.value) || 0)}
+                                    onChange={raw => updateSelectedLineField(line.estimate_line_id, 'materials_amount', raw === '' ? 0 : parseFloat(raw) || 0)}
                                     className="w-24 h-7 text-right text-xs"
                                   />
                                 ) : '—'}
                               </td>
                               <td className="py-2 px-2 text-right">
                                 {isSelected ? (
-                                  <Input
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
+                                  <NumberInput
                                     value={selectedLine?.cables_amount || ''}
-                                    onChange={e => updateSelectedLineField(line.estimate_line_id, 'cables_amount', parseFloat(e.target.value) || 0)}
+                                    onChange={raw => updateSelectedLineField(line.estimate_line_id, 'cables_amount', raw === '' ? 0 : parseFloat(raw) || 0)}
                                     className="w-24 h-7 text-right text-xs"
                                   />
                                 ) : '—'}
@@ -1703,7 +1811,7 @@ const FormsTab = ({ project }) => {
                                         type="text"
                                         value={selectedLine?.section_name || ''}
                                         onChange={e => updateSelectedLineField(line.estimate_line_id, 'section_name', e.target.value)}
-                                        placeholder="Bo'lim nomi (masalan: РАЗДЕЛ 1. Монтажные работы)"
+                                        placeholder="Bo'lim nomi (РАЗДЕЛ 1. Монтажные работы)"
                                         className="flex-1 h-7 text-xs"
                                       />
                                     )}
@@ -1784,8 +1892,8 @@ const FormsTab = ({ project }) => {
 
       {/* Auto-generate KS-2 Modal */}
       <Dialog open={showAutoGenModal} onOpenChange={setShowAutoGenModal}>
-        <DialogContent className="max-w-md" aria-describedby={undefined}>
-          <DialogHeader><DialogTitle>{t('auto_generate_ks2') || 'KS-2 avtomatik yaratish'}</DialogTitle><DialogDescription className="sr-only">Auto KS-2</DialogDescription></DialogHeader>
+        <DialogContent className="max-w-lg" aria-describedby={undefined}>
+          <DialogHeader><DialogTitle>{t('auto_generate_ks2') || 'Forma 2 avtomatik yaratish'}</DialogTitle><DialogDescription className="sr-only">Auto Forma 2</DialogDescription></DialogHeader>
           <div className="space-y-4">
             <div><Label>{t('subcontractor') || 'Subpudratchi'}</Label>
               <Select value={autoGenForm.subcontract_id || 'own'} onValueChange={v => setAutoGenForm(f => ({ ...f, subcontract_id: v === 'own' ? '' : v }))}>
@@ -1796,9 +1904,58 @@ const FormsTab = ({ project }) => {
                 </SelectContent>
               </Select>
             </div>
+            {/* Building/Block selector — restricts the Forma 2 to one building's
+                estimate lines. Leave on "All buildings" to keep project-wide scope. */}
+            <div><Label>{language === 'ru' ? 'Здание / Блок' : language === 'uz' ? 'Bino / Blok' : 'Building / Block'}</Label>
+              <Select value={autoGenForm.building_id || 'all'} onValueChange={v => setAutoGenForm(f => ({ ...f, building_id: v === 'all' ? '' : v }))}>
+                <SelectTrigger><SelectValue placeholder={language === 'ru' ? 'Выберите здание' : language === 'uz' ? 'Binoni tanlang' : 'Select building'} /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{language === 'ru' ? 'Все здания (проект)' : language === 'uz' ? 'Barcha binolar (loyiha)' : 'All buildings (project-wide)'}</SelectItem>
+                  {(buildings || []).map(b => (
+                    <SelectItem key={b.id} value={String(b.id)}>
+                      {b.code ? `${b.code} — ${b.name}` : b.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div><Label>{t('period_from') || 'Boshlanish'} *</Label><Input type="date" value={autoGenForm.period_from} onChange={e => setAutoGenForm(f => ({ ...f, period_from: e.target.value }))} /></div>
               <div><Label>{t('period_to') || 'Tugash'} *</Label><Input type="date" value={autoGenForm.period_to} onChange={e => setAutoGenForm(f => ({ ...f, period_to: e.target.value }))} /></div>
+            </div>
+
+            {/* Buyurtmachi rekvizitlari */}
+            <div className="border rounded-md bg-slate-50">
+              <button type="button" className="w-full flex items-center justify-between p-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 rounded-md transition-colors" onClick={() => setShowAutoGenClientFields(p => !p)}>
+                <span>{language === 'ru' ? 'Реквизиты заказчика (Форма 2)' : language === 'uz' ? 'Buyurtmachi rekvizitlari (Forma 2 uchun)' : 'Client Details (for Form 2)'}</span>
+                {showAutoGenClientFields ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+              {showAutoGenClientFields && (
+                <div className="px-3 pb-3 space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label>{language === 'ru' ? 'Наименование' : language === 'uz' ? 'Mijoz nomi' : 'Client Name'} *</Label><Input value={autoGenForm.client_name} onChange={e => setAutoGenForm(f => ({ ...f, client_name: e.target.value }))} placeholder={language === 'ru' ? 'ООО "..."' : 'MChJ "..."'} /></div>
+                    <div><Label>{language === 'ru' ? 'Телефон' : language === 'uz' ? 'Telefon' : 'Phone'}</Label><Input value={autoGenForm.client_phone} onChange={e => setAutoGenForm(f => ({ ...f, client_phone: e.target.value }))} placeholder="+998" /></div>
+                  </div>
+                  <div><Label>{language === 'ru' ? 'Юридический адрес' : language === 'uz' ? 'Yuridik manzil' : 'Legal Address'} *</Label><Input value={autoGenForm.client_address} onChange={e => setAutoGenForm(f => ({ ...f, client_address: e.target.value }))} placeholder={language === 'ru' ? 'г. Ташкент, ...' : 'Toshkent sh., ...'} /></div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label>{language === 'ru' ? 'Банк' : language === 'uz' ? 'Bank nomi' : 'Bank Name'} *</Label><Input value={autoGenForm.client_bank_name} onChange={e => setAutoGenForm(f => ({ ...f, client_bank_name: e.target.value }))} placeholder={language === 'ru' ? 'АКБ "..."' : 'AKB "..."'} /></div>
+                    <div><Label>{language === 'ru' ? 'Расчётный счёт' : language === 'uz' ? 'Hisob raqami' : 'Account'} *</Label><Input value={autoGenForm.client_bank_account} onChange={e => setAutoGenForm(f => ({ ...f, client_bank_account: e.target.value }))} placeholder="2020 8000 ..." /></div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div><Label>MFO *</Label><Input value={autoGenForm.client_mfo} onChange={e => setAutoGenForm(f => ({ ...f, client_mfo: e.target.value }))} placeholder="00440" /></div>
+                    <div><Label>STIR *</Label><Input value={autoGenForm.client_stir} onChange={e => setAutoGenForm(f => ({ ...f, client_stir: e.target.value }))} placeholder="123456789" /></div>
+                    <div><Label>OKONH</Label><Input value={autoGenForm.client_okonh} onChange={e => setAutoGenForm(f => ({ ...f, client_okonh: e.target.value }))} placeholder="61124" /></div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label>{language === 'ru' ? 'Номер договора' : language === 'uz' ? 'Shartnoma raqami' : 'Contract №'}</Label><Input value={autoGenForm.contract_number} onChange={e => setAutoGenForm(f => ({ ...f, contract_number: e.target.value }))} placeholder="№ 12/2025" /></div>
+                    <div><Label>{language === 'ru' ? 'Наименование объекта' : language === 'uz' ? 'Obyekt nomi' : 'Object Name'}</Label><Input value={autoGenForm.object_full_name} onChange={e => setAutoGenForm(f => ({ ...f, object_full_name: e.target.value }))} /></div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label>{language === 'ru' ? 'Директор (Ф.И.О)' : language === 'uz' ? 'Direktor (F.I.Sh)' : 'Director'}</Label><Input value={autoGenForm.client_director_name} onChange={e => setAutoGenForm(f => ({ ...f, client_director_name: e.target.value }))} /></div>
+                    <div><Label>{language === 'ru' ? 'Гл. бухгалтер' : language === 'uz' ? 'Bosh hisobchi' : 'Chief Accountant'}</Label><Input value={autoGenForm.client_chief_accountant_name} onChange={e => setAutoGenForm(f => ({ ...f, client_chief_accountant_name: e.target.value }))} /></div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>
@@ -1815,7 +1972,7 @@ const FormsTab = ({ project }) => {
         <DialogContent className="max-w-3xl" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>{t('confirm_ks2') || "Ko'rib chiqing va tasdiqlang"}</DialogTitle>
-            <DialogDescription className="sr-only">Confirm KS-2 generation</DialogDescription>
+            <DialogDescription className="sr-only">Confirm Forma 2 generation</DialogDescription>
           </DialogHeader>
           {autoGenPreview && (
             <div className="space-y-4">
@@ -1899,10 +2056,10 @@ const FormsTab = ({ project }) => {
 
       {/* Generate Forma 3 (KS-3) Modal */}
       <Dialog open={showGenF3Modal} onOpenChange={setShowGenF3Modal}>
-        <DialogContent className="max-w-md" aria-describedby={undefined}>
-          <DialogHeader><DialogTitle>{t('gen_ks3') || 'KS-3 (Forma 3) yaratish'}</DialogTitle><DialogDescription className="sr-only">Generate KS-3</DialogDescription></DialogHeader>
+        <DialogContent className="max-w-lg" aria-describedby={undefined}>
+          <DialogHeader><DialogTitle>{t('gen_ks3') || 'Forma 3 yaratish'}</DialogTitle><DialogDescription className="sr-only">Generate Forma 3</DialogDescription></DialogHeader>
           <div className="space-y-4">
-            <p className="text-sm text-slate-500">{t('gen_ks3_desc') || "Imzolangan KS-2 aktlar asosida KS-3 hisoboti yaratiladi"}</p>
+            <p className="text-sm text-slate-500">{t('gen_ks3_desc') || "Imzolangan Forma 2 aktlar asosida Forma 3 hisoboti yaratiladi"}</p>
             <div><Label>{t('subcontractor') || 'Subpudratchi'}</Label>
               <Select value={genF3Form.subcontract_id || 'own'} onValueChange={v => setGenF3Form(f => ({ ...f, subcontract_id: v === 'own' ? '' : v }))}>
                 <SelectTrigger><SelectValue placeholder="Tanlang" /></SelectTrigger>
@@ -1912,14 +2069,62 @@ const FormsTab = ({ project }) => {
                 </SelectContent>
               </Select>
             </div>
+            {/* Building/Block selector — restricts Forma 3 to Forma 2 acts of this building. */}
+            <div><Label>{language === 'ru' ? 'Здание / Блок' : language === 'uz' ? 'Bino / Blok' : 'Building / Block'}</Label>
+              <Select value={genF3Form.building_id || 'all'} onValueChange={v => setGenF3Form(f => ({ ...f, building_id: v === 'all' ? '' : v }))}>
+                <SelectTrigger><SelectValue placeholder={language === 'ru' ? 'Выберите здание' : language === 'uz' ? 'Binoni tanlang' : 'Select building'} /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{language === 'ru' ? 'Все здания (проект)' : language === 'uz' ? 'Barcha binolar (loyiha)' : 'All buildings (project-wide)'}</SelectItem>
+                  {(buildings || []).map(b => (
+                    <SelectItem key={b.id} value={String(b.id)}>
+                      {b.code ? `${b.code} — ${b.name}` : b.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div><Label>{t('period_from') || 'Boshlanish'} *</Label><Input type="date" value={genF3Form.period_from} onChange={e => setGenF3Form(f => ({ ...f, period_from: e.target.value }))} /></div>
               <div><Label>{t('period_to') || 'Tugash'} *</Label><Input type="date" value={genF3Form.period_to} onChange={e => setGenF3Form(f => ({ ...f, period_to: e.target.value }))} /></div>
             </div>
+
+            {/* Buyurtmachi rekvizitlari */}
+            <div className="border rounded-md bg-slate-50">
+              <button type="button" className="w-full flex items-center justify-between p-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 rounded-md transition-colors" onClick={() => setShowGenF3ClientFields(p => !p)}>
+                <span>{language === 'ru' ? 'Реквизиты заказчика (Форма 3)' : language === 'uz' ? 'Buyurtmachi rekvizitlari (Forma 3 uchun)' : 'Client Details (for Form 3)'}</span>
+                {showGenF3ClientFields ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+              {showGenF3ClientFields && (
+                <div className="px-3 pb-3 space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label>{language === 'ru' ? 'Наименование' : language === 'uz' ? 'Mijoz nomi' : 'Client Name'} *</Label><Input value={genF3Form.client_name} onChange={e => setGenF3Form(f => ({ ...f, client_name: e.target.value }))} placeholder={language === 'ru' ? 'ООО "..."' : 'MChJ "..."'} /></div>
+                    <div><Label>{language === 'ru' ? 'Телефон' : language === 'uz' ? 'Telefon' : 'Phone'}</Label><Input value={genF3Form.client_phone} onChange={e => setGenF3Form(f => ({ ...f, client_phone: e.target.value }))} placeholder="+998" /></div>
+                  </div>
+                  <div><Label>{language === 'ru' ? 'Юридический адрес' : language === 'uz' ? 'Yuridik manzil' : 'Legal Address'} *</Label><Input value={genF3Form.client_address} onChange={e => setGenF3Form(f => ({ ...f, client_address: e.target.value }))} placeholder={language === 'ru' ? 'г. Ташкент, ...' : 'Toshkent sh., ...'} /></div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label>{language === 'ru' ? 'Банк' : language === 'uz' ? 'Bank nomi' : 'Bank Name'} *</Label><Input value={genF3Form.client_bank_name} onChange={e => setGenF3Form(f => ({ ...f, client_bank_name: e.target.value }))} placeholder={language === 'ru' ? 'АКБ "..."' : 'AKB "..."'} /></div>
+                    <div><Label>{language === 'ru' ? 'Расчётный счёт' : language === 'uz' ? 'Hisob raqami' : 'Account'} *</Label><Input value={genF3Form.client_bank_account} onChange={e => setGenF3Form(f => ({ ...f, client_bank_account: e.target.value }))} placeholder="2020 8000 ..." /></div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div><Label>MFO *</Label><Input value={genF3Form.client_mfo} onChange={e => setGenF3Form(f => ({ ...f, client_mfo: e.target.value }))} placeholder="00440" /></div>
+                    <div><Label>STIR *</Label><Input value={genF3Form.client_stir} onChange={e => setGenF3Form(f => ({ ...f, client_stir: e.target.value }))} placeholder="123456789" /></div>
+                    <div><Label>OKONH</Label><Input value={genF3Form.client_okonh} onChange={e => setGenF3Form(f => ({ ...f, client_okonh: e.target.value }))} placeholder="61124" /></div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label>{language === 'ru' ? 'Номер договора' : language === 'uz' ? 'Shartnoma raqami' : 'Contract №'}</Label><Input value={genF3Form.contract_number} onChange={e => setGenF3Form(f => ({ ...f, contract_number: e.target.value }))} placeholder="№ 12/2025" /></div>
+                    <div><Label>{language === 'ru' ? 'Наименование объекта' : language === 'uz' ? 'Obyekt nomi' : 'Object Name'}</Label><Input value={genF3Form.object_full_name} onChange={e => setGenF3Form(f => ({ ...f, object_full_name: e.target.value }))} /></div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label>{language === 'ru' ? 'Директор (Ф.И.О)' : language === 'uz' ? 'Direktor (F.I.Sh)' : 'Director'}</Label><Input value={genF3Form.client_director_name} onChange={e => setGenF3Form(f => ({ ...f, client_director_name: e.target.value }))} /></div>
+                    <div><Label>{language === 'ru' ? 'Гл. бухгалтер' : language === 'uz' ? 'Bosh hisobchi' : 'Chief Accountant'}</Label><Input value={genF3Form.client_chief_accountant_name} onChange={e => setGenF3Form(f => ({ ...f, client_chief_accountant_name: e.target.value }))} /></div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowGenF3Modal(false)}>{t('cancel') || 'Bekor qilish'}</Button>
-            <Button onClick={handleGenerateF3} disabled={genF3Saving}>{genF3Saving ? 'Yaratilmoqda...' : 'Yaratish'}</Button>
+            <Button onClick={handleGenerateF3} disabled={genF3Saving}>{genF3Saving ? 'Yaratilmoqda...' : (language === 'ru' ? 'Создать' : 'Yaratish')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

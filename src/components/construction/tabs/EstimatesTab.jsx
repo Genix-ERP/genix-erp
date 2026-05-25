@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
   AlertDialog,
@@ -43,6 +44,7 @@ import {
   Package,
 } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
+import { useEmployeePermissions } from '@/components/contexts/EmployeePermissionsContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
@@ -50,10 +52,19 @@ import { ImportExportButtons } from '@/components/shared';
 import SmetaImportModal from '@/components/construction/SmetaImportModal';
 import SmetaExportModal from '@/components/construction/SmetaExportModal';
 import SmetaSummaryView from '@/components/construction/SmetaSummaryView';
+import Loader from '@/components/ui/loader';
+import SublineModal from '@/components/construction/SublineModal';
+import EstimateLineEditModal from '@/components/construction/EstimateLineEditModal';
 
 const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontracts = [] }) => {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  // Permission gating — backend already enforces construction.estimate.delete
+  // via h.perm.Require() middleware (handler.go:2105), but we hide the UI
+  // affordance for users without the right so they don't click and hit a
+  // 403 toast. Admins / owners / site admins return true via the hook.
+  const { canDelete } = useEmployeePermissions();
+  const canDeleteEstimate = canDelete('construction');
   const { formatCurrency } = useCurrencyFormatter();
 
   const [estimates, setEstimates] = useState([]);
@@ -63,11 +74,25 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
   const [loading, setLoading] = useState(true);
   const [linesLoading, setLinesLoading] = useState(null); // estimate id being loaded
   const [products, setProducts] = useState([]);
+  // Client-side "projected" cost per estimate. Populated when the user
+  // selects a building: we join the ВОР Miqdor (by parent-work name) with
+  // each non-ВОР estimate's unit_rate × norm_rate to get a meaningful
+  // total even when the Единич was imported in template mode (every
+  // quantity = 0 → DB-side amount_total = 0). Backend persisted total
+  // wins when it's already > 0 — this map only fills in the holes.
+  // Shape: { [estimateId]: number }
+  const [projectedAmounts, setProjectedAmounts] = useState({});
 
   // Modals
   const [showEstimateModal, setShowEstimateModal] = useState(false);
   const [showEditEstimateModal, setShowEditEstimateModal] = useState(false);
   const [showLineModal, setShowLineModal] = useState(false);
+
+  // Sub-line modals (migration 332). `sublineParent` is the parent row when
+  // adding a new sub-line; `lineToEdit` is the row being edited in the full
+  // edit modal (can be parent or sub-line).
+  const [sublineDialog, setSublineDialog] = useState({ open: false, parent: null, estimateId: null, nextSeq: 1, initial: null });
+  const [editLineDialog, setEditLineDialog] = useState({ open: false, line: null, parent: null, estimateId: null });
 
   // Forms
   const [estimateForm, setEstimateForm] = useState({
@@ -96,7 +121,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
 
   // importColumns removed - SmetaImportModal handles parsing directly
 
-  const handleImport = async ({ estimateName, buildingId, lines, sourceType, sectionNames, subcontractId }) => {
+  const handleImport = async ({ estimateName, buildingId, lines, sourceType, sectionNames, subcontractId, sourceFileName, budgetTotal, materialBudget, transportBudget }) => {
     try {
       // Find existing draft estimate with same name for this building, or create new
       let est = estimates.find(e =>
@@ -123,43 +148,96 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
         estId = created.id;
       }
 
-      // Bulk create all lines (replace existing if re-importing to same estimate)
-      const bulkResult = await constructionService.bulkCreateEstimateLines(estId, lines, { replace: isExisting });
+      // Bulk create all lines (replace existing if re-importing to same estimate).
+      // `sourceFileName` lets the backend dedupe auto-created Forma 2 drafts —
+      // multiple estimate types extracted from the same uploaded Excel file
+      // will merge into one Forma 2 instead of producing one per type.
+      const bulkResult = await constructionService.bulkCreateEstimateLines(estId, lines, {
+        replace: isExisting,
+        sourceType: sourceType || '',
+        sourceFileName: sourceFileName || '',
+        // Imported-budget capture (Ресурс sheet only — other types pass
+        // 0 and the backend leaves the existing values alone). See
+        // SmetaImportModal.parseResurs for the source rows.
+        budgetTotal: Number(budgetTotal || 0),
+        materialBudget: Number(materialBudget || 0),
+        transportBudget: Number(transportBudget || 0),
+      });
 
-      // Show toast if products were auto-created from resource lines
+      // Show toast if products were auto-created from resource lines.
+      // For Ресурс imports we ALWAYS announce the result (even when 0 new
+      // products were added) because the most common confusion is "I
+      // imported a resurs file but nothing showed up in inventory" — 0
+      // here usually means the same-named products already exist.
       if (bulkResult?.products_created > 0) {
-        toast.success(`${bulkResult.products_created} ${t('products_auto_created') || "ta mahsulot avtomatik yaratildi"}`);
+        toast.success(
+          `${bulkResult.products_created} ${t('products_auto_created') || "ta mahsulot avtomatik yaratildi"}`,
+          { description: t('products_auto_created_desc') || "Mahsulotlar bo'limida ko'rishingiz mumkin" }
+        );
+      } else if (sourceType === 'resurs') {
+        toast.message(
+          t('products_auto_create_zero') || "Yangi mahsulot qo'shilmadi",
+          { description: t('products_auto_create_zero_desc') ||
+            "Smetadagi materiallar Mahsulotlar ro'yxatida allaqachon mavjud bo'lishi mumkin." }
+        );
       }
 
       // Show toast if Forma 2 was auto-created from VOR/Edinich estimate
       if (bulkResult?.forma2_created) {
-        toast.success(t('forma2_auto_created') || "Forma 2 (KS-2) avtomatik yaratildi", {
+        toast.success(t('forma2_auto_created') || "Forma 2 avtomatik yaratildi", {
           description: t('forma2_auto_created_desc') || "Smetadan barcha qatorlar bilan qoralama Forma 2 yaratildi",
         });
       }
 
-      // Auto-create construction stages from BOP section headers
-      if (sourceType === 'vor' && sectionNames?.length > 0) {
+      // Auto-create construction stages — ONLY for `edinich` imports.
+      // ВОР sections are just block names ("Блок №1") and Ресурс sections
+      // are resource-type buckets ("ТРУДОВЫЕ РЕСУРСЫ", "МАТЕРИАЛЬНЫЕ
+      // РЕСУРСЫ", …) — neither maps to a real construction stage, and
+      // both used to clutter the Bosqichlar tab with bogus stage rows.
+      // Only the единич estimate carries genuine work-category headers
+      // that should drive stages, so the auto-create is now scoped to it.
+      //
+      // Dedupe by (building_id, upper-cased name) so re-importing the
+      // same единич file doesn't create duplicate stages, and so the same
+      // section name in a different block is still allowed to produce
+      // its own stage.
+      if (sourceType === 'edinich' && sectionNames?.length > 0) {
+        // Scope the existence check to this building — migration 333 made
+        // stages building-aware, so "Блок №1" in building A and "Блок №1"
+        // in building B are legitimately separate stages.
         let existingStages = [];
         try {
-          existingStages = await constructionService.listStages(project.id);
+          existingStages = await constructionService.listStages(
+            project.id,
+            buildingId > 0 ? { buildingId } : undefined,
+          );
         } catch (e) {
-          // ignore - will create all stages
+          // ignore — we'll attempt to create all stages
         }
-        const existingNames = new Set((existingStages || []).map(s => s.name?.toUpperCase()));
+        const existingNames = new Set(
+          (existingStages || [])
+            .filter(s => (buildingId > 0 ? Number(s.building_id) === Number(buildingId) : !s.building_id))
+            .map(s => (s.name || '').toUpperCase())
+        );
 
         for (let i = 0; i < sectionNames.length; i++) {
           const name = sectionNames[i];
-          if (!existingNames.has(name.toUpperCase())) {
-            try {
-              await constructionService.createStage(project.id, {
-                name,
-                status: 'not_started',
-                planned_budget: 0,
-              });
-            } catch (e) {
-              console.error('Failed to create stage:', name, e);
-            }
+          if (!name) continue;
+          const key = name.toUpperCase();
+          if (existingNames.has(key)) continue;
+          try {
+            await constructionService.createStage(project.id, {
+              name,
+              status: 'not_started',
+              planned_budget: 0,
+              // 0 = project-wide (backend maps to NULL via nullInt64FromVal).
+              building_id: buildingId > 0 ? Number(buildingId) : 0,
+            });
+            // Remember in the local dedupe set so duplicate section names
+            // within a single import (rare but possible) don't insert twice.
+            existingNames.add(key);
+          } catch (e) {
+            console.error('Failed to create stage:', name, e);
           }
         }
       }
@@ -222,6 +300,134 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
   useEffect(() => {
     setCurrentPage(1);
   }, [sourceTypeFilter]);
+
+  // ── Projected totals per building ─────────────────────────────────
+  // Triggered when the user selects a building (or the estimates list
+  // changes). For every non-ВОР estimate whose backend amount_total is
+  // 0, we fetch its lines and compute:
+  //
+  //   projected = Σ (vorQty(parent.name) × sub.norm_rate × sub.unit_rate)
+  //
+  // over every sub-line (parent_line_id != null) in the estimate. The
+  // ВОР's Miqdor is keyed by lowercase-trimmed name, scoped to the
+  // same building, so two blocks with identically-named works don't
+  // contaminate each other. If the building has no ВОР, projection is
+  // skipped (we honour the backend's 0 in that case).
+  //
+  // Estimates whose amount_total is already > 0 (e.g. Blok 1/2 imported
+  // before template mode) are left alone — no extra fetch, no overlay.
+  useEffect(() => {
+    if (!selectedBuilding) return;
+    let cancelled = false;
+    const buildingId = selectedBuilding === 'project' ? 0 : selectedBuilding.id;
+    const here = estimates.filter((e) =>
+      buildingId === 0 ? !e.building_id : Number(e.building_id) === Number(buildingId)
+    );
+    if (here.length === 0) return;
+    const vorEst = here.find((e) => String(e.source_type || '').toLowerCase() === 'vor');
+    // Targets = estimates with a backend total of 0 that aren't ВОР
+    // (ВОР itself naturally has 0 cost since it carries no prices, and
+    // we don't want to overlay the source-of-truth there).
+    const targets = here.filter((e) =>
+      !(Number(e.amount_total || 0) > 0)
+      && String(e.source_type || '').toLowerCase() !== 'vor',
+    );
+    if (!vorEst || targets.length === 0) {
+      // Clear any stale projections from a previous building.
+      setProjectedAmounts((prev) => {
+        const next = { ...prev };
+        for (const e of targets) delete next[e.id];
+        return next;
+      });
+      return;
+    }
+
+    (async () => {
+      try {
+        // Fetch ВОР once, then every target estimate in parallel. Lines
+        // are pulled with a high page_size since the cap on listEstimateLines
+        // is 5000 and even the fattest blocks rarely cross that.
+        const [vorRowsRaw, ...targetRowsRaw] = await Promise.all([
+          constructionService.listEstimateLines(vorEst.id, { page_size: 5000 }),
+          ...targets.map((e) =>
+            constructionService.listEstimateLines(e.id, { page_size: 5000 })
+              .catch(() => []),
+          ),
+        ]);
+        if (cancelled) return;
+
+        // ВОР map: parent-work name → planned project quantity. Only
+        // top-level rows (no parent_line_id) carry a real Miqdor. The
+        // key strips all whitespace so subtle Excel formatting
+        // differences (e.g. "В7,5 / М-100/" vs "В7,5 /М-100/") between
+        // the Единич and ВОР sheets don't break the match — a plain
+        // trim+lowercase was missing real rows.
+        const normKey = (s) => String(s || '').toLowerCase().replace(/[\s\u00A0]+/g, '');
+        const vorList = Array.isArray(vorRowsRaw)
+          ? vorRowsRaw
+          : (vorRowsRaw?.data || vorRowsRaw?.items || []);
+        const vorMap = new Map();
+        for (const r of vorList) {
+          if (r.parent_line_id) continue;
+          const n = normKey(r.name);
+          if (!n) continue;
+          const q = Number(r.quantity || 0);
+          if (q > 0) vorMap.set(n, q);
+        }
+
+        const updates = {};
+        for (let i = 0; i < targets.length; i++) {
+          const est = targets[i];
+          const rowsRaw = targetRowsRaw[i];
+          const lines = Array.isArray(rowsRaw)
+            ? rowsRaw
+            : (rowsRaw?.data || rowsRaw?.items || []);
+          if (!lines.length) {
+            updates[est.id] = 0;
+            continue;
+          }
+          // Index parents by id so each sub-line can resolve its parent's name.
+          const parentById = new Map();
+          for (const l of lines) {
+            if (!l.parent_line_id) parentById.set(Number(l.id), l);
+          }
+          let total = 0;
+          for (const l of lines) {
+            const pid = Number(l.parent_line_id || 0);
+            if (!pid) continue; // skip parents (their cost is the sum of children)
+            const parent = parentById.get(pid);
+            if (!parent) continue;
+            const vorQty = vorMap.get(normKey(parent.name)) || 0;
+            if (vorQty <= 0) continue;
+            const norm = Number(l.norm_rate || 0);
+            const rate = Number(l.unit_rate || 0);
+            total += vorQty * norm * rate;
+          }
+          updates[est.id] = total;
+        }
+        if (cancelled) return;
+        setProjectedAmounts((prev) => ({ ...prev, ...updates }));
+      } catch (e) {
+        // Non-fatal — the smeta will keep showing the backend total
+        // (likely 0) and the user can still navigate. Logging only
+        // surfaces in the console for debugging.
+        console.error('Failed to compute projected smeta totals:', e);
+      }
+    })();
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBuilding, estimates]);
+
+  // Helper: pick the cost a smeta card / building list should display.
+  // Backend total wins when present; otherwise fall back to the ВОР
+  // projection computed above.
+  const displayAmount = useCallback((est) => {
+    const persisted = Number(est?.amount_total || 0);
+    if (persisted > 0) return persisted;
+    const projected = projectedAmounts[est?.id];
+    return Number.isFinite(projected) ? projected : 0;
+  }, [projectedAmounts]);
 
   // Load lines for an estimate
   const loadEstimateLines = async (estimateId) => {
@@ -480,9 +686,16 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
         />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      {/* Smaller fixed-width sidebar so the right-hand smeta table gets
+         the lion's share of the row. Previously this was a 1:2 split
+         (lg:grid-cols-3 + col-span-1/col-span-2) which gave the building
+         list 33 % of the width even on wide monitors — that's far more
+         than it needs (it just lists block names) and squeezed the
+         smeta table into the remaining 66 %. Pinning the sidebar at
+         240 px gives the table everything else. */}
+      <div className="grid gap-6" style={{ gridTemplateColumns: '240px 1fr' }}>
       {/* Left: Buildings List */}
-      <Card className="lg:col-span-1">
+      <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base">{t('buildings_blocks') || 'Binolar / Bloklar'}</CardTitle>
         </CardHeader>
@@ -497,7 +710,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
               <div className="divide-y">
                 {buildings.map((building) => {
                   const buildingEstimates = estimates.filter(e => e.building_id === building.id);
-                  const totalAmount = buildingEstimates.reduce((sum, e) => sum + (e.amount_total || 0), 0);
+                  const totalAmount = buildingEstimates.reduce((sum, e) => sum + displayAmount(e), 0);
                   const isSelected = selectedBuilding?.id === building.id;
                   // Get unique subcontractor names for this building (subcontract mode)
                   // Show subcontractors linked to building via junction table + from estimates
@@ -519,7 +732,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                       <div className="flex items-center gap-2">
                         <Building2 className="w-4 h-4 text-slate-500 flex-shrink-0" />
                         <span className="text-sm font-medium truncate flex-1">
-                          {building.code ? `${building.code} - ${building.name}` : building.name}
+                          {building.name}
                         </span>
                       </div>
                       {subNames.length > 0 && (
@@ -554,7 +767,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                     <div className="flex items-center justify-between mt-1 ml-6">
                       <span className="text-xs text-slate-400">{unassignedCount} {t('estimates_count') || 'smeta'}</span>
                       <span className="text-xs font-medium text-slate-600">
-                        {formatCurrency(estimates.filter(e => !e.building_id).reduce((s, e) => s + (e.amount_total || 0), 0))}
+                        {formatCurrency(estimates.filter(e => !e.building_id).reduce((s, e) => s + displayAmount(e), 0))}
                       </span>
                     </div>
                   </div>
@@ -565,14 +778,17 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
         </CardContent>
       </Card>
 
-      {/* Right: Estimates with expandable lines */}
-      <Card className="lg:col-span-2">
+      {/* Right: Estimates with expandable lines. min-w-0 so the card
+         can shrink below its natural content size, which lets the
+         table inside use overflow-x-auto correctly instead of forcing
+         the grid to grow beyond the viewport. */}
+      <Card className="min-w-0">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base">
             {selectedBuilding === 'project'
               ? (t('entire_project') || "Butun loyiha")
               : selectedBuilding?.name
-                ? (selectedBuilding.code ? `${selectedBuilding.code} - ${selectedBuilding.name}` : selectedBuilding.name)
+                ? selectedBuilding.name
                 : (t('select_building_first') || "Avval bino tanlang")}
           </CardTitle>
           {selectedBuilding && (
@@ -624,7 +840,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
               <p className="text-slate-500">{t('select_building_first') || "Avval bino tanlang"}</p>
             </div>
           ) : loading ? (
-            <div className="text-center py-12 text-slate-500">{t('loading') || 'Yuklanmoqda...'}</div>
+            <Loader className="py-12" />
           ) : filteredEstimates.length === 0 ? (
             <div className="text-center py-12">
               <FileSpreadsheet className="w-12 h-12 text-slate-300 mx-auto mb-3" />
@@ -643,7 +859,14 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
               </Button>
             </div>
           ) : (
-            <ScrollArea className="h-[600px]">
+            // Use a plain scrollable div instead of Radix <ScrollArea>: the
+            // Radix viewport is `display: table`, which lets any descendant
+            // with an intrinsic min-width (like the resurs table's
+            // min-w-[1200px]) widen the viewport itself. That swallowed the
+            // inner overflow-x-auto and made horizontal scrolling impossible.
+            // A native block-level scroll container keeps the viewport
+            // constrained so the table can overflow and scroll horizontally.
+            <div className="h-[600px] overflow-y-auto">
               <div className="p-4 space-y-3">
                 {(() => {
                   const totalCount = filteredEstimates.length;
@@ -680,63 +903,45 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                             {est.is_current && <Badge className="bg-blue-500 text-white text-xs">{t('current') || 'Faol'}</Badge>}
                           </div>
                           <div className="flex items-center gap-2">
-                            <Badge className={`text-xs ${getStateColor(est.state)}`}>
-                              {getStateLabel(est.state)}
-                            </Badge>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-                                  <MoreHorizontal className="w-4 h-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                                {est.state === 'draft' && (
-                                  <DropdownMenuItem onClick={() => handleEditEstimate(est)}>
-                                    <Edit className="w-4 h-4 mr-2 text-blue-600" />
-                                    {t('edit_estimate') || 'Tahrirlash'}
-                                  </DropdownMenuItem>
-                                )}
-                                {est.state === 'draft' && (
-                                  <DropdownMenuItem onClick={() => handleApprove(est)}>
-                                    <CheckCircle className="w-4 h-4 mr-2 text-green-600" />
-                                    {t('approve') || 'Tasdiqlash'}
-                                  </DropdownMenuItem>
-                                )}
-                                {est.source_type === 'resurs' && (
-                                  <DropdownMenuItem onClick={async () => {
-                                    try {
-                                      const result = await constructionService.createProductsFromEstimate(est.id);
-                                      if (result?.products_created > 0) {
-                                        toast.success(`${result.products_created} ${t('products_created_success') || "ta mahsulot yaratildi"}`);
-                                      } else {
-                                        toast.info(t('all_products_already_exist') || "Barcha mahsulotlar allaqachon mavjud");
-                                      }
-                                    } catch (err) {
-                                      console.error(err);
-                                      toast.error(t('error_occurred') || 'Xatolik yuz berdi');
-                                    }
-                                  }}>
-                                    <Package className="w-4 h-4 mr-2 text-green-600" />
-                                    {t('create_products') || "Mahsulotlar yaratish"}
-                                  </DropdownMenuItem>
-                                )}
-                                <DropdownMenuItem onClick={() => handleDuplicate(est)}>
-                                  <Copy className="w-4 h-4 mr-2" />
-                                  {t('duplicate') || 'Nusxalash'}
-                                </DropdownMenuItem>
-                                {est.state === 'draft' && (
-                                  <DropdownMenuItem onClick={() => handleDeleteEstimate(est)} className="text-red-600">
-                                    <Trash2 className="w-4 h-4 mr-2" />
-                                    {t('delete') || "O'chirish"}
-                                  </DropdownMenuItem>
-                                )}
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                            {/* State badge ("Qoralama" / draft, etc.) removed
+                               per product feedback — the source-type pills
+                               (ВОР / Единич / Ресурс) on the left convey
+                               enough; the draft/confirmed distinction is
+                               more relevant on the editing surfaces
+                               (Smeta boshqaruvi, Bosqichlar), not in this
+                               read-only list. */}
+                            {/* Per-estimate delete button — visible only when:
+                                 (1) the user has construction.estimate.delete
+                                     permission (admins/owners auto-pass), AND
+                                 (2) the estimate is in draft state (backend
+                                     also rejects non-draft delete with 400).
+                               stopPropagation prevents the parent header's
+                               onClick from toggling row expansion. The
+                               confirm-dialog and i18n strings are wired up
+                               in handleDeleteEstimate. The backend
+                               middleware (h.perm.Require) is the actual
+                               authority — this UI gate is just to hide the
+                               button from users who'd hit a 403 if they
+                               clicked. */}
+                            {canDeleteEstimate && est.state === 'draft' && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteEstimate(est);
+                                }}
+                                className="p-1.5 rounded-md text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                                title={t('delete') || "O'chirish"}
+                                aria-label={t('delete') || "O'chirish"}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
                           </div>
                         </div>
                         <div className="flex items-center justify-between ml-6">
                           <span className="text-sm text-slate-500">{est.lines_count || 0} {t('lines') || 'qator'}</span>
-                          <span className="text-base font-semibold">{formatCurrency(est.amount_total || 0)}</span>
+                          <span className="text-base font-semibold">{formatCurrency(displayAmount(est))}</span>
                         </div>
                       </div>
 
@@ -744,113 +949,335 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                       {isExpanded && (
                         <div className="border-t border-blue-200 bg-slate-50/70">
                           {/* Add line button */}
-                          {est.state === 'draft' && (
-                            <div className="px-4 py-2 flex justify-end border-b border-slate-200">
-                              <Button size="sm" variant="outline" onClick={() => {
-                                const currentLines = estimateLines[est.id] || [];
-                                setLineForm({ id: null, estimate_id: est.id, product_id: '', name: '', uom: '', quantity: '', material_rate: '', labor_rate: '', equipment_rate: '', sort_order: String(currentLines.length) });
-                                setAddLines([{ product_id: '', quantity: '' }]);
-                                setShowLineModal(true);
-                              }}>
-                                <Plus className="w-4 h-4 mr-1" />
-                                {t('add_line') || "Qator qo'shish"}
-                              </Button>
-                            </div>
-                          )}
+                          {/* "Qator qo'shish" toolbar removed — line creation lives in the
+                             new Smeta boshqaruvi tab via the Yangi etap / Qo'shimcha resurs
+                             flow, so this Smetalar table stays a read-only overview. */}
 
                           {isLoadingLines ? (
-                            <div className="text-center py-6 text-slate-500 text-sm">{t('loading') || 'Yuklanmoqda...'}</div>
+                            <Loader className="py-6" size="w-5 h-5" />
                           ) : lines.length === 0 ? (
                             <div className="text-center py-6">
                               <p className="text-slate-400 text-sm">{t('no_lines') || "Qatorlar yo'q"}</p>
                             </div>
                           ) : (
                             <div className="px-2 pb-2">
+                              {/*
+                                For resurs estimates the table has up to 10
+                                columns (Nomi + 5 numeric rates + actions),
+                                which don't fit on a typical desktop viewport
+                                once sidebar + panel widths are taken out.
+                                Give the table a minimum width so the
+                                wrapping div's overflow-x-auto actually kicks
+                                in and the user can scroll to the rightmost
+                                columns (Material / Ish haqi / Jihozlar /
+                                Birlik narxi / Jami) instead of having them
+                                squeezed to 30-40px with the values wrapped
+                                across two lines.
+                              */}
+                              {/* Ресурс tab is now a slim catalog view: Nomi /
+                                  O'lchov / Birlik narxi only. The four numeric
+                                  breakdown columns (Miqdor / Material / Ish /
+                                  Jihozlar / Jami) were per-product noise on the
+                                  resource catalog and have been hidden from the
+                                  UI per UX request. ВОР/Единич keep the original
+                                  Shifr / Nomi / O'lchov / Miqdor layout. */}
                               <div className="overflow-x-auto">
-                                <table className="w-full text-sm">
+                                <table
+                                  // No fixed min-width — the table now fills
+                                  // the card's content width. The overflow-x-auto
+                                  // wrapper around it (above) still catches the
+                                  // edge case where the column widths legitimately
+                                  // exceed the viewport (e.g. very long Russian
+                                  // section names), but on normal screens the
+                                  // table no longer leaves blank space to the
+                                  // right of the last column.
+                                  className="w-full text-sm table-fixed"
+                                >
+                                  <colgroup>
+                                    {/* Column widths sized to fit the longest expected content
+                                       without crowding the neighbouring column. Earlier sizing
+                                       (Kod 120 / Resurs trailing 110+140+160 with min-w 640)
+                                       squeezed the Nom column on real data — long Russian work
+                                       names wrapped into 5+ lines and the Shifr text bled
+                                       visually into Nom. Bumping the fixed widths and the
+                                       table's overall min-width lets the user horizontally
+                                       scroll instead of seeing crowded text. */}
+                                    <col style={{ width: '56px' }} />
+                                    {est.source_type !== 'resurs' && <col style={{ width: '200px' }} />}
+                                    <col />{/* Nomi — absorbs remaining width */}
+                                    <col style={{ width: '110px' }} />
+                                    {/* Edinich / ВОР trailing columns:
+                                          Norma (per-unit, "на. ед. измерения" = Excel col E)
+                                          Miqdor (project total, "по проектным данным" = col F)
+                                       Norma was previously only shown as an inline (Norma X.XX)
+                                       label next to the resource name — small enough to miss.
+                                       Promoting it to a real column keeps the Excel sheet's
+                                       layout familiar. Display-only, mirrors norm_rate. */}
+                                    {est.source_type !== 'resurs' && <col style={{ width: '110px' }} />}
+                                    {est.source_type !== 'resurs' && <col style={{ width: '120px' }} />}
+                                    {est.source_type === 'resurs' && (
+                                      <>
+                                        {/* Miqdor + Birlik narxi + Jami. The Miqdor (imported_quantity)
+                                           and Jami (imported_total) columns are populated from the
+                                           Ресурс XLSX "Количество" and "Сметная стоимость в базисном
+                                           уровне" fields verbatim. They're DISPLAY-ONLY (migration
+                                           413) — no cost, cascade, ledger, or budget code reads
+                                           them. */}
+                                        <col style={{ width: '140px' }} />
+                                        <col style={{ width: '160px' }} />
+                                        <col style={{ width: '180px' }} />
+                                      </>
+                                    )}
+                                    {est.state === 'draft' && <col style={{ width: '96px' }} />}
+                                  </colgroup>
                                   <thead>
                                     <tr className="border-b">
-                                      <th className="text-left py-2 px-2 text-xs font-medium text-slate-500 w-10">№</th>
-                                      {est.source_type !== 'resurs' && <th className="text-left py-2 px-2 text-xs font-medium text-slate-500">{t('code') || 'Shifr'}</th>}
+                                      <th className="text-left py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">№</th>
+                                      {est.source_type !== 'resurs' && <th className="text-left py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">{t('code') || 'Shifr'}</th>}
                                       <th className="text-left py-2 px-2 text-xs font-medium text-slate-500">{t('name') || 'Nomi'}</th>
-                                      <th className="text-right py-2 px-2 text-xs font-medium text-slate-500">{t('unit') || "O'lchov"}</th>
-                                      <th className="text-right py-2 px-2 text-xs font-medium text-slate-500">{t('quantity') || 'Miqdor'}</th>
-                                      {est.source_type === 'resurs' && <>
-                                        <th className="text-right py-2 px-2 text-xs font-medium text-slate-500">{t('material') || 'Material'}</th>
-                                        <th className="text-right py-2 px-2 text-xs font-medium text-slate-500">{t('labor') || 'Ish haqi'}</th>
-                                        <th className="text-right py-2 px-2 text-xs font-medium text-slate-500">{t('equipment') || 'Jihozlar'}</th>
-                                        <th className="text-right py-2 px-2 text-xs font-medium text-slate-500">{t('unit_rate') || 'Birlik narxi'}</th>
-                                        <th className="text-right py-2 px-2 text-xs font-medium text-slate-500">{t('total') || 'Jami'}</th>
-                                      </>}
-                                      {est.state === 'draft' && <th className="w-16"></th>}
+                                      <th className="text-right py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">{t('unit') || "O'lchov"}</th>
+                                      {est.source_type !== 'resurs' && (
+                                        <>
+                                          <th className="text-right py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">{t('norm') || 'Norma'}</th>
+                                          <th className="text-right py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">{t('quantity') || 'Miqdor'}</th>
+                                        </>
+                                      )}
+                                      {est.source_type === 'resurs' && (
+                                        <>
+                                          <th className="text-right py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">{t('quantity') || 'Miqdor'}</th>
+                                          <th className="text-right py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">{t('unit_rate') || 'Birlik narxi'}</th>
+                                          <th className="text-right py-2 px-2 text-xs font-medium text-slate-500 whitespace-nowrap">{t('total') || 'Jami'}</th>
+                                        </>
+                                      )}
+                                      {/* Inline +/edit/trash row actions removed — line editing is
+                                         now done from the dedicated Smeta boshqaruvi tab so this
+                                         table stays a read-only summary. */}
                                     </tr>
                                   </thead>
                                   <tbody>
-                                    {lines.map((line) => (
-                                      <tr key={line.id} className={`border-b border-slate-100 hover:bg-white group ${line.resource_type ? 'bg-slate-50/50' : ''}`}>
-                                        <td className="py-2 px-2 text-xs text-slate-400">
-                                          {line.resource_type ? <span className="pl-2">{line.item_number}</span> : <span className="font-medium">{line.item_number}</span>}
-                                        </td>
-                                        {est.source_type !== 'resurs' && <td className="py-2 px-2 text-xs text-slate-500">{line.code}</td>}
-                                        <td className="py-2 px-2 text-xs">
-                                          {line.resource_type && (
-                                            <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${
-                                              line.resource_type === 'labor' ? 'bg-blue-400' :
-                                              line.resource_type === 'equipment' ? 'bg-amber-400' : 'bg-green-400'
-                                            }`} />
-                                          )}
-                                          {line.name}
-                                        </td>
-                                        <td className="py-2 px-2 text-right text-xs text-slate-600">{line.uom}</td>
-                                        <td className="py-2 px-2 text-right text-xs">{line.quantity}</td>
-                                        {est.source_type === 'resurs' && <>
-                                          <td className="py-2 px-2 text-right text-xs">{formatCurrency(line.material_rate)}</td>
-                                          <td className="py-2 px-2 text-right text-xs">{formatCurrency(line.labor_rate)}</td>
-                                          <td className="py-2 px-2 text-right text-xs">{formatCurrency(line.equipment_rate)}</td>
-                                          <td className="py-2 px-2 text-right text-xs font-medium">{formatCurrency(line.unit_rate)}</td>
-                                          <td className="py-2 px-2 text-right text-xs font-medium">{formatCurrency(line.total_amount)}</td>
-                                        </>}
-                                        {est.state === 'draft' && (
-                                          <td className="py-2 px-2 text-center">
-                                            <div className="flex gap-1 opacity-0 group-hover:opacity-100">
-                                              <Button
-                                                variant="ghost" size="sm"
-                                                className="h-6 w-6 p-0"
-                                                onClick={() => {
-                                                  setLineForm({
-                                                    id: line.id,
-                                                    estimate_id: est.id,
-                                                    product_id: line.product_id ? String(line.product_id) : '',
-                                                    name: line.name,
-                                                    uom: line.uom,
-                                                    quantity: String(line.quantity),
-                                                    material_rate: formatPriceInput(String(line.material_rate)),
-                                                    labor_rate: formatPriceInput(String(line.labor_rate)),
-                                                    equipment_rate: formatPriceInput(String(line.equipment_rate)),
-                                                    sort_order: String(line.sort_order),
-                                                  });
-                                                  setShowLineModal(true);
-                                                }}
-                                              >
-                                                <Edit className="w-3 h-3" />
-                                              </Button>
-                                              <Button
-                                                variant="ghost" size="sm"
-                                                className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
-                                                onClick={() => handleDeleteLine(est.id, line.id)}
-                                              >
-                                                <Trash2 className="w-3 h-3" />
-                                              </Button>
-                                            </div>
-                                          </td>
-                                        )}
-                                      </tr>
-                                    ))}
+                                    {(() => {
+                                      // Group lines by parent. Two mechanisms, in order of precedence:
+                                      //   1. Explicit FK (`parent_line_id`) set by the SublineModal flow.
+                                      //   2. Implicit hierarchy detected from the item_number pattern
+                                      //      `{base}-{seq}` (e.g. "3-1" is a child of "3"). This covers
+                                      //      data imported from Excel/SNiP files where the numbering
+                                      //      expresses the relationship but no FK was written.
+                                      const byParent = new Map(); // parent_line_id -> children[]
+                                      const roots = [];
+
+                                      // Build an item_number -> line.id lookup for the implicit pass.
+                                      // We only use top-level rows (no parent already set) as potential
+                                      // parents so we don't stack 3-1-1 as child of 3-1.
+                                      const itemNumToId = new Map();
+                                      for (const ln of lines) {
+                                        if (!ln.parent_line_id && ln.item_number) {
+                                          itemNumToId.set(String(ln.item_number), ln.id);
+                                        }
+                                      }
+
+                                      // Classify: a row is a sub-line if (a) it has parent_line_id,
+                                      // or (b) its item_number looks like "N-M" (N, M both numeric)
+                                      // AND an item_number "N" exists in this estimate.
+                                      for (const ln of lines) {
+                                        let effectiveParentId = null;
+                                        if (ln.parent_line_id) {
+                                          effectiveParentId = ln.parent_line_id;
+                                        } else if (typeof ln.item_number === 'string') {
+                                          // Only split on the LAST hyphen, and only when both sides are
+                                          // plain integers. This avoids misinterpreting codes like
+                                          // "E0102-057-02" (not all-numeric segments).
+                                          const m = ln.item_number.match(/^(\d+)-(\d+)$/);
+                                          if (m) {
+                                            const base = m[1];
+                                            const resolved = itemNumToId.get(base);
+                                            if (resolved && resolved !== ln.id) {
+                                              effectiveParentId = resolved;
+                                            }
+                                          }
+                                        }
+
+                                        if (effectiveParentId) {
+                                          const arr = byParent.get(effectiveParentId) || [];
+                                          arr.push(ln);
+                                          byParent.set(effectiveParentId, arr);
+                                        } else {
+                                          roots.push(ln);
+                                        }
+                                      }
+                                      const rows = [];
+                                      // Subtotal row uses (colSpan - 2) for the content cell
+                                      // which sits between the leftmost empty(es) and the
+                                      // rightmost value cell. Visible cols per type:
+                                      //   resurs:  №, Nomi, O'lchov, Miqdor, Birlik narxi, Jami → 6
+                                      //   other:   №, Shifr, Nomi, O'lchov, Miqdor              → 5
+                                      // The subtotal row is only rendered for resurs (see the
+                                      // `est.source_type === 'resurs'` guard below), so we size
+                                      // colSpan for that case:
+                                      //   layout: [empty №] + content (cs-2) + [value under Jami]
+                                      //   ⇒ 1 + (cs-2) + 1 = 6  ⇒  cs = 6
+                                      // Migration 400 added the Miqdor / Jami columns; the old
+                                      // value of 4 left the subtotal text leaking past the
+                                      // intended Birlik narxi column.
+                                      const colSpan = 6;
+
+                                      const renderLine = (line, isSubline, parent) => {
+                                        // Sub-lines (podkator) get a green tint + left accent border so they're
+                                        // visually distinct from regular estimate rows.
+                                        const rowClass = isSubline
+                                          ? 'border-b border-slate-100 hover:bg-emerald-50/70 group bg-emerald-50/40 border-l-[3px] border-l-emerald-400'
+                                          : 'border-b border-slate-100 hover:bg-white group';
+                                        return (
+                                          <tr key={line.id} className={rowClass}>
+                                            <td className="py-2 px-2 text-xs whitespace-nowrap">
+                                              {isSubline
+                                                ? <span className="pl-6 font-mono text-emerald-700 whitespace-nowrap">{line.item_number}</span>
+                                                : <span className="font-medium text-slate-500 whitespace-nowrap">{line.item_number}</span>}
+                                            </td>
+                                            {est.source_type !== 'resurs' && (
+                                              // break-words lets a long shifr that still doesn't
+                                              // fit in the wider 200px column break inside the
+                                              // cell instead of leaking into the Nom column. The
+                                              // text comes from imported XLSX where line breaks
+                                              // get flattened into a single string ("E0101-197-14
+                                              // ДОП. 11 ГОСАРХИТЕКТСТРОЙ РУЗ ПР. № 429 ОТ
+                                              // 15.12.17 Г.") so we need word-level breaks for
+                                              // wrapping to look right.
+                                              <td className={`py-2 px-2 text-xs break-words ${isSubline ? 'text-emerald-700/80' : 'text-slate-500'}`}>{line.code}</td>
+                                            )}
+                                            <td className={`py-2 px-2 text-xs break-words ${isSubline ? 'text-emerald-900' : ''}`}>
+                                              {isSubline && (
+                                                <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${
+                                                  line.resource_type === 'labor' ? 'bg-blue-500' :
+                                                  line.resource_type === 'equipment' ? 'bg-amber-500' :
+                                                  line.resource_type === 'material' ? 'bg-emerald-600' : 'bg-emerald-400'
+                                                }`} />
+                                              )}
+                                              {line.name}
+                                              {/* Inline "(Norma X.XX)" label removed —
+                                                 the per-unit norm now has its own
+                                                 dedicated column (Norma) for non-resurs
+                                                 estimates, so the inline label was
+                                                 redundant and easy to miss. */}
+                                            </td>
+                                            <td className="py-2 px-2 text-right text-xs text-slate-600 whitespace-nowrap">{line.uom}</td>
+                                            {est.source_type !== 'resurs' && (
+                                              // Norma (per-unit, Excel col E) — DISPLAY-ONLY.
+                                              // Sourced from norm_rate, which the Edinich
+                                              // parser populates from "на. ед. измерения".
+                                              // Empty for parent works (the norm only
+                                              // applies to child resources), and rendered
+                                              // as an em-dash when zero.
+                                              <td className="py-2 px-2 text-right text-xs whitespace-nowrap">
+                                                {isSubline && Number(line.norm_rate) > 0
+                                                  ? <span className="text-emerald-700/80 font-medium">{Number(line.norm_rate)}</span>
+                                                  : <span className="text-slate-300">—</span>}
+                                              </td>
+                                            )}
+                                            {est.source_type !== 'resurs' && (
+                                              // Show the file's "по проектным данным" value (col F on
+                                              // the Единич sheet) when available. This is what fills
+                                              // in the Miqdori column for BOTH parents and child
+                                              // resources — without it, Единич sub-rows displayed "0"
+                                              // because templateMode zeroes the live `quantity` ledger.
+                                              //
+                                              // Fallback chain (most specific → least):
+                                              //   1. imported_quantity — file's literal value, captured
+                                              //      by the Единич parser into norma_quantity and
+                                              //      persisted via migration 413. DISPLAY-ONLY: no
+                                              //      cascade, NORMA pill, ledger, or budget path reads
+                                              //      it. Set for both parent works and child resources
+                                              //      after migration 413.
+                                              //   2. original_quantity — the parent-only anchor from
+                                              //      migration 349. Present on older rows that predate
+                                              //      413; on those rows children still render 0 because
+                                              //      the legacy parser dropped col F for children.
+                                              //   3. live `quantity` — last-ditch fallback for
+                                              //      pre-migration-349 rows.
+                                              <td className="py-2 px-2 text-right text-xs whitespace-nowrap">
+                                                {line.imported_quantity != null && Number(line.imported_quantity) > 0
+                                                  ? Number(line.imported_quantity)
+                                                  : (Number(line.original_quantity) > 0
+                                                      ? line.original_quantity
+                                                      : line.quantity)}
+                                              </td>
+                                            )}
+                                            {est.source_type === 'resurs' && (
+                                              <>
+                                                {/* Miqdor — show the file's "Количество" verbatim.
+                                                   Falls back to original_quantity / live quantity for
+                                                   rows imported before migration 400 so older data
+                                                   doesn't render as em-dashes.
+
+                                                   imported_quantity is DISPLAY-ONLY: it never feeds
+                                                   the cost cascade, NORMA pill, FAKT ledger, or Reja
+                                                   vs Fakt budget. The user wanted the file figure
+                                                   visible without altering any computed behaviour. */}
+                                                <td className="py-2 px-2 text-right text-xs text-slate-700 whitespace-nowrap">
+                                                  {line.imported_quantity != null
+                                                    ? Number(line.imported_quantity)
+                                                    : (Number(line.original_quantity) > 0
+                                                        ? line.original_quantity
+                                                        : (Number(line.quantity) > 0 ? line.quantity : '—'))}
+                                                </td>
+                                                <td className="py-2 px-2 text-right text-xs font-medium whitespace-nowrap">{formatCurrency(line.unit_rate)}</td>
+                                                {/* Jami — show the file's "Сметная стоимость в базисном
+                                                   уровне" verbatim. Same display-only contract as
+                                                   Miqdor. Falls back to the computed total_amount so
+                                                   pre-migration rows still render a useful figure. */}
+                                                <td className="py-2 px-2 text-right text-xs font-semibold whitespace-nowrap">
+                                                  {line.imported_total != null
+                                                    ? formatCurrency(Number(line.imported_total))
+                                                    : (Number(line.total_amount) > 0
+                                                        ? formatCurrency(line.total_amount)
+                                                        : '—')}
+                                                </td>
+                                              </>
+                                            )}
+                                            {/* Per-row +/edit/trash actions removed — Smeta boshqaruvi tab
+                                               is the single editing surface for estimate lines. */}
+                                          </tr>
+                                        );
+                                      };
+
+                                      for (const parent of roots) {
+                                        rows.push(renderLine(parent, false, null));
+                                        const children = byParent.get(parent.id) || [];
+                                        for (const c of children) {
+                                          rows.push(renderLine(c, true, parent));
+                                        }
+                                        if (children.length > 0 && est.source_type === 'resurs') {
+                                          const subTotal = children.reduce((s, c) => s + (Number(c.total_amount) || 0), 0);
+                                          rows.push(
+                                            <tr key={`subtotal-${parent.id}`} className="bg-emerald-50/60 border-b border-slate-100 border-l-[3px] border-l-emerald-400">
+                                              <td className="py-1.5 px-2" />
+                                              {est.source_type !== 'resurs' && <td />}
+                                              <td className="py-1.5 px-2 text-xs text-emerald-800 italic" colSpan={colSpan - 2}>
+                                                {parent.item_number}-{t('subline_total_label') || "qator podkatorlar jami"}
+                                              </td>
+                                              <td className="py-1.5 px-2 text-right text-xs font-semibold text-emerald-700">
+                                                {formatCurrency(subTotal)}
+                                              </td>
+                                              {est.state === 'draft' && <td />}
+                                            </tr>
+                                          );
+                                        }
+                                        // Also render any orphan lines that claim this as parent by item_number
+                                        // (legacy rows linked via parent_item_number only)
+                                      }
+
+                                      // Render orphans (parent_line_id unset and parent_item_number points to nothing)
+                                      return rows;
+                                    })()}
                                   </tbody>
                                   {est.source_type === 'resurs' && (
                                     <tfoot>
+                                      {/* resurs visible cols (post-migration 400):
+                                          №, Nomi, O'lchov, Miqdor, Birlik narxi, Jami
+                                          (+ optional Actions in draft state).
+                                          Label cell spans cols 1–5, value cell sits in col 6
+                                          (Jami), and the draft state appends an extra empty td. */}
                                       <tr className="font-semibold bg-white">
-                                        <td colSpan={8} className="py-2 px-2 text-right text-xs">{t('direct_cost') || "To'g'ridan-to'g'ri xarajat"}:</td>
+                                        <td colSpan={5} className="py-2 px-2 text-right text-xs">{t('direct_cost') || "To'g'ridan-to'g'ri xarajat"}:</td>
                                         <td className="py-2 px-2 text-right text-xs">{formatCurrency(est.amount_direct || 0)}</td>
                                         {est.state === 'draft' && <td></td>}
                                       </tr>
@@ -919,7 +1346,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                   );
                 })()}
               </div>
-            </ScrollArea>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -975,7 +1402,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                       <SelectItem value="none">{t('entire_project') || "Butun loyiha"}</SelectItem>
                       {buildings.map(b => (
                         <SelectItem key={b.id} value={String(b.id)}>
-                          {b.code ? `${b.code} - ${b.name}` : b.name}
+                          {b.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1081,7 +1508,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                       <SelectItem value="none">{t('entire_project') || "Butun loyiha"}</SelectItem>
                       {buildings.map(b => (
                         <SelectItem key={b.id} value={String(b.id)}>
-                          {b.code ? `${b.code} - ${b.name}` : b.name}
+                          {b.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1157,10 +1584,9 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label>{t('quantity') || 'Miqdor'}</Label>
-                    <Input
-                      type="number" step="0.0001" min="0"
+                    <NumberInput
                       value={lineForm.quantity}
-                      onChange={(e) => setLineForm({ ...lineForm, quantity: e.target.value })}
+                      onChange={(raw) => setLineForm({ ...lineForm, quantity: raw })}
                     />
                   </div>
                   <div>
@@ -1228,12 +1654,11 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                           </div>
                           <div className="w-24 flex-shrink-0">
                             {idx === 0 && <label className="text-xs text-slate-500 mb-1 block">{t('qty') || 'Miqdor'}</label>}
-                            <Input
-                              type="number" step="0.0001" min="0"
+                            <NumberInput
                               placeholder="0"
                               value={row.quantity}
-                              onChange={(e) => {
-                                setAddLines(prev => prev.map((r, i) => i === idx ? { ...r, quantity: e.target.value } : r));
+                              onChange={(raw) => {
+                                setAddLines(prev => prev.map((r, i) => i === idx ? { ...r, quantity: raw } : r));
                               }}
                             />
                           </div>
@@ -1331,6 +1756,38 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
         loadEstimateLines={loadEstimateLines}
         selectedBuilding={selectedBuilding}
         project={project}
+      />
+
+      {/* Sub-line add / edit modal (migration 332) */}
+      <SublineModal
+        open={sublineDialog.open}
+        onClose={() => setSublineDialog({ open: false, parent: null, estimateId: null, nextSeq: 1, initial: null })}
+        parent={sublineDialog.parent}
+        estimateId={sublineDialog.estimateId}
+        projectId={project?.id}
+        nextSeq={sublineDialog.nextSeq}
+        initial={sublineDialog.initial}
+        onSaved={async () => {
+          if (sublineDialog.estimateId) {
+            await loadEstimateLines(sublineDialog.estimateId);
+            await loadEstimates();
+          }
+        }}
+      />
+
+      {/* Full edit modal — used by the pencil icon on any line */}
+      <EstimateLineEditModal
+        open={editLineDialog.open}
+        onClose={() => setEditLineDialog({ open: false, line: null, parent: null, estimateId: null })}
+        line={editLineDialog.line}
+        parent={editLineDialog.parent}
+        estimateId={editLineDialog.estimateId}
+        onSaved={async () => {
+          if (editLineDialog.estimateId) {
+            await loadEstimateLines(editLineDialog.estimateId);
+            await loadEstimates();
+          }
+        }}
       />
     </div>
   );

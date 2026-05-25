@@ -104,30 +104,32 @@ export default function CompanySwitcher({ compact = false }) {
         <DropdownMenuSeparator />
 
         {/* Company List */}
-        {companies.map((company) => (
-          <DropdownMenuItem
-            key={company.id}
-            onClick={() => handleCompanySwitch(company.id)}
-            className="cursor-pointer"
-          >
-            <div className="flex items-center gap-3 w-full">
-              {/* Company Info */}
-              <div className="flex flex-col flex-1 min-w-0">
-                <span className="text-sm font-medium truncate">
-                  {company.company_name}
-                </span>
-                <span className="text-xs text-slate-500">
-                  {company.company_code} • {company.currency}
-                </span>
-              </div>
+        <div className="max-h-[360px] overflow-y-auto">
+          {companies.map((company) => (
+            <DropdownMenuItem
+              key={company.id}
+              onClick={() => handleCompanySwitch(company.id)}
+              className="cursor-pointer"
+            >
+              <div className="flex items-center gap-3 w-full">
+                {/* Company Info */}
+                <div className="flex flex-col flex-1 min-w-0">
+                  <span className="text-sm font-medium truncate">
+                    {company.company_name}
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    {company.company_code} • {company.currency}
+                  </span>
+                </div>
 
-              {/* Active Indicator */}
-              {activeCompany?.id === company.id && (
-                <Check className="w-4 h-4 text-green-600 flex-shrink-0" />
-              )}
-            </div>
-          </DropdownMenuItem>
-        ))}
+                {/* Active Indicator */}
+                {activeCompany?.id === company.id && (
+                  <Check className="w-4 h-4 text-green-600 flex-shrink-0" />
+                )}
+              </div>
+            </DropdownMenuItem>
+          ))}
+        </div>
 
         <DropdownMenuSeparator />
 

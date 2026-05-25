@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 import { hrService } from '@/api/services/hr';
 import { useAdminSettings } from './AdminSettingsContext';
+import { useEmployeePermissions } from './EmployeePermissionsContext';
 import { isDemoMode, checkBackendHealth } from '@/config/dataMode';
 
 const HRContext = createContext(null);
@@ -59,6 +60,7 @@ const sampleEmployees = [
 
 export function HRProvider({ children }) {
   const { getSetting } = useAdminSettings();
+  const { canAccessModule, isAdmin } = useEmployeePermissions();
   const [employees, setEmployees] = useState([]);
   const [payrollPeriods, setPayrollPeriods] = useState([]);
   const [payrollEntries, setPayrollEntries] = useState([]);
@@ -132,11 +134,16 @@ export function HRProvider({ children }) {
       setBackendAvailable(isBackendAvailable);
 
       if (!demoMode && isBackendAvailable) {
-        // Try to load from backend
+        // Try to load from backend, but skip the calls entirely for users
+        // without HR/payroll access — otherwise they 403 and pollute the
+        // console. Admins always load.
+        const allowHr      = isAdmin || canAccessModule('hr');
+        const allowPayroll = isAdmin || canAccessModule('hr') || canAccessModule('payroll');
+        const skip = () => Promise.resolve([]);
         try {
           const [employeesData, payrollPeriodsData] = await Promise.all([
-            hrService.listEmployees(),
-            hrService.listPayrollPeriods(),
+            allowHr      ? hrService.listEmployees()      : skip(),
+            allowPayroll ? hrService.listPayrollPeriods() : skip(),
           ]);
           setEmployees(employeesData || []);
           setPayrollPeriods(payrollPeriodsData || []);
@@ -180,7 +187,7 @@ export function HRProvider({ children }) {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [canAccessModule, isAdmin]);
 
   // Load data on mount
   useEffect(() => {

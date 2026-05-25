@@ -358,8 +358,29 @@ export const financeService = {
     return response.data.data;
   },
 
+  // ASQ per TT Buxgalteriya §6.1 — opening / turnover / closing breakdown
+  async getTrialBalanceWithTurnover(params = {}) {
+    const response = await apiClient.get('/reports/trial-balance/turnover', { params });
+    return response.data.data;
+  },
+
+  // Streams an .xlsx file. Returns a Blob for the caller to trigger download.
+  async exportTrialBalanceExcel(params = {}) {
+    const response = await apiClient.get('/reports/trial-balance/excel', {
+      params,
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+
   async getGeneralLedger(params = {}) {
     const response = await apiClient.get('/reports/general-ledger', { params });
+    return response.data.data;
+  },
+
+  // Bosh kitob per TT Buxgalteriya §6.2 — monthly turnovers for a year
+  async getGeneralLedgerMonthly(params = {}) {
+    const response = await apiClient.get('/reports/general-ledger/monthly', { params });
     return response.data.data;
   },
 
@@ -373,13 +394,110 @@ export const financeService = {
     return response.data.data;
   },
 
-  // Expense Categories
+  async getAccountCard(params = {}) {
+    const response = await apiClient.get('/reports/account-card', { params });
+    return response.data.data;
+  },
+
+  // BHMS №21 regulated reports (TT §6.4)
+  async getForma1(params = {}) {
+    const response = await apiClient.get('/reports/forma-1', { params });
+    return response.data.data;
+  },
+  async getForma2(params = {}) {
+    const response = await apiClient.get('/reports/forma-2', { params });
+    return response.data.data;
+  },
+  async getForma3(params = {}) {
+    const response = await apiClient.get('/reports/forma-3', { params });
+    return response.data.data;
+  },
+  async exportFormasExcel(params = {}) {
+    const response = await apiClient.get('/reports/formas/excel', {
+      params,
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+
+  // Period Close (TT §4.3)
+  async closePeriod(data) {
+    const response = await apiClient.post('/period-close/run', data);
+    return response.data.data;
+  },
+  async listPeriodClosings() {
+    const response = await apiClient.get('/period-close');
+    return response.data.data;
+  },
+  async getPeriodClosing(id) {
+    const response = await apiClient.get(`/period-close/${id}`);
+    return response.data.data;
+  },
+  async reopenPeriod(id, reason) {
+    const response = await apiClient.post(`/period-close/${id}/reopen`, { reason });
+    return response.data.data;
+  },
+
+  // Bank Statement Import (TT §8.1)
+  async importBankStatement(file) {
+    const form = new FormData();
+    form.append('file', file);
+    const response = await apiClient.post('/bank-statement-imports', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data.data;
+  },
+  async listBankStatementImports() {
+    const response = await apiClient.get('/bank-statement-imports');
+    return response.data.data;
+  },
+
+  // E-invoices (TT §8.2)
+  async ingestEInvoice(payload) {
+    const response = await apiClient.post('/einvoices/ingest', payload);
+    return response.data.data;
+  },
+  async listEInvoices(params = {}) {
+    const response = await apiClient.get('/einvoices', { params });
+    return response.data.data;
+  },
+  async approveEInvoice(id, links = {}) {
+    const response = await apiClient.post(`/einvoices/${id}/approve`, links);
+    return response.data.data;
+  },
+  async rejectEInvoice(id, reason) {
+    const response = await apiClient.post(`/einvoices/${id}/reject`, { reason });
+    return response.data.data;
+  },
+
+  // Expense Categories — CRUD. The list endpoint surfaces account_id +
+  // account_code + account_name + usage_count so the Settings UI can show
+  // "Travel → 9410 Operating Expense (5 expenses)" without a second
+  // roundtrip. Mutations return the same enriched shape so the local list
+  // can splice in updates without a refetch.
   async listExpenseCategories(params = {}) {
     const response = await apiClient.get('/expense-categories', { params });
     return response.data.data;
   },
 
+  async createExpenseCategory(data) {
+    const response = await apiClient.post('/expense-categories', data);
+    return response.data.data;
+  },
+
+  async updateExpenseCategory(id, data) {
+    const response = await apiClient.put(`/expense-categories/${id}`, data);
+    return response.data.data;
+  },
+
+  async deleteExpenseCategory(id) {
+    await apiClient.delete(`/expense-categories/${id}`);
+  },
+
   // Expenses
+  // Accepts any of: status, category_id, employee_id, is_recognized (bool),
+  // date_from / date_to (YYYY-MM-DD), page, limit. Passed through axios
+  // params so snake_case keys survive on the wire.
   async listExpenses(params = {}) {
     const response = await apiClient.get('/expenses', { params });
     return response.data.data;
@@ -406,6 +524,59 @@ export const financeService = {
 
   async approveExpense(id) {
     const response = await apiClient.post(`/expenses/${id}/approve`);
+    return response.data.data;
+  },
+
+  // Toggle an expense's profit-tax recognition flag (PATCH
+  // /expenses/:id/recognize). See §7.2 of ТЗ_Ish_Haqi_Soliq_Tolik.docx —
+  // dedicated endpoint so UI can fire a small request on each row click
+  // without sending the full update payload.
+  async recognizeExpense(id, isRecognized) {
+    const response = await apiClient.patch(`/expenses/${id}/recognize`, {
+      is_recognized: Boolean(isRecognized),
+    });
+    return response.data.data;
+  },
+
+  // ────────────── Profit-tax calculation ──────────────
+  // Live re-compute for a period. `income` is passed as a manual override
+  // until the revenue ledger is wired up; omit it to get a tax-base that
+  // reflects only expenses.
+  async getProfitTax({ periodType = 'month', periodKey, income, rate } = {}) {
+    const params = { period_type: periodType };
+    if (periodKey) params.period_key = periodKey;
+    if (income !== undefined && income !== null && income !== '') params.income = income;
+    if (rate !== undefined && rate !== null && rate !== '') params.rate = rate;
+    const response = await apiClient.get('/profit-tax', { params });
+    return response.data.data;
+  },
+
+  // Pull a period's revenue straight from the general ledger — sum of
+  // credits net of debits on revenue-category accounts for posted
+  // journal entries. Used by the "Pull from ledger" button on the Profit
+  // Tax page so accountants don't have to type the number by hand.
+  async getProfitTaxRevenue({ periodType = 'month', periodKey } = {}) {
+    const params = { period_type: periodType };
+    if (periodKey) params.period_key = periodKey;
+    const response = await apiClient.get('/profit-tax/revenue', { params });
+    return response.data.data;
+  },
+
+  // Freeze the current computed numbers into profit_tax_calc.
+  async snapshotProfitTax({ periodType, periodKey, income, rate, notes } = {}) {
+    const body = { period_type: periodType, period_key: periodKey };
+    if (income !== undefined) body.income = income;
+    if (rate !== undefined && rate !== null && rate !== '') body.rate = rate;
+    if (notes) body.notes = notes;
+    const response = await apiClient.post('/profit-tax/snapshot', body);
+    return response.data.data;
+  },
+
+  // Listing for the snapshots tab / audit view.
+  async listProfitTaxSnapshots({ year } = {}) {
+    const params = {};
+    if (year) params.year = year;
+    const response = await apiClient.get('/profit-tax/snapshots', { params });
     return response.data.data;
   },
 

@@ -40,6 +40,41 @@ export default function JournalManagement() {
   const { t } = useTranslation(language);
 
   const tPM = (code, fallbackName) => t(PM_CODE_TO_KEY[code]) || fallbackName || code;
+
+  // Code-based translation map. The backend stores name_uz/name_en
+  // columns but they're NULL on legacy journals created before the
+  // seeder learned to write them. Without this map a tenant with old
+  // journals shows "Bank Journal" / "Cash Journal" in Uzbek mode
+  // because the only populated column is `name` (English). Keying off
+  // the immutable `code` field is reliable in any DB state.
+  const DEFAULT_JOURNAL_I18N = {
+    GEN:           { uz: 'Bosh jurnal',                en: 'General Journal',         ru: 'Главный журнал' },
+    SAL:           { uz: 'Sotish jurnali',             en: 'Sales Journal',           ru: 'Журнал продаж' },
+    PUR:           { uz: 'Xarid jurnali',              en: 'Purchase Journal',        ru: 'Журнал закупок' },
+    CASH:          { uz: 'Kassa jurnali',              en: 'Cash Journal',            ru: 'Кассовый журнал' },
+    BANK:          { uz: 'Bank jurnali',               en: 'Bank Journal',            ru: 'Банковский журнал' },
+    MISC:          { uz: 'Boshqa operatsiyalar jurnali', en: 'Miscellaneous Journal', ru: 'Прочие операции' },
+    STOCK:         { uz: 'Ombor jurnali',              en: 'Stock Journal',           ru: 'Складской журнал' },
+    ASSET:         { uz: 'Asosiy vositalar jurnali',   en: 'Fixed Assets Journal',    ru: 'Журнал основных средств' },
+    PAYROLL:       { uz: 'Ish haqi jurnali',           en: 'Payroll Journal',         ru: 'Журнал зарплаты' },
+    CONST:         { uz: 'Qurilish jurnali',           en: 'Construction Journal',    ru: 'Строительный журнал' },
+  };
+
+  // Pick the localized journal name. Strategy:
+  //   1. Use the backend's localized column if populated (preferred —
+  //      respects user renames of default journals).
+  //   2. Fall back to the DEFAULT_JOURNAL_I18N map keyed by `code` —
+  //      covers legacy rows where name_uz / name_en are NULL.
+  //   3. Fall back to any populated name column.
+  //   4. Final fallback: the code itself.
+  const journalDisplayName = (j) => {
+    if (!j) return '';
+    if (language === 'uz' && j.name_uz) return j.name_uz;
+    if (language === 'en' && j.name_en) return j.name_en;
+    const i18n = DEFAULT_JOURNAL_I18N[j.code];
+    if (i18n && i18n[language]) return i18n[language];
+    return j.name || j.name_uz || j.name_en || j.code || '';
+  };
   const {
     journals,
     accounts,
@@ -93,9 +128,16 @@ export default function JournalManagement() {
   useEffect(() => {
     let filtered = journals;
     if (searchQuery) {
+      const q = searchQuery.toLowerCase();
       filtered = filtered.filter(j =>
-        j.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        j.code?.toLowerCase().includes(searchQuery.toLowerCase())
+        // Search matches against the localized display name so a user
+        // typing in Uzbek finds Uzbek-labeled journals even when the
+        // underlying `name` column is Russian.
+        journalDisplayName(j).toLowerCase().includes(q) ||
+        j.name?.toLowerCase().includes(q) ||
+        j.name_uz?.toLowerCase().includes(q) ||
+        j.name_en?.toLowerCase().includes(q) ||
+        j.code?.toLowerCase().includes(q)
       );
     }
     if (typeFilter !== "all") {
@@ -1113,7 +1155,7 @@ export default function JournalManagement() {
                         </TableCell>
                         <TableCell>
                           <div>
-                            <p className="font-medium text-slate-900">{journal.name}</p>
+                            <p className="font-medium text-slate-900">{journalDisplayName(journal)}</p>
                             {journal.description && (
                               <p className="text-xs text-slate-500 mt-0.5">{journal.description}</p>
                             )}
@@ -1279,7 +1321,7 @@ export default function JournalManagement() {
           <div className="py-4">
             <p className="text-slate-600 mb-4">
               {t('confirm_delete_journal')}{' '}
-              <span className="font-semibold text-slate-900">"{selectedForDelete?.name}"</span>?
+              <span className="font-semibold text-slate-900">"{journalDisplayName(selectedForDelete)}"</span>?
             </p>
             <div className="p-3 bg-red-50 border border-red-200 rounded-lg mb-4">
               <div className="flex items-start gap-2">

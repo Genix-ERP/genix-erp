@@ -50,6 +50,7 @@ import { useSearchParams } from 'react-router-dom';
 
 import { useProcurement } from '@/components/contexts/ProcurementContext';
 import { useInventory } from '@/components/contexts/InventoryContext';
+import { useCompany } from '@/components/contexts/CompanyContext';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { usePermissions } from "@/hooks/usePermissions";
@@ -57,6 +58,7 @@ import { MODULES } from "@/config/permissions";
 import { procurementService } from '@/api/services/procurement';
 import { financeService } from '@/api/services/finance';
 import { useToast } from "@/components/ui/use-toast";
+import { formatApiError } from "@/utils/apiErrors";
 import { useAdminSettings } from '@/components/contexts/AdminSettingsContext';
 import { useFinancials } from '@/components/contexts/FinancialsContext';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
@@ -94,8 +96,10 @@ export default function PurchaseOrders() {
     receivePurchaseOrder,
     getSupplierById,
     isLoading,
+    refreshData,
   } = useProcurement();
   const { refreshData: refreshInventory } = useInventory();
+  const { activeCompany } = useCompany();
 
   const [activeTab, setActiveTab] = useState('orders');
   const [filteredOrders, setFilteredOrders] = useState([]);
@@ -300,7 +304,18 @@ export default function PurchaseOrders() {
 
   // Calculate order total from line items
   const calculateOrderTotal = (lines) => {
-    return lines.reduce((sum, line) => sum + (parseFloat(line.quantity || 0) * parseFloat(line.unit_price || 0)), 0);
+    return lines.reduce((sum, line) => {
+      const lineTotal = parseFloat(line.quantity || 0) * parseFloat(line.unit_price || 0);
+      const deliveryTotal = line.has_delivery ? (parseFloat(line.quantity || 0) * parseFloat(line.delivery_price || 0)) : 0;
+      return sum + lineTotal + deliveryTotal;
+    }, 0);
+  };
+
+  const calculateDeliveryTotal = (lines) => {
+    return lines.reduce((sum, line) => {
+      if (!line.has_delivery) return sum;
+      return sum + (parseFloat(line.quantity || 0) * parseFloat(line.delivery_price || 0));
+    }, 0);
   };
 
   // Calculate tax considering price_include flag
@@ -462,6 +477,8 @@ export default function PurchaseOrders() {
           unit_id: unitId,
           unit_name: unitName,
           product: selectedProduct,
+          has_delivery: selectedProduct.has_delivery || false,
+          delivery_price: parseFloat(selectedProduct.delivery_price) || 0,
           variant_id: null,
           variant_name: null,
           packaging_id: null,
@@ -590,6 +607,44 @@ export default function PurchaseOrders() {
     }
   };
 
+  // Enrich PO lines with `alt_name` = counterparty (seller) product's
+  // name, matched via search_key. Mirrors the same-named helper on
+  // the Sales Orders page so both sides of an intercompany flow see
+  // both the buyer's and the seller's name when printing.
+  const enrichLinesWithAltNames = async (lines) => {
+    if (!Array.isArray(lines) || lines.length === 0) return lines;
+    const keyByLine = new Map();
+    for (const line of lines) {
+      const prod = products.find(p => p.id === line.product_id);
+      const key = prod?.search_key;
+      if (key) keyByLine.set(line, key);
+    }
+    const uniqueKeys = [...new Set(keyByLine.values())];
+    if (uniqueKeys.length === 0) return lines;
+
+    const keyToMatches = new Map();
+    await Promise.all(uniqueKeys.map(async (k) => {
+      try {
+        const res = await apiClient.get('/products/by-search-key', {
+          params: {
+            key: k,
+            ...(activeCompany?.id ? { exclude_organization_id: activeCompany.id } : {}),
+          },
+        });
+        const list = res.data?.data?.products ?? res.data?.products ?? [];
+        keyToMatches.set(k, list);
+      } catch { /* ignore */ }
+    }));
+
+    return lines.map(line => {
+      const key = keyByLine.get(line);
+      if (!key) return line;
+      const matches = keyToMatches.get(key) || [];
+      const alt = matches.find(m => m.id !== line.product_id && m.name);
+      return alt ? { ...line, alt_name: alt.name } : line;
+    });
+  };
+
   const handleViewPO = async (po, e) => {
     e.stopPropagation();
     setIsLoadingDetails(true);
@@ -599,7 +654,8 @@ export default function PurchaseOrders() {
     try {
       const fullOrder = await procurementService.getOrder(po.id);
       setDetailPO(fullOrder);
-      setDetailPOLines(fullOrder.lines || []);
+      const enrichedLines = await enrichLinesWithAltNames(fullOrder.lines || []);
+      setDetailPOLines(enrichedLines);
 
       const basicReturns = getOrderReturns(po.id);
       if (basicReturns.length > 0) {
@@ -626,17 +682,160 @@ export default function PurchaseOrders() {
     }
   };
 
-  const handleEditPO = (po, e) => {
+  const handleEditPO = async (po, e) => {
     e.stopPropagation();
+    // Optimistic open with header info; fetch full PO + lines async so
+    // the modal renders immediately and lines populate when ready.
     setEditPO({
       ...po,
       po_number: po.po_number || po.order_number,
+      supplier_id: po.vendor_id || po.supplier_id || '',
       supplier_name: po.supplier_name || po.vendor_name,
+      warehouse_id: po.warehouse_id || '',
+      vehicle_number: po.vehicle_number || '',
+      requires_shipping: po.requires_shipping !== false,
+      tax_percent: po.tax_percent || 0,
+      tax_rate_id: po.tax_rate_id || '',
+      payment_terms: po.payment_terms || 'net_30',
       total_amount: po.total_amount || 0,
       expected_delivery_date: po.expected_delivery_date || po.expected_date || '',
       order_date: po.order_date ? (typeof po.order_date === 'string' ? po.order_date.split('T')[0] : po.order_date) : '',
+      lines: [{ product_id: '', product_name: '', quantity: 1, unit_price: 0, lead_time_days: 0 }],
+      _linesLoading: true,
+      // Snapshot the status as it came from the server so the save
+      // handler can tell whether the user actually changed it. Some
+      // statuses ('received', 'partial') are only writable via
+      // dedicated endpoints — sending them through the generic PUT
+      // is rejected by the backend, so we skip the status field
+      // entirely when it hasn't changed.
+      _originalStatus: po.status || '',
     });
     setShowEditModal(true);
+
+    try {
+      const fullOrder = await procurementService.getOrder(po.id);
+      const lines = (fullOrder.lines || []).map(l => ({
+        id: l.id,
+        product_id: l.product_id || '',
+        product_name: l.product_name || l.description || '',
+        variant_id: l.variant_id || '',
+        quantity: l.quantity || 1,
+        unit_price: l.unit_price || 0,
+        unit_name: l.unit_name || '',
+        lead_time_days: l.lead_time_days || 0,
+        packaging_id: l.packaging_id || null,
+        packaging_qty: l.packaging_qty || 1,
+        has_delivery: l.has_delivery || false,
+        delivery_price: l.delivery_price || 0,
+      }));
+      // Derive tax_percent from the absolute tax/subtotal returned by
+      // the API. The backend stores tax_percent per-line, not on the
+      // header, so the GET response carries `tax_amount` and
+      // `subtotal` but no `tax_percent` field. Without this derivation
+      // the edit modal opens with Soliq=0 even when the PO has tax,
+      // and saving wipes the line tax to zero.
+      const apiSubtotal = parseFloat(fullOrder.subtotal) || 0;
+      const apiTaxAmount = parseFloat(fullOrder.tax_amount) || 0;
+      const derivedTaxPercent = apiSubtotal > 0
+        ? Math.round((apiTaxAmount / apiSubtotal) * 10000) / 100  // 2dp
+        : 0;
+      // Pull tax_id off the first line if any — the API doesn't expose
+      // a header-level tax_rate_id, but lines all share the same rate
+      // in the create flow, so we sample the first one.
+      const firstLineTaxID =
+        (fullOrder.lines || []).find(l => l.tax_id)?.tax_id || '';
+
+      setEditPO(prev => prev ? {
+        ...prev,
+        ...fullOrder,
+        po_number: fullOrder.po_number || fullOrder.order_number || prev.po_number,
+        supplier_id: fullOrder.vendor_id || fullOrder.supplier_id || prev.supplier_id,
+        supplier_name: fullOrder.supplier_name || fullOrder.vendor_name || prev.supplier_name,
+        warehouse_id: fullOrder.warehouse_id || prev.warehouse_id,
+        vehicle_number: fullOrder.vehicle_number || prev.vehicle_number,
+        requires_shipping: fullOrder.requires_shipping !== false,
+        tax_percent: fullOrder.tax_percent || derivedTaxPercent || prev.tax_percent || 0,
+        tax_rate_id: fullOrder.tax_rate_id || firstLineTaxID || prev.tax_rate_id || '',
+        payment_terms: fullOrder.payment_terms || prev.payment_terms,
+        order_date: fullOrder.order_date
+          ? (typeof fullOrder.order_date === 'string' ? fullOrder.order_date.split('T')[0] : fullOrder.order_date)
+          : prev.order_date,
+        expected_delivery_date: fullOrder.expected_delivery_date || fullOrder.expected_date || prev.expected_delivery_date,
+        lines: lines.length > 0 ? lines : prev.lines,
+        _linesLoading: false,
+        // Refresh the snapshot from the authoritative server response
+        // (the list view's status can be stale; getOrder is canonical).
+        _originalStatus: fullOrder.status || prev._originalStatus || '',
+        // Snapshot the original lines so the save handler can detect
+        // whether the user actually changed anything. Without this,
+        // every save sends the lines payload and the backend's
+        // billed/received guards block edits even when the user only
+        // touched header fields like vehicle number.
+        _originalLines: lines.length > 0 ? JSON.stringify(lines.map(l => ({
+          id: l.id, product_id: l.product_id, quantity: l.quantity,
+          unit_price: l.unit_price, packaging_id: l.packaging_id, packaging_qty: l.packaging_qty,
+        }))) : '',
+      } : prev);
+    } catch (err) {
+      console.warn('Failed to load PO details for edit:', err);
+      setEditPO(prev => prev ? { ...prev, _linesLoading: false } : prev);
+    }
+  };
+
+  // Line ops on editPO mirror the create-modal helpers (handleAddLine,
+  // handleRemoveLine, handleLineChange) but operate on editPO.lines.
+  // Kept separate so the create flow's behavior is untouched.
+  const handleEditAddLine = () => {
+    if (!editPO) return;
+    setEditPO({
+      ...editPO,
+      lines: [...editPO.lines, { product_id: '', product_name: '', quantity: 1, unit_price: 0, lead_time_days: 0 }],
+    });
+  };
+
+  const handleEditRemoveLine = (index) => {
+    if (!editPO || editPO.lines.length === 1) return;
+    const newLines = editPO.lines.filter((_, i) => i !== index);
+    setEditPO({
+      ...editPO,
+      lines: newLines,
+      total_amount: calculateOrderTotal(newLines),
+    });
+  };
+
+  const handleEditLineChange = async (index, field, value) => {
+    if (!editPO) return;
+    const newLines = [...editPO.lines];
+    newLines[index] = { ...newLines[index], [field]: value };
+    if (field === 'product_id' && value) {
+      const product = products.find(p => p.id === value);
+      if (product) {
+        let unitPrice = product.purchase_price || product.cost_price || product.list_price || 0;
+        let leadTimeDays = product.lead_time_days || 0;
+        if (editPO.supplier_id) {
+          const vp = await lookupVendorPriceForProduct(editPO.supplier_id, value);
+          if (vp) {
+            unitPrice = vp.price;
+            leadTimeDays = vp.lead_time_days || leadTimeDays;
+          }
+        }
+        newLines[index] = {
+          ...newLines[index],
+          product_name: product.name,
+          unit_id: product.purchase_unit_id || product.unit_id || null,
+          unit_name: product.purchase_unit_name || product.unit_name || '',
+          unit_price: unitPrice,
+          lead_time_days: leadTimeDays,
+          has_delivery: product.has_delivery || false,
+          delivery_price: parseFloat(product.delivery_price) || 0,
+        };
+      }
+    }
+    setEditPO({
+      ...editPO,
+      lines: newLines,
+      total_amount: calculateOrderTotal(newLines),
+    });
   };
 
   const handleUpdatePO = async () => {
@@ -644,22 +843,65 @@ export default function PurchaseOrders() {
 
     setIsSubmitting(true);
     try {
+      // Build the full update payload — backend's UpdatePurchaseOrderInput
+      // accepts every field below as optional pointers, so missing ones
+      // are left untouched. We send everything the user could have
+      // changed; server-side audit log captures the diff.
       const updates = {};
 
-      if (editPO.expected_delivery_date) {
-        updates.expected_date = editPO.expected_delivery_date;
-      }
-      if (editPO.payment_terms) {
-        updates.payment_terms = editPO.payment_terms;
-      }
-      if (editPO.status) {
+      if (editPO.supplier_id) updates.vendor_id = editPO.supplier_id;
+      if (editPO.warehouse_id !== undefined) updates.warehouse_id = editPO.warehouse_id || null;
+      if (editPO.expected_delivery_date) updates.expected_date = editPO.expected_delivery_date;
+      if (editPO.payment_terms) updates.payment_terms = editPO.payment_terms;
+      if (editPO.vehicle_number !== undefined) updates.vehicle_number = editPO.vehicle_number || '';
+      if (editPO.requires_shipping !== undefined) updates.requires_shipping = !!editPO.requires_shipping;
+      // Status is only sent if the user explicitly changed it, AND the
+      // new status is one the generic PUT accepts. 'received' and
+      // 'partial' must go through the dedicated /receive endpoint —
+      // the backend's UpdatePurchaseOrder rejects them with:
+      //   "Status 'received' cannot be set via generic update."
+      // Without this guard, every save on a received PO 500s because
+      // the form preserves the existing 'received' value as-is.
+      const STATUS_BLOCKED_VIA_GENERIC = new Set(['received', 'partial']);
+      if (
+        editPO.status &&
+        editPO.status !== editPO._originalStatus &&
+        !STATUS_BLOCKED_VIA_GENERIC.has(editPO.status)
+      ) {
         updates.status = editPO.status;
       }
-      if (editPO.notes !== undefined) {
-        updates.notes = editPO.notes;
-      }
-      if (editPO.vendor_reference !== undefined) {
-        updates.vendor_reference = editPO.vendor_reference;
+      if (editPO.notes !== undefined) updates.notes = editPO.notes;
+      if (editPO.vendor_reference !== undefined) updates.vendor_reference = editPO.vendor_reference;
+
+      // Lines — only send if we actually loaded them, the user has
+      // at least one valid product line, AND the lines actually
+      // changed compared to what was loaded. The diff check matters
+      // because the backend rejects line replacement on POs that
+      // have already been billed/received; if the user only edited
+      // the vehicle number we don't want to trip that guard.
+      if (Array.isArray(editPO.lines) && editPO.lines.some(l => l.product_id)) {
+        const headerTaxPercent = parseFloat(editPO.tax_percent) || 0;
+        const currentLinesSnapshot = JSON.stringify(editPO.lines.map(l => ({
+          id: l.id, product_id: l.product_id, quantity: l.quantity,
+          unit_price: l.unit_price, packaging_id: l.packaging_id, packaging_qty: l.packaging_qty,
+        })));
+        const linesChanged = currentLinesSnapshot !== (editPO._originalLines || '');
+
+        if (linesChanged) {
+          updates.lines = editPO.lines
+            .filter(l => l.product_id && parseFloat(l.quantity) > 0)
+            .map(l => ({
+              product_id: l.product_id,
+              variant_id: l.variant_id || undefined,
+              quantity: parseFloat(l.quantity) || 0,
+              unit_price: parseFloat(l.unit_price) || 0,
+              description: l.product_name || l.description || '',
+              tax_percent: headerTaxPercent,
+              tax_id: editPO.tax_rate_id || undefined,
+              packaging_id: l.packaging_id || undefined,
+              packaging_qty: l.packaging_id ? (parseFloat(l.packaging_qty) || 1) : undefined,
+            }));
+        }
       }
 
       if (Object.keys(updates).length > 0) {
@@ -670,8 +912,23 @@ export default function PurchaseOrders() {
       }
       setShowEditModal(false);
       setEditPO(null);
+      await refreshData();
     } catch (error) {
       console.error('Error updating PO:', error);
+      // Run through formatApiError so structured backend error codes
+      // (PO_LINES_LOCKED_BILLED, etc.) get rendered in the user's
+      // current language via apiErrors.js's catalog. Falls back to
+      // the backend's English message if no translation exists yet.
+      const apiMessage = formatApiError(
+        error,
+        t,
+        t('failed_to_save') || 'Failed to save'
+      );
+      toast({
+        variant: 'destructive',
+        title: t('error') || 'Error',
+        description: apiMessage,
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -829,7 +1086,7 @@ export default function PurchaseOrders() {
                               <Button size="sm" variant="ghost" onClick={(e) => handleViewPO(po, e)} title={t('view_details') || 'View Details'}>
                                 <Eye className="w-4 h-4" />
                               </Button>
-                              {canUpdate(MODULES.PURCHASES) && (
+                              {canUpdate(MODULES.PURCHASES) && (po.status === 'draft' || po.status === 'cancelled') && (
                                 <Button size="sm" variant="ghost" onClick={(e) => handleEditPO(po, e)} title={t('edit') || 'Edit'}>
                                   <Edit2 className="w-4 h-4" />
                                 </Button>
@@ -839,7 +1096,7 @@ export default function PurchaseOrders() {
                                   {t('send') || 'Send'}
                                 </Button>
                               )}
-                              {canUpdate(MODULES.PURCHASES) && po.status === 'sent' && (
+                              {canUpdate(MODULES.PURCHASES) && (po.status === 'sent' || po.status === 'ordered') && (
                                 <Button size="sm" variant="ghost" onClick={async () => {
                                   try {
                                     await approvePurchaseOrder(po.id);
@@ -938,11 +1195,18 @@ export default function PurchaseOrders() {
           });
         }
       }}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        {/* Prevent accidental dismissal via outside-click or Escape so
+            users don't lose half-filled forms. Closing requires the X
+            button or Cancel button. */}
+        <DialogContent
+          className="max-w-4xl max-h-[90vh] overflow-y-auto"
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>{t('new_purchase_order') || 'New Purchase Order'}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-4 py-4 min-w-0">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium mb-1 block">{t('supplier') || 'Supplier'} *</label>
@@ -1071,7 +1335,7 @@ export default function PurchaseOrders() {
             </div>
 
             {/* Order Lines */}
-            <div className="border-t pt-4">
+            <div className="border-t pt-4 min-w-0">
               {/* Hidden file input for receipt scan */}
               <input
                 ref={receiptInputRef}
@@ -1127,14 +1391,21 @@ export default function PurchaseOrders() {
                   </div>
                 </div>
               )}
-              <div className="space-y-2 max-h-60 overflow-y-auto">
+              <div className="space-y-2 max-h-60 overflow-y-auto min-w-0">
                 {newPO.lines.map((line, index) => {
                   const selectedProduct = products.find(p => p.id === line.product_id);
                   const hasVariants = selectedProduct?.has_variants && productVariants[line.product_id]?.length > 0;
                   const hasPackagings = productPackagings[line.product_id]?.length > 0;
                   return (
-                  <div key={index} className="bg-slate-50 p-3 rounded space-y-2">
-                    <div className="flex gap-2 items-end">
+                  // min-w-0 chain: row → bg-slate-50 wrapper → space-y div.
+                  // For the inner column's `flex-[2] min-w-0` to actually
+                  // let the ProductCombobox shrink, every flex/block
+                  // ancestor up to the modal must also allow shrinking.
+                  // Without this chain, a long product name makes the
+                  // column grow regardless of what we set on the
+                  // combobox itself.
+                  <div key={index} className="bg-slate-50 p-3 rounded space-y-2 min-w-0">
+                    <div className="flex gap-2 items-end min-w-0">
                       <div className="flex-[2] min-w-0">
                         {index === 0 && <label className="text-xs text-slate-500 mb-1 block">{t('product')}</label>}
                         <ProductCombobox
@@ -1194,6 +1465,11 @@ export default function PurchaseOrders() {
                         <div className="h-9 flex items-center justify-end px-3 bg-white border rounded-md text-sm font-medium text-slate-700">
                           {formatPriceInput(String((parseFloat(line.quantity || 0) * parseFloat(line.unit_price || 0)).toFixed(2)))}
                         </div>
+                        {line.has_delivery && line.delivery_price > 0 && (
+                          <div className="text-xs text-blue-600 text-right mt-0.5">
+                            🚚 {formatPriceInput(String(line.delivery_price))} × {line.quantity} = {formatPriceInput(String((parseFloat(line.quantity || 0) * parseFloat(line.delivery_price || 0)).toFixed(2)))}
+                          </div>
+                        )}
                       </div>
                       <div className="flex-shrink-0">
                         <Button
@@ -1320,18 +1596,26 @@ export default function PurchaseOrders() {
               <div className="space-y-2">
                 {(() => {
                   const rawSubtotal = calculateOrderTotal(newPO.lines);
+                  const deliveryTotal = calculateDeliveryTotal(newPO.lines);
+                  const productSubtotal = rawSubtotal - deliveryTotal;
                   const taxPercent = parseFloat(newPO.tax_percent) || 0;
                   const selectedTax = newPO.tax_rate_id ? taxRates.find(tr => String(tr.id) === String(newPO.tax_rate_id)) : defaultPurchaseTax;
-                  const taxCalc = calculateTaxFromRate(rawSubtotal, taxPercent, selectedTax);
+                  const taxCalc = calculateTaxFromRate(productSubtotal, taxPercent, selectedTax);
                   const subtotal = taxCalc.subtotal;
                   const taxAmount = taxCalc.taxAmount;
-                  const total = subtotal + taxAmount;
+                  const total = subtotal + taxAmount + deliveryTotal;
                   return (
                     <>
                       <div className="flex justify-between text-sm">
                         <span className="text-slate-600">{t('subtotal')}:</span>
                         <span className="font-medium">{formatCurrency(subtotal)}</span>
                       </div>
+                      {deliveryTotal > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-slate-600">{language === 'uz' ? 'Yetkazib berish:' : language === 'ru' ? 'Доставка:' : 'Delivery:'}</span>
+                          <span className="font-medium text-blue-600">{formatCurrency(deliveryTotal)}</span>
+                        </div>
+                      )}
                       <div className="flex justify-between text-sm">
                         <span className="text-slate-600">{t('tax')}{taxCalc.isInclusive ? ` (${t('incl') || 'incl.'})` : ''}:</span>
                         <span className="font-medium">{formatCurrency(taxAmount)}</span>
@@ -1364,25 +1648,99 @@ export default function PurchaseOrders() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit PO Modal */}
+      {/* Edit PO Modal — full editor mirroring the create modal so
+          users can change supplier, warehouse, vehicle, dates, lines,
+          tax, payment terms, and status without recreating the order.
+          Backend's UpdatePurchaseOrderInput supports all of these. */}
       <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent
+          className="max-w-4xl max-h-[90vh] overflow-y-auto"
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>{t('edit_order') || 'Edit Order'}</DialogTitle>
           </DialogHeader>
           {editPO && (
-            <div className="space-y-4 py-4">
+            <div className="space-y-4 py-4 min-w-0">
+              {/* Read-only header — PO number is immutable */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium mb-1 block">{t('po_number') || 'PO Number'}</label>
-                  <Input value={editPO.po_number} disabled />
+                  <Input value={editPO.po_number || ''} disabled className="bg-slate-50 font-mono" />
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">{t('supplier') || 'Supplier'}</label>
-                  <Input value={editPO.supplier_name || editPO.vendor_name} disabled />
+                  <label className="text-sm font-medium mb-1 block">{t('status') || 'Status'}</label>
+                  <Select value={editPO.status || 'draft'} onValueChange={(value) => setEditPO({...editPO, status: value})}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="draft">{t('draft') || 'Draft'}</SelectItem>
+                      <SelectItem value="sent">{t('sent') || 'Sent'}</SelectItem>
+                      <SelectItem value="approved">{t('approved') || 'Approved'}</SelectItem>
+                      <SelectItem value="ordered">{t('ordered') || 'Ordered'}</SelectItem>
+                      <SelectItem value="cancelled">{t('cancelled') || 'Cancelled'}</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
+              {/* Supplier + Warehouse */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium mb-1 block">{t('supplier') || 'Supplier'} *</label>
+                  <Select
+                    value={editPO.supplier_id || ''}
+                    onValueChange={(value) => {
+                      const supplier = suppliers.find(s => s.id === value);
+                      setEditPO({
+                        ...editPO,
+                        supplier_id: value,
+                        vendor_id: value,
+                        supplier_name: supplier?.name || '',
+                        vendor_name: supplier?.name || '',
+                      });
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('select_supplier') || 'Select supplier'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {suppliers.filter(s => s.is_active !== false && s.status !== 'inactive').map((supplier) => (
+                        <SelectItem key={supplier.id} value={supplier.id}>
+                          {supplier.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-1 block">{t('warehouse') || 'Warehouse'}</label>
+                  {warehouses.length === 1 ? (
+                    <Input value={warehouses[0].name} disabled className="bg-slate-50" />
+                  ) : (
+                    <Select
+                      value={editPO.warehouse_id || '__none__'}
+                      onValueChange={(value) => setEditPO({...editPO, warehouse_id: value === '__none__' ? '' : value})}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={t('select_warehouse') || 'Select warehouse'} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">{t('auto_select') || 'Auto select'}</SelectItem>
+                        {warehouses.map((wh) => (
+                          <SelectItem key={wh.id} value={wh.id}>
+                            {wh.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              </div>
+
+              {/* Dates */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium mb-1 block">{t('order_date') || 'Order Date'}</label>
@@ -1402,10 +1760,136 @@ export default function PurchaseOrders() {
                 </div>
               </div>
 
+              {/* Vehicle + Shipping toggle */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium mb-1 block">{t('total_amount') || 'Total Amount'}</label>
-                  <Input type="text" value={formatPriceInput(editPO.total_amount)} disabled className="bg-slate-100" />
+                  <label className="text-sm font-medium mb-1 block">{t('vehicle_number') || 'Vehicle Number'}</label>
+                  <div className="relative">
+                    <Truck className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <Input
+                      value={editPO.vehicle_number || ''}
+                      onChange={(e) => setEditPO({...editPO, vehicle_number: e.target.value})}
+                      placeholder="01 A 123 AA"
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+                <div className="flex items-end pb-1">
+                  <div className="flex items-center gap-3">
+                    <Switch
+                      id="edit-requires-shipping"
+                      checked={!!editPO.requires_shipping}
+                      onCheckedChange={(checked) => setEditPO({...editPO, requires_shipping: checked})}
+                    />
+                    <label htmlFor="edit-requires-shipping" className="text-sm font-medium flex items-center gap-2 cursor-pointer">
+                      <Package className="w-4 h-4 text-slate-500" />
+                      {t('requires_shipping') || 'Requires Shipping'}
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Order Lines */}
+              <div className="border-t pt-4 min-w-0">
+                <div className="flex justify-between items-center mb-3">
+                  <label className="text-base font-semibold">{t('order_items') || 'Order Items'}</label>
+                  <Button size="sm" variant="outline" onClick={handleEditAddLine}>
+                    <Plus className="w-4 h-4 mr-1" /> {t('add_line') || 'Add Line'}
+                  </Button>
+                </div>
+
+                {editPO._linesLoading ? (
+                  <div className="flex items-center justify-center py-6 text-slate-500 text-sm gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    {t('loading') || 'Loading...'}
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-60 overflow-y-auto min-w-0">
+                    {(editPO.lines || []).map((line, index) => (
+                      <div key={line.id || index} className="bg-slate-50 p-3 rounded space-y-2 min-w-0">
+                        <div className="flex gap-2 items-end min-w-0">
+                          <div className="flex-[2] min-w-0">
+                            {index === 0 && <label className="text-xs text-slate-500 mb-1 block">{t('product')}</label>}
+                            <ProductCombobox
+                              products={products}
+                              value={line.product_id || ''}
+                              valueLabel={line.product_name || line.description || ''}
+                              onValueChange={(value) => handleEditLineChange(index, 'product_id', value)}
+                              placeholder={t('select_product') || 'Mahsulot tanlang'}
+                              t={t}
+                            />
+                          </div>
+                          <div className="flex-[1] min-w-0">
+                            {index === 0 && <label className="text-xs text-slate-500 mb-1 block">{t('qty')}</label>}
+                            <div className="flex items-center gap-1">
+                              <Input
+                                type="number"
+                                placeholder={t('qty') || 'Qty'}
+                                value={line.quantity}
+                                onChange={(e) => handleEditLineChange(index, 'quantity', e.target.value)}
+                              />
+                              {line.unit_name && (
+                                <span className="text-xs text-slate-500 whitespace-nowrap">{line.unit_name}</span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex-[1.5] min-w-0">
+                            {index === 0 && <label className="text-xs text-slate-500 mb-1 block">{t('price')}</label>}
+                            <Input
+                              type="text"
+                              inputMode="decimal"
+                              placeholder={t('price') || 'Price'}
+                              value={formatPriceInput(line.unit_price)}
+                              onChange={(e) => handleEditLineChange(index, 'unit_price', parsePriceInput(e.target.value))}
+                            />
+                          </div>
+                          <div className="flex-[1.5] min-w-0">
+                            {index === 0 && <label className="text-xs text-slate-500 mb-1 block">{t('total')}</label>}
+                            <div className="h-9 flex items-center justify-end px-3 bg-white border rounded-md text-sm font-medium text-slate-700">
+                              {formatPriceInput(String((parseFloat(line.quantity || 0) * parseFloat(line.unit_price || 0)).toFixed(2)))}
+                            </div>
+                          </div>
+                          <div className="flex-shrink-0">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleEditRemoveLine(index)}
+                              disabled={editPO.lines.length === 1}
+                              className="text-red-600 h-9 w-9 p-0"
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Tax + Payment terms */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium mb-1 block">{t('tax') || 'Tax'} (%)</label>
+                  <div className="flex">
+                    <Input
+                      type="text"
+                      inputMode="decimal"
+                      value={editPO.tax_percent || 0}
+                      onChange={(e) => setEditPO({...editPO, tax_percent: e.target.value})}
+                      className={parseFloat(editPO.tax_percent) > 0 ? 'rounded-r-none border-r-0' : ''}
+                    />
+                    {parseFloat(editPO.tax_percent) > 0 && (
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="rounded-l-none shrink-0 px-1 text-slate-400 hover:text-red-500"
+                        onClick={() => setEditPO({...editPO, tax_percent: 0, tax_rate_id: ''})}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <label className="text-sm font-medium mb-1 block">{t('payment_terms') || 'Payment Terms'}</label>
@@ -1424,18 +1908,37 @@ export default function PurchaseOrders() {
                 </div>
               </div>
 
-              <div>
-                <label className="text-sm font-medium mb-1 block">{t('status') || 'Status'}</label>
-                <Select value={editPO.status || 'draft'} onValueChange={(value) => setEditPO({...editPO, status: value})}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="draft">{t('draft') || 'Draft'}</SelectItem>
-                    <SelectItem value="sent">{t('sent') || 'Sent'}</SelectItem>
-                    <SelectItem value="cancelled">{t('cancelled') || 'Cancelled'}</SelectItem>
-                  </SelectContent>
-                </Select>
+              {/* Totals breakdown — recomputed live from edits */}
+              <div className="p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200">
+                <div className="space-y-2">
+                  {(() => {
+                    const rawSubtotal = calculateOrderTotal(editPO.lines || []);
+                    const taxPercent = parseFloat(editPO.tax_percent) || 0;
+                    const selectedTax = editPO.tax_rate_id ? taxRates.find(tr => String(tr.id) === String(editPO.tax_rate_id)) : defaultPurchaseTax;
+                    const taxCalc = calculateTaxFromRate(rawSubtotal, taxPercent, selectedTax);
+                    const subtotal = taxCalc.subtotal;
+                    const taxAmount = taxCalc.taxAmount;
+                    const total = subtotal + taxAmount;
+                    return (
+                      <>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-slate-600">{t('subtotal')}:</span>
+                          <span className="font-medium">{formatCurrency(subtotal)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-slate-600">{t('tax')}{taxCalc.isInclusive ? ` (${t('incl') || 'incl.'})` : ''}:</span>
+                          <span className="font-medium">{formatCurrency(taxAmount)}</span>
+                        </div>
+                        <div className="flex justify-between items-center pt-2 border-t border-blue-300">
+                          <span className="font-semibold text-lg">{t('total_amount')}:</span>
+                          <span className="text-2xl font-bold text-indigo-600">
+                            {formatCurrency(total)}
+                          </span>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
               </div>
 
               <div className="flex gap-3 pt-4">
@@ -1445,7 +1948,7 @@ export default function PurchaseOrders() {
                 <Button
                   onClick={handleUpdatePO}
                   className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || !editPO.supplier_id}
                 >
                   {isSubmitting ? (t('saving') || 'Saving...') : (t('save') || 'Save')}
                 </Button>
@@ -1524,6 +2027,9 @@ export default function PurchaseOrders() {
                       <div key={line.id || idx} className="flex justify-between items-center border-b border-slate-200 pb-2 last:border-0 last:pb-0">
                         <div>
                           <span className="font-medium">{line.product_name || line.description}</span>
+                          {line.alt_name && line.alt_name !== (line.product_name || line.description) && (
+                            <p className="text-xs text-indigo-600 italic">({line.alt_name})</p>
+                          )}
                           <p className="text-xs text-slate-500">{t('quantity')}: {line.quantity}{line.unit_name ? ` ${line.unit_name}` : ''}</p>
                         </div>
                         <div className="text-right">

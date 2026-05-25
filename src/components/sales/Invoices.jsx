@@ -83,6 +83,14 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
   const { taxRates = [], journals = [], paymentJournals = [], currencies = [], exchangeRates = [], getLatestExchangeRate } = useFinancials();
   const bankCashJournals = paymentJournals.length > 0 ? paymentJournals : journals.filter(j => j.type === 'bank' || j.type === 'cash');
 
+  // Helper to get translated journal name
+  const getJournalName = (journal) => {
+    if (!journal) return '-';
+    if (language === 'uz' && journal.name_uz) return journal.name_uz;
+    if (language === 'en' && journal.name_en) return journal.name_en;
+    return journal.name || '-';
+  };
+
   // Get default tax from settings
   const defaultSalesTaxId = getSetting('sales.tax.default_tax_id', '');
   const salesTaxRates = taxRates.filter(tr => tr.tax_type === 'sales' || !tr.tax_type);
@@ -475,7 +483,7 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
       bank_transfer: language === 'ru' ? 'Банковский перевод' : language === 'uz' ? 'Bank o\'tkazmasi' : 'Bank Transfer',
       cash: language === 'ru' ? 'Наличные' : language === 'uz' ? 'Naqd' : 'Cash',
     };
-    const journalName = alloc.journal_name || '-';
+    const journalName = (language === 'uz' && alloc.journal_name_uz ? alloc.journal_name_uz : language === 'en' && alloc.journal_name_en ? alloc.journal_name_en : alloc.journal_name) || '-';
     const method = journalName.toLowerCase().includes('kassa') || journalName.toLowerCase().includes('cash') || journalName.toLowerCase().includes('нал') ? 'cash' : 'bank_transfer';
 
     const html = `
@@ -649,7 +657,7 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
           ${selectedJournal ? `
           <div class="row">
             <span class="label">${t('receipt_journal')}:</span>
-            <span class="value">${selectedJournal.name}</span>
+            <span class="value">${getJournalName(selectedJournal)}</span>
           </div>` : ''}
 
           <div class="row">
@@ -951,7 +959,9 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                     <TableHead>{t('customer')}</TableHead>
                     <TableHead>{t('due_date')}</TableHead>
                     <TableHead className="text-right">{t('amount')}</TableHead>
+                    <TableHead className="text-right">{t('paid') || 'Paid'}</TableHead>
                     <TableHead className="text-right">{t('balance')}</TableHead>
+                    <TableHead>{t('payment_method') || 'Payment Method'}</TableHead>
                     <TableHead>{t('status')}</TableHead>
                     <TableHead className="w-20"></TableHead>
                   </TableRow>
@@ -968,7 +978,14 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                             ) : (
                               <Receipt className="w-4 h-4 text-slate-400" />
                             )}
-                            <span className="font-medium">{invoice.invoice_number}</span>
+                            <div className="flex flex-col">
+                              <span className="font-medium">{invoice.invoice_number}</span>
+                              {invoice.order_number && (
+                                <span className="text-xs text-slate-500">
+                                  {t('order') || 'Buyurtma'}: {invoice.order_number}
+                                </span>
+                              )}
+                            </div>
                             {invoice.invoice_type === "credit_note" && (
                               <Badge className="bg-red-100 text-red-700 text-xs">{t("credit_note")}</Badge>
                             )}
@@ -998,6 +1015,11 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                           {formatCurrency(invoice.total_amount)}
                         </TableCell>
                         <TableCell className="text-right">
+                          <span className={`font-medium ${(invoice.amount_paid || 0) > 0 ? "text-green-600" : "text-slate-400"}`}>
+                            {formatCurrency(invoice.amount_paid || 0)}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right">
                           <span
                             className={`font-medium ${
                               (invoice.balance || invoice.amount_due || 0) > 0 ? "text-red-600" : "text-green-600"
@@ -1005,6 +1027,18 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                           >
                             {formatCurrency(invoice.balance || invoice.amount_due || 0)}
                           </span>
+                        </TableCell>
+                        <TableCell>
+                          {(() => {
+                            const pj = language === 'uz' ? (invoice.payment_journals_uz || invoice.payment_journals)
+                              : language === 'en' ? (invoice.payment_journals_en || invoice.payment_journals)
+                              : invoice.payment_journals;
+                            return pj ? (
+                              <span className="text-sm text-slate-700">{pj}</span>
+                            ) : (
+                              <span className="text-sm text-slate-400">—</span>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell>{getPaymentStatusBadge(invoice)}</TableCell>
                         <TableCell>
@@ -1448,7 +1482,7 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                             {j.type === 'cash'
                               ? <Banknote className="w-4 h-4 text-green-600" />
                               : <CreditCard className="w-4 h-4 text-blue-600" />}
-                            {j.name}
+                            {getJournalName(j)}
                           </div>
                         </SelectItem>
                       ))
@@ -1651,7 +1685,7 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                           </Badge>
                           <span className="text-slate-600">{alloc.payment_number}</span>
                           {alloc.journal_name && (
-                            <span className="text-slate-400 text-xs">({alloc.journal_name})</span>
+                            <span className="text-slate-400 text-xs">({language === 'uz' && alloc.journal_name_uz ? alloc.journal_name_uz : language === 'en' && alloc.journal_name_en ? alloc.journal_name_en : alloc.journal_name})</span>
                           )}
                         </div>
                         <div className="flex items-center gap-3">
@@ -1664,14 +1698,14 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                           <Button
                             variant="outline"
                             size="sm"
-                            className="h-6 px-2 text-xs gap-1"
+                            className="h-8 px-3 text-sm gap-2 border-blue-300 text-blue-700 hover:bg-blue-50 hover:border-blue-400 font-medium"
                             onClick={(e) => {
                               e.stopPropagation();
                               handlePrintAllocationReceipt(selectedInvoice, alloc);
                             }}
                           >
-                            <Printer className="w-3 h-3" />
-                            {t('print') || 'Print'}
+                            <Printer className="w-4 h-4" />
+                            {t('print_receipt')}
                           </Button>
                         </div>
                       </div>
@@ -1777,6 +1811,29 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                 <div className="p-3 bg-yellow-50 rounded-lg">
                   <p className="text-sm text-yellow-800">{selectedInvoice.notes}</p>
                 </div>
+              )}
+
+              {/* Print Last Payment Receipt - big prominent button */}
+              {(selectedInvoice.amount_paid > 0 || (selectedInvoice.payment_allocations || []).length > 0) && (
+                <Button
+                  onClick={() => {
+                    const allocs = selectedInvoice.payment_allocations || [];
+                    const lastAlloc = allocs.length > 0 ? allocs[allocs.length - 1] : null;
+                    if (lastAlloc) {
+                      handlePrintAllocationReceipt(selectedInvoice, lastAlloc);
+                    } else {
+                      handlePrintPaymentReceipt(selectedInvoice, {
+                        amount: selectedInvoice.amount_paid || 0,
+                        date: selectedInvoice.payment_date || new Date().toISOString().split('T')[0],
+                        journal_id: '',
+                      });
+                    }
+                  }}
+                  className="w-full h-12 text-base font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md"
+                >
+                  <Printer className="w-5 h-5 mr-3" />
+                  {t('print_receipt')}
+                </Button>
               )}
             </div>
           )}

@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -12,6 +13,8 @@ import { Plus, Edit, Trash2, Package, BarChart3, ChevronLeft, ChevronRight } fro
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import Loader from '@/components/ui/loader';
+import { sortBuildings } from '@/utils/naturalSort';
 import { toast } from 'sonner';
 
 const SUMMARY_STATUS_COLORS = {
@@ -75,7 +78,8 @@ const MaterialUsageTab = ({ project }) => {
       ]);
       setUsageRecords(usageData || []);
       setWbsList(wbsData || []);
-      setBuildings(buildingData || []);
+      // Natural-sort ("block 1 / block 2 / block 10" order).
+      setBuildings(sortBuildings(buildingData || []));
     } catch (e) {
       console.error('Failed to load material usage:', e);
     } finally {
@@ -208,7 +212,7 @@ const MaterialUsageTab = ({ project }) => {
           </CardHeader>
           <CardContent>
             {summaryLoading ? (
-              <div className="text-center py-8 text-slate-400">{t('loading') || 'Yuklanmoqda...'}</div>
+              <Loader />
             ) : summary.length === 0 ? (
               <div className="text-center py-12">
                 <BarChart3 className="w-16 h-16 text-slate-300 mx-auto mb-4" />
@@ -264,7 +268,7 @@ const MaterialUsageTab = ({ project }) => {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="text-center py-8 text-slate-400">{t('loading') || 'Yuklanmoqda...'}</div>
+            <Loader />
           ) : usageRecords.length === 0 ? (
             <div className="text-center py-12">
               <Package className="w-16 h-16 text-slate-300 mx-auto mb-4" />
@@ -359,7 +363,7 @@ const MaterialUsageTab = ({ project }) => {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>{t('quantity_used') || 'Sarflangan miqdor'} *</Label>
-                <Input type="number" value={form.quantity_used} onChange={e => setForm(f => ({...f, quantity_used: e.target.value}))} placeholder="0" />
+                <NumberInput value={form.quantity_used} onChange={raw => setForm(f => ({...f, quantity_used: raw}))} placeholder="0" />
               </div>
               <div>
                 <Label>{t('usage_date') || 'Sarf sanasi'} *</Label>

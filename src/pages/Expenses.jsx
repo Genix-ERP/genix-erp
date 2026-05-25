@@ -12,18 +12,41 @@ import { Plus, Search, Receipt, Upload, CheckCircle, XCircle, Clock, DollarSign,
 import { format } from 'date-fns';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { analyzeExpenses } from '@/api/services/aiAnalytics';
+import { financeService } from '@/api/services/finance';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { usePermissions } from "@/hooks/usePermissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { Link } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 
 const COLORS = ['#0ea5e9', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444'];
 
+// Money input helpers — keep the underlying state as a raw numeric string
+// (no separators) so parseFloat() at submit time stays correct, but
+// render the input with thin-space thousands grouping so a user typing
+// 120000 sees "120 000" while typing. Decimal point/comma both accepted.
+const formatAmountForInput = (val) => {
+  if (val === '' || val === null || val === undefined) return '';
+  const cleaned = String(val).replace(/\s/g, '').replace(',', '.');
+  const [intPart, decPart] = cleaned.split('.');
+  const grouped = (intPart || '').replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return decPart !== undefined ? `${grouped}.${decPart}` : grouped;
+};
+const stripAmountInput = (val) => {
+  if (val === '' || val === null || val === undefined) return '';
+  // Strip everything that isn't a digit or a single decimal point.
+  const cleaned = String(val).replace(/\s/g, '').replace(',', '.').replace(/[^\d.]/g, '');
+  // Keep only the first dot — collapse anything after it.
+  const firstDot = cleaned.indexOf('.');
+  if (firstDot === -1) return cleaned;
+  return cleaned.slice(0, firstDot + 1) + cleaned.slice(firstDot + 1).replace(/\./g, '');
+};
+
 export default function Expenses() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { expenses, createExpense, updateExpense, isLoading, employees, refreshData } = useModules();
+  const { expenses, createExpense, updateExpense, recognizeExpense, isLoading, employees, refreshData } = useModules();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
 
   // Refresh data when navigating to this page
@@ -37,6 +60,10 @@ export default function Expenses() {
   const [filteredClaims, setFilteredClaims] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  // Profit-tax recognition filter: 'all' | 'recognized' | 'unrecognized'.
+  // See §6 of ТЗ_Ish_Haqi_Soliq_Tolik.docx — lets accountants review the
+  // unrecognized ("тан олинмаган") list in isolation when closing a period.
+  const [recognitionFilter, setRecognitionFilter] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editClaim, setEditClaim] = useState(null);
@@ -44,11 +71,38 @@ export default function Expenses() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [claimToDelete, setClaimToDelete] = useState(null);
 
+  // Categories are now driven by the `expense_categories` table —
+  // managed in Settings → Expenses. The page loads them on mount and
+  // both the create and edit modals render their dropdowns from this
+  // list. `category_id` (UUID) is the canonical reference to the
+  // selected row; we still pass `category` (the name) for the legacy
+  // text column the backend keeps for backwards-compatibility.
+  const [categories, setCategories] = useState([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setCategoriesLoading(true);
+    financeService.listExpenseCategories()
+      .then((rows) => {
+        if (cancelled) return;
+        setCategories(Array.isArray(rows) ? rows : []);
+      })
+      .catch(() => { /* silent — empty state already covers this */ })
+      .finally(() => { if (!cancelled) setCategoriesLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
   const [newClaim, setNewClaim] = useState({
     employee_name: '',
     expense_date: new Date().toISOString().split('T')[0],
-    category: 'travel',
+    category_id: '',
+    category: '',
     amount: 0,
+    // Matches the DB default from migration 336. Accountants flip this
+    // to false for fines, undocumented costs, personal items, etc. —
+    // see the "YO'Q" list in §6.3 of ТЗ_Ish_Haqi_Soliq_Tolik.docx.
+    is_recognized: true,
     description: ''
   });
 
@@ -57,6 +111,13 @@ export default function Expenses() {
     if (statusFilter !== 'all') {
       filtered = filtered.filter(c => c.status === statusFilter);
     }
+    if (recognitionFilter !== 'all') {
+      // `is_recognized` defaults to true for any row the backend hasn't
+      // populated yet — we coerce undefined to true to match the column
+      // default in migration 336.
+      const want = recognitionFilter === 'recognized';
+      filtered = filtered.filter(c => (c.is_recognized !== false) === want);
+    }
     if (searchQuery) {
       filtered = filtered.filter(c =>
         c.claim_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -64,7 +125,7 @@ export default function Expenses() {
       );
     }
     setFilteredClaims(filtered);
-  }, [expenses, searchQuery, statusFilter]);
+  }, [expenses, searchQuery, statusFilter, recognitionFilter]);
 
   const handleCreateClaim = async () => {
     setIsSubmitting(true);
@@ -82,9 +143,11 @@ export default function Expenses() {
       setNewClaim({
         employee_name: '',
         expense_date: new Date().toISOString().split('T')[0],
-        category: 'travel',
+        category_id: '',
+        category: '',
         amount: 0,
-        description: ''
+        description: '',
+        is_recognized: true,
       });
     } catch (error) {
       console.error('Error creating claim:', error);
@@ -94,9 +157,21 @@ export default function Expenses() {
   };
 
   const handleEditClaim = (claim) => {
+    // Legacy rows may carry only the text `category` column without a
+    // category_id. Resolve it by name from the loaded list so the edit
+    // dropdown opens with the right row pre-selected.
+    let categoryId = claim.category_id || '';
+    if (!categoryId && claim.category && categories.length > 0) {
+      const match = categories.find(
+        (c) => String(c.name).toLowerCase() === String(claim.category).toLowerCase()
+            || String(c.code).toLowerCase() === String(claim.category).toLowerCase(),
+      );
+      if (match) categoryId = match.id;
+    }
     setEditClaim({
       ...claim,
-      amount: claim.amount || 0
+      category_id: categoryId,
+      amount: claim.amount || 0,
     });
     setShowEditModal(true);
   };
@@ -109,10 +184,15 @@ export default function Expenses() {
       updateExpense(editClaim.id, {
         employee_name: editClaim.employee_name,
         expense_date: editClaim.expense_date,
+        // Send the canonical category_id (UUID) so the backend can join
+        // through to expense_categories; `category` keeps the legacy
+        // text column populated for backwards-compatibility.
+        category_id: editClaim.category_id,
         category: editClaim.category,
         amount: parseFloat(editClaim.amount) || 0,
         description: editClaim.description,
-        status: editClaim.status
+        status: editClaim.status,
+        is_recognized: editClaim.is_recognized,
       });
       setShowEditModal(false);
       setEditClaim(null);
@@ -371,7 +451,7 @@ export default function Expenses() {
         {chartData.length > 0 && (
           <Card className="bg-white/80 backdrop-blur-sm">
             <CardHeader>
-              <CardTitle>{t('expenses_by_category')}</CardTitle>
+              <CardTitle>{t('expense_claims_by_category')}</CardTitle>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={280}>
@@ -447,6 +527,18 @@ export default function Expenses() {
                     <SelectItem value="cancelled">{t('cancelled')}</SelectItem>
                   </SelectContent>
                 </Select>
+
+                {/* Profit-tax recognition filter — mirrors §8.2 of the TZ. */}
+                <Select value={recognitionFilter} onValueChange={setRecognitionFilter}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t('recognition_all') || 'Barchasi (tan olish)'}</SelectItem>
+                    <SelectItem value="recognized">{t('recognition_recognized') || 'Tan olingan'}</SelectItem>
+                    <SelectItem value="unrecognized">{t('recognition_unrecognized') || 'Tan olinmagan'}</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </CardHeader>
             <CardContent className="p-0">
@@ -472,13 +564,23 @@ export default function Expenses() {
                         <TableHead>{t('date')}</TableHead>
                         <TableHead>{t('category')}</TableHead>
                         <TableHead>{t('amount')}</TableHead>
+                        <TableHead>{t('recognition') || 'Tan olinadi?'}</TableHead>
                         <TableHead>{t('status')}</TableHead>
                         <TableHead>{t('actions')}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredClaims.map((claim) => (
-                        <TableRow key={claim.id} className="hover:bg-slate-50">
+                      {filteredClaims.map((claim) => {
+                        // Treat missing flag as recognized (matches DB
+                        // default from migration 336). Row tint follows
+                        // the colour standard from §8.3 of the TZ:
+                        // light-green for recognized, light-red otherwise.
+                        const isRecognized = claim.is_recognized !== false;
+                        const rowTint = isRecognized
+                          ? 'hover:bg-emerald-50/60'
+                          : 'bg-red-50/50 hover:bg-red-50';
+                        return (
+                        <TableRow key={claim.id} className={rowTint}>
                           <TableCell className="font-mono text-sm">{claim.claim_number}</TableCell>
                           <TableCell className="font-medium">{claim.employee_name}</TableCell>
                           <TableCell className="text-sm">
@@ -488,6 +590,36 @@ export default function Expenses() {
                             <Badge variant="outline">{t(claim.category)}</Badge>
                           </TableCell>
                           <TableCell className="font-semibold">{formatCurrency(claim.amount || 0)}</TableCell>
+                          <TableCell>
+                            {/* Recognition toggle — click flips is_recognized
+                                via PATCH /expenses/:id/recognize. Guarded
+                                by the same update permission as the edit
+                                button so view-only users can't toggle. */}
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className={`h-7 px-2 rounded-full text-xs font-medium border ${
+                                isRecognized
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                                  : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                              }`}
+                              disabled={!canUpdate(MODULES.FINANCIALS)}
+                              title={
+                                isRecognized
+                                  ? (t('recognition_click_to_unrecognize') || 'Tan olinmaydi qilish uchun bosing')
+                                  : (t('recognition_click_to_recognize') || 'Tan olinadi qilish uchun bosing')
+                              }
+                              onClick={async () => {
+                                try {
+                                  await recognizeExpense(claim.id, !isRecognized);
+                                } catch (e) {
+                                  console.error('Failed to toggle recognition', e);
+                                }
+                              }}
+                            >
+                              {isRecognized ? (t('recognized_short') || 'HA') : (t('unrecognized_short') || "YO'Q")}
+                            </Button>
+                          </TableCell>
                           <TableCell>
                             <Badge className={getStatusColor(claim.status)}>{t(claim.status)}</Badge>
                           </TableCell>
@@ -526,7 +658,8 @@ export default function Expenses() {
                             </div>
                           </TableCell>
                         </TableRow>
-                      ))}
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>
@@ -575,28 +708,66 @@ export default function Expenses() {
                 </div>
                 <div>
                   <label className="text-sm font-medium mb-1 block">{t('category')} *</label>
-                  <Select value={newClaim.category} onValueChange={(value) => setNewClaim({...newClaim, category: value})}>
+                  <Select
+                    value={newClaim.category_id || ''}
+                    onValueChange={(value) => {
+                      const picked = categories.find((c) => c.id === value);
+                      setNewClaim({
+                        ...newClaim,
+                        category_id: value,
+                        // Keep the name in sync so the legacy `category`
+                        // text column still gets a sensible value on
+                        // backends that haven't migrated to category_id.
+                        category: picked?.name || '',
+                      });
+                    }}
+                    disabled={categoriesLoading || categories.length === 0}
+                  >
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue
+                        placeholder={
+                          categoriesLoading
+                            ? (t('loading') || 'Loading…')
+                            : categories.length === 0
+                              ? (t('no_categories_yet') || 'No categories yet')
+                              : (t('select_category') || 'Select category')
+                        }
+                      />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="travel">{t('travel')}</SelectItem>
-                      <SelectItem value="meals">{t('meals')}</SelectItem>
-                      <SelectItem value="accommodation">{t('accommodation')}</SelectItem>
-                      <SelectItem value="transportation">{t('transportation')}</SelectItem>
-                      <SelectItem value="office_supplies">{t('office_supplies')}</SelectItem>
-                      <SelectItem value="training">{t('training')}</SelectItem>
-                      <SelectItem value="other">{t('other')}</SelectItem>
+                      {categories.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name}
+                          {c.account_code && (
+                            <span className="ml-2 text-[10px] font-mono text-slate-400">
+                              {c.account_code}
+                            </span>
+                          )}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
+                  {!categoriesLoading && categories.length === 0 && (
+                    <p className="text-[11px] text-amber-700 mt-1">
+                      {t('no_categories_create_first')
+                        || 'No categories yet — '}
+                      <Link
+                        to="/settings?tab=expenses"
+                        className="underline font-medium"
+                      >
+                        {t('create_in_settings') || 'create one in Settings'}
+                      </Link>
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="text-sm font-medium mb-1 block">{t('amount')} *</label>
                   <Input
-                    type="number"
-                    placeholder="0.00"
-                    value={newClaim.amount}
-                    onChange={(e) => setNewClaim({...newClaim, amount: e.target.value})}
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0"
+                    value={formatAmountForInput(newClaim.amount)}
+                    onChange={(e) => setNewClaim({ ...newClaim, amount: stripAmountInput(e.target.value) })}
                     required
                   />
                 </div>
@@ -611,6 +782,32 @@ export default function Expenses() {
                 />
               </div>
 
+              {/* Profit-tax recognition toggle — lets the submitter flag
+                  non-deductible expenses up front (fines, undocumented
+                  spending, personal costs). Defaults to "recognized"
+                  which matches the DB default from migration 336. */}
+              <div className="flex items-center justify-between rounded-md border p-3">
+                <div className="text-sm">
+                  <p className="font-medium">{t('recognition') || 'Tan olinadi?'}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {t('recognition_help') || "Tan olinmagan xarajat foyda solig'i bazasidan chiqarilmaydi."}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className={`h-7 px-3 rounded-full text-xs font-medium ${
+                    newClaim.is_recognized
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                      : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                  }`}
+                  onClick={() => setNewClaim({ ...newClaim, is_recognized: !newClaim.is_recognized })}
+                >
+                  {newClaim.is_recognized ? (t('recognized_short') || 'HA') : (t('unrecognized_short') || "YO'Q")}
+                </Button>
+              </div>
+
               <div className="flex gap-3 pt-4">
                 <Button variant="outline" onClick={() => setShowCreateModal(false)} className="flex-1">
                   {t('cancel')}
@@ -618,7 +815,7 @@ export default function Expenses() {
                 <Button
                   onClick={handleCreateClaim}
                   className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-                  disabled={!newClaim.amount || !newClaim.employee_name || isSubmitting}
+                  disabled={!newClaim.amount || !newClaim.employee_name || !newClaim.category_id || isSubmitting}
                 >
                   {isSubmitting ? t('submitting') : t('submit_claim')}
                 </Button>
@@ -685,27 +882,48 @@ export default function Expenses() {
                   </div>
                   <div>
                     <label className="text-sm font-medium mb-1 block">{t('category')}</label>
-                    <Select value={editClaim.category || 'travel'} onValueChange={(value) => setEditClaim({...editClaim, category: value})}>
+                    <Select
+                      value={editClaim.category_id || ''}
+                      onValueChange={(value) => {
+                        const picked = categories.find((c) => c.id === value);
+                        setEditClaim({
+                          ...editClaim,
+                          category_id: value,
+                          category: picked?.name || editClaim.category || '',
+                        });
+                      }}
+                      disabled={categoriesLoading || categories.length === 0}
+                    >
                       <SelectTrigger>
-                        <SelectValue />
+                        <SelectValue
+                          placeholder={
+                            categories.length === 0
+                              ? (t('no_categories_yet') || 'No categories yet')
+                              : (t('select_category') || 'Select category')
+                          }
+                        />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="travel">{t('travel')}</SelectItem>
-                        <SelectItem value="meals">{t('meals')}</SelectItem>
-                        <SelectItem value="accommodation">{t('accommodation')}</SelectItem>
-                        <SelectItem value="transportation">{t('transportation')}</SelectItem>
-                        <SelectItem value="office_supplies">{t('office_supplies')}</SelectItem>
-                        <SelectItem value="training">{t('training')}</SelectItem>
-                        <SelectItem value="other">{t('other')}</SelectItem>
+                        {categories.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.name}
+                            {c.account_code && (
+                              <span className="ml-2 text-[10px] font-mono text-slate-400">
+                                {c.account_code}
+                              </span>
+                            )}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
                   <div>
                     <label className="text-sm font-medium mb-1 block">{t('amount')} *</label>
                     <Input
-                      type="number"
-                      value={editClaim.amount}
-                      onChange={(e) => setEditClaim({...editClaim, amount: e.target.value})}
+                      type="text"
+                      inputMode="decimal"
+                      value={formatAmountForInput(editClaim.amount)}
+                      onChange={(e) => setEditClaim({ ...editClaim, amount: stripAmountInput(e.target.value) })}
                     />
                   </div>
                 </div>
@@ -732,6 +950,33 @@ export default function Expenses() {
                     value={editClaim.description || ''}
                     onChange={(e) => setEditClaim({...editClaim, description: e.target.value})}
                   />
+                </div>
+
+                {/* Same recognition toggle as the create modal — reusing
+                    the same component-level semantics so a row can be
+                    re-classified without having to use the table pill. */}
+                <div className="flex items-center justify-between rounded-md border p-3">
+                  <div className="text-sm">
+                    <p className="font-medium">{t('recognition') || 'Tan olinadi?'}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {t('recognition_help') || "Tan olinmagan xarajat foyda solig'i bazasidan chiqarilmaydi."}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className={`h-7 px-3 rounded-full text-xs font-medium ${
+                      editClaim.is_recognized !== false
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                        : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                    }`}
+                    onClick={() => setEditClaim({ ...editClaim, is_recognized: !(editClaim.is_recognized !== false) })}
+                  >
+                    {editClaim.is_recognized !== false
+                      ? (t('recognized_short') || 'HA')
+                      : (t('unrecognized_short') || "YO'Q")}
+                  </Button>
                 </div>
 
                 <div className="flex gap-3 pt-4">

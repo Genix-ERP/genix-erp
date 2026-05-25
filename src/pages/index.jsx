@@ -1,45 +1,63 @@
 import React, { Suspense } from 'react';
 import Layout from "./Layout.jsx";
 
-const Login = React.lazy(() => import('./Login'));
-const SharedReconciliation = React.lazy(() => import('./SharedReconciliation'));
-const Register = React.lazy(() => import('./Register'));
-const AcceptInvite = React.lazy(() => import('./AcceptInvite'));
-const Dashboard = React.lazy(() => import('./Dashboard'));
-const AIAssistant = React.lazy(() => import('./AIAssistant'));
-const Inventory = React.lazy(() => import('./Inventory'));
-const Workflows = React.lazy(() => import('./Workflows'));
-const HR = React.lazy(() => import('./HR'));
-const Apps = React.lazy(() => import('./Apps'));
-const Customers = React.lazy(() => import('./Customers'));
-const Settings = React.lazy(() => import('./Settings'));
-const MySettings = React.lazy(() => import('./MySettings'));
-const Financials = React.lazy(() => import('./Financials'));
-const Notifications = React.lazy(() => import('./Notifications'));
-const AdminPanel = React.lazy(() => import('./AdminPanel'));
-const AdminSettings = React.lazy(() => import('./AdminSettings'));
-const Manufacturing = React.lazy(() => import('./Manufacturing'));
-const Procurement = React.lazy(() => import('./Procurement'));
-const Projects = React.lazy(() => import('./Projects'));
-const ProjectDetail = React.lazy(() => import('./ProjectDetail'));
-const SalesOrders = React.lazy(() => import('./SalesOrders'));
-const Assets = React.lazy(() => import('./Assets'));
-const Expenses = React.lazy(() => import('./Expenses'));
-const Payroll = React.lazy(() => import('./Payroll'));
-const Contracts = React.lazy(() => import('./Contracts'));
-const Companies = React.lazy(() => import('./Companies'));
-const AddCompany = React.lazy(() => import('./AddCompany'));
-const LeaveManagement = React.lazy(() => import('./LeaveManagement'));
-const Attendance = React.lazy(() => import('./Attendance'));
-const EmployeeContracts = React.lazy(() => import('./EmployeeContracts'));
-const Cargo = React.lazy(() => import('./Cargo'));
-const POS = React.lazy(() => import('./POS'));
-const Construction = React.lazy(() => import('./Construction'));
-const OperationTypeDetail = React.lazy(() => import('./OperationTypeDetail'));
-const ForgotPassword = React.lazy(() => import('./ForgotPassword'));
-const ResetPassword = React.lazy(() => import('./ResetPassword'));
-const PaymentSuccess = React.lazy(() => import('./PaymentSuccess'));
-const PaymentError = React.lazy(() => import('./PaymentError'));
+// Retry wrapper for lazy imports — handles stale chunks after deployments
+function lazyRetry(importFn) {
+    return React.lazy(() =>
+        importFn().catch(() => {
+            // Chunk failed to load (likely a new deployment), reload once
+            const reloaded = sessionStorage.getItem('lazy_reload');
+            if (!reloaded) {
+                sessionStorage.setItem('lazy_reload', '1');
+                window.location.reload();
+                return new Promise(() => {}); // hang while reloading
+            }
+            sessionStorage.removeItem('lazy_reload');
+            return importFn(); // retry once after reload flag is set
+        })
+    );
+}
+
+const Login = lazyRetry(() => import('./Login'));
+const SharedReconciliation = lazyRetry(() => import('./SharedReconciliation'));
+const Register = lazyRetry(() => import('./Register'));
+const AcceptInvite = lazyRetry(() => import('./AcceptInvite'));
+const Dashboard = lazyRetry(() => import('./Dashboard'));
+const AIAssistant = lazyRetry(() => import('./AIAssistant'));
+const Inventory = lazyRetry(() => import('./Inventory'));
+const Workflows = lazyRetry(() => import('./Workflows'));
+const HR = lazyRetry(() => import('./HR'));
+const Apps = lazyRetry(() => import('./Apps'));
+const Customers = lazyRetry(() => import('./Customers'));
+const Settings = lazyRetry(() => import('./Settings'));
+const MySettings = lazyRetry(() => import('./MySettings'));
+const Financials = lazyRetry(() => import('./Financials'));
+const Notifications = lazyRetry(() => import('./Notifications'));
+const AdminPanel = lazyRetry(() => import('./AdminPanel'));
+const AdminSettings = lazyRetry(() => import('./AdminSettings'));
+const Manufacturing = lazyRetry(() => import('./Manufacturing'));
+const Procurement = lazyRetry(() => import('./Procurement'));
+const Projects = lazyRetry(() => import('./Projects'));
+const ProjectDetail = lazyRetry(() => import('./ProjectDetail'));
+const SalesOrders = lazyRetry(() => import('./SalesOrders'));
+const Assets = lazyRetry(() => import('./Assets'));
+const Expenses = lazyRetry(() => import('./Expenses'));
+const Payroll = lazyRetry(() => import('./Payroll'));
+const Contracts = lazyRetry(() => import('./Contracts'));
+const Companies = lazyRetry(() => import('./Companies'));
+const AddCompany = lazyRetry(() => import('./AddCompany'));
+const LeaveManagement = lazyRetry(() => import('./LeaveManagement'));
+const Attendance = lazyRetry(() => import('./Attendance'));
+const EmployeeContracts = lazyRetry(() => import('./EmployeeContracts'));
+const Cargo = lazyRetry(() => import('./Cargo'));
+const POS = lazyRetry(() => import('./POS'));
+const Construction = lazyRetry(() => import('./Construction'));
+const DirectorDashboard = lazyRetry(() => import('./DirectorDashboard'));
+const OperationTypeDetail = lazyRetry(() => import('./OperationTypeDetail'));
+const ForgotPassword = lazyRetry(() => import('./ForgotPassword'));
+const ResetPassword = lazyRetry(() => import('./ResetPassword'));
+const PaymentSuccess = lazyRetry(() => import('./PaymentSuccess'));
+const PaymentError = lazyRetry(() => import('./PaymentError'));
 
 const SuspenseFallback = (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
@@ -82,6 +100,7 @@ const PAGES = {
     EmployeeContracts: EmployeeContracts,
     Cargo: Cargo,
     Construction: Construction,
+    DirectorDashboard: DirectorDashboard,
 }
 
 function _getCurrentPage(url) {
@@ -206,6 +225,7 @@ function PagesContent() {
                 <Route path="employee-contracts" element={<ModuleRoute moduleId="hr"><EmployeeContracts /></ModuleRoute>} />
                 <Route path="cargo" element={<ModuleRoute moduleId="cargo"><Cargo /></ModuleRoute>} />
                 <Route path="construction" element={<ModuleRoute moduleId="construction"><Construction /></ModuleRoute>} />
+                <Route path="directordashboard" element={<ModuleRoute moduleId="director_dashboard"><DirectorDashboard /></ModuleRoute>} />
                 <Route path="apps" element={<AdminRoute><Apps /></AdminRoute>} />
                 <Route path="customers" element={<ModuleRoute moduleId="crm"><Customers /></ModuleRoute>} />
                 <Route path="settings" element={<AdminRoute><Settings /></AdminRoute>} />
@@ -222,6 +242,10 @@ function PagesContent() {
                 <Route path="pos" element={<ModuleRoute moduleId="sales"><POS /></ModuleRoute>} />
                 <Route path="assets" element={<ModuleRoute moduleId="assets"><Assets /></ModuleRoute>} />
                 <Route path="expenses" element={<ModuleRoute moduleId="expenses"><Expenses /></ModuleRoute>} />
+                {/* Profit tax is now mounted as a tab inside Financials
+                    per §8.1 of ТЗ_Ish_Haqi_Soliq_Tolik.docx, so no
+                    dedicated route here. Link to it with
+                    /financials?tab=profit-tax. */}
                 <Route path="payroll" element={<ModuleRoute moduleId="payroll"><Payroll /></ModuleRoute>} />
                 <Route path="contracts" element={<ModuleRoute moduleId="contracts"><Contracts /></ModuleRoute>} />
                 <Route path="companies" element={<AdminRoute><Companies /></AdminRoute>} />

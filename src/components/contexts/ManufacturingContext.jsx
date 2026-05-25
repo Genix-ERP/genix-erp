@@ -265,7 +265,7 @@ export function ManufacturingProvider({ children }) {
       if (isBackendAvailable) {
         // Load all manufacturing data from API
         const [wcData, poData, woData, bomData, statsData, catData] = await Promise.all([
-          workCentersService.list(companyId).catch(err => {
+          workCentersService.list(companyId, { limit: 200 }).catch(err => {
             console.error('Failed to load work centers:', err);
             return [];
           }),
@@ -277,7 +277,7 @@ export function ManufacturingProvider({ children }) {
             console.error('Failed to load work orders:', err);
             return [];
           }),
-          bomsService.list(companyId).catch(err => {
+          bomsService.list(companyId, { limit: 500 }).catch(err => {
             console.error('Failed to load BOMs:', err);
             return [];
           }),
@@ -619,9 +619,43 @@ export function ManufacturingProvider({ children }) {
     wc.status === 'active' && wc.is_available
   );
 
-  const averageOEE = workCenters.length > 0
-    ? workCenters.reduce((sum, wc) => sum + (wc.current_utilization || 0), 0) / workCenters.length
-    : 0;
+  // Average work center utilization. Two notes for future-self:
+  //   1. The backend stats endpoint already computes this (avg of
+  //      current_utilization across non-deleted work centers) — prefer it
+  //      because the list query is capped at limit=200 and would undercount
+  //      large tenants. Fall back to local list math only if stats are
+  //      unavailable (backend down, fetch failed, etc.).
+  //   2. The local fallback averages over ACTIVE work centers only.
+  //      Inactive/unavailable centers have current_utilization=0 and would
+  //      otherwise drag the mean down for no real-world reason.
+  const averageUtilization = (() => {
+    if (manufacturingStats && typeof manufacturingStats.average_utilization === 'number') {
+      return manufacturingStats.average_utilization;
+    }
+    const activeWCs = workCenters.filter(wc => wc.status === 'active' && wc.is_available);
+    if (activeWCs.length === 0) return 0;
+    return activeWCs.reduce((sum, wc) => sum + (wc.current_utilization || 0), 0) / activeWCs.length;
+  })();
+
+  // Count of orders the operator considers "active" right now. Prefer the
+  // backend stats numbers because the production-orders list is limited to
+  // 1000 rows — for high-volume tenants the local filter would silently
+  // undercount. Fall back to filtering the local list only when stats are
+  // not present (backend health check failed, etc.).
+  const activeProductionOrdersCount = (() => {
+    if (
+      manufacturingStats &&
+      typeof manufacturingStats.confirmed_orders === 'number' &&
+      typeof manufacturingStats.in_progress_orders === 'number'
+    ) {
+      return manufacturingStats.confirmed_orders + manufacturingStats.in_progress_orders;
+    }
+    return activeProductionOrders.length;
+  })();
+
+  // Deprecated alias — kept so older imports of `averageOEE` don't crash, but
+  // it now correctly reflects utilization (which is what the value always was).
+  const averageOEE = averageUtilization;
 
   const value = useMemo(() => ({
     // State
@@ -637,9 +671,11 @@ export function ManufacturingProvider({ children }) {
 
     // Computed
     activeProductionOrders,
+    activeProductionOrdersCount,
     completedToday,
     availableWorkCenters,
-    averageOEE,
+    averageUtilization,
+    averageOEE, // deprecated — same value as averageUtilization, kept for back-compat
 
     // Work Center Operations
     createWorkCenter,
@@ -687,7 +723,7 @@ export function ManufacturingProvider({ children }) {
     getDefaultEfficiency: () => manufacturingSettings.defaultEfficiencyRate,
     isAutoConsumeEnabled: () => manufacturingSettings.autoConsumeComponents,
     isBackflushEnabled: () => manufacturingSettings.backflushEnabled
-  }), [workCenters, productionOrders, workOrders, boms, manufacturingStats, isLoading, backendAvailable, error, activeProductionOrders, completedToday, availableWorkCenters, averageOEE, createWorkCenter, updateWorkCenter, deleteWorkCenter, createProductionOrder, updateProductionOrder, deleteProductionOrder, confirmProductionOrder, startProductionOrder, pauseProductionOrder, completeProductionOrder, cancelProductionOrder, recordProduction, createWorkOrder, startWorkOrder, pauseWorkOrder, completeWorkOrder, recordWorkOrderTime, createBOM, updateBOM, deleteBOM, manufacturingCategories, createManufacturingCategory, updateManufacturingCategory, deleteManufacturingCategory, loadData, manufacturingSettings]);
+  }), [workCenters, productionOrders, workOrders, boms, manufacturingStats, isLoading, backendAvailable, error, activeProductionOrders, activeProductionOrdersCount, completedToday, availableWorkCenters, averageUtilization, averageOEE, createWorkCenter, updateWorkCenter, deleteWorkCenter, createProductionOrder, updateProductionOrder, deleteProductionOrder, confirmProductionOrder, startProductionOrder, pauseProductionOrder, completeProductionOrder, cancelProductionOrder, recordProduction, createWorkOrder, startWorkOrder, pauseWorkOrder, completeWorkOrder, recordWorkOrderTime, createBOM, updateBOM, deleteBOM, manufacturingCategories, createManufacturingCategory, updateManufacturingCategory, deleteManufacturingCategory, loadData, manufacturingSettings]);
 
   return (
     <ManufacturingContext.Provider value={value}>

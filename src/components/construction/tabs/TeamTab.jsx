@@ -13,6 +13,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Users, UserPlus, Edit, Trash2, Phone, Mail, Loader2, ArrowRightLeft, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { sortBuildings } from '@/utils/naturalSort';
 import { toast } from 'sonner';
 
 const ROLE_OPTIONS = [
@@ -81,7 +82,9 @@ const TeamTab = ({ project }) => {
       ]);
       setMembers(teamData || []);
       setEmployees(employeesData?.items || employeesData || []);
-      setBuildings(buildingData || []);
+      // Natural-sort so "block 1 / block 2 / block 10" appear in that order
+      // wherever the buildings list is surfaced (block picker, etc.).
+      setBuildings(sortBuildings(buildingData || []));
     } catch (e) {
       console.error('Failed to load team data:', e);
       setMembers([]);

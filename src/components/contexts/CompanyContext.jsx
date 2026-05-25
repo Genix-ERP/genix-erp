@@ -83,6 +83,10 @@ export function CompanyProvider({ children }) {
         owner_id: userId,
         created_date: org.created_at,
         updated_date: org.updated_at,
+        // Per-org sidebar visibility list (migration 386). Apps whose ID
+        // appears here are hidden from the sidebar when this company is
+        // active. Defaults to [] for orgs with no overrides.
+        hidden_apps: Array.isArray(org.hidden_apps) ? org.hidden_apps : [],
         // Keep original backend data
         _backend: org
       }));

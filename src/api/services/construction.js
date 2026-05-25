@@ -29,6 +29,55 @@ export const constructionService = {
     await apiClient.delete(`/construction/projects/${id}`);
   },
 
+  // =====================================================
+  // CRM LINKAGE — wires Genix construction to Yuksalish CRM
+  // =====================================================
+
+  // Fetches the CRM's project list (via Genix backend proxy so the browser
+  // never holds the CRM token). Returns { configured: bool, projects: [] }.
+  async listCRMProjects() {
+    const response = await apiClient.get('/construction/crm/projects');
+    return response.data.data;
+  },
+
+  // Fetches the blocks of a CRM project. crmProjectId is the CRM-side id.
+  async listCRMBlocks(crmProjectId) {
+    const response = await apiClient.get('/construction/crm/blocks', {
+      params: { crm_project_id: crmProjectId },
+    });
+    return response.data.data;
+  },
+
+  // Sets (or clears with null/0) crm_project_id on a Genix construction
+  // project. Called from the project edit form's "CRM" section.
+  async setProjectCRMLink(genixProjectId, crmProjectId) {
+    const response = await apiClient.put(
+      `/construction/projects/${genixProjectId}/crm-link`,
+      { crm_project_id: crmProjectId || null }
+    );
+    return response.data.data;
+  },
+
+  // Sets per-building crm_block_id + current stage + auto-sync toggle.
+  async setBuildingCRMLink(projectId, buildingId, { crmBlockId, currentStage, autoSync }) {
+    const body = {};
+    if (crmBlockId !== undefined) body.crm_block_id = crmBlockId || null;
+    if (currentStage !== undefined) body.current_crm_stage = currentStage;
+    if (autoSync !== undefined) body.crm_auto_sync = autoSync;
+    const response = await apiClient.put(
+      `/construction/projects/${projectId}/buildings/${buildingId}/crm-link`,
+      body
+    );
+    return response.data.data;
+  },
+
+  // Manual re-sync of a photo report (for "Re-send to CRM" buttons after
+  // a failure or link change).
+  async resyncPhotoReportToCRM(reportId) {
+    const response = await apiClient.post(`/construction/photo-reports/${reportId}/resync-crm`);
+    return response.data.data;
+  },
+
   async getProjectDashboard(id) {
     const response = await apiClient.get(`/construction/projects/${id}/dashboard`);
     return response.data.data;
@@ -284,6 +333,247 @@ export const constructionService = {
     return response.data.data;
   },
 
+  // Create a brand-new project resource — lands in a sentinel "catalog"
+  // estimate and shows up in subsequent listEstimateResources searches.
+  // For resource_type='material' the backend also creates an inventory
+  // product so warehouse reservations work the same as imported materials.
+  async createProjectResource(projectId, payload) {
+    const response = await apiClient.post(`/construction/projects/${projectId}/resources`, payload);
+    return response.data.data;
+  },
+
+  // Resource prices — backs the Smeta boshqaruvi → Resurslar tab.
+  // Wraps the bulk-edit + history endpoints introduced by migration 348.
+  // `estimateId` is optional. When supplied, the catalog is scoped to the
+  // resources used by that one estimate so the Resurslar tab stays in sync
+  // with the estimate selector at the top of the page. Without it, the
+  // response covers every estimate in the project (mockup-faithful behaviour).
+  async listResourcePrices(projectId, { type, estimateId } = {}) {
+    const params = {};
+    if (type) params.type = type;
+    if (estimateId) params.estimate_id = estimateId;
+    const response = await apiClient.get(`/construction/projects/${projectId}/resource-prices`, { params });
+    return response.data.data || [];
+  },
+  async bulkUpdateResourcePrice(projectId, payload) {
+    // payload: { resource_name, uom, resource_type, new_price, note?, estimate_id? }
+    // When estimate_id is set the UPDATE is scoped to that single estimate
+    // (block) so price edits in one block don't bleed into the others.
+    const response = await apiClient.post(`/construction/projects/${projectId}/resource-prices/bulk-update`, payload);
+    return response.data.data;
+  },
+  async bulkUpdateResourceMaterialType(projectId, payload) {
+    // payload: { resource_name, uom, material_type, estimate_id? }
+    const response = await apiClient.post(`/construction/projects/${projectId}/resource-prices/material-type`, payload);
+    return response.data.data;
+  },
+  async getResourcePriceHistory(projectId, { name, uom } = {}) {
+    const params = { name };
+    if (uom) params.uom = uom;
+    const response = await apiClient.get(`/construction/projects/${projectId}/resource-prices/history`, { params });
+    return response.data.data || [];
+  },
+  // Reset endpoints (migration 349 anchors).
+  // Per-resource: revert unit_rate to original_unit_rate for every matching line.
+  // When `estimate_id` is included, the rollback is scoped to that estimate.
+  async resetResourcePrice(projectId, payload) {
+    // payload: { resource_name, uom, estimate_id? }
+    const response = await apiClient.post(`/construction/projects/${projectId}/resource-prices/reset`, payload);
+    return response.data.data;
+  },
+  // Revert every line's price to its original anchor. With `estimateId`
+  // the rollback is per-estimate; without it, it's project-wide.
+  async resetAllResourcePrices(projectId, { estimateId } = {}) {
+    const body = {};
+    if (estimateId) body.estimate_id = estimateId;
+    const response = await apiClient.post(`/construction/projects/${projectId}/resource-prices/reset-all`, body);
+    return response.data.data;
+  },
+  // Per-line: revert one work's quantity to original_quantity. The handler
+  // also re-derives any non-override sub-line quantities downstream.
+  async resetLineQuantity(estimateId, lineId) {
+    const response = await apiClient.post(
+      `/construction/estimates/${estimateId}/lines/${lineId}/reset-quantity`,
+      {},
+    );
+    return response.data.data;
+  },
+  // Bulk: zero every top-level work qty in the estimate. Cascades to
+  // non-override sub-line qtys via parent.qty × norm_rate. Used by the
+  // "Reset all quantities" button on Smeta boshqaruvi.
+  async resetAllEstimateQuantities(estimateId) {
+    const response = await apiClient.post(
+      `/construction/estimates/${estimateId}/reset-quantities`,
+      {},
+    );
+    return response.data.data;
+  },
+
+  // =====================================================
+  // RESOURCE TOP-UPS  (migration 358)
+  // =====================================================
+  // When a foreman runs short on a smeta resource and re-orders MORE
+  // (often at a different price), each extra purchase is recorded as
+  // a top-up against the original sub-line. The smeta plan stays
+  // immutable; total cost = plan + Σ (extra_qty × new_price).
+
+  async createResourceTopup(estimateId, lineId, payload) {
+    // payload: { extra_quantity, new_price, ordered_at?, note? }
+    const response = await apiClient.post(
+      `/construction/estimates/${estimateId}/lines/${lineId}/topups`,
+      payload,
+    );
+    return response.data.data;
+  },
+
+  async deleteResourceTopup(estimateId, lineId, topupId) {
+    const response = await apiClient.delete(
+      `/construction/estimates/${estimateId}/lines/${lineId}/topups/${topupId}`,
+    );
+    return response.data.data;
+  },
+
+  // =====================================================
+  // FORMA 2 SNAPSHOTS  (Smeta boshqaruvi → Tarix tab)
+  // =====================================================
+  // Saved versions of a Form 2 (KS-2) document for an estimate. The list
+  // endpoint omits the heavy snapshot_data payload; call getForm2Snapshot
+  // to fetch the full saved state when re-opening a row.
+
+  async listForm2Snapshots(estimateId) {
+    const response = await apiClient.get(
+      `/construction/estimates/${estimateId}/form2-snapshots`,
+    );
+    return response.data.data || [];
+  },
+
+  async getForm2Snapshot(snapshotId) {
+    const response = await apiClient.get(
+      `/construction/form2-snapshots/${snapshotId}`,
+    );
+    return response.data.data;
+  },
+
+  async createForm2Snapshot(estimateId, payload) {
+    // payload: {
+    //   period_from, period_to,           // ISO date strings or null
+    //   other_costs_pct, use_vat,
+    //   total_with_vat, total_without_vat,
+    //   construction_total, equipment_total,
+    //   act_number,                       // optional KS-2 number
+    //   snapshot_data,                    // full JSON state of the lines
+    // }
+    const response = await apiClient.post(
+      `/construction/estimates/${estimateId}/form2-snapshots`,
+      payload,
+    );
+    return response.data.data;
+  },
+
+  async deleteForm2Snapshot(snapshotId) {
+    const response = await apiClient.delete(
+      `/construction/form2-snapshots/${snapshotId}`,
+    );
+    return response.data.data;
+  },
+
+  // =====================================================
+  // SMETA AUDIT LOG  (Smeta boshqaruvi → Jurnal tab)
+  // =====================================================
+
+  async listSmetaAudit(estimateId, { limit = 200, action } = {}) {
+    const params = { limit };
+    if (action) params.action = action;
+    const response = await apiClient.get(
+      `/construction/estimates/${estimateId}/audit`,
+      { params },
+    );
+    return response.data.data || [];
+  },
+
+  async listProjectSmetaAudit(projectId, { limit = 500 } = {}) {
+    const response = await apiClient.get(
+      `/construction/projects/${projectId}/smeta-audit`,
+      { params: { limit } },
+    );
+    return response.data.data || [];
+  },
+
+  // =====================================================
+  // BOSQICHLAR v2  — work approval workflow
+  // =====================================================
+  // Per construction_module_v2.html. Each "work" is a construction_estimate_line
+  // row with an approval_status field (migration 353). Three roles drive the
+  // transitions: foreman / supervisor / engineer.
+  //
+  // The frontend resolves the user's role for a project via getMyProjectRole;
+  // the backend enforces it again on every transition.
+
+  async getMyProjectRole(projectId) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/my-role`);
+    return response.data.data; // { role, assigned }
+  },
+
+  // Foreman.
+  async updateWorkDoneQuantity(workId, doneQuantity) {
+    const response = await apiClient.post(
+      `/construction/works/${workId}/done-quantity`,
+      { done_quantity: Number(doneQuantity) || 0 },
+    );
+    return response.data.data;
+  },
+  async submitWork(workId) {
+    const response = await apiClient.post(`/construction/works/${workId}/submit`, {});
+    return response.data.data;
+  },
+  async bulkSubmitWorks(workIds) {
+    const response = await apiClient.post(
+      `/construction/works/bulk-submit`,
+      { work_ids: workIds },
+    );
+    return response.data.data;
+  },
+
+  // Supervisor.
+  async confirmWorkSupervisor(workId) {
+    const response = await apiClient.post(`/construction/works/${workId}/confirm-supervisor`, {});
+    return response.data.data;
+  },
+  async rejectWorkSupervisor(workId, note = '') {
+    const response = await apiClient.post(
+      `/construction/works/${workId}/reject-supervisor`,
+      { note },
+    );
+    return response.data.data;
+  },
+  async bulkConfirmSupervisor(workIds) {
+    const response = await apiClient.post(
+      `/construction/works/bulk-confirm-supervisor`,
+      { work_ids: workIds },
+    );
+    return response.data.data;
+  },
+
+  // Engineer (final).
+  async confirmWorkEngineer(workId) {
+    const response = await apiClient.post(`/construction/works/${workId}/confirm-engineer`, {});
+    return response.data.data;
+  },
+  async rejectWorkEngineer(workId, note = '') {
+    const response = await apiClient.post(
+      `/construction/works/${workId}/reject-engineer`,
+      { note },
+    );
+    return response.data.data;
+  },
+  async bulkConfirmEngineer(workIds) {
+    const response = await apiClient.post(
+      `/construction/works/bulk-confirm-engineer`,
+      { work_ids: workIds },
+    );
+    return response.data.data;
+  },
+
   // =====================================================
   // PROJECT VENDORS (Future)
   // =====================================================
@@ -483,10 +773,18 @@ export const constructionService = {
     return response.data.data;
   },
 
-  // Estimate Lines
-  async listEstimateLines(estimateId) {
-    const response = await apiClient.get(`/construction/estimates/${estimateId}/lines`);
+  // Estimate Lines — supports pagination via params { page, page_size }
+  async listEstimateLines(estimateId, params = {}) {
+    // Default to large page_size for callers that don't paginate
+    const queryParams = { page_size: 5000, ...params };
+    const response = await apiClient.get(`/construction/estimates/${estimateId}/lines`, { params: queryParams });
     return response.data.data;
+  },
+
+  // Paginated version — returns { data, meta }
+  async listEstimateLinesPaginated(estimateId, params = {}) {
+    const response = await apiClient.get(`/construction/estimates/${estimateId}/lines`, { params });
+    return { data: response.data.data, meta: response.data.meta };
   },
 
   async createEstimateLine(estimateId, data) {
@@ -494,8 +792,42 @@ export const constructionService = {
     return response.data.data;
   },
 
-  async bulkCreateEstimateLines(estimateId, lines, { replace = false } = {}) {
-    const response = await apiClient.post(`/construction/estimates/${estimateId}/lines/bulk`, { lines, replace });
+  async bulkCreateEstimateLines(estimateId, lines, {
+    replace = false,
+    sourceType = '',
+    sourceFileName = '',
+    budgetTotal = 0,
+    materialBudget = 0,
+    transportBudget = 0,
+  } = {}) {
+    // `source_file_name` lets the backend dedupe auto-created Forma 2
+    // drafts across estimates extracted from the same uploaded Excel
+    // file — see migration 339 and autoCreateForma2FromEstimate.
+    //
+    // `budget_total` carries the Ресурс file's bottom-summary grand
+    // total (ИТОГО ПРЯМЫЕ ЗАТРАТЫ). The backend persists it to
+    // construction_estimate.budget_total (migration 369) so the
+    // Reja vs Fakt page can display the imported budget verbatim
+    // instead of computing it from per-line plan totals.
+    // Per-request timeout override. The global axios timeout is 30s which
+    // is fine for normal CRUD, but a real-world resurs/единич import can be
+    // 2–3 MB of JSON with 3000+ lines — on a slow connection the upload
+    // alone exceeds 30s and aborts before the server even sees the request.
+    // Backend processing itself is fast (~15 ms for ~400 lines per the
+    // logs), so the long timeout is purely a network-upload allowance.
+    // 5 minutes covers very slow connections without leaving hung
+    // requests open indefinitely if the connection truly dies.
+    const response = await apiClient.post(`/construction/estimates/${estimateId}/lines/bulk`, {
+      lines,
+      replace,
+      source_type: sourceType,
+      source_file_name: sourceFileName,
+      budget_total: budgetTotal,
+      material_budget: materialBudget,
+      transport_budget: transportBudget,
+    }, {
+      timeout: 300000,
+    });
     return response.data.data;
   },
 
@@ -567,8 +899,23 @@ export const constructionService = {
   // CONSTRUCTION STAGES (Bosqichlar)
   // =====================================================
 
-  async listStages(projectId) {
-    const response = await apiClient.get(`/construction/projects/${projectId}/stages`);
+  // Flat aggregated feed of items that are currently status='in_progress'
+  // across the construction module for one project (stages + sub-stages today,
+  // pluggable for more sources later). Drives the Jarayon tab.
+  async getProjectInProgressItems(projectId) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/in-progress`);
+    return response.data.data;
+  },
+
+  async listStages(projectId, { buildingId } = {}) {
+    // Migration 333 — optional building filter. Pass a numeric id to scope
+    // stages to one building, 0 for unassigned (project-wide), or nothing for
+    // the "Hammasi" tab.
+    const params = {};
+    if (buildingId !== undefined && buildingId !== null && buildingId !== 'all') {
+      params.building_id = Number(buildingId);
+    }
+    const response = await apiClient.get(`/construction/projects/${projectId}/stages`, { params });
     return response.data.data;
   },
 
@@ -945,6 +1292,14 @@ export const constructionService = {
     return response.data;
   },
   async deleteF2(projectId, f2Id) {
+    // Defensive: reject malformed calls client-side. Dropping `f2Id` used
+    // to produce `/construction/acts/undefined` 400s on the backend; we
+    // now fail fast so the caller's bug is obvious. `projectId` is kept in
+    // the signature for parity with `deleteF19` but not used in the URL
+    // because the Forma 2 delete endpoint is project-agnostic.
+    if (f2Id === undefined || f2Id === null || f2Id === '') {
+      throw new Error('deleteF2: f2Id is required');
+    }
     const response = await apiClient.delete(`/construction/acts/${f2Id}`);
     return response.data.data;
   },
@@ -1011,6 +1366,14 @@ export const constructionService = {
     return response.data.data;
   },
   async deleteF19(projectId, actId) {
+    // Defensive: both args must be present. A missing actId used to produce
+    // URLs like `/construction/projects/1/f19/undefined` and return 400.
+    if (projectId === undefined || projectId === null || projectId === '') {
+      throw new Error('deleteF19: projectId is required');
+    }
+    if (actId === undefined || actId === null || actId === '') {
+      throw new Error('deleteF19: actId is required');
+    }
     const response = await apiClient.delete(`/construction/projects/${projectId}/f19/${actId}`);
     return response.data.data;
   },
@@ -1065,8 +1428,39 @@ export const constructionService = {
     return response.data.data;
   },
 
-  async getStageBudgetReport(projectId) {
-    const response = await apiClient.get(`/construction/projects/${projectId}/reports/budget`);
+  async getStageBudgetReport(projectId, { buildingId } = {}) {
+    // `buildingId` is optional. When present (falsy values are skipped) the
+    // backend scopes both the stage rows AND the total_planned / total_actual
+    // KPIs to stages belonging to that building, matching the per-block tab
+    // behaviour on the Bosqichlar page.
+    const params = {};
+    if (buildingId !== undefined && buildingId !== null && buildingId !== '' && buildingId !== 'all') {
+      params.building_id = buildingId;
+    }
+    const response = await apiClient.get(
+      `/construction/projects/${projectId}/reports/budget`,
+      { params },
+    );
+    return response.data.data;
+  },
+
+  // СВОД (consolidated estimate) — per-building FAKT broken into the four
+  // primary cost rows (labor / machine / material / installed-equipment).
+  // The frontend modal layers user-editable percentage rows on top
+  // (overhead, insurance, VAT, PQ-161) to render the full 12-line layout.
+  async getSvodReport(projectId) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/reports/svod`);
+    return response.data.data;
+  },
+
+  // Material consolidation — per-block aggregation of FAKT material usage
+  // grouped by (name, UOM, unit_rate). Same name+UOM with different prices
+  // produce separate rows; same name+UOM+price are summed into one. Topups
+  // (resource purchases at a different price after the smeta was set) are
+  // returned as nested children of the parent group. Mirrors the Material
+  // yig'indisi modal launched from Smeta boshqaruvi.
+  async getMaterialConsolidationReport(projectId) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/reports/material-consolidation`);
     return response.data.data;
   },
 

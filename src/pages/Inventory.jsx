@@ -223,11 +223,24 @@ export default function Inventory() {
   };
 
   const calculateMetrics = () => {
-    const totalValue = items.reduce((sum, item) => {
-      const stock = parseFloat(item.current_stock) || parseFloat(item.quantity_on_hand) || parseFloat(item.quantity) || 0;
-      const cost = parseFloat(item.cost_price) || parseFloat(item.unit_cost) || parseFloat(item.price) || 0;
-      return sum + (stock * cost);
-    }, 0);
+    // Total inventory value: derive from the SAME source the Qoldiq boshqaruvi
+    // (Stock Management) page uses — `getInventorySummary().totalValue` from
+    // InventoryContext. That formula sums per-lot:
+    //     SUM(inventory.quantity_on_hand × COALESCE(inventory.unit_cost,
+    //                                               product.cost_price, 0))
+    //
+    // The previous version computed totalValue by iterating `items`
+    // (one row per product, with `current_stock = sum of lots`) and
+    // multiplying that total by a *single* `item.cost_price`. That
+    // undervalues whenever lots were received at different prices over
+    // time (FIFO scenarios) because product.cost_price typically tracks
+    // only the oldest lot's cost. Result: this card showed ~880M while
+    // Qoldiq boshqaruvi correctly showed ~1.6B for the same physical
+    // inventory. We now read from the same source so the two screens
+    // agree.
+    const summary = getInventorySummary ? getInventorySummary() : null;
+    const totalValueFromSummary = summary?.totalValue ?? 0;
+
     const lowStockItems = items.filter(item => {
       const stock = parseFloat(item.current_stock) || parseFloat(item.quantity_on_hand) || parseFloat(item.quantity) || 0;
       const reorderLevel = parseFloat(item.reorder_level) || parseFloat(item.min_stock_level) || 10;
@@ -239,7 +252,7 @@ export default function Inventory() {
     );
 
     return {
-      totalValue: isNaN(totalValue) ? 0 : totalValue,
+      totalValue: isNaN(totalValueFromSummary) ? 0 : totalValueFromSummary,
       lowStockCount: lowStockItems.length,
       deadStockCount: deadStockItems.length,
       expiringCount: expiringItems.length,
@@ -292,21 +305,7 @@ export default function Inventory() {
               <span className="hidden sm:inline">{t('transfers') || "O'tkazmalar"}</span>
             </TabsTrigger>
 
-            <TabsTrigger
-              value="stock-ops"
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-50"
-            >
-              <ClipboardList className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('stock_operations') || "Operations"}</span>
-            </TabsTrigger>
-
-            <TabsTrigger
-              value="locations"
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-50"
-            >
-              <MapPin className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('locations') || "Lokatsiyalar"}</span>
-            </TabsTrigger>
+            {/* Stock Operations, Operation Types, and Locations tabs hidden — simplified to 1-step operations */}
 
             <TabsTrigger
               value="valuation"
