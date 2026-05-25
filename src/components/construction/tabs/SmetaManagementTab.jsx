@@ -911,22 +911,28 @@ export default function SmetaManagementTab({ project }) {
     // landed at the end of its parent's content — past every imported
     // row — which is the opposite of what the user expects when they
     // create a sub-stage and want to see it right away.
-    const manualSubSet = new Set(
-      (manualSectionNames || []).map((n) => String(n || '').trim()),
+    // See the render-side isManualSub for why we DON'T consult
+    // manualSectionNames here — every imported section name is
+    // also in that list because the smeta import auto-creates a
+    // construction_stages row per section. Heuristics-only.
+    const recentlyAddedSet = new Set(
+      (recentlyAddedSectionIds || []).map(Number),
     );
+    const nameToManualId = new Map();
+    for (const ms of (manualSectionRows || [])) {
+      const name = String(ms?.name || '').trim();
+      if (name && ms?.id != null) {
+        nameToManualId.set(name, Number(ms.id));
+      }
+    }
     const isManualSubData = (sub) => {
-      if (manualSubSet.has(String(sub.fullName || ''))) return true;
+      const full = String(sub.fullName || '').trim();
+      const mid = nameToManualId.get(full);
+      if (mid != null && recentlyAddedSet.has(mid)) return true;
       if (sub.is_empty_manual) return true;
       const lines = sub.lines || [];
       if (lines.length === 0) return true;
       if (lines.every((ln) => ln.is_manual === true)) return true;
-      // Heuristic — imported єдинич lines always have a pure-numeric
-      // item_number (e.g. "1", "27", "395"). Lines added by the user
-      // either lack one entirely or use a parent#-seq / free-form
-      // string. If none of the sub-section's lines look imported,
-      // treat the bucket as manual. Falls back gracefully when the
-      // backend hasn't been rebuilt with migration 417's is_manual
-      // writes.
       return lines.every((ln) => {
         const raw = String(ln.item_number || '').trim();
         return !raw || !/^\d+$/.test(raw);
@@ -1858,25 +1864,30 @@ export default function SmetaManagementTab({ project }) {
                               </button>
                             )}
                           </div>
-                          {/* Hide the "bucket marker" line that AddSubWorkModal
-                             creates with the same name as the sub-section
-                             itself — otherwise the user sees the sub-section
-                             header followed by an inner row repeating the
-                             same name (e.g. "└ yangi 1 ish" then "yangi
-                             yangi ЧЕЛ.-Ч 2 0 resurs"). We treat a line as
-                             a bucket marker when its name matches the
-                             sub-section's child name AND it has no
-                             resources of its own — the sub-section header
-                             plus the user's "+ Ish" affordance is enough
-                             to manage it from there. */}
+                          {/* Hide ONE "bucket marker" line that
+                             AddSubWorkModal creates with the same name as
+                             the sub-section — but only the first such
+                             line, so subsequent works the user adds with
+                             the same name still show. A bucket marker is
+                             a line whose name matches the sub-section's
+                             child name AND has no resources of its own.
+                             Keeping all real works visible (with their
+                             resources, qty, etc.) is what was missing
+                             when both "yangi" works got hidden together. */}
                           {(() => {
                             const normTxt = (s) => String(s || '').trim().toLowerCase();
                             const subName = normTxt(sub.name);
+                            let bucketSkipped = false;
                             const visibleLines = (sub.lines || []).filter((ln) => {
+                              if (bucketSkipped) return true;
                               if (normTxt(ln.name) !== subName) return true;
                               const lnSubs = subByParent.get(Number(ln.id)) || [];
                               const hasResources = lnSubs.some((s) => !isSubStageRow(s));
-                              return hasResources;
+                              if (hasResources) return true;
+                              // First name-match line with no resources is
+                              // the bucket marker — skip it once.
+                              bucketSkipped = true;
+                              return false;
                             });
                             if (visibleLines.length === 0) return null;
                             return (
@@ -1937,24 +1948,44 @@ export default function SmetaManagementTab({ project }) {
                       );
                       // Manual sub-sections pin to the top. Detection
                       // chain (each is a strong-enough signal on its own):
-                      //   1. Full name matches a construction_stages row
-                      //      tracked in manualSectionNames.
-                      //   2. is_empty_manual placeholder (pre-seeded).
-                      //   3. Sub-section has zero lines (empty bucket).
-                      //   4. Every line carries is_manual = TRUE
+                      //
+                      //   1. is_empty_manual placeholder (pre-seeded).
+                      //   2. Sub-section has zero lines (empty bucket).
+                      //   3. Every line carries is_manual = TRUE
                       //      (migration 417 + backend writes).
-                      //   5. HEURISTIC fallback — every line lacks a
-                      //      leading-numeric item_number (e.g. "qwqw",
-                      //      "yangi"). Imported єдинич lines have item
-                      //      numbers like "1", "27", "395" — purely
-                      //      digits. Lines added via the UI either get
-                      //      "1-3" style (parent#-seq) or whatever the
-                      //      user typed, which won't match /^\d+$/.
-                      //      Useful when the backend hasn't been rebuilt
-                      //      with migration 417's is_manual writes yet.
+                      //   4. HEURISTIC — every line lacks a leading-
+                      //      numeric item_number. Imported єдинич lines
+                      //      have item numbers like "1", "27", "395".
+                      //      Lines added via the UI either lack one or
+                      //      use a parent#-seq / free-form string that
+                      //      won't match /^\d+$/.
+                      //
+                      // NOTE: we deliberately do NOT consult
+                      // manualSectionNames here. The smeta import path
+                      // auto-creates construction_stages rows for every
+                      // section it detects, so EVERY imported section
+                      // name ends up in that list — and a naive
+                      // .includes() check would match all 60 sections
+                      // as "manual", defeating the pin. Only the
+                      // heuristics above reliably distinguish manual
+                      // from imported.
+                      const recentlyAdded = new Set(
+                        (recentlyAddedSectionIds || []).map(Number),
+                      );
+                      const fullNameToManualId = new Map();
+                      for (const ms of (manualSectionRows || [])) {
+                        const name = String(ms?.name || '').trim();
+                        if (name && ms?.id != null) {
+                          fullNameToManualId.set(name, Number(ms.id));
+                        }
+                      }
                       const isManualSub = (sub) => {
                         const full = String(sub.fullName || '').trim();
-                        if (manualSectionNames && manualSectionNames.includes(full)) return true;
+                        // The user's own recent additions (tracked in
+                        // localStorage) are always pinned, even if the
+                        // heuristic would miss them.
+                        const mid = fullNameToManualId.get(full);
+                        if (mid != null && recentlyAdded.has(mid)) return true;
                         if (sub.is_empty_manual) return true;
                         const lines = sub.lines || [];
                         if (lines.length === 0) return true;

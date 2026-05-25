@@ -964,6 +964,37 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
     // FRONT of the list — these are user-added stages that already
     // have works, so they need their progress/cost from derived data
     // but their position must still be "pinned at top".
+    //
+    // A stage counts as manual when ANY of the following holds:
+    //   1. Its name matches a construction_stages row tracked in
+    //      localStorage (manualByName) — most precise signal.
+    //   2. Every work + sub-stage carries is_manual = TRUE (migration
+    //      417 + backend writes).
+    //   3. HEURISTIC fallback — none of the works look imported. An
+    //      imported єдинич/ВОР work always has a pure-numeric
+    //      item_number ("1", "27", "395"). User-added ones either
+    //      lack item_number entirely or use a parent#-seq / free-form
+    //      string that doesn't match /^\d+$/. Catches stages added
+    //      in older sessions whose localStorage tracking was lost.
+    const looksManualStage = (ds) => {
+      const allWorks = [];
+      const visit = (w) => {
+        if (!w) return;
+        allWorks.push(w);
+        if (Array.isArray(w.subStages)) {
+          for (const ss of w.subStages) visit(ss);
+        }
+      };
+      for (const w of (ds.works || [])) visit(w);
+      for (const ss of (ds.subStages || [])) visit(ss);
+      if (allWorks.length === 0) return true; // empty stage = pinned anyway
+      if (allWorks.every((w) => w.is_manual === true)) return true;
+      return allWorks.every((w) => {
+        const raw = String(w?.item_number || '').trim();
+        return !raw || !/^\d+$/.test(raw);
+      });
+    };
+
     const pinnedDerived = [];
     const restDerived   = [];
     for (const ds of derivedStages) {
@@ -971,6 +1002,12 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
       const mid = manualByName.get(key);
       if (mid != null) {
         pinnedDerived.push({ ...ds, manual_stage_id: mid });
+      } else if (looksManualStage(ds)) {
+        // Heuristic match — no localStorage id, but the works look
+        // user-added. Pin it with a synthetic ordering key (0 so it
+        // sorts AFTER stages that DO have a localStorage id, which
+        // are intentionally newest-first).
+        pinnedDerived.push({ ...ds, manual_stage_id: 0 });
       } else {
         restDerived.push(ds);
       }
