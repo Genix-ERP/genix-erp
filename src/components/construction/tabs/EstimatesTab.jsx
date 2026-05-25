@@ -1178,29 +1178,20 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                               </td>
                                             )}
                                             {est.source_type !== 'resurs' && (
-                                              // Show the file's "по проектным данным" value (col F on
-                                              // the Единич sheet) when available. This is what fills
-                                              // in the Miqdori column for BOTH parents and child
-                                              // resources — without it, Единич sub-rows displayed "0"
-                                              // because templateMode zeroes the live `quantity` ledger.
-                                              //
                                               // Fallback chain (most specific → least):
-                                              //   1. imported_quantity — file's literal value, captured
-                                              //      by the Единич parser into norma_quantity and
-                                              //      persisted via migration 413. DISPLAY-ONLY: no
-                                              //      cascade, NORMA pill, ledger, or budget path reads
-                                              //      it. Set for both parent works and child resources
-                                              //      after migration 413.
-                                              //   2. original_quantity — the parent-only anchor from
-                                              //      migration 349. Present on older rows that predate
-                                              //      413; on those rows children still render 0 because
-                                              //      the legacy parser dropped col F for children.
-                                              //   3. live `quantity` — last-ditch fallback for
-                                              //      pre-migration-349 rows.
+                                              //   1. imported_quantity — file's literal value.
+                                              //   2. original_quantity — parent-only anchor.
+                                              //   3. live `quantity` — last fallback.
+                                              //
+                                              // Use !== 0 instead of > 0 so NEGATIVE values
+                                              // (subtraction positions like ВЫЧИТАЕТСЯ ПОЗИЦИЯ)
+                                              // surface as -1.03 / -30.9 instead of falling
+                                              // through to 0. The file legitimately stores
+                                              // negative qtys for deductive rows.
                                               <td className="py-2 px-2 text-right text-xs whitespace-nowrap">
-                                                {line.imported_quantity != null && Number(line.imported_quantity) > 0
+                                                {line.imported_quantity != null && Number(line.imported_quantity) !== 0
                                                   ? Number(line.imported_quantity)
-                                                  : (Number(line.original_quantity) > 0
+                                                  : (Number(line.original_quantity) !== 0
                                                       ? line.original_quantity
                                                       : line.quantity)}
                                               </td>
@@ -1219,19 +1210,21 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                                 <td className="py-2 px-2 text-right text-xs text-slate-700 whitespace-nowrap">
                                                   {line.imported_quantity != null
                                                     ? Number(line.imported_quantity)
-                                                    : (Number(line.original_quantity) > 0
+                                                    : (Number(line.original_quantity) !== 0
                                                         ? line.original_quantity
-                                                        : (Number(line.quantity) > 0 ? line.quantity : '—'))}
+                                                        : (Number(line.quantity) !== 0 ? line.quantity : '—'))}
                                                 </td>
                                                 <td className="py-2 px-2 text-right text-xs font-medium whitespace-nowrap">{formatCurrency(line.unit_rate)}</td>
                                                 {/* Jami — show the file's "Сметная стоимость в базисном
                                                    уровне" verbatim. Same display-only contract as
                                                    Miqdor. Falls back to the computed total_amount so
-                                                   pre-migration rows still render a useful figure. */}
+                                                   pre-migration rows still render a useful figure.
+                                                   Uses !== 0 so negative totals (deductions) display
+                                                   instead of falling through to an em-dash. */}
                                                 <td className="py-2 px-2 text-right text-xs font-semibold whitespace-nowrap">
                                                   {line.imported_total != null
                                                     ? formatCurrency(Number(line.imported_total))
-                                                    : (Number(line.total_amount) > 0
+                                                    : (Number(line.total_amount) !== 0
                                                         ? formatCurrency(line.total_amount)
                                                         : '—')}
                                                 </td>
