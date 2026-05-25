@@ -433,7 +433,11 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
   const loadEstimateLines = async (estimateId) => {
     setLinesLoading(estimateId);
     try {
-      const data = await constructionService.getEstimate(estimateId);
+      // includeManual: false — hides lines added via the Smeta
+      // boshqaruvi / Bosqichlar UI (migration 417). The Smetalar tab
+      // is the read-only view of the file's original content; user
+      // edits live on the editing tabs.
+      const data = await constructionService.getEstimate(estimateId, { includeManual: false });
       setEstimateLines(prev => ({ ...prev, [estimateId]: data?.lines || [] }));
     } catch (error) {
       console.error('Error loading estimate lines:', error);
