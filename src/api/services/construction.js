@@ -326,9 +326,18 @@ export const constructionService = {
     return response.data.data;
   },
 
-  // Estimate resources by type (for substage dropdowns)
-  async listEstimateResources(projectId, type) {
-    const params = type ? { type } : {};
+  // Estimate resources by type (for substage dropdowns). The second arg
+  // can be either a bare type string (legacy callers) or an options
+  // object `{ type, q }` — passing `q` enables server-side substring
+  // search so resources past the alphabetical LIMIT cap still show up.
+  async listEstimateResources(projectId, typeOrOpts) {
+    const params = {};
+    if (typeof typeOrOpts === 'string') {
+      if (typeOrOpts) params.type = typeOrOpts;
+    } else if (typeOrOpts && typeof typeOrOpts === 'object') {
+      if (typeOrOpts.type) params.type = typeOrOpts.type;
+      if (typeOrOpts.q)    params.q    = typeOrOpts.q;
+    }
     const response = await apiClient.get(`/construction/projects/${projectId}/estimate-resources`, { params });
     return response.data.data;
   },

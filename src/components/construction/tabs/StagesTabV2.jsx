@@ -1002,6 +1002,40 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
     userAddedEmpty.sort(byNewest);
     pinnedDerived.sort(byNewest);
 
+    // Sort the imported (non-pinned) stages by the minimum numeric
+    // item_number of their works AND any nested sub-stages. So a stage
+    // whose works start at row 1 lands above one whose works start at
+    // row 8 — same rule the Smeta boshqaruvi tab uses for sections,
+    // keeping the two tabs visually aligned.
+    const leadNum = (raw) => {
+      const m = String(raw || '').trim().match(/^\d+(?:\.\d+)?/);
+      return m ? Number(m[0]) : Infinity;
+    };
+    const stageMinItem = (st) => {
+      let min = Infinity;
+      const visit = (work) => {
+        const n = leadNum(work?.item_number);
+        if (n < min) min = n;
+        // Sub-stages on Bosqichlar carry their own item_numbers too
+        // (e.g. "13-1") — scan them so a sub-stage at "1-3" still
+        // contributes its leading 1 to the stage's min.
+        if (work && Array.isArray(work.subStages)) {
+          for (const ss of work.subStages) visit(ss);
+        }
+      };
+      for (const w of (st.works || [])) visit(w);
+      for (const ss of (st.subStages || [])) visit(ss);
+      return min;
+    };
+    restDerived.sort((a, b) => {
+      const ma = stageMinItem(a);
+      const mb = stageMinItem(b);
+      if (ma === mb) {
+        return String(a.name || '').localeCompare(String(b.name || ''));
+      }
+      return ma - mb;
+    });
+
     // Top: empty extras (no works yet) — most recent first.
     // Middle: user-added stages that now have works — most recent first.
     // Bottom: everything else in natural import order.

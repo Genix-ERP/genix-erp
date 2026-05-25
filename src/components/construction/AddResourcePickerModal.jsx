@@ -94,6 +94,12 @@ export default function AddResourcePickerModal({ open, onClose, projectId, estim
     }
   }, [open]);
 
+  // Initial fetch (no search term) on open — populates the list so the
+  // user can scroll through the first 5000 (name, uom, type) tuples.
+  // When they type a search term, the second effect below refetches
+  // with `q=` so resources that landed past the alphabetical cap still
+  // surface. The list is debounced to avoid one-request-per-keystroke
+  // on slow keyboards.
   useEffect(() => {
     if (!open || !projectId) return;
     let cancelled = false;
@@ -104,6 +110,24 @@ export default function AddResourcePickerModal({ open, onClose, projectId, estim
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [open, projectId]);
+
+  // Server-side search refetch. Fires when the user types in the
+  // search box; debounced 250ms so each keystroke doesn't slam the
+  // backend. When the box is empty we re-load the unfiltered set so
+  // the user can clear their search and see everything again.
+  useEffect(() => {
+    if (!open || !projectId) return;
+    const q = String(search || '').trim();
+    let cancelled = false;
+    const tick = setTimeout(() => {
+      setLoading(true);
+      constructionService.listEstimateResources(projectId, q ? { q } : undefined)
+        .then((rows) => { if (!cancelled) setResources(Array.isArray(rows) ? rows : []); })
+        .catch(() => { if (!cancelled) setResources([]); })
+        .finally(() => { if (!cancelled) setLoading(false); });
+    }, 250);
+    return () => { cancelled = true; clearTimeout(tick); };
+  }, [open, projectId, search]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
