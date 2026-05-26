@@ -1117,6 +1117,7 @@ const ProjectDetailView = ({
   onProjectStatusChange,
 }) => {
   const { formatCurrencyCompact } = useCurrencyFormatter();
+  const { language } = useLanguage();
 
   // Persist active group / tab in the URL so a hard refresh (or a
   // copy-pasted link) lands the user back on the same view. Falls
@@ -1268,7 +1269,11 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
   const [buildingForm, setBuildingForm] = useState({
     name: '', code: '', description: '', building_type: '', building_purpose: '',
     floors_count: '', total_area: '', apartments_count: '', commercial_units_count: '',
-    estimated_cost: '', status: 'draft'
+    estimated_cost: '', status: 'draft',
+    // CRM link fields — only persisted via the separate setBuildingCRMLink
+    // PUT after the main building save succeeds. crm_block_id can be null;
+    // current_crm_stage defaults to 'foundation'; crm_auto_sync defaults true.
+    crm_block_id: null, current_crm_stage: 'foundation', crm_auto_sync: true,
   });
   const [teamForm, setTeamForm] = useState({ employee_id: '', role: '', responsibilities: '', start_date: '' });
   const [materialRequestForm, setMaterialRequestForm] = useState({
@@ -1556,12 +1561,33 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
         estimated_cost: estCost,
       };
 
+      let savedBuildingId = buildingForm.id;
       if (buildingForm.id) {
         await constructionService.updateBuilding(project.id, buildingForm.id, formData);
         toast.success(t('building_updated') || 'Bino yangilandi');
       } else {
-        await constructionService.createBuilding(project.id, formData);
+        const created = await constructionService.createBuilding(project.id, formData);
+        savedBuildingId = created?.id || created?.data?.id || savedBuildingId;
         toast.success(t('building_created') || "Bino qo'shildi");
+      }
+
+      // Persist CRM link separately — backend has dedicated /crm-link route
+      // (the main building POST/PUT does not touch crm_block_id). Only send
+      // if the parent project is linked to CRM, otherwise the call is a
+      // no-op at best (no CRM block can be picked).
+      if (savedBuildingId && project?.crm_project_id) {
+        try {
+          await constructionService.setBuildingCRMLink(project.id, savedBuildingId, {
+            crmBlockId: buildingForm.crm_block_id ?? null,
+            currentStage: buildingForm.current_crm_stage || 'foundation',
+            autoSync: buildingForm.crm_auto_sync !== false,
+          });
+        } catch (linkErr) {
+          // Non-fatal: building itself saved fine. Surface a warning so the
+          // operator knows the CRM link didn't persist and can retry.
+          console.warn('CRM link save failed:', linkErr);
+          toast.error(t('crm_link_save_failed') || 'CRM ulanish saqlanmadi');
+        }
       }
 
       const buildingsData = await constructionService.listBuildings(project.id);
@@ -1570,7 +1596,8 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
       setBuildingForm({
         name: '', code: '', description: '', building_type: '', building_purpose: '',
         floors_count: '', total_area: '', apartments_count: '', commercial_units_count: '',
-        estimated_cost: '', status: 'draft'
+        estimated_cost: '', status: 'draft',
+        crm_block_id: null, current_crm_stage: 'foundation', crm_auto_sync: true,
       });
     } catch (error) {
       console.error('Error saving building:', error);
@@ -2575,7 +2602,10 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                                     apartments_count: building.apartments_count || '',
                                     commercial_units_count: building.commercial_units_count || '',
                                     estimated_cost: building.estimated_cost || '',
-                                    status: building.status || 'draft'
+                                    status: building.status || 'draft',
+                                    crm_block_id: building.crm_block_id ?? null,
+                                    current_crm_stage: building.current_crm_stage || 'foundation',
+                                    crm_auto_sync: building.crm_auto_sync ?? true,
                                   });
                                   setShowBuildingModal(true);
                                 }}>
@@ -3420,6 +3450,36 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                 </Select>
               </div>
             )}
+
+            {/* CRM block link — only meaningful once the building has been
+                saved (so we have an ID for the /crm-link PUT) AND the parent
+                project is linked to a CRM project (so we can filter the
+                block dropdown by it). */}
+            {buildingForm.id && project?.crm_project_id && (
+              <CRMLinkPanel
+                mode="block"
+                crmProjectId={project.crm_project_id}
+                value={{
+                  crmBlockId: buildingForm.crm_block_id,
+                  currentStage: buildingForm.current_crm_stage,
+                  autoSync: buildingForm.crm_auto_sync,
+                }}
+                onChange={(v) => setBuildingForm({
+                  ...buildingForm,
+                  crm_block_id: v.crmBlockId,
+                  current_crm_stage: v.currentStage,
+                  crm_auto_sync: v.autoSync,
+                })}
+                language={language}
+              />
+            )}
+            {buildingForm.id && !project?.crm_project_id && (
+              <div className="border rounded-lg p-3 bg-amber-50 border-amber-200 text-xs text-amber-800">
+                {t('link_project_to_crm_first') ||
+                  "Avval loyihani CRM bilan bog'lang (loyihani tahrirlash) — keyin shu binoni CRM blokiga ulay olasiz."}
+              </div>
+            )}
+
             <DialogFooter className="flex-col-reverse sm:flex-row gap-2">
               <Button type="button" variant="outline" onClick={() => setShowBuildingModal(false)}>
                 {t('cancel') || 'Bekor qilish'}
