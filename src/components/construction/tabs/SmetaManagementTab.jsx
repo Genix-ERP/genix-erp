@@ -570,16 +570,23 @@ export default function SmetaManagementTab({ project }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [estimateId, page]);
 
-  const handleDeleteSnapshot = useCallback(async (snap) => {
+  const handleDeleteSnapshot = useCallback((snap) => {
     if (!snap?.id) return;
-    if (!window.confirm(t('snapshot_delete_confirm') || 'Saqlangan Forma 2 ni o\'chirilsinmi?')) return;
-    try {
-      await constructionService.deleteForm2Snapshot(snap.id);
-      toast.success(t('deleted') || 'O\'chirildi');
-      loadSnapshots(estimateId);
-    } catch (e) {
-      toast.error(formatApiError(e, t, 'Xatolik'));
-    }
+    setConfirmModal({
+      tone: 'red',
+      title: t('delete_confirm_title') || "O'chirish",
+      body: t('snapshot_delete_confirm') || "Saqlangan Forma 2 ni o'chirilsinmi?",
+      confirmLabel: t('delete') || "O'chirish",
+      onConfirm: async () => {
+        try {
+          await constructionService.deleteForm2Snapshot(snap.id);
+          toast.success(t('deleted') || "O'chirildi");
+          loadSnapshots(estimateId);
+        } catch (e) {
+          toast.error(formatApiError(e, t, 'Xatolik'));
+        }
+      },
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [estimateId]);
 
@@ -1017,15 +1024,27 @@ export default function SmetaManagementTab({ project }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [estimateId, activeEstimateIds, loadLines, t]);
 
-  const removeLine = useCallback(async (line) => {
-    if (!window.confirm(t('confirm_delete_subline') || "O'chirishni tasdiqlaysizmi?")) return;
-    try {
-      await constructionService.deleteEstimateLine(lineEst(line), line.id);
-      setLines((rows) => rows.filter((r) => r.id !== line.id && Number(r.parent_line_id) !== Number(line.id)));
-      toast.success(t('deleted') || "O'chirildi");
-    } catch (e) {
-      toast.error(formatApiError(e, t, 'Xatolik'));
-    }
+  const removeLine = useCallback((line) => {
+    // Replaces window.confirm with the in-app SmetaConfirmModal so the
+    // dialog uses our translation keys and matches the rest of the UI.
+    setConfirmModal({
+      tone: 'red',
+      title: t('delete_confirm_title') || "O'chirish",
+      body: t('confirm_delete_subline')
+        || "Ushbu resurs / etapni o'chirishni tasdiqlaysizmi?",
+      confirmLabel: t('delete') || "O'chirish",
+      onConfirm: async () => {
+        try {
+          await constructionService.deleteEstimateLine(lineEst(line), line.id);
+          setLines((rows) => rows.filter(
+            (r) => r.id !== line.id && Number(r.parent_line_id) !== Number(line.id),
+          ));
+          toast.success(t('deleted') || "O'chirildi");
+        } catch (e) {
+          toast.error(formatApiError(e, t, 'Xatolik'));
+        }
+      },
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [estimateId, t]);
 
