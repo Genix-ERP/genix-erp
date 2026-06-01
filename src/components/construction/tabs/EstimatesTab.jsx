@@ -429,22 +429,47 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
     return Number.isFinite(projected) ? projected : 0;
   }, [projectedAmounts]);
 
-  // Load lines for an estimate
-  const loadEstimateLines = async (estimateId) => {
-    setLinesLoading(estimateId);
-    try {
-      // includeManual: false — hides lines added via the Smeta
-      // boshqaruvi / Bosqichlar UI (migration 417). The Smetalar tab
-      // is the read-only view of the file's original content; user
-      // edits live on the editing tabs.
-      const data = await constructionService.getEstimate(estimateId, { includeManual: false });
-      setEstimateLines(prev => ({ ...prev, [estimateId]: data?.lines || [] }));
-    } catch (error) {
-      console.error('Error loading estimate lines:', error);
-      setEstimateLines(prev => ({ ...prev, [estimateId]: [] }));
-    } finally {
-      setLinesLoading(null);
+  // Open/close cache (Smetalar tab) — keep a ref-backed set of estimate
+  // ids whose lines have already been fetched in this session. The
+  // existing `estimateLines[estId]` check covers the common case, but
+  // the user reported that opening → closing → opening the same file
+  // still triggered a network fetch. The ref makes the cache decision
+  // independent of React's render cycle: even if a re-render somewhere
+  // hands us a stale `estimateLines` reference, the ref tells us "this
+  // id was already loaded — skip the round-trip." A successful mutation
+  // path (Edit / Add subline / Delete) calls loadEstimateLines with
+  // `{ force: true }` to drop and re-fetch.
+  const linesLoadedRef = React.useRef(new Set());
+  const linesInflightRef = React.useRef(new Map()); // estimateId → Promise — dedupes concurrent toggles
+  const loadEstimateLines = async (estimateId, { force = false } = {}) => {
+    if (!force) {
+      if (linesLoadedRef.current.has(estimateId)) return; // already in estimateLines
+      const existing = linesInflightRef.current.get(estimateId);
+      if (existing) return existing;
+    } else {
+      linesLoadedRef.current.delete(estimateId);
     }
+    setLinesLoading(estimateId);
+    const promise = (async () => {
+      try {
+        // includeManual: false — hides lines added via the Smeta
+        // boshqaruvi / Bosqichlar UI (migration 417). The Smetalar tab
+        // is the read-only view of the file's original content; user
+        // edits live on the editing tabs.
+        const data = await constructionService.getEstimate(estimateId, { includeManual: false });
+        setEstimateLines(prev => ({ ...prev, [estimateId]: data?.lines || [] }));
+        linesLoadedRef.current.add(estimateId);
+      } catch (error) {
+        console.error('Error loading estimate lines:', error);
+        setEstimateLines(prev => ({ ...prev, [estimateId]: [] }));
+        // Don't add to loaded set on error — next toggle should retry.
+      } finally {
+        setLinesLoading(null);
+        linesInflightRef.current.delete(estimateId);
+      }
+    })();
+    linesInflightRef.current.set(estimateId, promise);
+    return promise;
   };
 
   // Toggle estimate expansion
@@ -453,7 +478,10 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
       setExpandedEstimate(null);
     } else {
       setExpandedEstimate(estId);
-      if (!estimateLines[estId]) {
+      // Ref check first — handles the open/close/open replay where
+      // estimateLines might be in transit, then a defensive
+      // estimateLines fallback for cases where the ref was reset.
+      if (!linesLoadedRef.current.has(estId) && !estimateLines[estId]) {
         loadEstimateLines(estId);
       }
     }
@@ -565,7 +593,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
       await loadEstimates();
       // Reload lines if this estimate is expanded
       if (expandedEstimate === editEstimateForm.id) {
-        await loadEstimateLines(editEstimateForm.id);
+        await loadEstimateLines(editEstimateForm.id, { force: true });
       }
     } catch (error) {
       console.error('Error updating estimate:', error);
@@ -614,7 +642,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
         }
       }
 
-      await loadEstimateLines(estId);
+      await loadEstimateLines(estId, { force: true });
       await loadEstimates();
       setShowLineModal(false);
       setLineForm({ id: null, estimate_id: null, product_id: '', name: '', uom: '', quantity: '', material_rate: '', labor_rate: '', equipment_rate: '', sort_order: '0' });
@@ -634,7 +662,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
       onConfirm: async () => {
         try {
           await constructionService.deleteEstimateLine(estId, lineId);
-          await loadEstimateLines(estId);
+          await loadEstimateLines(estId, { force: true });
           await loadEstimates();
         } catch (error) {
           console.error('Error deleting line:', error);
@@ -1766,7 +1794,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
         initial={sublineDialog.initial}
         onSaved={async () => {
           if (sublineDialog.estimateId) {
-            await loadEstimateLines(sublineDialog.estimateId);
+            await loadEstimateLines(sublineDialog.estimateId, { force: true });
             await loadEstimates();
           }
         }}
@@ -1781,7 +1809,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
         estimateId={editLineDialog.estimateId}
         onSaved={async () => {
           if (editLineDialog.estimateId) {
-            await loadEstimateLines(editLineDialog.estimateId);
+            await loadEstimateLines(editLineDialog.estimateId, { force: true });
             await loadEstimates();
           }
         }}
