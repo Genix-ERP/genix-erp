@@ -32,12 +32,21 @@ const releaseRequest = () => {
 };
 
 // Create axios instance
+//
+// Timeout note: bumped from 30s → 120s because the construction module
+// pulls full estimate-line lists (multiple thousand rows) in one shot
+// for the Smeta boshqaruvi / Bosqichlar tabs. Reports from the field
+// were "loading… then timeout" on the heaviest projects. Two minutes
+// is still well within "user waits and gets a result" UX territory and
+// matches the longest backend path we exercise from a single GET.
+// Per-request overrides (uploads, exports) continue to pass their own
+// `timeout` and bypass this default.
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 30000,
+  timeout: 120000,
 });
 
 // --- GET request deduplication ---
