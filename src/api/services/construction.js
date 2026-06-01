@@ -487,6 +487,43 @@ export const constructionService = {
   },
 
   // =====================================================
+  // FORMA 2 ITERATIONS  (Bosqichlar tab strip — migration 419)
+  // =====================================================
+  // A project's Forma 2 is built up over MULTIPLE submissions. Each press
+  // of "+ Forma 2 yaratish" freezes the open iteration and opens N+1 with
+  // period_fakt = 0 on every line. updateWorkDoneQuantity now writes that
+  // period contribution; line.done_quantity stays as the cumulative
+  // (Σ period_fakt) so Bosqichlar progress %, Smetalar, reports are
+  // unchanged.
+
+  async listForm2Iterations(projectId) {
+    const response = await apiClient.get(
+      `/construction/projects/${projectId}/form2-iterations`,
+    );
+    return response.data.data || [];
+  },
+
+  async getForm2IterationLines(projectId, iterationId) {
+    const response = await apiClient.get(
+      `/construction/projects/${projectId}/form2-iterations/${iterationId}/lines`,
+    );
+    return response.data.data || [];
+  },
+
+  // Freeze the current open iteration + open the next. Server writes a
+  // construction_form2_snapshot row in the same transaction, so the
+  // Smeta boshqaruvi → Formalar tarixi list automatically gains an entry.
+  // Payload mirrors createForm2Snapshot — totals/period/act_number are
+  // optional and default to zeros + today when omitted.
+  async createForm2Iteration(projectId, payload = {}) {
+    const response = await apiClient.post(
+      `/construction/projects/${projectId}/form2-iterations`,
+      payload,
+    );
+    return response.data.data;
+  },
+
+  // =====================================================
   // SMETA AUDIT LOG  (Smeta boshqaruvi → Jurnal tab)
   // =====================================================
 
