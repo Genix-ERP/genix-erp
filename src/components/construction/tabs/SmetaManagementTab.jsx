@@ -20,6 +20,7 @@ import ResourcesPanel from '@/components/construction/ResourcesPanel';
 import AddResourcePickerModal from '@/components/construction/AddResourcePickerModal';
 import AddSubWorkModal from '@/components/construction/AddSubWorkModal';
 import EstimateLineEditModal from '@/components/construction/EstimateLineEditModal';
+import { sortLinesManualFirst, sortLinesManualFirstInPlace } from '@/components/construction/utils/sortLines';
 
 // SmetaManagementTab — full match to files/Form2_Works_v2 (7).html.
 //
@@ -735,32 +736,11 @@ export default function SmetaManagementTab({ project }) {
         m.set(Number(pid), arr);
       }
     }
-    // Sort every parent's children by item_number using NATURAL numeric
-    // collation ("1-1" < "1-2" < "1-10"). The earlier subline_seq sort
-    // got the right answer when seq numbers matched the displayed
-    // labels, but the user reported "ordering works for some rows, not
-    // others" — turns out a few sub-stages were created with manually
-    // pinned item_numbers whose order didn't track creation order, so
-    // sorting on the visible label is more robust than sorting on the
-    // internal seq. Falls back to subline_seq then id for legacy rows
-    // that have no item_number at all.
+    // Unified "manuals at top" sort — see utils/sortLines.js for the
+    // canonical rule. Replaces a per-call bespoke comparator that kept
+    // getting tweaked and breaking other cases.
     for (const arr of m.values()) {
-      arr.sort((a, b) => {
-        const ia = String(a.item_number || '').trim();
-        const ib = String(b.item_number || '').trim();
-        if (ia && ib) {
-          const c = ia.localeCompare(ib, undefined, { numeric: true, sensitivity: 'base' });
-          if (c !== 0) return c;
-        } else if (ia && !ib) {
-          return -1;
-        } else if (!ia && ib) {
-          return 1;
-        }
-        const sa = Number(a.subline_seq || 0);
-        const sb = Number(b.subline_seq || 0);
-        if (sa !== sb) return sa - sb;
-        return Number(a.id || 0) - Number(b.id || 0);
-      });
+      sortLinesManualFirstInPlace(arr);
     }
     return m;
   }, [lines]);
@@ -1089,46 +1069,10 @@ export default function SmetaManagementTab({ project }) {
       if (lines.length === 0) return true;
       return lines.every((ln) => ln.is_manual === true);
     };
-    // Sort top-level work lines within each section (and each sub-section)
-    // into two buckets:
-    //   • Manual additions (no item_number — they were added via "+ Ish"
-    //     and never got a printed-smeta row number) PIN TO THE TOP,
-    //     newest first by id DESC. Matches the existing "manuals at top"
-    //     rule for sub-sections and gives the foreman a visible parking
-    //     spot for what they just added.
-    //   • Imported rows keep their natural printed order — sorted by
-    //     the leading numeric portion of item_number ASC ("8" < "9" <
-    //     "10"). id ASC is the tiebreaker for legacy rows that share
-    //     numbers.
-    const importItemNum = (ln) => {
-      const raw = String(ln.item_number || '').trim();
-      if (!raw) return Number.POSITIVE_INFINITY;
-      const m = raw.match(/^\d+/);
-      if (m) {
-        const n = Number(m[0]);
-        if (Number.isFinite(n)) return n;
-      }
-      return Number.POSITIVE_INFINITY;
-    };
-    const sortTopLines = (arr) => {
-      if (!Array.isArray(arr) || arr.length < 2) return;
-      const manuals = [];
-      const imports = [];
-      for (const ln of arr) {
-        const raw = String(ln.item_number || '').trim();
-        if (!raw) manuals.push(ln);
-        else imports.push(ln);
-      }
-      manuals.sort((a, b) => Number(b.id || 0) - Number(a.id || 0));
-      imports.sort((a, b) => {
-        const ka = importItemNum(a);
-        const kb = importItemNum(b);
-        if (ka !== kb) return ka - kb;
-        return Number(a.id || 0) - Number(b.id || 0);
-      });
-      arr.length = 0;
-      arr.push(...manuals, ...imports);
-    };
+    // Top-level work ordering uses the shared helper — manuals at top,
+    // imports by natural item_number ASC. Same rule subByParent now uses
+    // for sub-lines, so the two never disagree.
+    const sortTopLines = (arr) => { sortLinesManualFirstInPlace(arr); };
     for (const sec of [...pinned, ...imported]) {
       sortTopLines(sec.lines);
       if (Array.isArray(sec.subSections) && sec.subSections.length > 0) {

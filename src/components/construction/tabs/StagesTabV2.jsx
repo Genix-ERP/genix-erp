@@ -12,6 +12,7 @@ import { constructionService } from '@/api/services/construction';
 import { formatApiError } from '@/utils/apiErrors';
 import AddResourcePickerModal from '@/components/construction/AddResourcePickerModal';
 import AddSubWorkModal from '@/components/construction/AddSubWorkModal';
+import { sortLinesManualFirst, sortLinesManualFirstInPlace } from '@/components/construction/utils/sortLines';
 import Form2Preview from '@/components/construction/Form2Preview';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 
@@ -1269,30 +1270,9 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
       if (!m.has(parentId)) m.set(parentId, []);
       m.get(parentId).push(l);
     }
-    // Sort each parent's child list by item_number (natural-numeric,
-    // so "1-1" < "1-2" < "1-10"). Earlier we sorted by subline_seq
-    // alone, but a few sub-stages were created with pinned item_numbers
-    // that don't track seq order, so the displayed labels were out of
-    // sequence. Sorting on the visible label fixes that without
-    // breaking legacy rows — falls back to subline_seq + id when
-    // item_number is missing.
+    // Unified manuals-first sort — see utils/sortLines.js.
     for (const arr of m.values()) {
-      arr.sort((a, b) => {
-        const ia = String(a.item_number || '').trim();
-        const ib = String(b.item_number || '').trim();
-        if (ia && ib) {
-          const c = ia.localeCompare(ib, undefined, { numeric: true, sensitivity: 'base' });
-          if (c !== 0) return c;
-        } else if (ia && !ib) {
-          return -1;
-        } else if (!ia && ib) {
-          return 1;
-        }
-        const sa = Number(a.subline_seq || 0);
-        const sb = Number(b.subline_seq || 0);
-        if (sa !== sb) return sa - sb;
-        return Number(a.id || 0) - Number(b.id || 0);
-      });
+      sortLinesManualFirstInPlace(arr);
     }
     return m;
   }, [lines]);
@@ -2264,35 +2244,12 @@ function StageBody(props) {
     ? explicitSubs.map((s) => ({ key: s.name, name: s.name, works: s.works }))
     : (heuristicSubs || []);
 
-  // Manuals-at-top sort for the stage's direct works — mirrors what
-  // Smeta boshqaruvi's sortTopLines does, so the two pages agree on
-  // where a freshly-added work shows up. Manuals (no item_number) pin
-  // to the top in id-DESC order so the most recent addition is the
-  // first thing the foreman sees; imported rows keep their natural
-  // printed order ("8" < "9" < "10") with id ASC as tiebreaker.
-  const directWorks = useMemo(() => {
-    const works = Array.isArray(props.stage.works) ? props.stage.works : [];
-    if (works.length < 2) return works;
-    const manuals = [];
-    const imports = [];
-    for (const w of works) {
-      const raw = String(w.item_number || '').trim();
-      if (!raw) manuals.push(w);
-      else imports.push(w);
-    }
-    manuals.sort((a, b) => Number(b.id || 0) - Number(a.id || 0));
-    const parseNum = (s) => {
-      const m = String(s || '').trim().match(/^\d+/);
-      return m ? Number(m[0]) : Number.POSITIVE_INFINITY;
-    };
-    imports.sort((a, b) => {
-      const ka = parseNum(a.item_number);
-      const kb = parseNum(b.item_number);
-      if (ka !== kb) return ka - kb;
-      return Number(a.id || 0) - Number(b.id || 0);
-    });
-    return [...manuals, ...imports];
-  }, [props.stage.works]);
+  // Stage's direct works — same unified sort as Smeta boshqaruvi uses
+  // for top-level work lines (utils/sortLines.js). One rule, no drift.
+  const directWorks = useMemo(
+    () => sortLinesManualFirst(props.stage.works || []),
+    [props.stage.works],
+  );
 
   if (subs.length === 0) {
     // Flat layout: just a works table.
