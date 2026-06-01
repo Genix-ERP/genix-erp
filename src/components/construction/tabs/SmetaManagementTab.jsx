@@ -417,9 +417,31 @@ export default function SmetaManagementTab({ project }) {
   // The list endpoint is per-estimate, so we fan out and concat. Each
   // line carries its own .estimate_id which mutations key off, so we
   // don't lose track of where any individual row belongs.
-  const loadLines = useCallback(async (ids) => {
+  //
+  // Block-switch cache: a project with thousands of lines was timing out
+  // every time the user clicked between 1-Block / 2-Block / 3-Block /
+  // 4-Block because the lines were refetched in full each time. Keep
+  // an in-memory Map keyed by the sorted estimateId list — switching
+  // back to a previously-loaded block now hydrates from cache instantly
+  // and the network round-trip only happens on first visit or after the
+  // user presses "Yangilash" (which calls forceReloadLines below).
+  const linesCacheRef = React.useRef(new Map());
+  const cacheKeyFor = useCallback((ids) => {
+    const idList = Array.isArray(ids) ? ids : (ids ? [ids] : []);
+    return idList.slice().sort((a, b) => Number(a) - Number(b)).join(',');
+  }, []);
+  const loadLines = useCallback(async (ids, { force = false } = {}) => {
     const idList = Array.isArray(ids) ? ids : (ids ? [ids] : []);
     if (idList.length === 0) { setLines([]); return; }
+    const key = cacheKeyFor(idList);
+    if (!force) {
+      const cached = linesCacheRef.current.get(key);
+      if (Array.isArray(cached)) {
+        setLines(cached);
+        setQtyDraft({});
+        return;
+      }
+    }
     setLoadingLines(true);
     try {
       const all = [];
@@ -428,6 +450,7 @@ export default function SmetaManagementTab({ project }) {
         const arr = Array.isArray(rows) ? rows : (rows?.data || rows?.items || []);
         all.push(...arr);
       }
+      linesCacheRef.current.set(key, all);
       setLines(all);
       setQtyDraft({});
     } catch (e) {
@@ -437,8 +460,21 @@ export default function SmetaManagementTab({ project }) {
       setLoadingLines(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  useEffect(() => { loadLines(activeEstimateIds); }, [activeEstimateIds, loadLines]);
+  }, [cacheKeyFor]);
+  // Forced reload — bound to the "Yangilash" button. Drops the cache for
+  // the current block before re-fetching so the user can still pull
+  // fresh state when they suspect another user just mutated the smeta.
+  const forceReloadLines = useCallback(() => {
+    const key = cacheKeyFor(activeEstimateIds);
+    linesCacheRef.current.delete(key);
+    loadLines(activeEstimateIds, { force: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeEstimateIds, loadLines, cacheKeyFor]);
+  // Block switch is the main caller; use the cache so coming back to a
+  // previously-loaded block hydrates instantly. Mutation reloads call
+  // loadLines with { force: true } so their fresh state replaces the
+  // cached copy.
+  useEffect(() => { loadLines(activeEstimateIds, { force: false }); }, [activeEstimateIds, loadLines]);
 
   // ── Manually-added sections (construction_stages) ─────────────────
   // Fetched whenever the active block changes or "+ Yangi seksiya" was
@@ -1220,10 +1256,10 @@ export default function SmetaManagementTab({ project }) {
           return n;
         });
         toast.success(t('saved') || 'Saqlandi');
-        loadLines(activeEstimateIds);
+        loadLines(activeEstimateIds, { force: true });
       } catch (e) {
         toast.error(formatApiError(e, t, 'Xatolik'));
-        loadLines(activeEstimateIds);
+        loadLines(activeEstimateIds, { force: true });
       }
       return;
     }
@@ -1266,10 +1302,10 @@ export default function SmetaManagementTab({ project }) {
       }));
       toast.success(t('saved') || 'Saqlandi');
       // Pull authoritative state for cascading qty changes.
-      loadLines(activeEstimateIds);
+      loadLines(activeEstimateIds, { force: true });
     } catch (e) {
       toast.error(formatApiError(e, t, 'Xatolik'));
-      loadLines(activeEstimateIds);
+      loadLines(activeEstimateIds, { force: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [estimateId, activeEstimateIds, loadLines, t, isFrozenView, periodFaktByLine]);
@@ -1278,7 +1314,7 @@ export default function SmetaManagementTab({ project }) {
     try {
       await constructionService.resetLineQuantity(lineEst(line), line.id);
       toast.success(t('reset_qty_done') || "Hajm asl qiymatga qaytarildi");
-      loadLines(activeEstimateIds);
+      loadLines(activeEstimateIds, { force: true });
     } catch (e) {
       toast.error(formatApiError(e, t, 'Xatolik'));
     }
@@ -1372,7 +1408,7 @@ export default function SmetaManagementTab({ project }) {
               return next;
             });
           }
-          loadLines(activeEstimateIds);
+          loadLines(activeEstimateIds, { force: true });
           setSectionRefreshTick((n) => n + 1);
           toast.success(t('deleted') || "O'chirildi");
         } catch (e) {
@@ -1402,7 +1438,7 @@ export default function SmetaManagementTab({ project }) {
             totalZeroed += Number(result?.works_zeroed || 0);
           }
           toast.success(`${t('reset_all_qty_done') || 'Hajmlar tushirildi'} · ${totalZeroed}`);
-          loadLines(activeEstimateIds);
+          loadLines(activeEstimateIds, { force: true });
         } catch (e) {
           toast.error(formatApiError(e, t, 'Xatolik'));
         }
@@ -1447,7 +1483,7 @@ export default function SmetaManagementTab({ project }) {
       toast.success(t('saved') || 'Saqlandi');
       // Refresh totals so the section subtotal + estimate amount_total
       // reflect the new top-up immediately.
-      loadLines(activeEstimateIds);
+      loadLines(activeEstimateIds, { force: true });
     } catch (e) {
       toast.error(formatApiError(e, t, 'Xatolik'));
     }
@@ -1464,7 +1500,7 @@ export default function SmetaManagementTab({ project }) {
         return { ...r, topups: list };
       }));
       toast.success(t('deleted') || "O'chirildi");
-      loadLines(activeEstimateIds);
+      loadLines(activeEstimateIds, { force: true });
     } catch (e) {
       toast.error(formatApiError(e, t, 'Xatolik'));
     }
@@ -1641,7 +1677,7 @@ export default function SmetaManagementTab({ project }) {
             ))}
           </select>
           <button
-            onClick={() => loadLines(activeEstimateIds)}
+            onClick={() => loadLines(activeEstimateIds, { force: true })}
             disabled={activeEstimateIds.length === 0 || loadingLines}
             className="px-3 py-2 rounded-md text-xs flex items-center gap-1.5 transition disabled:opacity-50"
             style={{ background: 'transparent', color: C.dim, border: `1px solid ${C.border2}` }}
@@ -2575,7 +2611,7 @@ export default function SmetaManagementTab({ project }) {
         estimateId={Number(estimateId)}
         parent={addTarget}
         nextSeq={addTarget ? nextSeqFor(addTarget.id) : 1}
-        onSaved={() => loadLines(activeEstimateIds)}
+        onSaved={() => loadLines(activeEstimateIds, { force: true })}
       />
       <AddSubWorkModal
         open={addStageOpen}
@@ -2584,7 +2620,7 @@ export default function SmetaManagementTab({ project }) {
         estimateId={Number(estimateId)}
         parent={addTarget}
         nextSeq={addTarget ? nextSeqFor(addTarget.id) : 1}
-        onSaved={() => loadLines(activeEstimateIds)}
+        onSaved={() => loadLines(activeEstimateIds, { force: true })}
       />
 
       {/* Second mount of the same modal in parentSection mode — handles
@@ -2601,7 +2637,7 @@ export default function SmetaManagementTab({ project }) {
         parentSection={addSubBosqichSection || ''}
         onSaved={() => {
           setAddSubBosqichSection(null);
-          loadLines(activeEstimateIds);
+          loadLines(activeEstimateIds, { force: true });
         }}
       />
 
@@ -2625,7 +2661,7 @@ export default function SmetaManagementTab({ project }) {
         estimateId={editLineTarget ? lineEst(editLineTarget) : (estimateId ? Number(estimateId) : undefined)}
         onSaved={() => {
           setEditLineTarget(null);
-          loadLines(activeEstimateIds);
+          loadLines(activeEstimateIds, { force: true });
         }}
       />
 
@@ -2810,7 +2846,7 @@ export default function SmetaManagementTab({ project }) {
                 toast.success(t('work_added') || "Ish qo'shildi");
               }
               setAddWorkModal(null);
-              loadLines(activeEstimateIds);
+              loadLines(activeEstimateIds, { force: true });
             } catch (e) {
               toast.error(formatApiError(e, t, 'Xatolik'));
             } finally {
