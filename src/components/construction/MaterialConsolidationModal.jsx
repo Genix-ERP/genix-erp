@@ -68,9 +68,15 @@ const fmt = (v) => {
 const fmtQty = (v) => {
   // Quantities can be fractional (m3, kg etc.) — keep up to 4 decimals,
   // strip trailing zeros so the column reads cleanly.
+  //
+  // ru-RU formats decimals with a comma ("0,333") and uses a
+  // non-breaking space as the thousand separator. Earlier we did
+  // `.replace(/,/g, ' ')` to "normalise" thousand separators — but that
+  // ALSO clobbered the decimal comma, rendering "0,333" as "0 333".
+  // Only the NBSP needs swapping for a regular space.
   const n = Number(v) || 0;
   const s = n.toFixed(4).replace(/\.?0+$/, '');
-  return Number(s).toLocaleString('ru-RU').replace(/,/g, ' ');
+  return Number(s).toLocaleString('ru-RU').replace(/ /g, ' ');
 };
 
 export default function MaterialConsolidationModal({
@@ -283,14 +289,14 @@ export default function MaterialConsolidationModal({
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Materiallar');
 
-    // Title block
-    ws.mergeCells(1, 1, 1, 5);
+    // Title block — 6 columns wide now (added № column).
+    ws.mergeCells(1, 1, 1, 6);
     ws.getCell(1, 1).value = tt('title', language).toUpperCase();
     ws.getCell(1, 1).font = { bold: true, size: 13 };
     ws.getCell(1, 1).alignment = { horizontal: 'center', vertical: 'middle' };
 
     if (data.project?.name || data.project?.address) {
-      ws.mergeCells(2, 1, 2, 5);
+      ws.mergeCells(2, 1, 2, 6);
       ws.getCell(2, 1).value = [data.project?.name, data.project?.address].filter(Boolean).join(' — ');
       ws.getCell(2, 1).font = { italic: true };
       ws.getCell(2, 1).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
@@ -298,54 +304,59 @@ export default function MaterialConsolidationModal({
 
     let row = 4;
     const writeHeader = () => {
-      const headers = [tt('th_name', language), tt('th_uom', language), tt('th_qty', language), tt('th_price', language), tt('th_sum', language)];
+      // 6 columns: №, Name, UOM, Qty, Price, Sum.
+      const headers = ['№', tt('th_name', language), tt('th_uom', language), tt('th_qty', language), tt('th_price', language), tt('th_sum', language)];
       headers.forEach((h, i) => {
         const cell = ws.getCell(row, i + 1);
         cell.value = h;
         cell.font = { bold: true };
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9EAD3' } };
         cell.border = box();
-        cell.alignment = { horizontal: i === 0 ? 'left' : 'center' };
+        cell.alignment = { horizontal: i === 0 || i === 2 ? 'center' : i === 1 ? 'left' : 'right' };
       });
       row++;
     };
 
     const writeBlock = (label, groups, total) => {
       // Block heading
-      ws.mergeCells(row, 1, row, 5);
+      ws.mergeCells(row, 1, row, 6);
       ws.getCell(row, 1).value = label;
       ws.getCell(row, 1).font = { bold: true, size: 11 };
       ws.getCell(row, 1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
       ws.getCell(row, 1).border = box();
       row++;
       writeHeader();
-      groups.forEach((g) => {
+      groups.forEach((g, idx) => {
         const r = row;
-        ws.getCell(r, 1).value = g.name;
-        ws.getCell(r, 2).value = g.uom;
-        ws.getCell(r, 3).value = Number(g.fakt_quantity) || 0;
-        ws.getCell(r, 4).value = Number(g.unit_rate) || 0;
-        ws.getCell(r, 5).value = Number(g.fakt_amount) || 0;
-        for (let c = 1; c <= 5; c++) {
+        ws.getCell(r, 1).value = idx + 1;
+        ws.getCell(r, 2).value = g.name;
+        ws.getCell(r, 3).value = g.uom;
+        ws.getCell(r, 4).value = Number(g.fakt_quantity) || 0;
+        ws.getCell(r, 5).value = Number(g.unit_rate) || 0;
+        ws.getCell(r, 6).value = Number(g.fakt_amount) || 0;
+        for (let c = 1; c <= 6; c++) {
           ws.getCell(r, c).border = box();
-          if (c >= 3) {
-            ws.getCell(r, c).numFmt = c === 3 ? '#,##0.####' : '#,##0';
+          if (c === 1) {
+            ws.getCell(r, c).alignment = { horizontal: 'center' };
+          } else if (c >= 4) {
+            ws.getCell(r, c).numFmt = c === 4 ? '#,##0.####' : '#,##0';
             ws.getCell(r, c).alignment = { horizontal: 'right' };
           }
         }
         row++;
         // Topups indented
         (g.topups || []).forEach((tp) => {
-          ws.getCell(row, 1).value = `   ↳ ${tt('topup_label', language)}${tp.note ? ' — ' + tp.note : ''}`;
-          ws.getCell(row, 2).value = g.uom;
-          ws.getCell(row, 3).value = Number(tp.extra_quantity) || 0;
-          ws.getCell(row, 4).value = Number(tp.new_price) || 0;
-          ws.getCell(row, 5).value = Number(tp.amount) || 0;
-          for (let c = 1; c <= 5; c++) {
+          ws.getCell(row, 1).value = '';
+          ws.getCell(row, 2).value = `   ↳ ${tt('topup_label', language)}${tp.note ? ' — ' + tp.note : ''}`;
+          ws.getCell(row, 3).value = g.uom;
+          ws.getCell(row, 4).value = Number(tp.extra_quantity) || 0;
+          ws.getCell(row, 5).value = Number(tp.new_price) || 0;
+          ws.getCell(row, 6).value = Number(tp.amount) || 0;
+          for (let c = 1; c <= 6; c++) {
             ws.getCell(row, c).border = box();
             ws.getCell(row, c).font = { italic: true, color: { argb: 'FF64748B' } };
-            if (c >= 3) {
-              ws.getCell(row, c).numFmt = c === 3 ? '#,##0.####' : '#,##0';
+            if (c >= 4) {
+              ws.getCell(row, c).numFmt = c === 4 ? '#,##0.####' : '#,##0';
               ws.getCell(row, c).alignment = { horizontal: 'right' };
             }
           }
@@ -353,15 +364,15 @@ export default function MaterialConsolidationModal({
         });
       });
       // Block total
-      ws.mergeCells(row, 1, row, 4);
+      ws.mergeCells(row, 1, row, 5);
       ws.getCell(row, 1).value = tt('total_block', language);
       ws.getCell(row, 1).font = { bold: true };
       ws.getCell(row, 1).alignment = { horizontal: 'right' };
-      ws.getCell(row, 5).value = Number(total) || 0;
-      ws.getCell(row, 5).font = { bold: true };
-      ws.getCell(row, 5).numFmt = '#,##0';
-      ws.getCell(row, 5).alignment = { horizontal: 'right' };
-      for (let c = 1; c <= 5; c++) {
+      ws.getCell(row, 6).value = Number(total) || 0;
+      ws.getCell(row, 6).font = { bold: true };
+      ws.getCell(row, 6).numFmt = '#,##0';
+      ws.getCell(row, 6).alignment = { horizontal: 'right' };
+      for (let c = 1; c <= 6; c++) {
         ws.getCell(row, c).border = box();
         ws.getCell(row, c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9EAD3' } };
       }
@@ -387,11 +398,12 @@ export default function MaterialConsolidationModal({
       }
     }
 
-    ws.getColumn(1).width = 50;
-    ws.getColumn(2).width = 10;
-    ws.getColumn(3).width = 14;
-    ws.getColumn(4).width = 14;
-    ws.getColumn(5).width = 18;
+    ws.getColumn(1).width = 5;   // №
+    ws.getColumn(2).width = 50;  // Material nomi
+    ws.getColumn(3).width = 10;  // O'lchov
+    ws.getColumn(4).width = 14;  // Hajm
+    ws.getColumn(5).width = 14;  // Birlik narxi
+    ws.getColumn(6).width = 18;  // Summa
 
     return await wb.xlsx.writeBuffer();
   };
@@ -707,6 +719,7 @@ function BlockSection({ label, groups, totalAmount, language, totalLabel, isProj
         <table className="w-full text-[12px] border-collapse">
           <thead>
             <tr className="bg-[#D9EAD3] border-b border-slate-300 text-[11px]">
+              <th className="px-3 py-2 border-r border-slate-300 font-semibold w-10 text-center">№</th>
               <th className="px-3 py-2 border-r border-slate-300 font-semibold text-left min-w-[280px]">{tt('th_name', language)}</th>
               <th className="px-3 py-2 border-r border-slate-300 font-semibold w-20">{tt('th_uom', language)}</th>
               <th className="px-3 py-2 border-r border-slate-300 font-semibold w-28 text-right">{tt('th_qty', language)}</th>
@@ -717,11 +730,12 @@ function BlockSection({ label, groups, totalAmount, language, totalLabel, isProj
           <tbody>
             {visibleGroups.length === 0 ? (
               <tr>
-                <td colSpan={5} className="text-center text-slate-400 py-3">—</td>
+                <td colSpan={6} className="text-center text-slate-400 py-3">—</td>
               </tr>
             ) : visibleGroups.map((g, i) => (
               <React.Fragment key={`${g.name}|${g.uom}|${g.unit_rate}|${i}`}>
                 <tr className="border-b border-slate-200 hover:bg-slate-50">
+                  <td className="px-3 py-1.5 border-r border-slate-200 text-center text-slate-500 font-mono">{i + 1}</td>
                   <td className="px-3 py-1.5 border-r border-slate-200">{g.name}</td>
                   <td className="px-3 py-1.5 border-r border-slate-200 text-center text-slate-600">{g.uom}</td>
                   <td className="px-3 py-1.5 border-r border-slate-200 text-right font-mono">{fmtQty(g.fakt_quantity)}</td>
@@ -731,6 +745,7 @@ function BlockSection({ label, groups, totalAmount, language, totalLabel, isProj
                 {/* Indented topup rows under the parent material */}
                 {(g.topups || []).map((tp, ti) => (
                   <tr key={`tp-${i}-${ti}`} className="border-b border-slate-100 bg-amber-50/30 italic text-slate-600">
+                    <td className="px-3 py-1 border-r border-slate-200" />
                     <td className="px-3 py-1 border-r border-slate-200 pl-8">
                       ↳ {tt('topup_label', language)}
                       {tp.note ? <span className="ml-1 text-slate-500">— {tp.note}</span> : null}
@@ -747,7 +762,7 @@ function BlockSection({ label, groups, totalAmount, language, totalLabel, isProj
           </tbody>
           <tfoot>
             <tr className="bg-[#D9EAD3] font-semibold border-t border-slate-300">
-              <td colSpan={4} className="px-3 py-2 border-r border-slate-300 text-right">{totalLabel}</td>
+              <td colSpan={5} className="px-3 py-2 border-r border-slate-300 text-right">{totalLabel}</td>
               <td className="px-3 py-2 text-right font-mono">{fmt(totalAmount)}</td>
             </tr>
           </tfoot>

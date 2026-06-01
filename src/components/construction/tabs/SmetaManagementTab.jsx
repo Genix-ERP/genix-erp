@@ -1999,6 +1999,27 @@ export default function SmetaManagementTab({ project }) {
                         if (lines.length === 0) return true;
                         return lines.every((ln) => ln.is_manual === true);
                       };
+                      // A sub-section that's just a one-work wrapper
+                      // (created via "+ Sub-bosqich" with a SHRNK code,
+                      // where AddSubWorkModal creates both a wrapper
+                      // line and an inner work line of the same name)
+                      // collapses to JUST the inner work — no wrapper
+                      // card. The user explicitly asked for this:
+                      // "tashqaridagini olib tashlab, ichidagisi
+                      // koʻrinishi kerak" (drop the outer, show the
+                      // inner). The inner work keeps its WorkCard with
+                      // qty input + cloned resources + sub-stage
+                      // affordances; the wrapper's "+ Ish" / "+ Sub-
+                      // bosqich" controls would have been redundant.
+                      const normTxt = (s) => String(s || '').trim().toLowerCase();
+                      const collapseToInnerWork = (sub) => {
+                        const lines = sub.lines || [];
+                        if (lines.length !== 1) return null;
+                        const ln = lines[0];
+                        if (normTxt(ln.name) !== normTxt(sub.name)) return null;
+                        return ln;
+                      };
+
                       // Manual sub-sections render first (preserved in
                       // their existing order). Imported sub-sections and
                       // top-level lines render in their file order — no
@@ -2010,17 +2031,30 @@ export default function SmetaManagementTab({ project }) {
                         importedEntries.push({ kind: 'line', data: ln });
                       }
                       for (const sub of (sec.subSections || [])) {
-                        if (isManualSub(sub)) {
-                          manualSubs.push(sub);
+                        const inner = collapseToInnerWork(sub);
+                        const target = isManualSub(sub) ? manualSubs : importedEntries;
+                        if (inner) {
+                          // Collapse to inner work card — caller of
+                          // renderLineEntry below will handle WorkCard +
+                          // sub-stages + cloned resources naturally.
+                          if (target === manualSubs) {
+                            manualSubs.push({ kind: 'line', data: inner });
+                          } else {
+                            importedEntries.push({ kind: 'line', data: inner });
+                          }
+                        } else if (target === manualSubs) {
+                          manualSubs.push({ kind: 'sub', data: sub });
                         } else {
                           importedEntries.push({ kind: 'sub', data: sub });
                         }
                       }
+
+                      const renderEntry = (entry) =>
+                        entry.kind === 'line' ? renderLineEntry(entry.data) : renderSubEntry(entry.data);
+
                       return [
-                        ...manualSubs.map((sub) => renderSubEntry(sub)),
-                        ...importedEntries.map((entry) =>
-                          entry.kind === 'line' ? renderLineEntry(entry.data) : renderSubEntry(entry.data),
-                        ),
+                        ...manualSubs.map(renderEntry),
+                        ...importedEntries.map(renderEntry),
                       ];
                     })()}
 
@@ -3367,13 +3401,19 @@ function WorkCard({
                 <Edit3 className="w-3.5 h-3.5" />
               </button>
             )}
-            {/* Sub-stages can be deleted from their own header — except
-                when locked. */}
-            {isSubStage && !isLocked && (
+            {/* Delete affordance — available for BOTH sub-stages and
+                top-level works (and Yangi bosqich rows). The trash icon
+                triggers removeLine, which routes through the
+                SmetaConfirmModal so the user sees a translated
+                confirm prompt before the row is wiped. Hidden when
+                the line is YAKUNIY-locked. */}
+            {!isLocked && (
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); removeLine(line); }}
-                title={t('delete_stage') || "Etapni o'chirish"}
+                title={isSubStage
+                  ? (t('delete_stage') || "Etapni o'chirish")
+                  : (t('delete_work') || "Ishni o'chirish")}
                 className="w-7 h-7 rounded-[5px] flex items-center justify-center transition"
                 style={{ background: C.hover, border: `1px solid ${C.border2}`, color: C.red }}
               >
