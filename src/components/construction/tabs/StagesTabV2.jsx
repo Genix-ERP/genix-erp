@@ -12,6 +12,8 @@ import { constructionService } from '@/api/services/construction';
 import { formatApiError } from '@/utils/apiErrors';
 import AddResourcePickerModal from '@/components/construction/AddResourcePickerModal';
 import AddSubWorkModal from '@/components/construction/AddSubWorkModal';
+import Form2Preview from '@/components/construction/Form2Preview';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 
 // =====================================================================
 // StagesTabV2 — full port of construction_module_v2.html
@@ -505,6 +507,36 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
   const [addStageModal, setAddStageModal] = useState(null);
   const [addStageBusy, setAddStageBusy] = useState(false);
 
+  // ── Forma 2 iterations (migration 419) ───────────────────────────
+  // Multi-run Forma 2 series. iterations[] is ordered oldest→newest by
+  // iteration_seq. activeIterationId controls which tab is selected;
+  // null/undefined means "the open one" (current). Frozen iterations
+  // display read-only — the fakt inputs are disabled and the cumulative
+  // progress is rendered as it stood at freeze time.
+  //
+  // The "+ Forma 2 yaratish" button on this strip POSTs to the freeze
+  // endpoint, which also writes a construction_form2_snapshot row so the
+  // Smeta boshqaruvi → Formalar tarixi list automatically shows the new
+  // entry without a separate "Save snapshot" click.
+  const [iterations, setIterations] = useState([]);             // [{id, iteration_seq, status, ...}]
+  const [activeIterationId, setActiveIterationId] = useState(null);
+  const [freezingIteration, setFreezingIteration] = useState(false);
+  // "+ Forma 2 yaratish" now opens the same Form2Preview modal the Smeta
+  // boshqaruvi tab uses — the user fills in period dates, other-costs %,
+  // VAT toggle and act number, then clicking Save inside the modal calls
+  // performFreeze with that payload (vs. our prior empty POST which made
+  // a zero-everything snapshot the foreman couldn't actually print).
+  const [form2Open, setForm2Open] = useState(false);
+  // Per-iteration period_fakt for the currently SELECTED iteration tab.
+  // Map<estimate_line_id, period_fakt>. Rebuilt every time the user
+  // switches tabs or the lines refresh. Used as the BAJARILDI input
+  // value so the new iteration starts at 0 even though
+  // line.done_quantity (the cumulative) carries the prior progress.
+  // The PROGRESS bar still reads done_quantity so cumulative completion
+  // stays visible across iterations — exactly what the user described:
+  // "new tab takes fakt as 0 but progress stays same."
+  const [periodFaktByLine, setPeriodFaktByLine] = useState(new Map());
+
   // IDs of stages the user added via "+ Bosqich qo'shish".
   //
   // Persisted in localStorage (per project) so the "user-added at top"
@@ -650,6 +682,56 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
       .catch(() => { /* leave realRole empty → admin/demo mode */ });
     return () => { cancelled = true; };
   }, [project?.id]);
+
+  // ── Load Forma 2 iterations ──────────────────────────────────────
+  // Refresh on project change AND on refreshTick so the freeze button
+  // can trigger a reload without re-running everything else.
+  useEffect(() => {
+    if (!project?.id) return;
+    let cancelled = false;
+    constructionService.listForm2Iterations(project.id)
+      .then((rows) => {
+        if (cancelled) return;
+        const list = Array.isArray(rows) ? rows : [];
+        setIterations(list);
+        // Default to the open iteration so the user lands on the
+        // editable view. If none is open (shouldn't happen post-
+        // migration 419), fall back to the newest.
+        const openOne = list.find((it) => it.status === 'open');
+        const fallback = list[list.length - 1];
+        setActiveIterationId((cur) => {
+          if (cur && list.some((it) => it.id === cur)) return cur;
+          return (openOne || fallback)?.id ?? null;
+        });
+      })
+      .catch(() => { /* iterations load is non-blocking; bosqichlar still renders */ });
+    return () => { cancelled = true; };
+  }, [project?.id, refreshTick]);
+
+  // ── Load per-line period_fakt for the active iteration ───────────
+  // Without this every BAJARILDI input would show the cumulative
+  // done_quantity, defeating the whole "new iter starts at 0" point.
+  // GetForm2IterationLines returns [{estimate_line_id, period_fakt}, …]
+  // for the selected iter; we turn it into a Map keyed by line id so
+  // the WorksTable can look up O(1) per row.
+  useEffect(() => {
+    if (!project?.id || !activeIterationId) {
+      setPeriodFaktByLine(new Map());
+      return;
+    }
+    let cancelled = false;
+    constructionService.getForm2IterationLines(project.id, activeIterationId)
+      .then((rows) => {
+        if (cancelled) return;
+        const m = new Map();
+        for (const r of (Array.isArray(rows) ? rows : [])) {
+          m.set(Number(r.estimate_line_id), Number(r.period_fakt || 0));
+        }
+        setPeriodFaktByLine(m);
+      })
+      .catch(() => { /* leave empty; rows default to 0 in the input */ });
+    return () => { cancelled = true; };
+  }, [project?.id, activeIterationId, refreshTick]);
 
   // ── Load estimate + lines when active building changes ───────────
   useEffect(() => {
@@ -1031,13 +1113,43 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
     userAddedEmpty.sort(byNewest);
     pinnedDerived.sort(byNewest);
 
-    // Imported stages stay in their derivedStages order — that's
-    // the order deriveStages() built them, which mirrors the file
-    // sequence. No re-sort.
+    // Imported stages: sort by the MIN item_number across every work
+    // they contain (own works + nested sub-stage works). This is what
+    // matches the printed-page sequence: a project with ZRP rows 1-7
+    // and ФУНДАМЕНТЫ rows 8-47 surfaces ZRP first regardless of how
+    // the import wrote sort_order. The earlier "no re-sort" rule
+    // assumed sort_order tracked file order, but real imports often
+    // diverge (legacy projects + multi-file merges shuffle it), and
+    // the user reported "7 is after 47, fix this" because of exactly
+    // that drift.
+    const minStageItemNum = (stage) => {
+      let min = Number.POSITIVE_INFINITY;
+      const visit = (w) => {
+        if (!w) return;
+        const raw = String(w.item_number || '').trim();
+        const m = raw.match(/^\d+(?:\.\d+)?/);
+        if (m) {
+          const n = Number(m[0]);
+          if (Number.isFinite(n) && n < min) min = n;
+        }
+        if (Array.isArray(w.subStages)) {
+          for (const ss of w.subStages) visit(ss);
+        }
+      };
+      for (const w of (stage.works || [])) visit(w);
+      for (const ss of (stage.subStages || [])) visit(ss);
+      return min;
+    };
+    restDerived.sort((a, b) => {
+      const ka = minStageItemNum(a);
+      const kb = minStageItemNum(b);
+      if (ka !== kb) return ka - kb;
+      return 0;
+    });
 
     // Top: empty extras (no works yet) — most recent first.
     // Middle: user-added stages that now have works — most recent first.
-    // Bottom: everything else in natural import order.
+    // Bottom: imported stages in printed-page (min item_number) order.
     return [...userAddedEmpty, ...pinnedDerived, ...restDerived];
   }, [derivedStages, manualStages, recentlyAddedStageIds]);
   // Plan-quantity resolver for progress aggregations. Fallback chain:
@@ -1157,6 +1269,31 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
       if (!m.has(parentId)) m.set(parentId, []);
       m.get(parentId).push(l);
     }
+    // Sort each parent's child list by item_number (natural-numeric,
+    // so "1-1" < "1-2" < "1-10"). Earlier we sorted by subline_seq
+    // alone, but a few sub-stages were created with pinned item_numbers
+    // that don't track seq order, so the displayed labels were out of
+    // sequence. Sorting on the visible label fixes that without
+    // breaking legacy rows — falls back to subline_seq + id when
+    // item_number is missing.
+    for (const arr of m.values()) {
+      arr.sort((a, b) => {
+        const ia = String(a.item_number || '').trim();
+        const ib = String(b.item_number || '').trim();
+        if (ia && ib) {
+          const c = ia.localeCompare(ib, undefined, { numeric: true, sensitivity: 'base' });
+          if (c !== 0) return c;
+        } else if (ia && !ib) {
+          return -1;
+        } else if (!ia && ib) {
+          return 1;
+        }
+        const sa = Number(a.subline_seq || 0);
+        const sb = Number(b.subline_seq || 0);
+        if (sa !== sb) return sa - sb;
+        return Number(a.id || 0) - Number(b.id || 0);
+      });
+    }
     return m;
   }, [lines]);
 
@@ -1189,12 +1326,31 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
     return total;
   }, [stages, subResourcesByWork, resolveWorkQty]);
 
+  // Derived: which iteration is the user looking at, and is it frozen?
+  // Declared BEFORE the permission helpers so canEditQty (below) can
+  // reference isFrozenView without depending on TDZ-then-closure semantics.
+  // Frozen iterations show historical state with read-only inputs —
+  // attempts to type fakt are blocked client-side and the backend
+  // wouldn't accept them anyway (UpdateWorkDoneQuantity only writes
+  // into the currently-open iteration_line).
+  const activeIteration = useMemo(
+    () => iterations.find((it) => it.id === activeIterationId) || null,
+    [iterations, activeIterationId],
+  );
+  const isFrozenView = activeIteration ? activeIteration.status === 'frozen' : false;
+
   // Permission helpers — based on viewRole (what the user is currently
   // simulating) for UI gating; the server independently enforces using
   // the real role on every action.
   const canSeeCost = viewRole !== 'foreman';
   const canEditQty = (w) =>
-    viewRole === 'foreman'
+    !isFrozenView
+    // isFrozenView gate (migration 419) — when the user is looking at a
+    // frozen Forma 2 iteration tab, the fakt input is read-only. The
+    // backend would reject writes against a frozen iter anyway (the open-
+    // iter lookup wouldn't return the frozen one), but disabling the
+    // input on the client gives a clearer UX than failing silently.
+    && viewRole === 'foreman'
     && (w.approval_status === 'pending' || w.approval_status === 'in_progress');
   const canSubmitToSupervisor = (w) =>
     viewRole === 'foreman'
@@ -1207,34 +1363,53 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
 
   // ── Action handlers ──────────────────────────────────────────────
   const updateDone = useCallback(async (work, raw) => {
+    if (isFrozenView) {
+      // Belt-and-braces — the input is also disabled by JSX. This guard
+      // catches any leftover keyboard handlers (e.g. Enter on a focused
+      // disabled field with browser quirks).
+      toast.error(t('forma2_frozen_readonly') || 'Bu Forma 2 muzlatilgan');
+      return;
+    }
     const v = Number(String(raw).replace(/\s/g, '').replace(',', '.'));
     // Template-mode imports leave plan quantity = 0; the foreman's
     // BAJARILDI IS the recorded work volume. So the only constraint is
     // non-negative — we don't cap at work.quantity any more (which used
     // to lock everyone at 0 because the smeta plan was 0). The backend
     // also doesn't enforce a ceiling, so this matches.
-    const newQty = Number.isFinite(v) ? Math.max(0, v) : 0;
-    if (Math.abs(newQty - Number(work.done_quantity || 0)) < 0.0001) return;
+    const newPeriod = Number.isFinite(v) ? Math.max(0, v) : 0;
+    // The user's typed value is the THIS-PERIOD contribution (matches
+    // what's shown in the BAJARILDI input). Skip the round-trip when it
+    // equals the cached period_fakt for the active iteration.
+    const prevPeriod = periodFaktByLine.get(Number(work.id)) || 0;
+    if (Math.abs(newPeriod - prevPeriod) < 0.0001) return;
     try {
-      await constructionService.updateWorkDoneQuantity(work.id, newQty);
-      // Optimistic patch — the backend now mirrors done_quantity →
-      // quantity (so Smeta boshqaruvi's ISH HAJMI matches Bosqichlar's
-      // BAJARILDI) and cascades non-override children. Patch all of
-      // those locally so the UI doesn't flash a stale value.
+      // Backend treats body.done_quantity as the open iter's period_fakt
+      // (see UpdateWorkDoneQuantity comment block, migration 419) — wire
+      // field name stays `done_quantity` for backwards compatibility but
+      // the semantics changed under the hood.
+      await constructionService.updateWorkDoneQuantity(work.id, newPeriod);
+      // Optimistic patch — the cumulative for this line is
+      //   newCumulative = oldCumulative - prevPeriod + newPeriod
+      // because all other iterations' period_fakt values are unchanged.
+      // We also update the local periodFaktByLine map so the input
+      // immediately shows the freshly-typed value as the new "starting
+      // point" if the user blurs and re-focuses.
       const childParentId = Number(work.id);
+      const oldCumulative = Number(work.done_quantity || 0);
+      const newCumulative = oldCumulative - prevPeriod + newPeriod;
       setLines((rows) => rows.map((r) => {
         if (r.id === work.id) {
           return {
             ...r,
-            done_quantity: newQty,
-            quantity: newQty,
-            total_amount: newQty * Number(r.unit_rate || 0),
-            approval_status: newQty > 0 ? 'in_progress' : 'pending',
+            done_quantity: newCumulative,
+            quantity: newCumulative,
+            total_amount: newCumulative * Number(r.unit_rate || 0),
+            approval_status: newCumulative > 0 ? 'in_progress' : 'pending',
           };
         }
         if (Number(r.parent_line_id) === childParentId && !r.quantity_override) {
           const norm = Number(r.norm_rate || 0);
-          const childQty = newQty * norm;
+          const childQty = newCumulative * norm;
           return {
             ...r,
             quantity: childQty,
@@ -1243,12 +1418,17 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
         }
         return r;
       }));
+      setPeriodFaktByLine((m) => {
+        const n = new Map(m);
+        n.set(Number(work.id), newPeriod);
+        return n;
+      });
       toast.success(t('saved'));
     } catch (e) {
       toast.error(formatApiError(e, t, 'Xatolik'));
       reload();
     }
-  }, [t]);
+  }, [t, isFrozenView, periodFaktByLine]);
 
   const transitionRow = useCallback(async (label, fn) => {
     try {
@@ -1259,6 +1439,46 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
       toast.error(formatApiError(e, t, 'Xatolik'));
     }
   }, [t]);
+
+  // Freeze the open iteration, write the snapshot the Form2Preview modal
+  // just composed, and open the next iteration. `payload` is whatever
+  // Form2Preview's Save button emits — period dates, other_costs_pct,
+  // use_vat, totals, act_number, and snapshot_data (the full lines+
+  // summary JSON). The backend writes it into construction_form2_snapshot
+  // in the same transaction as the freeze, so Formalar tarixi
+  // automatically gets a real, printable entry.
+  //
+  // payload may be undefined when callers want a no-input freeze (kept
+  // for future use); we forward {} in that case.
+  const performFreeze = useCallback(async (payload) => {
+    if (!project?.id || freezingIteration) return;
+    setFreezingIteration(true);
+    try {
+      const body = payload || {};
+      // The iteration endpoint defaults estimate_id to the project's
+      // first estimate when omitted. When the foreman is actively on a
+      // building/estimate, pin that one so multi-estimate projects
+      // snapshot the right one.
+      if (!body.estimate_id && activeEstimateId) {
+        body.estimate_id = activeEstimateId;
+      }
+      const res = await constructionService.createForm2Iteration(project.id, body);
+      toast.success(t('forma2_frozen_opened_next') || "Forma 2 muzlatildi va keyingisi ochildi");
+      // Snap to the newly-opened iteration so the user can keep typing
+      // fakt without reaching for the tab strip.
+      if (res?.new_iteration_id) {
+        setActiveIterationId(res.new_iteration_id);
+      } else {
+        setActiveIterationId(null);
+      }
+      setForm2Open(false);
+      setRefreshTick((n) => n + 1);
+    } catch (e) {
+      toast.error(formatApiError(e, t, 'Xatolik'));
+    } finally {
+      setFreezingIteration(false);
+    }
+  }, [project?.id, activeEstimateId, freezingIteration, t]);
 
   const submitWork              = (w) => transitionRow(t('sent_for_review'),     () => constructionService.submitWork(w.id));
   const confirmAsSupervisor     = (w) => transitionRow(t('confirmed'),                    () => constructionService.confirmWorkSupervisor(w.id));
@@ -1415,6 +1635,74 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
           variant="blue"
         />
       </div>
+
+      {/* FORMA 2 ITERATION STRIP — migration 419.
+         Each tab = one submission of the project's Forma 2. The latest tab
+         carries "(joriy)" and is editable; older tabs are read-only and
+         show the historical state at the moment of freeze. Pressing
+         "+ Forma 2 yaratish" freezes the current open and opens N+1; the
+         same call also writes a construction_form2_snapshot row so Smeta
+         boshqaruvi → Formalar tarixi shows the new entry automatically. */}
+      {iterations.length > 0 && (
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <h2 className="text-base font-bold text-slate-900">📄 {t('forma2_series') || 'Forma 2 iteratsiyalari'}</h2>
+            <button
+              type="button"
+              // Opens Form2Preview where the foreman fills in period
+              // dates, other-costs %, VAT toggle and act number — same
+              // modal used on the Smeta boshqaruvi tab. When the user
+              // hits Save inside the modal, Form2Preview hands us a
+              // fully-composed snapshot payload via onSaveSnapshot →
+              // performFreeze, which freezes + opens next in one POST.
+              onClick={() => setForm2Open(true)}
+              disabled={freezingIteration || !iterations.some((it) => it.status === 'open')}
+              className="px-3 py-1.5 rounded-lg text-[12px] font-semibold border border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100 transition inline-flex items-center gap-1.5 disabled:opacity-50"
+            >
+              {freezingIteration && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              <span className="text-[14px] leading-none">+</span>
+              {t('create_forma2') || "Forma 2 yaratish"}
+            </button>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            {iterations.map((it) => {
+              const active = activeIterationId === it.id;
+              const isOpen = it.status === 'open';
+              return (
+                <button
+                  key={it.id}
+                  onClick={() => setActiveIterationId(it.id)}
+                  className="px-4 py-2 rounded-lg text-[13px] font-semibold flex items-center gap-2 transition"
+                  style={{
+                    background: active ? '#0F172A' : '#FFFFFF',
+                    color: active ? '#FFFFFF' : '#64748B',
+                    border: `1.5px solid ${active ? '#0F172A' : '#E5E7EB'}`,
+                  }}
+                  title={isOpen
+                    ? (t('forma2_open_editable') || 'Joriy iteratsiya — tahrirlash mumkin')
+                    : (t('forma2_frozen_readonly') || 'Muzlatilgan — faqat ko\'rish')}
+                >
+                  <span>📄 Forma 2 #{it.iteration_seq}</span>
+                  <span
+                    className="text-[10px] px-2 py-0.5 rounded-full font-bold"
+                    style={{
+                      background: active ? (isOpen ? '#047857' : '#64748B') : (isOpen ? '#D1FAE5' : '#E5E7EB'),
+                      color:      active ? '#FFFFFF' : (isOpen ? '#047857' : '#64748B'),
+                    }}
+                  >
+                    {isOpen ? (t('current_label') || 'joriy') : (t('frozen_label') || 'muzlatilgan')}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          {isFrozenView && (
+            <div className="mt-3 px-3 py-2 rounded-md text-[12px] bg-amber-50 border border-amber-200 text-amber-800">
+              {t('forma2_frozen_notice') || "Bu Forma 2 muzlatilgan. Yangi fakt kiritish uchun #joriy ni tanlang."}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* BLOCK TABS — the "Smeta yuklash" CTA used to live in this header
          row, but the user prefers the upload affordance to stay in
@@ -1655,6 +1943,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
                       canRejectAsEngineer={canRejectAsEngineer}
                       doneDraft={doneDraft}
                       setDoneDraft={setDoneDraft}
+                      periodFaktByLine={periodFaktByLine}
                       onUpdateDone={updateDone}
                       onSubmit={submitWork}
                       onConfirmSupervisor={confirmAsSupervisor}
@@ -1706,6 +1995,27 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
           t={t}
         />
       )}
+
+      {/* Forma 2 freeze modal — Form2Preview is the same renderer Smeta
+         boshqaruvi uses for "Forma 2 ni yaratish". The foreman fills in
+         period dates, other-costs %, VAT toggle and the act number;
+         pressing Save inside Form2Preview emits the full snapshot
+         payload to onSaveSnapshot → performFreeze, which freezes the
+         open iteration AND writes the snapshot AND opens the next one,
+         all in one server transaction (migration 419). */}
+      <Dialog open={form2Open} onOpenChange={setForm2Open}>
+        <DialogContent className="max-w-[1200px] w-[95vw] h-[95vh] p-0 overflow-hidden flex flex-col">
+          <div className="flex-1 overflow-auto bg-stone-100">
+            <Form2Preview
+              estimate={estimates.find((e) => Number(e.id) === Number(activeEstimateId)) || null}
+              lines={lines}
+              project={project}
+              onClose={() => setForm2Open(false)}
+              onSaveSnapshot={performFreeze}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Add-resource modal — opened from the per-row "+" button. The new
          sub-line attaches to the work via parent_line_id, so it shows up
@@ -1896,9 +2206,15 @@ function AddStageModal({
 // CONFIRM MODAL
 // =====================================================================
 function ConfirmModal({ title, body, confirmLabel, onConfirm, onCancel, t }) {
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center"
-         style={{ background: 'rgba(15,23,42,0.5)' }}
+  // Portal to document.body so the backdrop covers the FULL viewport,
+  // including the project header / sub-pill nav at the top of the
+  // Construction page. Rendering inline meant the modal was trapped
+  // inside StagesTabV2's stacking context, leaving a visible "line" of
+  // un-dimmed page chrome between the browser bar and the modal —
+  // exactly the issue raised after the iteration freeze button shipped.
+  return createPortal(
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center"
+         style={{ background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(2px)' }}
          onClick={onCancel}>
       <div className="bg-white rounded-2xl p-6 max-w-[520px] w-[90%] shadow-2xl"
            onClick={(e) => e.stopPropagation()}>
@@ -1922,7 +2238,8 @@ function ConfirmModal({ title, body, confirmLabel, onConfirm, onCancel, t }) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -1947,7 +2264,35 @@ function StageBody(props) {
     ? explicitSubs.map((s) => ({ key: s.name, name: s.name, works: s.works }))
     : (heuristicSubs || []);
 
-  const directWorks = props.stage.works;
+  // Manuals-at-top sort for the stage's direct works — mirrors what
+  // Smeta boshqaruvi's sortTopLines does, so the two pages agree on
+  // where a freshly-added work shows up. Manuals (no item_number) pin
+  // to the top in id-DESC order so the most recent addition is the
+  // first thing the foreman sees; imported rows keep their natural
+  // printed order ("8" < "9" < "10") with id ASC as tiebreaker.
+  const directWorks = useMemo(() => {
+    const works = Array.isArray(props.stage.works) ? props.stage.works : [];
+    if (works.length < 2) return works;
+    const manuals = [];
+    const imports = [];
+    for (const w of works) {
+      const raw = String(w.item_number || '').trim();
+      if (!raw) manuals.push(w);
+      else imports.push(w);
+    }
+    manuals.sort((a, b) => Number(b.id || 0) - Number(a.id || 0));
+    const parseNum = (s) => {
+      const m = String(s || '').trim().match(/^\d+/);
+      return m ? Number(m[0]) : Number.POSITIVE_INFINITY;
+    };
+    imports.sort((a, b) => {
+      const ka = parseNum(a.item_number);
+      const kb = parseNum(b.item_number);
+      if (ka !== kb) return ka - kb;
+      return Number(a.id || 0) - Number(b.id || 0);
+    });
+    return [...manuals, ...imports];
+  }, [props.stage.works]);
 
   if (subs.length === 0) {
     // Flat layout: just a works table.
@@ -2103,6 +2448,7 @@ function WorksTable({
   canConfirmAsEngineer,
   canRejectAsEngineer,
   doneDraft, setDoneDraft,
+  periodFaktByLine,
   onUpdateDone, onSubmit,
   onConfirmSupervisor, onRejectSupervisor,
   onConfirmEngineer, onRejectEngineer,
@@ -2192,7 +2538,20 @@ function WorksTable({
             const pct = planQty > 0 ? Math.min((doneQty / planQty) * 100, 100) : 0;
             const stMeta = STATUS_META[w.approval_status] || STATUS_META.pending;
             const draftKey = `q_${w.id}`;
-            const inputValue = doneDraft[draftKey] !== undefined ? doneDraft[draftKey] : fmt(doneQty);
+            // PERIOD FAKT vs CUMULATIVE (migration 419) — the BAJARILDI
+            // input shows THIS iteration's contribution (starts at 0 in
+            // a fresh iter), while the PROGRESS bar above keeps using
+            // doneQty (the cumulative) so completed lines still read
+            // 100% after the freeze. Without this split the user
+            // reported "i said new tab should take fakt as 0 but
+            // progress stays same" — both columns were showing the
+            // cumulative and the iter feature looked broken.
+            const periodFakt = periodFaktByLine
+              ? Number(periodFaktByLine.get(Number(w.id)) || 0)
+              : doneQty;
+            const inputValue = doneDraft[draftKey] !== undefined
+              ? doneDraft[draftKey]
+              : fmt(periodFakt);
             const subs = subResourcesByWork?.get(Number(w.id)) || [];
             const isExpanded = expandedWorks?.has(Number(w.id)) || false;
             const hasSubs = subs.length > 0;
@@ -2256,7 +2615,12 @@ function WorksTable({
                       )}
                     </div>
                   ) : (
-                    <span className="font-mono text-slate-500">{fmt(doneQty)}</span>
+                    // Read-only BAJARILDI (frozen iter view, or non-foreman
+                    // role). Show the period contribution for the active
+                    // iteration so frozen tabs reproduce "what was reported
+                    // this period" rather than the running total — which
+                    // the PROGRESS column to the right already conveys.
+                    <span className="font-mono text-slate-500">{fmt(periodFakt)}</span>
                   )}
                 </td>
                 <td className="text-center py-2.5 px-3">

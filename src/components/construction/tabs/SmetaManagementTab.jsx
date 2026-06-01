@@ -226,6 +226,23 @@ export default function SmetaManagementTab({ project }) {
   const [matConsOpen, setMatConsOpen] = useState(false);
   const [qtyDraft, setQtyDraft] = useState({});
 
+  // Forma 2 iterations (migration 419). The same tab strip Bosqichlar
+  // shows — surfaced here so the foreman can also tell at a glance
+  // which iteration the smeta edits will land in, and so the iteration
+  // is read-only when the user is browsing a frozen one. Pressing
+  // "+ Forma 2 ni yaratish" anywhere on the page advances this strip.
+  const [iterations, setIterations] = useState([]);
+  const [activeIterationId, setActiveIterationId] = useState(null);
+  // Refresh tick bumped from handleSaveSnapshot success so the strip
+  // reloads after the foreman freezes via the Forma 2 button.
+  const [iterRefreshTick, setIterRefreshTick] = useState(0);
+  // Per-line period_fakt for the active iteration. The FAKT input on
+  // top-level work cards displays this (so a fresh iter shows 0)
+  // instead of line.quantity (which carries the cumulative). Mirrors
+  // the same plumbing in StagesTabV2 — the two pages stay in sync
+  // because both flow through updateWorkDoneQuantity on save.
+  const [periodFaktByLine, setPeriodFaktByLine] = useState(new Map());
+
   // "X o'zgarish" badge — count of resources whose price drifted from
   // original. Pulled separately from the main lines query because resource
   // pricing is bucketed per (name, uom), not per line.
@@ -552,6 +569,60 @@ export default function SmetaManagementTab({ project }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [estimateId]);
 
+  // ── Load Forma 2 iterations ──────────────────────────────────────
+  // Powers the iteration tab strip + the isFrozenView gate that puts
+  // every quantity input into read-only mode when the user is browsing
+  // a frozen iteration. Reloads on iterRefreshTick so a successful
+  // freeze (handleSaveSnapshot below) immediately surfaces the new
+  // open iter without a full page reload.
+  useEffect(() => {
+    if (!project?.id) return;
+    let cancelled = false;
+    constructionService.listForm2Iterations(project.id)
+      .then((rows) => {
+        if (cancelled) return;
+        const list = Array.isArray(rows) ? rows : [];
+        setIterations(list);
+        const openOne = list.find((it) => it.status === 'open');
+        const fallback = list[list.length - 1];
+        setActiveIterationId((cur) => {
+          if (cur && list.some((it) => it.id === cur)) return cur;
+          return (openOne || fallback)?.id ?? null;
+        });
+      })
+      .catch(() => { /* iterations are non-blocking — page still renders */ });
+    return () => { cancelled = true; };
+  }, [project?.id, iterRefreshTick]);
+
+  const activeIteration = useMemo(
+    () => iterations.find((it) => it.id === activeIterationId) || null,
+    [iterations, activeIterationId],
+  );
+  const isFrozenView = activeIteration ? activeIteration.status === 'frozen' : false;
+
+  // ── Load per-line period_fakt for the active iteration ───────────
+  // Same fetch StagesTabV2 does — keeps the Smeta boshqaruvi FAKT
+  // input showing this iteration's contribution so a fresh iter
+  // reads 0 across the board.
+  useEffect(() => {
+    if (!project?.id || !activeIterationId) {
+      setPeriodFaktByLine(new Map());
+      return;
+    }
+    let cancelled = false;
+    constructionService.getForm2IterationLines(project.id, activeIterationId)
+      .then((rows) => {
+        if (cancelled) return;
+        const m = new Map();
+        for (const r of (Array.isArray(rows) ? rows : [])) {
+          m.set(Number(r.estimate_line_id), Number(r.period_fakt || 0));
+        }
+        setPeriodFaktByLine(m);
+      })
+      .catch(() => { /* default to zeros when the endpoint is unavailable */ });
+    return () => { cancelled = true; };
+  }, [project?.id, activeIterationId, iterRefreshTick]);
+
   // ── Snapshot save / delete ───────────────────────────────────────
   // Same loop hazard as loadSnapshots/loadAudit: depending on `t` (which
   // changes identity every render) would re-create these handlers each
@@ -560,15 +631,31 @@ export default function SmetaManagementTab({ project }) {
   const handleSaveSnapshot = useCallback(async (payload) => {
     if (!estimateId) return;
     try {
-      await constructionService.createForm2Snapshot(estimateId, payload);
+      // Multi-iteration model (migration 419): "Forma 2 ni yaratish" now
+      // does the FULL freeze — write a construction_form2_snapshot row
+      // AND flip the open iteration to 'frozen' AND open the next
+      // iteration with period_fakt = 0 on every line. The snapshot side
+      // is still visible in Formalar tarixi exactly as before, but the
+      // iteration tab strip on Bosqichlar now also shows the new entry,
+      // and any period_fakt input the foreman fills in goes into the new
+      // open iter instead of compounding into the previous Forma 2.
+      // Falls back to project_id via estimate (the iteration endpoint
+      // resolves its own estimate when caller pins one).
+      await constructionService.createForm2Iteration(
+        project?.id,
+        { ...payload, estimate_id: estimateId },
+      );
       toast.success(t('snapshot_saved') || 'Forma 2 saqlandi');
       // If the user is currently viewing the History tab refresh the list.
       if (page === 'history') loadSnapshots(estimateId);
+      // Bump the iteration strip so the new open iter shows up and the
+      // frozen one moves out of "joriy" without a full page reload.
+      setIterRefreshTick((n) => n + 1);
     } catch (e) {
       toast.error(formatApiError(e, t, 'Xatolik'));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [estimateId, page]);
+  }, [estimateId, page, project?.id]);
 
   const handleDeleteSnapshot = useCallback((snap) => {
     if (!snap?.id) return;
@@ -611,6 +698,33 @@ export default function SmetaManagementTab({ project }) {
         arr.push(ln);
         m.set(Number(pid), arr);
       }
+    }
+    // Sort every parent's children by item_number using NATURAL numeric
+    // collation ("1-1" < "1-2" < "1-10"). The earlier subline_seq sort
+    // got the right answer when seq numbers matched the displayed
+    // labels, but the user reported "ordering works for some rows, not
+    // others" — turns out a few sub-stages were created with manually
+    // pinned item_numbers whose order didn't track creation order, so
+    // sorting on the visible label is more robust than sorting on the
+    // internal seq. Falls back to subline_seq then id for legacy rows
+    // that have no item_number at all.
+    for (const arr of m.values()) {
+      arr.sort((a, b) => {
+        const ia = String(a.item_number || '').trim();
+        const ib = String(b.item_number || '').trim();
+        if (ia && ib) {
+          const c = ia.localeCompare(ib, undefined, { numeric: true, sensitivity: 'base' });
+          if (c !== 0) return c;
+        } else if (ia && !ib) {
+          return -1;
+        } else if (!ia && ib) {
+          return 1;
+        }
+        const sa = Number(a.subline_seq || 0);
+        const sb = Number(b.subline_seq || 0);
+        if (sa !== sb) return sa - sb;
+        return Number(a.id || 0) - Number(b.id || 0);
+      });
     }
     return m;
   }, [lines]);
@@ -939,19 +1053,103 @@ export default function SmetaManagementTab({ project }) {
       if (lines.length === 0) return true;
       return lines.every((ln) => ln.is_manual === true);
     };
+    // Sort top-level work lines within each section (and each sub-section)
+    // into two buckets:
+    //   • Manual additions (no item_number — they were added via "+ Ish"
+    //     and never got a printed-smeta row number) PIN TO THE TOP,
+    //     newest first by id DESC. Matches the existing "manuals at top"
+    //     rule for sub-sections and gives the foreman a visible parking
+    //     spot for what they just added.
+    //   • Imported rows keep their natural printed order — sorted by
+    //     the leading numeric portion of item_number ASC ("8" < "9" <
+    //     "10"). id ASC is the tiebreaker for legacy rows that share
+    //     numbers.
+    const importItemNum = (ln) => {
+      const raw = String(ln.item_number || '').trim();
+      if (!raw) return Number.POSITIVE_INFINITY;
+      const m = raw.match(/^\d+/);
+      if (m) {
+        const n = Number(m[0]);
+        if (Number.isFinite(n)) return n;
+      }
+      return Number.POSITIVE_INFINITY;
+    };
+    const sortTopLines = (arr) => {
+      if (!Array.isArray(arr) || arr.length < 2) return;
+      const manuals = [];
+      const imports = [];
+      for (const ln of arr) {
+        const raw = String(ln.item_number || '').trim();
+        if (!raw) manuals.push(ln);
+        else imports.push(ln);
+      }
+      manuals.sort((a, b) => Number(b.id || 0) - Number(a.id || 0));
+      imports.sort((a, b) => {
+        const ka = importItemNum(a);
+        const kb = importItemNum(b);
+        if (ka !== kb) return ka - kb;
+        return Number(a.id || 0) - Number(b.id || 0);
+      });
+      arr.length = 0;
+      arr.push(...manuals, ...imports);
+    };
     for (const sec of [...pinned, ...imported]) {
+      sortTopLines(sec.lines);
+      if (Array.isArray(sec.subSections) && sec.subSections.length > 0) {
+        for (const sub of sec.subSections) sortTopLines(sub.lines);
+      }
       if (Array.isArray(sec.subSections) && sec.subSections.length > 1) {
-        // Stable partition: manuals first (in their existing order),
-        // imports after (in their existing insertion order). No
-        // alphabetical / item_number reshuffle for either bucket.
+        // Two-bucket sort:
+        //   1) Manual sub-sections (user-added) pin to the top.
+        //   2) Imported sub-sections sort by their MIN item_number
+        //      so the printed-page numbering is respected. The user
+        //      reported "ZRP rows 1-7 are showing AFTER ФУНДАМЕНТЫ
+        //      rows 8-47, fix this" — root cause was that sub-section
+        //      order was driven by the lines-array iteration (which
+        //      follows backend sort_order), but the original smeta
+        //      file had ZRP's items numbered before ФУНДАМЕНТЫ's, so
+        //      ZRP needs to come first. Sorting on min(item_number)
+        //      matches the printed file order regardless of how the
+        //      import wrote sort_order.
         const manualOnes = [];
         const importedOnes = [];
         for (const sub of sec.subSections) {
           if (isManualSubData(sub)) manualOnes.push(sub);
           else importedOnes.push(sub);
         }
+        importedOnes.sort((a, b) => {
+          const ka = minItemNum(a);
+          const kb = minItemNum(b);
+          if (ka !== kb) return ka - kb;
+          return 0;
+        });
         sec.subSections = [...manualOnes, ...importedOnes];
       }
+    }
+    // Same min-item_number sort for TOP-LEVEL imported sections so a
+    // project whose import scrambled sort_order across "СЕКЦИЯ №1",
+    // "СЕКЦИЯ №2", etc. still surfaces them in printed page order.
+    if (imported.length > 1) {
+      imported.sort((a, b) => {
+        const ka = (() => {
+          let m = minItemNum(a);
+          for (const sub of (a.subSections || [])) {
+            const s = minItemNum(sub);
+            if (s < m) m = s;
+          }
+          return m;
+        })();
+        const kb = (() => {
+          let m = minItemNum(b);
+          for (const sub of (b.subSections || [])) {
+            const s = minItemNum(sub);
+            if (s < m) m = s;
+          }
+          return m;
+        })();
+        if (ka !== kb) return ka - kb;
+        return 0;
+      });
     }
     return [...pinned, ...imported];
   }, [lines, search, sectionFilter, t, manualSectionNames, manualSectionRows, recentlyAddedSectionIds]);
@@ -965,7 +1163,70 @@ export default function SmetaManagementTab({ project }) {
   const lineEst = (line) => Number(line.estimate_id || estimateId || 0);
 
   const commitQty = useCallback(async (line, raw) => {
+    if (isFrozenView) {
+      // Frozen iteration (migration 419) — quantity edits are blocked
+      // server-side too (UpdateEstimateLine on a non-draft estimate, plus
+      // the period_fakt write path only targets the open iter), but
+      // short-circuiting here avoids a confusing toast cascade.
+      toast.error(t('forma2_frozen_readonly') || 'Bu Forma 2 muzlatilgan');
+      return;
+    }
     const newQty = parseNum(raw);
+    // For TOP-LEVEL work rows (no parent) the FAKT input now represents
+    // this iteration's period contribution — same semantics as the
+    // BAJARILDI input on Bosqichlar. Route the write through
+    // updateWorkDoneQuantity so:
+    //   • the server writes period_fakt for the open iter and
+    //     recomputes done_quantity = Σ period_fakt
+    //   • the parent-row mirror updates `quantity` (so other readers
+    //     that still look at quantity stay consistent)
+    //   • Bosqichlar's BAJARILDI input picks up the same number — the
+    //     user's bidirectional sync question is answered "yes" because
+    //     both pages now flow through the same write path.
+    // Sub-line rows (resources / sub-stages with parent_line_id > 0)
+    // keep using updateEstimateLine because their FAKT is the plan
+    // override (quantity_override), not period contribution.
+    const isParent = !line.parent_line_id || Number(line.parent_line_id) === 0;
+    if (isParent) {
+      const prevPeriod = Number(periodFaktByLine.get(Number(line.id)) || 0);
+      if (Math.abs(newQty - prevPeriod) < 0.0001) return;
+      try {
+        await constructionService.updateWorkDoneQuantity(line.id, newQty);
+        const prevCumulative = Number(line.quantity || 0);
+        const newCumulative = prevCumulative - prevPeriod + newQty;
+        setLines((rows) => rows.map((r) => {
+          if (r.id === line.id) {
+            return {
+              ...r,
+              quantity: newCumulative,
+              done_quantity: newCumulative,
+              total_amount: Number(r.unit_rate || 0) * newCumulative,
+            };
+          }
+          if (Number(r.parent_line_id) === Number(line.id) && !r.quantity_override) {
+            const norm = Number(r.norm_rate || 0);
+            const childQty = newCumulative * norm;
+            return {
+              ...r,
+              quantity: childQty,
+              total_amount: childQty * Number(r.unit_rate || 0),
+            };
+          }
+          return r;
+        }));
+        setPeriodFaktByLine((m) => {
+          const n = new Map(m);
+          n.set(Number(line.id), newQty);
+          return n;
+        });
+        toast.success(t('saved') || 'Saqlandi');
+        loadLines(activeEstimateIds);
+      } catch (e) {
+        toast.error(formatApiError(e, t, 'Xatolik'));
+        loadLines(activeEstimateIds);
+      }
+      return;
+    }
     if (Math.abs(newQty - Number(line.quantity || 0)) < 0.0001) return;
     try {
       await constructionService.updateEstimateLine(lineEst(line), line.id, { quantity: newQty });
@@ -1011,7 +1272,7 @@ export default function SmetaManagementTab({ project }) {
       loadLines(activeEstimateIds);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [estimateId, activeEstimateIds, loadLines, t]);
+  }, [estimateId, activeEstimateIds, loadLines, t, isFrozenView, periodFaktByLine]);
 
   const resetQty = useCallback(async (line) => {
     try {
@@ -1490,6 +1751,64 @@ export default function SmetaManagementTab({ project }) {
       {/* WORKS PAGE */}
       {page === 'works' && (
         <div>
+          {/* FORMA 2 ITERATION STRIP (migration 419) — same data the
+              Bosqichlar tab shows. Selecting a frozen tab disables
+              quantity edits (via isFrozenView in commitQty). "+ Forma 2
+              ni yaratish" still lives in the topbar above and advances
+              this strip on Save. */}
+          {iterations.length > 0 && (
+            <div className="px-8 pt-6">
+              <div
+                className="rounded-xl p-4"
+                style={{ background: C.card, border: `1px solid ${C.border}` }}
+              >
+                <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                  <h2 className="text-base font-bold text-slate-900">
+                    📄 {t('forma2_series') || 'Forma 2 iteratsiyalari'}
+                  </h2>
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                  {iterations.map((it) => {
+                    const active = activeIterationId === it.id;
+                    const isOpen = it.status === 'open';
+                    return (
+                      <button
+                        key={it.id}
+                        type="button"
+                        onClick={() => setActiveIterationId(it.id)}
+                        className="px-4 py-2 rounded-lg text-[13px] font-semibold flex items-center gap-2 transition"
+                        style={{
+                          background: active ? '#0F172A' : '#FFFFFF',
+                          color: active ? '#FFFFFF' : '#64748B',
+                          border: `1.5px solid ${active ? '#0F172A' : '#E5E7EB'}`,
+                        }}
+                        title={isOpen
+                          ? (t('forma2_open_editable') || 'Joriy iteratsiya — tahrirlash mumkin')
+                          : (t('forma2_frozen_readonly') || 'Muzlatilgan — faqat ko\'rish')}
+                      >
+                        <span>📄 Forma 2 #{it.iteration_seq}</span>
+                        <span
+                          className="text-[10px] px-2 py-0.5 rounded-full font-bold"
+                          style={{
+                            background: active ? (isOpen ? '#047857' : '#64748B') : (isOpen ? '#D1FAE5' : '#E5E7EB'),
+                            color:      active ? '#FFFFFF' : (isOpen ? '#047857' : '#64748B'),
+                          }}
+                        >
+                          {isOpen ? (t('current_label') || 'joriy') : (t('frozen_label') || 'muzlatilgan')}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {isFrozenView && (
+                  <div className="mt-3 px-3 py-2 rounded-md text-[12px] bg-amber-50 border border-amber-200 text-amber-800">
+                    {t('forma2_frozen_notice') || "Bu Forma 2 muzlatilgan. Yangi fakt kiritish uchun joriy iteratsiyani tanlang."}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Stats */}
           <div className="px-8 py-6 grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
             <StatCard icon={Users} variant="labor"     label={t('labor_resources')       || 'Mehnat resurslari'}     value={kpis.labor} />
@@ -1781,6 +2100,7 @@ export default function SmetaManagementTab({ project }) {
                               editLine={setEditLineTarget}
                               t={t}
                               isSubStage={false}
+                              periodFakt={periodFaktByLine.get(Number(ln.id))}
                             />
                             {subStages.map((ss) => (
                               <WorkCard
@@ -1927,6 +2247,7 @@ export default function SmetaManagementTab({ project }) {
                                       editLine={setEditLineTarget}
                                       t={t}
                                       isSubStage={false}
+                                      periodFakt={periodFaktByLine.get(Number(ln.id))}
                                     />
                                     {subStages.map((ss) => (
                                       <WorkCard
@@ -2161,6 +2482,7 @@ export default function SmetaManagementTab({ project }) {
                                     editLine={setEditLineTarget}
                                     t={t}
                                     isSubStage={false}
+                                    periodFakt={periodFaktByLine.get(Number(ln.id))}
                                   />
                                   {subStages.map((ss) => (
                                     <WorkCard
@@ -3062,6 +3384,7 @@ function WorkCard({
   line, subs, isOpen, onToggle,
   qtyDraft, setQtyDraft, clearQtyDraft, commitQty, resetQty, removeLine,
   openAddResource, openAddStage, openTopup, removeTopup, editLine, t, isSubStage,
+  periodFakt, // optional: when defined, FAKT input uses period_fakt (top-level works only)
 }) {
   // Resource-level top-up expansion. Collapsed by default so a row
   // with several top-ups doesn't blow up the card height; the user
@@ -3077,8 +3400,15 @@ function WorkCard({
   const qty = Number(line.quantity) || 0;
   const isEmpty = qty <= 0;
   const draft = qtyDraft;
-  const qtyValue = draft !== undefined ? draft : qty;
-  const qtyChanged = draft !== undefined && Number(parseNum(draft)) !== qty;
+  // When the parent passes a `periodFakt` (top-level work in the new
+  // iteration model — migration 419), the FAKT input shows THIS
+  // iteration's contribution starting at 0 on a fresh iter. The
+  // NORMA badge below still reads original_quantity (smeta reja) and
+  // the resource subtable below still computes off line.quantity
+  // (cumulative), so nothing else flips semantics.
+  const inputBase = periodFakt !== undefined ? Number(periodFakt) : qty;
+  const qtyValue = draft !== undefined ? draft : inputBase;
+  const qtyChanged = draft !== undefined && Number(parseNum(draft)) !== inputBase;
   const origQty = Number(line.original_quantity || 0);
   const qtyModified = origQty > 0 && Math.abs(qty - origQty) > 0.0001;
 
