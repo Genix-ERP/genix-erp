@@ -9,7 +9,12 @@ services:
     container_name: genix-frontend
     restart: unless-stopped
     ports:
-      - "3001:80"
+      # Host port comes from .env (FRONTEND_PORT). Different deploy targets
+      # need different host ports — the Genix prod server and the Yuksalish
+      # server each have unrelated stacks holding one or the other. Set
+      # FRONTEND_PORT in each server's .env once so the value isn't a
+      # local hand-edit that gets clobbered on every merge.
+      - "${FRONTEND_PORT:-3000}:80"
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
       interval: 30s
