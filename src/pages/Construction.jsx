@@ -4845,6 +4845,10 @@ export default function Construction() {
       contract_number: '', object_full_name: '',
       client_director_name: '',
       client_chief_accountant_name: '',
+      // CRM link starts unset on a new project. The CRMLinkPanel only
+      // appears for edits (gated on editingProject), so this default is
+      // mostly defensive — keeps the form shape consistent.
+      crm_project_id: null,
     });
     setEditingProject(null);
   };
@@ -4879,6 +4883,12 @@ export default function Construction() {
       object_full_name: project.object_full_name || '',
       client_director_name: project.client_director_name || '',
       client_chief_accountant_name: project.client_chief_accountant_name || '',
+      // CRM link — copy through so the CRMLinkPanel dropdown pre-fills with
+      // the currently-linked project. Backend includes crm_project_id in
+      // the list/detail SELECT (see df3afe7); we were silently dropping it
+      // here, which is why the dropdown looked empty on every reopen even
+      // though the link was persisted server-side.
+      crm_project_id: project.crm_project_id ?? null,
     });
     setShowProjectModal(true);
   };
