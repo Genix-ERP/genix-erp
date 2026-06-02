@@ -1037,6 +1037,30 @@ export default function SmetaManagementTab({ project }) {
       }
       return min;
     };
+
+    // Insertion-order fallback. Some imported sections (notably ones that
+    // pre-date row-numbered exports — e.g. ЗЕМЛЯННЫЕ РАБОТЫ in older Yuksalish
+    // projects) come in with NULL/empty item_numbers on every line, so
+    // minItemNum returns Infinity and they slide to the very bottom of the
+    // imported bucket — past sections numbered 800+. The lines' DB ids still
+    // reflect the order rows were inserted during import, so the lowest id
+    // among a section's lines is a reliable proxy for "this section's first
+    // row in the file." Used only when no numeric item_number exists, so it
+    // never overrides the proper file-page sort when one is present.
+    const minLineId = (sec) => {
+      let min = Infinity;
+      for (const ln of (sec.lines || [])) {
+        const id = Number(ln.id);
+        if (Number.isFinite(id) && id < min) min = id;
+      }
+      for (const sub of (sec.subSections || [])) {
+        for (const ln of (sub.lines || [])) {
+          const id = Number(ln.id);
+          if (Number.isFinite(id) && id < min) min = id;
+        }
+      }
+      return min;
+    };
     // Also sort each section's sub-sections so manually-added ones
     // pin to the top (newest first) and imported sub-sections sort by
     // their min item_number. Without the manual-pin step, an empty
@@ -1106,11 +1130,30 @@ export default function SmetaManagementTab({ project }) {
         sec.subSections = [...manualOnes, ...importedOnes];
       }
     }
-    // Same min-item_number sort for TOP-LEVEL imported sections so a
-    // project whose import scrambled sort_order across "СЕКЦИЯ №1",
-    // "СЕКЦИЯ №2", etc. still surfaces them in printed page order.
+    // Sort TOP-LEVEL imported sections by the order their first row was
+    // inserted during import (min line id). This is the most reliable
+    // "import file order" signal:
+    //
+    //   • Bulk imports INSERT row-by-row in file order, so within a single
+    //     import batch the lowest id in a section = the file row where
+    //     that section started. Two sections from the same import sort
+    //     in printed-page order automatically.
+    //   • Sections whose lines have NULL/empty item_numbers (older Yuksalish
+    //     exports — notably ЗЕМЛЯННЫЕ РАБОТЫ on project 21) used to fall to
+    //     the very bottom because the item_number-based comparator returned
+    //     Infinity. They now sort by id like everything else and end up at
+    //     the position they actually occupy in the source file.
+    //
+    // item_number stays as a tiebreaker for the rare case where two
+    // sections share the same min id (effectively never, but it costs
+    // nothing and keeps the printed-page heuristic from earlier patches
+    // intact for any future format that posts item_numbers without
+    // monotonic ids).
     if (imported.length > 1) {
       imported.sort((a, b) => {
+        const ida = minLineId(a);
+        const idb = minLineId(b);
+        if (ida !== idb) return ida - idb;
         const ka = (() => {
           let m = minItemNum(a);
           for (const sub of (a.subSections || [])) {
