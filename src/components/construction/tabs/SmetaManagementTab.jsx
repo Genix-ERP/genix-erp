@@ -1015,9 +1015,69 @@ export default function SmetaManagementTab({ project }) {
     const allSections = Array.from(sectionMap.values());
     const pinned = [];
     const imported = [];
+    // Top-level "manual" detection — mirrors isManualSubData below so the
+    // same rule applies to whole sections, not just sub-sections.
+    //
+    //   1. Explicitly pre-seeded via localStorage (manualPinnedNames) —
+    //      this is the strongest signal and covers the "I just clicked
+    //      + Bo'lim qo'shish" case on the active device.
+    //   2. EVERY line under the section (direct + sub-section lines) is
+    //      flagged is_manual = TRUE (migration 417). This catches sections
+    //      the user built up entirely through "+ Ish" / clone-by-code /
+    //      "+ Qo'shimcha resurs" — even on a different device where the
+    //      localStorage marker was never recorded. ЗЕМЛЯННЫЕ РАБОТЫ on
+    //      project 21 is the motivating case: the section header and all
+    //      its works were added manually, but the manual-id marker only
+    //      lives in the original device's localStorage so the localStorage
+    //      check missed it and it slid to the bottom of the imported
+    //      bucket.
+    //
+    // Strict "every line" — one imported line anchors the section to the
+    // file and it stays in the imported bucket. Empty sections (no lines
+    // at all) are treated as manual too: the only way they exist in
+    // sectionMap is via the user-added pre-seed step above, which already
+    // covers the manualPinnedNames path.
+    const isManualTopSection = (sec) => {
+      if (manualPinnedNames.has(sec.name)) return true;
+      const direct = sec.lines || [];
+      const subLines = (sec.subSections || []).flatMap((s) => s.lines || []);
+      const all = [...direct, ...subLines];
+      if (all.length === 0) return true;
+      return all.every((ln) => ln.is_manual === true);
+    };
     for (const sec of allSections) {
-      if (manualPinnedNames.has(sec.name)) pinned.push(sec);
+      if (isManualTopSection(sec)) pinned.push(sec);
       else imported.push(sec);
+    }
+    // Stable order within the pinned bucket: explicitly user-added sections
+    // (manualPinnedNames) keep their newest-first order from the pre-seed
+    // pass above; sections promoted to pinned by the all-lines-manual
+    // heuristic fall in after them, also newest-first using the lowest
+    // line id as a proxy (the section that contains the most recently
+    // created lines lands at the top).
+    if (pinned.length > 1) {
+      const lowestLineId = (sec) => {
+        let min = Infinity;
+        for (const ln of (sec.lines || [])) {
+          const id = Number(ln.id);
+          if (Number.isFinite(id) && id < min) min = id;
+        }
+        for (const sub of (sec.subSections || [])) {
+          for (const ln of (sub.lines || [])) {
+            const id = Number(ln.id);
+            if (Number.isFinite(id) && id < min) min = id;
+          }
+        }
+        return min;
+      };
+      pinned.sort((a, b) => {
+        const aPre = manualPinnedNames.has(a.name);
+        const bPre = manualPinnedNames.has(b.name);
+        if (aPre !== bPre) return aPre ? -1 : 1;
+        // Within each pinning source, newest first — higher ids = more
+        // recently created.
+        return lowestLineId(b) - lowestLineId(a);
+      });
     }
     // No re-sort for imported top-level sections — they stay in
     // the order the import wrote them, which mirrors the printed
