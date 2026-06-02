@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,7 +29,7 @@ export default function StockReport() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
-  const { stockMovements, products, warehouses, inventory } = useInventory();
+  const { stockMovements, products, warehouses, inventory, reloadMovements } = useInventory();
 
   const [activeTab, setActiveTab] = useState("movements");
   const [searchQuery, setSearchQuery] = useState("");
@@ -41,6 +41,23 @@ export default function StockReport() {
     return d.toISOString().split("T")[0];
   });
   const [dateTo, setDateTo] = useState(() => new Date().toISOString().split("T")[0]);
+
+  // Re-fetch transactions from the backend when date range, warehouse, or
+  // type filter changes. The global InventoryContext load only pulls the top
+  // 1000 most-recent rows across the entire system, so products whose
+  // chiqim happened earlier (or got pushed out by busy days on other
+  // products) silently lose their outgoing rows in the Hisobotlar tab.
+  // Hitting /inventory/movements with the active filters guarantees we see
+  // every row that matches the user's date window, up to the backend cap.
+  useEffect(() => {
+    if (!reloadMovements) return;
+    reloadMovements({
+      date_from: dateFrom || undefined,
+      date_to: dateTo || undefined,
+      warehouse_id: warehouseFilter,
+      type: typeFilter,
+    });
+  }, [dateFrom, dateTo, warehouseFilter, typeFilter, reloadMovements]);
 
   // === MOVEMENTS TAB ===
   const filteredMovements = useMemo(() => {
