@@ -3475,8 +3475,16 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
             )}
             {buildingForm.id && !project?.crm_project_id && (
               <div className="border rounded-lg p-3 bg-amber-50 border-amber-200 text-xs text-amber-800">
-                {t('link_project_to_crm_first') ||
-                  "Avval loyihani CRM bilan bog'lang (loyihani tahrirlash) — keyin shu binoni CRM blokiga ulay olasiz."}
+                {(() => {
+                  // t() returns the key itself when no translation exists, so
+                  // the || fallback never fires. Detect that and hand back the
+                  // hand-rolled Uzbek message instead of the raw key.
+                  const translated = t('link_project_to_crm_first');
+                  if (!translated || translated === 'link_project_to_crm_first') {
+                    return "Avval loyihani CRM bilan bog'lang (loyihani tahrirlash) — keyin shu binoni CRM blokiga ulay olasiz.";
+                  }
+                  return translated;
+                })()}
               </div>
             )}
 
