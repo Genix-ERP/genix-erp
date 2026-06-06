@@ -267,13 +267,6 @@ export default function Dashboard() {
     ...hrAnalysis.recommendations.slice(0, 1),
   ].slice(0, 3), [salesAnalysis, inventoryAnalysis, hrAnalysis]);
 
-  // Health score
-  const healthScore = businessHealth.score;
-  const healthColor = healthScore >= 80 ? "text-emerald-600" : healthScore >= 60 ? "text-amber-600" : "text-red-600";
-  const healthBg = healthScore >= 80 ? "from-emerald-50 to-emerald-50/30" : healthScore >= 60 ? "from-amber-50 to-amber-50/30" : "from-red-50 to-red-50/30";
-  const healthBadge = healthScore >= 80 ? "bg-emerald-100 text-emerald-700" : healthScore >= 60 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700";
-  const healthRing = healthScore >= 80 ? "#10b981" : healthScore >= 60 ? "#f59e0b" : "#ef4444";
-
   const revenueGrowth = salesAnalysis.metrics?.growthRate;
 
   if (isLoading) {
@@ -291,36 +284,10 @@ export default function Dashboard() {
     <div className="p-4 md:p-6 lg:p-8 bg-gradient-to-br from-slate-50 via-white to-slate-50/80 min-h-screen">
       <div className="max-w-[1440px] mx-auto space-y-5">
 
-        {/* === KPI Cards Row (6 cards) === */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 items-stretch">
-          {/* 1. Business Health Score */}
+        {/* === KPI Cards Row (5 cards) === */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 items-stretch">
+          {/* 1. Revenue */}
           <motion.div custom={0} initial="hidden" animate="visible" variants={fadeIn} className="h-full">
-            <div className={`glass-card rounded-2xl p-4 bg-gradient-to-br ${healthBg} flex flex-col items-center justify-center transition-all duration-300 h-full`}>
-              <div className="relative w-[64px] h-[64px] mb-2">
-                <svg className="w-[64px] h-[64px] -rotate-90" viewBox="0 0 80 80">
-                  <circle cx="40" cy="40" r="34" fill="none" stroke="#e2e8f0" strokeWidth="5" />
-                  <circle
-                    cx="40" cy="40" r="34" fill="none"
-                    stroke={healthRing}
-                    strokeWidth="5"
-                    strokeLinecap="round"
-                    strokeDasharray={`${(healthScore / 100) * 213.6} 213.6`}
-                    style={{ transition: "stroke-dasharray 1s ease" }}
-                  />
-                </svg>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <span className={`text-lg font-bold ${healthColor}`}>{healthScore}</span>
-                </div>
-              </div>
-              <p className="text-[11px] font-medium text-slate-500 mb-1">{t("business_health") || "Biznes holati"}</p>
-              <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${healthBadge}`}>
-                {t(businessHealth.status)?.toUpperCase() || "A'LO"}
-              </span>
-            </div>
-          </motion.div>
-
-          {/* 2. Revenue */}
-          <motion.div custom={1} initial="hidden" animate="visible" variants={fadeIn} className="h-full">
             <MetricCard
               title={t("revenue") || "Daromad"}
               value={formatCurrency(metrics.totalRevenue)}
@@ -332,8 +299,8 @@ export default function Dashboard() {
             />
           </motion.div>
 
-          {/* 3. Expenses */}
-          <motion.div custom={2} initial="hidden" animate="visible" variants={fadeIn} className="h-full">
+          {/* 2. Expenses */}
+          <motion.div custom={1} initial="hidden" animate="visible" variants={fadeIn} className="h-full">
             <MetricCard
               title={t("expenses") || "Xarajatlar"}
               value={formatCurrency(metrics.totalExpenses)}
@@ -350,8 +317,8 @@ export default function Dashboard() {
             />
           </motion.div>
 
-          {/* 4. Net Profit */}
-          <motion.div custom={3} initial="hidden" animate="visible" variants={fadeIn} className="h-full">
+          {/* 3. Net Profit */}
+          <motion.div custom={2} initial="hidden" animate="visible" variants={fadeIn} className="h-full">
             <MetricCard
               title={t("net_profit") || "Sof foyda"}
               value={formatCurrency(Math.abs(metrics.netProfit))}
@@ -364,8 +331,8 @@ export default function Dashboard() {
             />
           </motion.div>
 
-          {/* 5. Active Clients */}
-          <motion.div custom={4} initial="hidden" animate="visible" variants={fadeIn} className="h-full">
+          {/* 4. Active Clients */}
+          <motion.div custom={3} initial="hidden" animate="visible" variants={fadeIn} className="h-full">
             <MetricCard
               title={t("customers") || "Mijozlar"}
               value={metrics.totalCustomers.toLocaleString()}
@@ -377,8 +344,8 @@ export default function Dashboard() {
             />
           </motion.div>
 
-          {/* 6. Overdue Invoices */}
-          <motion.div custom={5} initial="hidden" animate="visible" variants={fadeIn} className="h-full">
+          {/* 5. Overdue Invoices */}
+          <motion.div custom={4} initial="hidden" animate="visible" variants={fadeIn} className="h-full">
             <MetricCard
               title={t("overdue") || "Overdue"}
               value={`${metrics.overdueCount} ta`}
@@ -393,7 +360,7 @@ export default function Dashboard() {
         </div>
 
         {/* === Charts Section Row 1: Revenue + Cash Flow === */}
-        <motion.div custom={6} initial="hidden" animate="visible" variants={fadeIn}>
+        <motion.div custom={5} initial="hidden" animate="visible" variants={fadeIn}>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <RevenueExpenseChart data={revenueExpenseData} />
             <CashFlowWaterfall transactions={financialTransactions} customerInvoices={customerInvoices} vendorBills={vendorBills} />
@@ -401,7 +368,7 @@ export default function Dashboard() {
         </motion.div>
 
         {/* === Charts Section Row 2: Funnel + Top Products === */}
-        <motion.div custom={7} initial="hidden" animate="visible" variants={fadeIn}>
+        <motion.div custom={6} initial="hidden" animate="visible" variants={fadeIn}>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <SalesFunnel
               leads={leads}
@@ -413,7 +380,7 @@ export default function Dashboard() {
         </motion.div>
 
         {/* === Charts Section Row 3: Client Segments + Inventory === */}
-        <motion.div custom={8} initial="hidden" animate="visible" variants={fadeIn}>
+        <motion.div custom={7} initial="hidden" animate="visible" variants={fadeIn}>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <ClientSegmentsDonut customers={customers} salesOrders={salesOrders} />
             <InventoryStackedBar inventory={inventory} />
@@ -421,7 +388,7 @@ export default function Dashboard() {
         </motion.div>
 
         {/* === Operational Panels: Tasks + Top Clients + Transactions === */}
-        <motion.div custom={9} initial="hidden" animate="visible" variants={fadeIn}>
+        <motion.div custom={8} initial="hidden" animate="visible" variants={fadeIn}>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <TodaysTasks
               salesOrders={salesOrders}
@@ -439,7 +406,7 @@ export default function Dashboard() {
         </motion.div>
 
         {/* === AI Section (Full Width, Impressive) === */}
-        <motion.div custom={10} initial="hidden" animate="visible" variants={fadeIn}>
+        <motion.div custom={9} initial="hidden" animate="visible" variants={fadeIn}>
           <AIBusinessPulse
             businessHealth={businessHealth}
             allInsights={allInsights}

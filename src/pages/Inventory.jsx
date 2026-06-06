@@ -33,7 +33,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import InventoryForm from "@/components/inventory/InventoryForm";
-import CompliancePanel from "@/components/inventory/CompliancePanel";
 // COGSCalculator is now integrated into Products component
 import Products from "@/components/inventory/Products";
 import Warehouses from "@/components/inventory/Warehouses";
@@ -80,7 +79,6 @@ export default function Inventory() {
   const [costingFilter, setCostingFilter] = useState("all");
   const [showForm, setShowForm] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
-  const [compliance, setCompliance] = useState(null);
   const activeTab = searchParams.get("tab") || "dashboard";
   const setActiveTab = (tab) => setSearchParams({ tab }, { replace: true });
 
@@ -99,61 +97,6 @@ export default function Inventory() {
 
   // Get summary from context
   const summary = getInventorySummary();
-
-  // Generate static compliance check
-  // Note: t is not in deps to avoid infinite loop (it's a new function each render)
-  const checkCompliance = useCallback(() => {
-    // For empty inventory, show default compliant status with helpful info
-    if (items.length === 0) {
-      setCompliance({
-        compliance_status: "compliant",
-        standard_detected: "IFRS",
-        issues: [],
-        recommendations: [
-          t('regular_inventory_audits_recommended') || 'Regular inventory audits recommended',
-          t('maintain_proper_documentation') || 'Maintain proper documentation for all stock movements',
-          t('review_costing_methods_annually') || 'Review costing methods annually'
-        ],
-        best_practices: [
-          t('fifo_provides_better_matching') || 'FIFO provides better matching in inflationary periods',
-          t('maintains_clear_audit_trail') || 'Maintains clear audit trail for all movements',
-          t('supports_real_time_cogs') || 'Supports real-time COGS calculation',
-          t('enables_accurate_valuation') || 'Enables accurate inventory valuation'
-        ]
-      });
-      return;
-    }
-
-    const fifoCount = items.filter(i => i.costing_method === 'fifo').length;
-    const wacCount = items.filter(i => i.costing_method === 'weighted_average').length;
-    const lifoCount = items.filter(i => i.costing_method === 'lifo').length;
-
-    const hasLifo = lifoCount > 0;
-
-    setCompliance({
-      compliance_status: hasLifo ? "partially_compliant" : "compliant",
-      standard_detected: hasLifo ? "US_GAAP" : "IFRS",
-      issues: hasLifo ? [
-        {
-          issue: t('lifo_costing_detected'),
-          severity: "warning",
-          solution: t('lifo_switch_recommendation')
-        }
-      ] : [],
-      recommendations: [
-        t('regular_inventory_audits_recommended'),
-        t('maintain_proper_documentation'),
-        t('review_costing_methods_annually')
-      ],
-      best_practices: [
-        t('fifo_provides_better_matching') || 'FIFO provides better matching in inflationary periods',
-        t('maintains_clear_audit_trail') || 'Maintains clear audit trail for all movements',
-        t('supports_real_time_cogs') || 'Supports real-time COGS calculation',
-        t('enables_accurate_valuation') || 'Enables accurate inventory valuation'
-      ]
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, language]);
 
   const filterItems = useCallback(() => {
     let filtered = items;
@@ -180,12 +123,6 @@ export default function Inventory() {
 
     setFilteredItems(filtered);
   }, [items, searchQuery, categoryFilter, statusFilter, costingFilter]);
-
-  useEffect(() => {
-    // Always generate compliance - even for empty inventory
-    // This ensures new tenants see helpful information
-    checkCompliance();
-  }, [items, checkCompliance]);
 
   useEffect(() => {
     filterItems();
@@ -376,9 +313,6 @@ export default function Inventory() {
                 <p className="text-xl font-bold text-slate-900">{warehouses?.length || 0}</p>
               </div>
             </div>
-
-            {/* Compliance Panel */}
-            {compliance && <CompliancePanel compliance={compliance} />}
           </TabsContent>
 
           {/* Products Tab */}

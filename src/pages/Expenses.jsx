@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useModules } from '@/components/contexts/ModulesContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,10 +8,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Receipt, Upload, CheckCircle, XCircle, Clock, DollarSign, Brain, AlertTriangle, Target, Lightbulb, Edit2, Download, Trash2 } from 'lucide-react';
+import { Plus, Search, Receipt, Upload, CheckCircle, XCircle, Clock, DollarSign, Brain, Edit2, Download, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
-import { analyzeExpenses } from '@/api/services/aiAnalytics';
 import { financeService } from '@/api/services/finance';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -55,8 +54,6 @@ export default function Expenses() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
 
-  // AI Analysis
-  const expenseAnalysis = useMemo(() => analyzeExpenses(expenses, language), [expenses, language]);
   const [filteredClaims, setFilteredClaims] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -228,40 +225,6 @@ export default function Expenses() {
     }
   };
 
-  const handleRecommendationClick = (recommendation) => {
-    // Generate proper prompt based on recommendation type and language
-    let prompt = '';
-
-    if (recommendation.action.includes('Set Category Budgets') || recommendation.action.includes('Toifa byudjetlarini belgilash') || recommendation.action.includes('Установка бюджетов по категориям')) {
-      // Set category budgets prompt
-      if (language === 'uz') {
-        prompt = 'Xarajat toifalari uchun byudjet chegaralarini qanday belgilashim kerak? Har bir toifa uchun optimal xarajat limitlarini aniqlashda menga yordam bering.';
-      } else if (language === 'ru') {
-        prompt = 'Как мне установить бюджетные лимиты для категорий расходов? Помогите мне определить оптимальные лимиты расходов для каждой категории.';
-      } else {
-        prompt = 'How should I set budget limits for expense categories? Help me determine optimal spending limits for each category.';
-      }
-    } else if (recommendation.action.includes('Review Pending') || recommendation.action.includes('Kutilayotgan xarajatlarni') || recommendation.action.includes('Проверка ожидающих')) {
-      // Review pending expenses prompt
-      const pending = expenses.filter(e => e.status === 'pending' || e.status === 'submitted').length;
-      if (language === 'uz') {
-        prompt = `Menda ${pending} ta kutilayotgan xarajat tasdiqlanishi kerak. Xarajatlarni ko'rib chiqish va tasdiqlash jarayonini qanday tartibga solishim mumkin?`;
-      } else if (language === 'ru') {
-        prompt = `У меня ${pending} расходов ожидают одобрения. Как я могу организовать процесс проверки и одобрения расходов?`;
-      } else {
-        prompt = `I have ${pending} expenses awaiting approval. How can I streamline the expense review and approval process?`;
-      }
-    } else {
-      // Generic prompt
-      prompt = recommendation.action;
-    }
-
-    // Open AI chatbox with the prompt
-    if (window.openAIChat) {
-      window.openAIChat(prompt);
-    }
-  };
-
   const handleExportToExcel = () => {
     // Prepare data for export
     const exportData = filteredClaims.map(claim => ({
@@ -394,58 +357,6 @@ export default function Expenses() {
             </CardContent>
           </Card>
         </div>
-
-        {/* AI Insights Panel */}
-        {(expenseAnalysis.insights.length > 0 || expenseAnalysis.recommendations.length > 0) && (
-          <Card className="bg-gradient-to-r from-blue-50 to-purple-50 border-blue-200/50">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Brain className="w-5 h-5 text-blue-600" />
-                {t('ai_expense_insights')}
-                <Badge className="bg-blue-100 text-blue-700 text-xs">{t('live')}</Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {expenseAnalysis.insights.slice(0, 3).map((insight, index) => (
-                  <div key={index} className="bg-white rounded-lg p-4 shadow-sm border border-blue-100">
-                    <div className="flex items-start gap-3">
-                      {insight.type === 'positive' ? (
-                        <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
-                      ) : insight.type === 'warning' ? (
-                        <AlertTriangle className="w-5 h-5 text-orange-500 mt-0.5" />
-                      ) : (
-                        <Target className="w-5 h-5 text-blue-500 mt-0.5" />
-                      )}
-                      <div>
-                        <h4 className="font-medium text-slate-900 text-sm">{insight.title}</h4>
-                        <p className="text-xs text-slate-600 mt-0.5">{insight.description}</p>
-                        {insight.metric && (
-                          <p className="text-lg font-bold text-blue-600 mt-1">{insight.metric}</p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {expenseAnalysis.recommendations.length > 0 && (
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {expenseAnalysis.recommendations.map((rec, index) => (
-                    <button
-                      key={index}
-                      onClick={() => handleRecommendationClick(rec)}
-                      className="flex items-center gap-2 text-xs bg-white rounded-full px-3 py-1.5 border border-blue-100 hover:bg-blue-50 hover:border-blue-300 transition-colors cursor-pointer"
-                      title={t('ask_ai_about_this')}
-                    >
-                      <Lightbulb className="w-3 h-3 text-yellow-500" />
-                      <span className="text-slate-700">{rec.action}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
 
         {/* Category Breakdown */}
         {chartData.length > 0 && (

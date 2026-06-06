@@ -7,9 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Briefcase, Clock, DollarSign, TrendingUp, Brain, CheckCircle, AlertTriangle, Target, Lightbulb, Edit2, LayoutGrid, Columns, Settings, X, GripVertical } from 'lucide-react';
+import { Plus, Search, Briefcase, Clock, DollarSign, TrendingUp, CheckCircle, Edit2, LayoutGrid, Columns, Settings, X, GripVertical } from 'lucide-react';
 import { Progress } from "@/components/ui/progress";
-import { analyzeProjects } from '@/api/services/aiAnalytics';
 import { contactsService } from '@/api/services/contacts';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -69,9 +68,6 @@ export default function Projects() {
 
   const [newStatus, setNewStatus] = useState({ label: '', color: 'bg-blue-100 text-blue-800' });
   const [clients, setClients] = useState([]);
-
-  // AI Analysis
-  const projectAnalysis = useMemo(() => analyzeProjects(projects), [projects]);
 
   const [newProject, setNewProject] = useState({
     project_name: '',
@@ -456,76 +452,6 @@ export default function Projects() {
             </CardContent>
           </Card>
         </div>
-
-        {/* AI Insights Panel */}
-        {(projectAnalysis.insights.length > 0 || projectAnalysis.recommendations.length > 0) && (
-          <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200/50">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Brain className="w-5 h-5 text-blue-600" />
-                {t('ai_project_insights')}
-                <Badge className="bg-blue-100 text-blue-700 text-xs">{t('live')}</Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div className="bg-white rounded-lg p-4 shadow-sm border border-blue-100">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                      <DollarSign className="w-5 h-5 text-purple-600" />
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500">{t('total_spent')}</p>
-                      <p className="text-lg font-bold text-slate-900">{formatCurrency(projectAnalysis.metrics?.totalSpent || 0)}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {projectAnalysis.insights.slice(0, 2).map((insight, index) => (
-                  <div key={index} className="bg-white rounded-lg p-4 shadow-sm border border-blue-100">
-                    <div className="flex items-start gap-3">
-                      {insight.type === 'positive' ? (
-                        <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
-                      ) : insight.type === 'warning' || insight.type === 'negative' ? (
-                        <AlertTriangle className="w-5 h-5 text-orange-500 mt-0.5" />
-                      ) : (
-                        <Target className="w-5 h-5 text-blue-500 mt-0.5" />
-                      )}
-                      <div>
-                        <h4 className="font-medium text-slate-900 text-sm">{insight.title}</h4>
-                        <p className="text-xs text-slate-600 mt-0.5">{insight.description}</p>
-                        {insight.metric && (
-                          <p className="text-lg font-bold text-blue-600 mt-1">{insight.metric}</p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {projectAnalysis.recommendations.length > 0 && (
-                <div className="mt-4 bg-white rounded-lg p-4 shadow-sm border border-blue-100">
-                  <div className="flex items-start gap-3">
-                    <Lightbulb className="w-5 h-5 text-yellow-500 mt-0.5" />
-                    <div className="flex-1">
-                      <h4 className="font-medium text-slate-900 text-sm mb-2">{t('ai_recommendations')}</h4>
-                      <div className="flex flex-wrap gap-2">
-                        {projectAnalysis.recommendations.map((rec, index) => (
-                          <div key={index} className="flex items-center gap-2 text-xs bg-slate-50 rounded-full px-3 py-1.5">
-                            <span className={`w-2 h-2 rounded-full ${
-                              rec.impact === 'high' ? 'bg-red-400' : rec.impact === 'medium' ? 'bg-yellow-400' : 'bg-blue-400'
-                            }`} />
-                            <span className="text-slate-700">{rec.action}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
 
         {/* Projects List/Kanban */}
         <Card className="bg-white/80 backdrop-blur-sm">

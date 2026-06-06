@@ -376,81 +376,10 @@ export function SalesProvider({ children }) {
     };
   }, [invoices, quotations, returns, discounts]);
 
-  // AI Insights
-  const getAIInsights = useMemo(() => {
+  // Contextual metrics (real computed analytics only)
+  const getContextualInsights = useMemo(() => {
     const analytics = getSalesAnalytics();
-    const insights = [];
-    const recommendations = [];
-
-    if (analytics.thisMonthRevenue > 0) {
-      insights.push({
-        type: 'positive',
-        titleKey: 'monthly_revenue',
-        descriptionKey: 'current_month_revenue',
-        metric: analytics.thisMonthRevenue,
-        priority: 'high',
-      });
-    }
-
-    if (analytics.totalOutstanding > 0) {
-      insights.push({
-        type: analytics.overdueInvoices > 0 ? 'warning' : 'info',
-        titleKey: 'outstanding_invoices',
-        descriptionKey: 'overdue_invoices_count',
-        overdueCount: analytics.overdueInvoices,
-        metric: analytics.totalOutstanding,
-        priority: analytics.overdueInvoices > 0 ? 'high' : 'medium',
-      });
-    }
-
-    if (analytics.conversionRate < 50 && analytics.totalQuotations > 5) {
-      insights.push({
-        type: 'warning',
-        titleKey: 'low_conversion',
-        descriptionKey: 'conversion_low_desc',
-        metric: `${analytics.conversionRate.toFixed(1)}%`,
-        priority: 'medium',
-      });
-      recommendations.push({
-        actionKey: 'review_quotations',
-        descriptionKey: 'analyze_rejected',
-        impact: 'high',
-      });
-    }
-
-    if (analytics.returnRate > 5) {
-      insights.push({
-        type: 'negative',
-        titleKey: 'high_returns',
-        descriptionKey: 'return_rate_high',
-        metric: `${analytics.returnRate.toFixed(1)}%`,
-        priority: 'high',
-      });
-      recommendations.push({
-        actionKey: 'check_quality',
-        descriptionKey: 'analyze_return_reasons',
-        impact: 'high',
-      });
-    }
-
-    if (analytics.overdueAmount > 0) {
-      recommendations.push({
-        actionKey: 'collect_payments',
-        descriptionKey: 'amount_overdue',
-        overdueAmount: analytics.overdueAmount,
-        impact: 'high',
-      });
-    }
-
-    if (analytics.activeDiscounts < 2) {
-      recommendations.push({
-        actionKey: 'run_discount_campaign',
-        descriptionKey: 'few_active_discounts',
-        impact: 'medium',
-      });
-    }
-
-    return { insights, recommendations, metrics: analytics };
+    return { insights: [], recommendations: [], metrics: analytics };
   }, [getSalesAnalytics]);
 
   // Refresh data from backend
@@ -510,7 +439,9 @@ export function SalesProvider({ children }) {
 
     // Analytics
     getSalesAnalytics,
-    getAIInsights,
+    getContextualInsights,
+    // Backward-compatible alias for existing consumers
+    getAIInsights: getContextualInsights,
 
     // Refresh
     refreshData,
@@ -525,7 +456,7 @@ export function SalesProvider({ children }) {
     needsDiscountApproval: (discountPercent) => discountPercent > salesSettings.discountApprovalThreshold,
     needsApproval: (amount) => salesSettings.requireApproval && amount >= salesSettings.approvalThreshold,
     isCreditLimitEnabled: () => salesSettings.enableCreditLimit
-  }), [quotations, salesOrders, invoices, returns, discounts, summary, refreshSummary, isLoading, error, createQuotation, updateQuotation, deleteQuotation, convertQuotationToOrder, getOrder, createSalesOrder, updateSalesOrder, deleteSalesOrder, confirmSalesOrder, cancelSalesOrder, createInvoiceFromOrder, getInvoice, createInvoice, updateInvoice, deleteInvoice, recordPayment, createReturn, updateReturn, deleteReturn, approveReturn, rejectReturn, processRefund, createDiscount, updateDiscount, deleteDiscount, applyDiscount, validateDiscountCode, useDiscountCode, getSalesAnalytics, getAIInsights, refreshData, salesSettings]);
+  }), [quotations, salesOrders, invoices, returns, discounts, summary, refreshSummary, isLoading, error, createQuotation, updateQuotation, deleteQuotation, convertQuotationToOrder, getOrder, createSalesOrder, updateSalesOrder, deleteSalesOrder, confirmSalesOrder, cancelSalesOrder, createInvoiceFromOrder, getInvoice, createInvoice, updateInvoice, deleteInvoice, recordPayment, createReturn, updateReturn, deleteReturn, approveReturn, rejectReturn, processRefund, createDiscount, updateDiscount, deleteDiscount, applyDiscount, validateDiscountCode, useDiscountCode, getSalesAnalytics, getContextualInsights, refreshData, salesSettings]);
 
   return (
     <SalesContext.Provider value={value}>

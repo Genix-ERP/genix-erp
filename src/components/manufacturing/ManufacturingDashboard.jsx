@@ -251,7 +251,7 @@ export default function ManufacturingDashboard() {
           <div className="flex items-center gap-2 mb-4">
             <Brain className="w-6 h-6 text-purple-600" />
             <h3 className="text-xl font-bold text-slate-900">{t('ai_manufacturing_insights') || 'AI Manufacturing Insights'}</h3>
-            <Badge className="bg-purple-50 text-purple-700 border-purple-200">{t('live_analysis') || 'Live Analysis'}</Badge>
+            <Badge className="bg-purple-50 text-purple-700 border-purple-200">{t('ai_generated_insights') || 'AI-Generated Insights'}</Badge>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {aiInsights.map((insight, index) => (

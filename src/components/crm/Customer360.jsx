@@ -1,6 +1,5 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { 
@@ -12,7 +11,6 @@ import {
   DollarSign,
   MessageSquare,
   TrendingUp,
-  AlertTriangle,
   Search
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -118,7 +116,6 @@ export default function Customer360({ customers, selectedCustomer, onSelectCusto
                   <TabsTrigger value="overview">Overview</TabsTrigger>
                   <TabsTrigger value="communications">Communications</TabsTrigger>
                   <TabsTrigger value="calls">Call History</TabsTrigger>
-                  <TabsTrigger value="insights">AI Insights</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="overview" className="space-y-4">
@@ -222,41 +219,6 @@ export default function Customer360({ customers, selectedCustomer, onSelectCusto
                         )}
                       </div>
                     ))}
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="insights">
-                  <div className="space-y-4">
-                    <div className="p-4 bg-gradient-to-r from-[var(--genix-blue)]/5 to-[var(--genix-purple)]/5 rounded-lg">
-                      <h5 className="font-semibold mb-2 flex items-center gap-2">
-                        <TrendingUp className="w-4 h-4" />
-                        Customer Intelligence
-                      </h5>
-                      <div className="space-y-2 text-sm">
-                        <p>• High-value customer with consistent communication patterns</p>
-                        <p>• Last interaction shows positive sentiment</p>
-                        <p>• Potential for upselling based on usage patterns</p>
-                        <p>• Renewal date approaching in 60 days</p>
-                      </div>
-                    </div>
-
-                    <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                      <h5 className="font-semibold mb-2 flex items-center gap-2">
-                        <AlertTriangle className="w-4 h-4 text-yellow-600" />
-                        Recommended Actions
-                      </h5>
-                      <div className="space-y-2">
-                        <Button size="sm" className="w-full justify-start">
-                          Schedule renewal discussion call
-                        </Button>
-                        <Button size="sm" variant="outline" className="w-full justify-start">
-                          Send premium feature demo
-                        </Button>
-                        <Button size="sm" variant="outline" className="w-full justify-start">
-                          Check satisfaction survey
-                        </Button>
-                      </div>
-                    </div>
                   </div>
                 </TabsContent>
               </Tabs>

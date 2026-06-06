@@ -1070,7 +1070,7 @@ export default function BudgetManagement() {
         <Button variant="ghost" onClick={() => setView('list')}><ArrowLeft className="w-4 h-4 mr-1" />{t('back') || 'Back'}</Button>
         <div>
           <h2 className="text-xl font-bold">{t('cash_flow_bdds') || 'Cash Flow (BDDS)'}</h2>
-          <p className="text-sm text-slate-500">{t('cash_flow_desc') || 'Real-time cash position and 30-day forecast'}</p>
+          <p className="text-sm text-slate-500">{t('cash_flow_desc') || 'Cash position and receivables/payables overview'}</p>
         </div>
         <Button variant="outline" size="sm" className="ml-auto" onClick={loadCashFlow}>
           <RefreshCw className={`w-4 h-4 mr-1 ${cashFlowLoading ? 'animate-spin' : ''}`} />{t('refresh') || 'Refresh'}
