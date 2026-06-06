@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Upload, Search, FileText, AlertTriangle, CheckCircle, Clock, DollarSign, Brain, Plus, Download, Printer, Eye, Building2, Loader2, RotateCcw } from 'lucide-react';
+import { Upload, Search, FileText, AlertTriangle, CheckCircle, Clock, DollarSign, Plus, Download, Printer, Eye, Building2, Loader2, RotateCcw } from 'lucide-react';
 import { format } from 'date-fns';
 import { ru, uz } from 'date-fns/locale';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -476,15 +476,14 @@ export default function AccountsPayable() {
       if (!b.due_date || b.status === 'paid') return false;
       return new Date(b.due_date) < new Date();
     }).length,
-    pendingApproval: vendorBills.filter(b => b.status === 'draft').length,
-    aiExtracted: vendorBills.filter(b => b.ai_extracted).length
+    pendingApproval: vendorBills.filter(b => b.status === 'draft').length
   };
 
   return (
     <div className="space-y-6">
 
       {/* Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
           <CardContent className="p-6">
             <div className="flex items-center justify-between mb-4">
@@ -518,18 +517,6 @@ export default function AccountsPayable() {
             </div>
             <p className="text-3xl font-bold text-yellow-900">{metrics.pendingApproval}</p>
             <p className="text-sm text-slate-600">{t('pending_approval')}</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-                <Brain className="w-6 h-6 text-purple-600" />
-              </div>
-            </div>
-            <p className="text-3xl font-bold text-purple-900">{metrics.aiExtracted}</p>
-            <p className="text-sm text-slate-600">{t('ai_extracted')}</p>
           </CardContent>
         </Card>
       </div>
@@ -653,12 +640,6 @@ export default function AccountsPayable() {
                           {bill.invoice_type === 'debit_note' && (
                             <Badge className="bg-orange-100 text-orange-700 text-xs">{t('debit_note')}</Badge>
                           )}
-                          {bill.ai_extracted && (
-                            <Badge variant="outline" className="bg-purple-50 text-purple-700 text-xs">
-                              <Brain className="w-3 h-3 mr-1" />
-                              AI
-                            </Badge>
-                          )}
                         </div>
                       </TableCell>
                       <TableCell className="font-medium">{bill.partner_name || bill.vendor_name || '-'}</TableCell>
@@ -759,8 +740,8 @@ export default function AccountsPayable() {
         <DialogContent className="max-w-xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Brain className="w-5 h-5 text-purple-600" />
-              {t('ai_invoice_scan') || 'AI Invoice Scan'}
+              <Upload className="w-5 h-5 text-purple-600" />
+              {t('scan_invoice') || 'Scan Invoice'}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -773,10 +754,6 @@ export default function AccountsPayable() {
                   <Upload className="w-10 h-10 text-slate-400 mx-auto mb-3" />
                   <p className="text-sm text-slate-600 mb-3">
                     {t('upload_invoice_description') || 'Upload vendor invoice (PDF, Image)'}
-                    <br />
-                    <span className="text-purple-600 font-medium">
-                      {t('ai_will_extract') || 'AI will automatically extract all data'}
-                    </span>
                   </p>
                   <Input
                     type="file"
@@ -903,7 +880,7 @@ export default function AccountsPayable() {
                     </>
                   ) : (
                     <>
-                      <Brain className="w-4 h-4 mr-2" />
+                      <FileText className="w-4 h-4 mr-2" />
                       {t('extract_data') || 'Extract Data'}
                     </>
                   )}

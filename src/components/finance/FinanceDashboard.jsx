@@ -1,25 +1,18 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   DollarSign,
   TrendingUp,
   TrendingDown,
-  BarChart3,
-  Brain,
-  AlertTriangle,
-  CheckCircle,
-  Target,
-  Lightbulb
+  BarChart3
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell } from "recharts";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
-import { Badge } from "@/components/ui/badge";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatAxisTick } from '@/utils/formatCurrency';
-import { analyzeFinancialsFromMetrics } from "@/api/services/aiAnalytics";
 import financeService from "@/api/services/finance";
 
 const COLORS = ['#0ea5e9', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#14b8a6', '#f97316'];
@@ -35,12 +28,6 @@ export default function FinanceDashboard() {
 
   // Fetch metrics from Income Statement API (same source as P&L report)
   const [metrics, setMetrics] = useState({ totalIncome: 0, totalExpenses: 0, netProfit: 0, profitMargin: 0 });
-
-  // AI Analysis using real Income Statement metrics
-  const financialAnalysis = useMemo(() =>
-    analyzeFinancialsFromMetrics({ ...metrics, expensesByCategory }, language, formatCurrency),
-    [metrics, expensesByCategory, language, formatCurrency]
-  );
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -236,9 +223,7 @@ export default function FinanceDashboard() {
               <p className={`text-3xl font-bold tabular-nums ${metrics.netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                 {formatCurrency(metrics.netProfit)}
               </p>
-              <p className="text-xs text-slate-500 mt-2">
-                {metrics.netProfit >= 0 ? t('healthy_profit') : t('needs_attention')}
-              </p>
+              <p className="text-xs text-slate-500 mt-2">{t('all_time') || 'All time'}</p>
             </div>
             <div className={`absolute bottom-0 right-0 w-24 h-24 ${metrics.netProfit >= 0 ? 'bg-emerald-500/5' : 'bg-red-500/5'} rounded-tl-full`}></div>
           </CardContent>
@@ -259,9 +244,6 @@ export default function FinanceDashboard() {
               <p className="text-sm font-medium text-slate-600 mb-1">{t('profit_margin')}</p>
               <p className={`text-3xl font-bold tabular-nums ${metrics.profitMargin >= 0 ? 'text-purple-600' : 'text-red-600'}`}>
                 {metrics.profitMargin.toFixed(1)}%
-              </p>
-              <p className="text-xs text-slate-500 mt-2">
-                {metrics.profitMargin >= 30 ? t('excellent_margin') : metrics.profitMargin > 0 ? t('good_performance') : t('below_target')}
               </p>
             </div>
             <div className="absolute bottom-0 right-0 w-24 h-24 bg-purple-500/5 rounded-tl-full"></div>
@@ -342,66 +324,6 @@ export default function FinanceDashboard() {
           </CardContent>
         </Card>
       </div>
-
-      {/* AI Financial Intelligence - Moved to bottom */}
-      {(financialAnalysis.insights.length > 0 || financialAnalysis.recommendations.length > 0) && (
-        <Card className="bg-gradient-to-r from-green-50 to-emerald-50 border-green-200/50">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Brain className="w-5 h-5 text-green-600" />
-              {t('ai_financial_intelligence')}
-              <Badge className="bg-green-100 text-green-700 text-xs">{t('live')}</Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {/* AI Insights */}
-              {financialAnalysis.insights.slice(0, 3).map((insight, index) => (
-                <div key={index} className="bg-white rounded-lg p-4 shadow-sm border border-green-100">
-                  <div className="flex items-start gap-3">
-                    {insight.type === 'positive' ? (
-                      <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
-                    ) : insight.type === 'warning' || insight.type === 'negative' ? (
-                      <AlertTriangle className="w-5 h-5 text-orange-500 mt-0.5" />
-                    ) : (
-                      <Target className="w-5 h-5 text-blue-500 mt-0.5" />
-                    )}
-                    <div>
-                      <h4 className="font-medium text-slate-900 text-sm">{insight.title}</h4>
-                      <p className="text-xs text-slate-600 mt-1">{insight.description}</p>
-                      {insight.metric && (
-                        <p className="text-lg font-bold text-green-600 mt-2">{insight.metric}</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* AI Recommendations */}
-            {financialAnalysis.recommendations.length > 0 && (
-              <div className="mt-4 bg-white rounded-lg p-4 shadow-sm border border-green-100">
-                <div className="flex items-start gap-3">
-                  <Lightbulb className="w-5 h-5 text-yellow-500 mt-0.5" />
-                  <div className="flex-1">
-                    <h4 className="font-medium text-slate-900 text-sm mb-2">{t('ai_recommendations')}</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {financialAnalysis.recommendations.map((rec, index) => (
-                        <div key={index} className="flex items-center gap-2 text-xs bg-slate-50 rounded-full px-3 py-1.5">
-                          <span className={`w-2 h-2 rounded-full ${
-                            rec.impact === 'high' ? 'bg-red-400' : rec.impact === 'medium' ? 'bg-yellow-400' : 'bg-blue-400'
-                          }`} />
-                          <span className="text-slate-700">{rec.action}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }

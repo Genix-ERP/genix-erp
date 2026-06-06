@@ -10,9 +10,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Monitor, TrendingDown, Wrench, DollarSign, AlertTriangle, Brain, CheckCircle, Target, Lightbulb, Edit2, Download, Trash2, ArrowRightLeft, History, Printer, FileText } from 'lucide-react';
+import { Plus, Search, Monitor, TrendingDown, Wrench, DollarSign, Edit2, Download, Trash2, ArrowRightLeft, History, Printer, FileText } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
-import { analyzeAssets } from '@/api/services/aiAnalytics';
 import financeService from '@/api/services/finance';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -33,19 +32,6 @@ export default function Assets() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
 
-  // AI Analysis
-  const assetAnalysis = useMemo(() => {
-    try {
-      return analyzeAssets(rawAssets || [], language, formatCurrencyCompact) || {
-        insights: [],
-        recommendations: [],
-        metrics: {}
-      };
-    } catch (error) {
-      console.error('Error analyzing assets:', error);
-      return { insights: [], recommendations: [], metrics: {} };
-    }
-  }, [rawAssets, language, formatCurrencyCompact]);
   const [filteredAssets, setFilteredAssets] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -462,53 +448,6 @@ export default function Assets() {
             </CardContent>
           </Card>
         </div>
-
-        {/* AI Insights Panel */}
-        {((assetAnalysis?.insights?.length > 0) || (assetAnalysis?.recommendations?.length > 0)) && (
-          <Card className="bg-gradient-to-r from-orange-50 to-amber-50 border-orange-200/50">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Brain className="w-5 h-5 text-orange-600" />
-                {t('ai_asset_insights')}
-                <Badge className="bg-orange-100 text-orange-700 text-xs">{t('live')}</Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {(assetAnalysis?.insights || []).slice(0, 3).map((insight, index) => (
-                  <div key={index} className="bg-white rounded-lg p-4 shadow-sm border border-orange-100">
-                    <div className="flex items-start gap-3">
-                      {insight.type === 'positive' ? (
-                        <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
-                      ) : insight.type === 'warning' ? (
-                        <AlertTriangle className="w-5 h-5 text-orange-500 mt-0.5" />
-                      ) : (
-                        <Target className="w-5 h-5 text-blue-500 mt-0.5" />
-                      )}
-                      <div>
-                        <h4 className="font-medium text-slate-900 text-sm">{insight.title}</h4>
-                        <p className="text-xs text-slate-600 mt-0.5">{insight.description}</p>
-                        {insight.metric && (
-                          <p className="text-lg font-bold text-orange-600 mt-1">{insight.metric}</p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {assetAnalysis?.recommendations?.length > 0 && (
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {(assetAnalysis?.recommendations || []).map((rec, index) => (
-                    <div key={index} className="flex items-center gap-2 text-xs bg-white rounded-full px-3 py-1.5 border border-orange-100">
-                      <Lightbulb className="w-3 h-3 text-yellow-500" />
-                      <span className="text-slate-700">{rec.action}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
 
         {/* Category Distribution */}
         {chartData.length > 0 && (

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,10 +18,6 @@ import {
   AlertCircle,
   CheckCircle,
   Truck,
-  Brain,
-  AlertTriangle,
-  Target,
-  Lightbulb,
   Edit2,
   LayoutDashboard,
   Building2,
@@ -38,7 +34,6 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { analyzeProcurement } from '@/api/services/aiAnalytics';
 import { formatAxisTick } from '@/utils/formatCurrency';
 
 import { useProcurement } from '@/components/contexts/ProcurementContext';
@@ -64,7 +59,6 @@ export default function Procurement() {
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
   const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
   const {
-    suppliers,
     purchaseOrders,
     rfqs,
     contracts,
@@ -170,9 +164,6 @@ export default function Procurement() {
     deliveryDate.setDate(deliveryDate.getDate() + maxLeadTime);
     return deliveryDate.toISOString().split('T')[0];
   }, []);
-
-  // AI Analysis
-  const procurementAnalysis = useMemo(() => analyzeProcurement(purchaseOrders, suppliers, language), [purchaseOrders, suppliers, language]);
 
   const [newPO, setNewPO] = useState({
     po_number: '',
@@ -687,55 +678,6 @@ export default function Procurement() {
                 </CardContent>
               </Card>
             </div>
-
-            {/* AI Insights Panel */}
-            {(procurementAnalysis.insights.length > 0 || procurementAnalysis.recommendations.length > 0) && (
-              <Card className="bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-200/50">
-                <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center gap-2 text-lg">
-                    <Brain className="w-5 h-5 text-indigo-600" />
-                    {t('ai_analysis') || 'AI Analysis'}
-                    <Badge className="bg-indigo-100 text-indigo-700 text-xs">{t('live')}</Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {procurementAnalysis.insights.slice(0, 2).map((insight, index) => (
-                      <div key={index} className="bg-white rounded-lg p-4 shadow-sm border border-indigo-100">
-                        <div className="flex items-start gap-3">
-                          {insight.type === 'positive' ? (
-                            <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
-                          ) : insight.type === 'warning' ? (
-                            <AlertTriangle className="w-5 h-5 text-orange-500 mt-0.5" />
-                          ) : (
-                            <Target className="w-5 h-5 text-blue-500 mt-0.5" />
-                          )}
-                          <div>
-                            <h4 className="font-medium text-slate-900 text-sm">{insight.title}</h4>
-                            <p className="text-xs text-slate-600 mt-0.5">{insight.description}</p>
-                            {insight.metric && (
-                              <p className="text-lg font-bold text-indigo-600 mt-1">{insight.metric}</p>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    {procurementAnalysis.recommendations.length > 0 && (
-                      <div className="bg-white rounded-lg p-4 shadow-sm border border-indigo-100">
-                        <div className="flex items-start gap-3">
-                          <Lightbulb className="w-5 h-5 text-yellow-500 mt-0.5" />
-                          <div>
-                            <h4 className="font-medium text-slate-900 text-sm">{t('ai_recommendation') || 'AI Recommendation'}</h4>
-                            <p className="text-xs text-slate-600 mt-0.5">{procurementAnalysis.recommendations[0].action}</p>
-                            <p className="text-xs text-slate-500 mt-1">{procurementAnalysis.recommendations[0].description}</p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
 
             {/* Chart */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
