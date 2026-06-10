@@ -73,6 +73,7 @@ import {
   Paperclip,
   ChevronsUpDown,
   Check,
+  Copy,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -1286,6 +1287,21 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
   const [variantsByProduct, setVariantsByProduct] = useState({});
   const [confirmApprove, setConfirmApprove] = useState({ open: false, requestId: null });
   const [confirmDelete, setConfirmDelete] = useState({ open: false, onConfirm: null, title: null, description: null });
+  // Clone-estimates modal — opened from the block card "..." menu. The
+  // user picks a sibling source block; on confirm we POST to the backend
+  // which copies every estimate (Единич, ВОР, Ресурс) + all their lines
+  // into the target. Same project only. Backend refuses if target already
+  // has estimates (the menu entry below is disabled in that case, this is
+  // the race / direct-call guard). Shape: { open, target, sourceId } | null.
+  const [cloneEstimatesModal, setCloneEstimatesModal] = useState(null);
+  const [cloneEstimatesBusy, setCloneEstimatesBusy] = useState(false);
+  // Estimate counts per building id — keyed by Number(building.id). Used
+  // to (a) disable the "Klonlash" menu entry on blocks that already have
+  // estimates, since they're not eligible as a clone TARGET, and (b)
+  // surface "no estimates yet" on candidate SOURCES inside the modal.
+  // Loaded once per project alongside the buildings list — see the
+  // listEstimates effect lower down.
+  const [estimateCountByBuildingId, setEstimateCountByBuildingId] = useState({});
   const [lightboxSrc, setLightboxSrc] = useState(null);
   const [dailyLogForm, setDailyLogForm] = useState({
     id: null,
@@ -1397,13 +1413,26 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
             break;
           case 'buildings':
             try {
-              const [buildingsData, wbsData] = await Promise.all([
+              // Estimate counts power the Klonlash menu entry on each
+              // block card: target must be empty, so we need to know
+              // which blocks already have estimates to disable the
+              // "clone INTO this" path and surface counts on candidate
+              // sources inside the modal.
+              const [buildingsData, wbsData, allEstimates] = await Promise.all([
                 constructionService.listBuildings(project.id),
-                constructionService.getWBSTree(project.id)
+                constructionService.getWBSTree(project.id),
+                constructionService.listEstimates(project.id).catch(() => []),
               ]);
               setBuildings(sortBuildings(buildingsData));
               setWbsTree(wbsData || []);
-            } catch (e) { setBuildings([]); setWbsTree([]); }
+              const counts = {};
+              for (const e of (allEstimates || [])) {
+                const bid = Number(e?.building_id || 0);
+                if (!bid) continue;
+                counts[bid] = (counts[bid] || 0) + 1;
+              }
+              setEstimateCountByBuildingId(counts);
+            } catch (e) { setBuildings([]); setWbsTree([]); setEstimateCountByBuildingId({}); }
             break;
           case 'team':
             try {
@@ -2616,6 +2645,44 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                                   <Paperclip className="w-4 h-4 mr-2" />
                                   {t('files') || 'Fayllar'}
                                 </DropdownMenuItem>
+                                {/* Klonlash — copy estimates from a sibling block. Disabled
+                                    when this block already has any estimates (clone is
+                                    refused server-side to protect FAKT progress) or when
+                                    there is no other block in the project to source from. */}
+                                {(() => {
+                                  const tgtCount = estimateCountByBuildingId[Number(building.id)] || 0;
+                                  const otherBlocks = (buildings || []).filter(
+                                    (b) => Number(b?.id) !== Number(building.id),
+                                  );
+                                  const eligibleSources = otherBlocks.filter(
+                                    (b) => (estimateCountByBuildingId[Number(b?.id)] || 0) > 0,
+                                  );
+                                  const disabled = tgtCount > 0 || eligibleSources.length === 0;
+                                  const tip = tgtCount > 0
+                                    ? (t('clone_disabled_target_not_empty') ||
+                                       "Bu blokda allaqachon smeta bor. Avval o'chiring.")
+                                    : eligibleSources.length === 0
+                                    ? (t('clone_disabled_no_source') ||
+                                       "Nusxalash uchun smetali boshqa blok yo'q.")
+                                    : '';
+                                  return (
+                                    <DropdownMenuItem
+                                      disabled={disabled}
+                                      title={tip || undefined}
+                                      onClick={() => {
+                                        if (disabled) return;
+                                        setCloneEstimatesModal({
+                                          open: true,
+                                          target: building,
+                                          sourceId: String(eligibleSources[0]?.id || ''),
+                                        });
+                                      }}
+                                    >
+                                      <Copy className="w-4 h-4 mr-2" />
+                                      {t('clone_estimates') || 'Nusxalash (smetalar)'}
+                                    </DropdownMenuItem>
+                                  );
+                                })()}
                                 <DropdownMenuItem
                                   className="text-red-600"
                                   onClick={() => {
@@ -3495,6 +3562,154 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
               <Button type="submit">{buildingForm.id ? (t('update') || 'Yangilash') : (t('create') || 'Yaratish')}</Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Clone estimates modal — opened from the block card "..." menu.
+          User picks a source block (must have estimates); confirm POSTs
+          to /buildings/:targetId/clone-estimates which copies every
+          construction_estimate + line into the target. Target must be
+          empty (the menu entry that opens this modal is disabled
+          otherwise; this is also enforced server-side). */}
+      <Dialog
+        open={!!cloneEstimatesModal?.open}
+        onOpenChange={(open) => { if (!open && !cloneEstimatesBusy) setCloneEstimatesModal(null); }}
+      >
+        <DialogContent className="max-w-lg" aria-describedby="clone-estimates-help">
+          <DialogHeader>
+            <DialogTitle>
+              {t('clone_estimates') || 'Smetalarni klonlash'}
+            </DialogTitle>
+          </DialogHeader>
+          <div id="clone-estimates-help" className="space-y-4 text-sm">
+            <p className="text-slate-600">
+              {(t('clone_estimates_help') ||
+                "Boshqa blokdagi barcha smetalar (Единич, ВОР, Ресурс), ularning satrlari va bosqichlari joriy blokga nusxalanadi. FAKT ma'lumotlari (bajarilgan ish, sana, status) nusxalanmaydi. Bu amal blokda hozircha smeta bo'lmaganda ishlaydi.")}
+            </p>
+
+            <div>
+              <Label className="text-slate-500 text-xs">
+                {t('target_block') || 'Maqsad blok'}
+              </Label>
+              <div className="mt-1 font-medium">
+                {cloneEstimatesModal?.target?.name || '—'}
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="clone-source-block">
+                {t('source_block') || 'Manba blok'}
+              </Label>
+              <Select
+                value={cloneEstimatesModal?.sourceId || ''}
+                onValueChange={(v) =>
+                  setCloneEstimatesModal((m) => (m ? { ...m, sourceId: v } : m))
+                }
+              >
+                <SelectTrigger id="clone-source-block" className="mt-1">
+                  <SelectValue placeholder={t('select') || 'Tanlang'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {(buildings || [])
+                    .filter((b) => Number(b?.id) !== Number(cloneEstimatesModal?.target?.id))
+                    .filter((b) => (estimateCountByBuildingId[Number(b?.id)] || 0) > 0)
+                    .map((b) => {
+                      const n = estimateCountByBuildingId[Number(b?.id)] || 0;
+                      return (
+                        <SelectItem key={b.id} value={String(b.id)}>
+                          {b.name} · {n} {t('smeta_short') || 'smeta'}
+                        </SelectItem>
+                      );
+                    })}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-slate-400 mt-1">
+                {(t('clone_source_hint') ||
+                  "Faqat smetasi bor bloklar ko'rsatiladi.")}
+              </p>
+            </div>
+          </div>
+          <DialogFooter className="flex-col-reverse sm:flex-row gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={cloneEstimatesBusy}
+              onClick={() => setCloneEstimatesModal(null)}
+            >
+              {t('cancel') || 'Bekor qilish'}
+            </Button>
+            <Button
+              type="button"
+              disabled={cloneEstimatesBusy || !cloneEstimatesModal?.sourceId}
+              onClick={async () => {
+                const target = cloneEstimatesModal?.target;
+                const sourceId = cloneEstimatesModal?.sourceId;
+                if (!target?.id || !sourceId || !project?.id) return;
+                setCloneEstimatesBusy(true);
+                try {
+                  const res = await constructionService.cloneBuildingEstimates(
+                    project.id, target.id, sourceId,
+                  );
+                  toast.success(
+                    `${t('clone_done') || 'Nusxalash bajarildi'}: ` +
+                    `${res?.estimates_created ?? 0} smeta · ` +
+                    `${res?.lines_created ?? 0} satr · ` +
+                    `${res?.stages_created ?? 0} bosqich · ` +
+                    `${res?.files_created ?? 0} fayl`,
+                  );
+                  // Refresh block list AND estimate counts so the menu
+                  // entry on the target is now correctly disabled and
+                  // the Smetalar tab shows the copies on next visit.
+                  try {
+                    const [buildingsData, allEstimates] = await Promise.all([
+                      constructionService.listBuildings(project.id),
+                      constructionService.listEstimates(project.id).catch(() => []),
+                    ]);
+                    setBuildings(sortBuildings(buildingsData));
+                    const counts = {};
+                    for (const e of (allEstimates || [])) {
+                      const bid = Number(e?.building_id || 0);
+                      if (!bid) continue;
+                      counts[bid] = (counts[bid] || 0) + 1;
+                    }
+                    setEstimateCountByBuildingId(counts);
+                  } catch { /* non-fatal — the next tab visit will reload */ }
+                  setCloneEstimatesModal(null);
+                } catch (err) {
+                  // The backend uses two error envelope shapes depending on
+                  // which helper fired:
+                  //   { success:false, code: "TARGET_NOT_EMPTY", error: "string" }  ← gin.H from CloneBuildingEstimates
+                  //   { success:false, error: { code: 500, message: "..." } }       ← response.InternalError wrapper
+                  // Read `code` from either, and pull the human-readable
+                  // text out of whichever string-shaped field actually has
+                  // one. toast.error must receive a string — passing the
+                  // object directly broke React with "Objects are not valid
+                  // as a React child (found: object with keys {code, message})".
+                  const data = err?.response?.data || {};
+                  const code = data.code
+                    || (typeof data.error === 'object' ? data.error?.code : undefined);
+                  const backendMessage = typeof data.error === 'string'
+                    ? data.error
+                    : (data.error?.message || data.message);
+                  const msg = code === 'TARGET_NOT_EMPTY'
+                    ? (t('clone_target_not_empty') ||
+                       "Maqsad blokda allaqachon smeta bor.")
+                    : code === 'SOURCE_EMPTY'
+                    ? (t('clone_source_empty') ||
+                       "Manba blokda smeta yo'q.")
+                    : (backendMessage || err?.message ||
+                       (t('error_occurred') || 'Xatolik yuz berdi'));
+                  toast.error(String(msg));
+                } finally {
+                  setCloneEstimatesBusy(false);
+                }
+              }}
+            >
+              {cloneEstimatesBusy
+                ? (t('cloning') || 'Nusxalanmoqda...')
+                : (t('clone') || 'Nusxalash')}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

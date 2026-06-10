@@ -106,6 +106,19 @@ export const constructionService = {
     await apiClient.delete(`/construction/projects/${projectId}/buildings/${buildingId}`);
   },
 
+  // Clone every estimate (ВОР, Единич, Ресурс) plus all their lines from a
+  // sibling block (`sourceBuildingId`) into `targetBuildingId`. Same project
+  // only. Backend refuses (409 TARGET_NOT_EMPTY) if the target already has
+  // any estimates — the UI grays out the menu entry in that case, this
+  // catches the race / direct-call path.
+  async cloneBuildingEstimates(projectId, targetBuildingId, sourceBuildingId) {
+    const response = await apiClient.post(
+      `/construction/projects/${projectId}/buildings/${targetBuildingId}/clone-estimates`,
+      { source_building_id: Number(sourceBuildingId) },
+    );
+    return response.data.data;
+  },
+
   // =====================================================
   // BUILDING FILES
   // =====================================================
