@@ -757,13 +757,18 @@ export default function SmetaManagementTab({ project }) {
     //
     // Sort order in the merged array:
     //   sub-stages (manual-first / item_number) — first
-    //   resources, category bucket asc (mat=0, mash=1, mehnat=2)
-    //     within each bucket: manuals first, then file order (id ASC)
+    //   resources, category bucket asc — Mehnat (labor) → Mashina →
+    //     Material. The user's previous request was material→mashina→
+    //     mehnat; they've since flipped the preference because resource
+    //     tables in their workflow read top-to-bottom as workers first
+    //     (labor hours decide the schedule), then equipment, then the
+    //     materials those workers will install.
+    //     Within each bucket: manuals first, then file order (id ASC).
     const catRank = (rt) => {
       const c = classifyResource(rt);
-      if (c === 'materials') return 0;
-      if (c === 'machines')  return 1;
-      return 2; // labor
+      if (c === 'labor')    return 0;
+      if (c === 'machines') return 1;
+      return 2; // materials
     };
     const naturalKey = (s) => String(s || '').trim();
     const isManualResource = (ln) =>
