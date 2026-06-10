@@ -736,11 +736,57 @@ export default function SmetaManagementTab({ project }) {
         m.set(Number(pid), arr);
       }
     }
-    // Unified "manuals at top" sort — see utils/sortLines.js for the
-    // canonical rule. Replaces a per-call bespoke comparator that kept
-    // getting tweaked and breaking other cases.
+    // Two distinct sub-line populations live under the same parent and
+    // both render off this array — but in very different surfaces:
+    //
+    //   1. Sub-stages (isSubStageRow → resource_type='' AND norm_rate=0).
+    //      These render as their own WorkCard rows BELOW the parent. We
+    //      keep them in the unified "manuals at top → item_number ASC"
+    //      order so a freshly-added sub-stage floats to the top and the
+    //      imported ones follow file-page numbering.
+    //
+    //   2. Resource sub-lines (everything else). These render INSIDE the
+    //      parent WorkCard's resource table. The user wants them grouped
+    //      by category in a fixed display order — Material → Mashina →
+    //      Mehnat — regardless of creation time. The screenshot symptom
+    //      was that a newly added MASHINA line landed above the existing
+    //      MATERIAL ones because the manual-first sort prioritised
+    //      "newest" over "right bucket"; people read the resource table
+    //      top-to-bottom expecting all materials first, then equipment,
+    //      then labor.
+    //
+    // Sort order in the merged array:
+    //   sub-stages (manual-first / item_number) — first
+    //   resources, category bucket asc (mat=0, mash=1, mehnat=2)
+    //     within each bucket: manuals first, then file order (id ASC)
+    const catRank = (rt) => {
+      const c = classifyResource(rt);
+      if (c === 'materials') return 0;
+      if (c === 'machines')  return 1;
+      return 2; // labor
+    };
+    const naturalKey = (s) => String(s || '').trim();
+    const isManualResource = (ln) =>
+      ln?.is_manual === true || !naturalKey(ln?.item_number);
     for (const arr of m.values()) {
-      sortLinesManualFirstInPlace(arr);
+      // Split, sort each bucket with its own rule, recombine in place.
+      const stages = arr.filter(isSubStageRow);
+      const resources = arr.filter((s) => !isSubStageRow(s));
+      sortLinesManualFirstInPlace(stages);
+      resources.sort((a, b) => {
+        const ra = catRank(a.resource_type);
+        const rb = catRank(b.resource_type);
+        if (ra !== rb) return ra - rb;
+        // Same category — manual-added first (so a freshly added
+        // resource lands at the top of its bucket where the user is
+        // looking), then file-order (lower id = imported earlier).
+        const aM = isManualResource(a);
+        const bM = isManualResource(b);
+        if (aM !== bM) return aM ? -1 : 1;
+        return Number(a.id || 0) - Number(b.id || 0);
+      });
+      arr.length = 0;
+      arr.push(...stages, ...resources);
     }
     return m;
   }, [lines]);

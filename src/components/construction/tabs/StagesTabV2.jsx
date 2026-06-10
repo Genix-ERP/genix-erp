@@ -1114,27 +1114,73 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
     userAddedEmpty.sort(byNewest);
     pinnedDerived.sort(byNewest);
 
-    // Imported stages: sort by the MIN item_number across every work
-    // they contain (own works + nested sub-stage works). This is what
-    // matches the printed-page sequence: a project with ZRP rows 1-7
-    // and ФУНДАМЕНТЫ rows 8-47 surfaces ZRP first regardless of how
-    // the import wrote sort_order. The earlier "no re-sort" rule
-    // assumed sort_order tracked file order, but real imports often
-    // diverge (legacy projects + multi-file merges shuffle it), and
-    // the user reported "7 is after 47, fix this" because of exactly
-    // that drift.
+    // Imported stages: sort by the MIN DB row id across every work they
+    // contain (own works + nested sub-stage works). Bulk imports INSERT
+    // rows in file order, so min id == "first row of this stage in the
+    // source file." This is exactly the rule SmetaManagementTab uses for
+    // its imported-section bucket — keeping the two tabs in sync is
+    // important because the user navigates between them and expects the
+    // same order in both.
+    //
+    // Item_number stays as a tiebreaker only. The earlier "sort by min
+    // item_number" was correct for single-discipline files where each
+    // РАЗДЕЛ continued the numbering (1, 7, 10, 17…). It broke on the
+    // multi-discipline Юксалиш Тип-3 XLS where each discipline restarts
+    // at 1 — KЖ's ЗЕМЛЯНЫЕ РАБОТЫ (item 1) and ВК's ХОЗ. ПИТЬЕВОЙ
+    // ВОДОПРОВОД (also item 1) tied and the user got "line number
+    // started from 1 multiple times" with the stages in arbitrary order.
+    // Two sort keys, in priority order:
+    //   1. min sort_order across every reachable work
+    //   2. min line id (fallback for legacy rows with sort_order=0)
+    //
+    // sort_order is captured at import time as a continuously-incrementing
+    // counter across the whole file (parseEdinich → buildImportPayloadFor),
+    // so KЖ's rows have low sort_orders and ЛВС's rows have high ones —
+    // exactly the file-order signal we need. line.id is more brittle
+    // because re-imports / partial deletes can interleave the
+    // auto-increment range across disciplines.
+    //
+    // The previous version walked w.subStages instead of node.works /
+    // node.subStages, so stages whose works all lived inside sub-stages
+    // (КЖ has 11 sub-stages, ZERO direct works) returned Infinity, and
+    // ЛВС (no РАЗДЕЛ N. → flat works on the stage) floated to the top.
+    const minStageKey = (stage, field) => {
+      let min = Number.POSITIVE_INFINITY;
+      const visit = (node) => {
+        if (!node) return;
+        const v = Number(node[field]);
+        if (Number.isFinite(v) && v > 0 && v < min) min = v;
+        if (Array.isArray(node.works)) {
+          for (const w of node.works) visit(w);
+        }
+        if (Array.isArray(node.subStages)) {
+          for (const ss of node.subStages) visit(ss);
+        }
+      };
+      for (const w of (stage.works || [])) visit(w);
+      for (const ss of (stage.subStages || [])) visit(ss);
+      return min;
+    };
+    const minStageSortOrder = (stage) => minStageKey(stage, 'sort_order');
+    const minStageLineId    = (stage) => minStageKey(stage, 'id');
     const minStageItemNum = (stage) => {
       let min = Number.POSITIVE_INFINITY;
-      const visit = (w) => {
-        if (!w) return;
-        const raw = String(w.item_number || '').trim();
+      // Same recursion fix as minStageLineId above — walk node.works
+      // AND node.subStages so multi-substage stages don't silently
+      // tie at Infinity.
+      const visit = (node) => {
+        if (!node) return;
+        const raw = String(node.item_number || '').trim();
         const m = raw.match(/^\d+(?:\.\d+)?/);
         if (m) {
           const n = Number(m[0]);
           if (Number.isFinite(n) && n < min) min = n;
         }
-        if (Array.isArray(w.subStages)) {
-          for (const ss of w.subStages) visit(ss);
+        if (Array.isArray(node.works)) {
+          for (const w of node.works) visit(w);
+        }
+        if (Array.isArray(node.subStages)) {
+          for (const ss of node.subStages) visit(ss);
         }
       };
       for (const w of (stage.works || [])) visit(w);
@@ -1142,6 +1188,18 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
       return min;
     };
     restDerived.sort((a, b) => {
+      // Primary: file order via sort_order (set at import time,
+      // continuously incremented across all sections — KЖ low, ЛВС high).
+      const soa = minStageSortOrder(a);
+      const sob = minStageSortOrder(b);
+      if (soa !== sob && Number.isFinite(soa) && Number.isFinite(sob)) {
+        return soa - sob;
+      }
+      // Secondary: min line.id (legacy / single-discipline fallback).
+      const ida = minStageLineId(a);
+      const idb = minStageLineId(b);
+      if (ida !== idb) return ida - idb;
+      // Tertiary: min item_number (last-ditch).
       const ka = minStageItemNum(a);
       const kb = minStageItemNum(b);
       if (ka !== kb) return ka - kb;
