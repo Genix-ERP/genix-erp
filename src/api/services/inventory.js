@@ -287,6 +287,29 @@ export const inventoryService = {
     return response.data.data;
   },
 
+  // Per-(product, warehouse) turnover sheet for a date range. The backend
+  // replays inventory_transactions and returns, per row: opening balance
+  // (before date_from), kirim/chiqim during the period, closing balance,
+  // weighted-average cost and closing value. Powers the "Ombor holati"
+  // report sub-tab. Soft-deleted products are included by default.
+  //
+  // params:
+  //   date_from       — YYYY-MM-DD (required) period start, inclusive
+  //   date_to         — YYYY-MM-DD (required) period end, inclusive
+  //   warehouse_id    — uuid, filter to a single warehouse
+  //   product_id      — uuid, filter to a single product
+  //   include_deleted — bool, default true
+  async getInventoryTurnover(params = {}) {
+    const clean = { include_deleted: true, ...params };
+    Object.keys(clean).forEach((k) => {
+      if (clean[k] === undefined || clean[k] === null || clean[k] === '' || clean[k] === 'all') {
+        delete clean[k];
+      }
+    });
+    const response = await apiClient.get('/inventory/turnover', { params: clean });
+    return response.data.data;
+  },
+
   async getInventoryValuation() {
     const response = await apiClient.get('/inventory/valuation');
     return response.data.data;
