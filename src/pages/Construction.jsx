@@ -74,6 +74,7 @@ import {
   ChevronsUpDown,
   Check,
   Copy,
+  Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -2384,6 +2385,25 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
 
   return (
     <div className="space-y-6">
+      {/* Full-page blocking overlay while a block is being duplicated.
+          Block cloning can take several seconds in production (it copies
+          every estimate, line, stage, and file), and the success toast only
+          appears once the backend responds. Until then we blur the whole
+          page and show a spinner so the user knows work is in progress and
+          can't fire a second duplication or navigate away mid-flight. */}
+      {cloneEstimatesBusy && (
+        <div
+          className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-4 bg-white/40 backdrop-blur-sm cursor-wait"
+          role="status"
+          aria-live="assertive"
+          aria-busy="true"
+        >
+          <Loader2 className="h-12 w-12 animate-spin text-[#185FA5]" />
+          <p className="text-sm font-medium text-slate-700">
+            {t('cloning_in_progress') || 'Nusxalanmoqda, kuting...'}
+          </p>
+        </div>
+      )}
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3 min-w-0">

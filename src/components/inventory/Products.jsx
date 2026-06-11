@@ -8,7 +8,7 @@ import {
   Tag, Barcode, Box, Boxes, Filter, MoreHorizontal, AlertCircle,
   CheckCircle, XCircle, ShoppingCart, Archive, Upload, Download, History,
   Layers, Printer, HelpCircle, Truck, RefreshCw, Scale, ChevronDown, ChevronLeft, ChevronRight, ShieldCheck,
-  Loader2, CalendarDays, X
+  Loader2
 } from "lucide-react";
 import {
   Tooltip,
@@ -213,62 +213,6 @@ export default function Products() {
   const [warehouseFilter, setWarehouseFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [inventoryTypeFilter, setInventoryTypeFilter] = useState("trade");
-
-  // As-of date stock report. When `asOfDate` is set (YYYY-MM-DD), the
-  // products table is replaced with the historical stock view powered by
-  // GET /inventory/stock-at-date — the backend replays the
-  // inventory_transactions ledger up to that date and returns per
-  // (product, warehouse) quantity + weighted-average cost. Soft-deleted
-  // products are included so the user can see SKUs that existed then but
-  // have since been removed; those rows render with an "O'chirilgan"
-  // badge. When `asOfDate` is empty, behaviour reverts to the standard
-  // live products list — no change to existing flows.
-  const [asOfDate, setAsOfDate] = useState('');
-  const [stockAtDateRows, setStockAtDateRows] = useState([]);
-  const [stockAtDateLoading, setStockAtDateLoading] = useState(false);
-  const [stockAtDateError, setStockAtDateError] = useState('');
-  useEffect(() => {
-    if (!asOfDate) {
-      setStockAtDateRows([]);
-      setStockAtDateError('');
-      return;
-    }
-    let cancelled = false;
-    setStockAtDateLoading(true);
-    setStockAtDateError('');
-    inventoryService.getStockAtDate(asOfDate, {
-      warehouse_id: warehouseFilter !== 'all' ? warehouseFilter : undefined,
-      include_deleted: true,
-    })
-      .then((data) => {
-        if (cancelled) return;
-        setStockAtDateRows(Array.isArray(data?.rows) ? data.rows : []);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setStockAtDateRows([]);
-        setStockAtDateError(
-          err?.response?.data?.error?.message
-            || err?.response?.data?.error
-            || err?.message
-            || 'Failed to load stock at date',
-        );
-      })
-      .finally(() => { if (!cancelled) setStockAtDateLoading(false); });
-    return () => { cancelled = true; };
-  }, [asOfDate, warehouseFilter]);
-
-  // Filter applied AFTER the backend fetch — searches are cheap and
-  // we want them to react instantly without re-querying the server.
-  const filteredStockAtDateRows = useMemo(() => {
-    if (!asOfDate) return [];
-    const q = String(searchQuery || '').trim().toLowerCase();
-    if (!q) return stockAtDateRows;
-    return stockAtDateRows.filter((r) =>
-      String(r.product_name || '').toLowerCase().includes(q)
-      || String(r.product_code || '').toLowerCase().includes(q),
-    );
-  }, [asOfDate, stockAtDateRows, searchQuery]);
 
   // Server-side pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -2151,33 +2095,6 @@ export default function Products() {
                   <SelectItem value="inactive">{t('inactive')}</SelectItem>
                 </SelectContent>
               </Select>
-              {/* As-of date picker — switches the table below into a
-                  historical stock report mode powered by GET
-                  /inventory/stock-at-date. Empty value = live products
-                  list (default behaviour). The CalendarDays icon hints
-                  this is a time-travel control. */}
-              <div className="flex items-center gap-1">
-                <CalendarDays className="w-4 h-4 text-slate-400" />
-                <input
-                  type="date"
-                  value={asOfDate}
-                  max={new Date().toISOString().split('T')[0]}
-                  onChange={(e) => setAsOfDate(e.target.value)}
-                  className="h-10 px-2 text-sm border border-input bg-slate-50 rounded-md outline-none focus:ring-2 focus:ring-[var(--genix-blue)]"
-                  title={t('stock_as_of_hint') || "Sanaga ko'ra ombor holati"}
-                />
-                {asOfDate && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => setAsOfDate('')}
-                    title={t('clear') || "Tozalash"}
-                  >
-                    <X className="w-4 h-4" />
-                  </Button>
-                )}
-              </div>
               {/* Import button — opens a small confirm modal that lets
                   the user download the template first. Picking a file
                   inside the modal triggers the body-attached singleton
@@ -2216,94 +2133,7 @@ export default function Products() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          {/* As-of stock report view. Renders only when the user picks a
-              date in the toolbar; otherwise falls through to the standard
-              live products table below. Keeps the rest of the page
-              unchanged so create / edit / delete / import flows are not
-              touched. */}
-          {asOfDate ? (
-            <div>
-              <div className="px-6 py-3 border-b bg-amber-50/50 flex items-center justify-between">
-                <div className="text-sm text-amber-900">
-                  <CalendarDays className="w-4 h-4 inline-block mr-2 align-middle" />
-                  {(t('stock_as_of_banner') || "Sanaga ko'ra ombor holati") + ': '}
-                  <strong>{asOfDate}</strong>
-                  <span className="ml-3 text-xs text-amber-700">
-                    ({(t('stock_as_of_note') || "FAKT zahirasi va o'rtacha tannarx")})
-                  </span>
-                </div>
-                <div className="text-sm text-amber-900 font-medium">
-                  {filteredStockAtDateRows.length} {t('rows') || 'qator'}
-                </div>
-              </div>
-              {stockAtDateLoading ? (
-                <div className="flex items-center justify-center py-16">
-                  <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
-                </div>
-              ) : stockAtDateError ? (
-                <div className="text-center py-12 text-red-600 text-sm">
-                  {stockAtDateError}
-                </div>
-              ) : filteredStockAtDateRows.length === 0 ? (
-                <div className="text-center py-16 px-6 text-slate-500 text-sm">
-                  {t('no_stock_at_date') || "Tanlangan sanada ombor ma'lumotlari yo'q"}
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-slate-50 hover:bg-slate-50">
-                        <TableHead className="font-semibold text-slate-700 min-w-[220px]">{t('product')}</TableHead>
-                        <TableHead className="font-semibold text-slate-700 min-w-[150px]">{t('warehouse') || 'Ombor'}</TableHead>
-                        <TableHead className="font-semibold text-slate-700 text-right min-w-[100px]">{t('stock') || 'Qoldiq'}</TableHead>
-                        <TableHead className="hidden md:table-cell font-semibold text-slate-700 text-right min-w-[120px]">{t('avg_unit_cost') || "O'rt. tannarx"}</TableHead>
-                        <TableHead className="font-semibold text-slate-700 text-right min-w-[140px]">{t('total_value') || 'Umumiy qiymat'}</TableHead>
-                        <TableHead className="hidden lg:table-cell font-semibold text-slate-700 text-right min-w-[120px]">{t('current_price') || 'Joriy narx'}</TableHead>
-                        <TableHead className="hidden lg:table-cell font-semibold text-slate-700 min-w-[130px]">{t('last_movement') || "Oxirgi harakat"}</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredStockAtDateRows.map((r, idx) => (
-                        <TableRow key={`${r.product_id}-${r.warehouse_id}-${idx}`} className="hover:bg-blue-50/50 transition-colors">
-                          <TableCell>
-                            <div className="flex flex-col">
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium text-sm text-slate-900">{r.product_name}</span>
-                                {r.is_deleted && (
-                                  <Badge variant="outline" className="border-red-300 text-red-700 text-[10px] uppercase">
-                                    {t('deleted_label') || "O'chirilgan"}
-                                  </Badge>
-                                )}
-                              </div>
-                              {r.product_code && (
-                                <span className="text-xs text-slate-400 font-mono">{r.product_code}</span>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-sm text-slate-700">{r.warehouse_name}</TableCell>
-                          <TableCell className={`text-right font-mono font-semibold ${Number(r.quantity || 0) > 0 ? 'text-green-700' : Number(r.quantity || 0) < 0 ? 'text-red-700' : 'text-slate-500'}`}>
-                            {Number(r.quantity || 0).toLocaleString(undefined, { maximumFractionDigits: 3 })}
-                          </TableCell>
-                          <TableCell className="hidden md:table-cell text-right font-mono text-sm">
-                            {formatCurrency(Number(r.unit_cost || 0))}
-                          </TableCell>
-                          <TableCell className="text-right font-mono font-semibold text-sm">
-                            {formatCurrency(Number(r.total_value || 0))}
-                          </TableCell>
-                          <TableCell className="hidden lg:table-cell text-right font-mono text-sm text-slate-500">
-                            {formatCurrency(Number(r.current_sales_price || 0))}
-                          </TableCell>
-                          <TableCell className="hidden lg:table-cell text-xs text-slate-500">
-                            {r.last_txn_date ? new Date(r.last_txn_date).toLocaleDateString() : '—'}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </div>
-          ) : (isLoading || productsLoading) ? (
+          {(isLoading || productsLoading) ? (
             <div className="flex items-center justify-center py-16">
               <div className="text-center">
                 <div className="w-8 h-8 border-4 border-[var(--genix-blue)] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
