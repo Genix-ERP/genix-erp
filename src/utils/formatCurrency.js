@@ -179,7 +179,7 @@ export function createCurrencyFormatter(settings = {}) {
   };
 }
 
-// Create a compact currency formatter (uses full numbers with thousands separators)
+// Create a compact currency formatter
 export function createCompactCurrencyFormatter(settings = {}) {
   const {
     currency = 'UZS',
@@ -187,14 +187,18 @@ export function createCompactCurrencyFormatter(settings = {}) {
     currency_position = 'after',
   } = settings;
 
-  // Use full formatter instead of abbreviated (mln/mlrd) format
-  const fullFormatter = createCurrencyFormatter({
-    currency,
-    currency_symbol,
-    currency_position,
-  });
-
   return function formatCurrencyCompact(amount, overrideCurrencyCode = null) {
-    return fullFormatter(amount, overrideCurrencyCode);
+    const sym = overrideCurrencyCode
+      ? (CURRENCY_SYMBOLS[overrideCurrencyCode] || overrideCurrencyCode)
+      : currency_symbol;
+
+    const pos = overrideCurrencyCode && overrideCurrencyCode !== currency
+      ? (overrideCurrencyCode === 'USD' ? 'before' : 'after')
+      : currency_position;
+
+    return formatCompactNumber(amount, {
+      symbol: sym,
+      position: pos,
+    });
   };
 }

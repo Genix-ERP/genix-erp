@@ -125,7 +125,7 @@ apiClient.interceptors.request.use(
             }
           }
         }
-      } catch (e) {
+      } catch {
         // fallback: scan for any matching key
         const activeCompanyKey = Object.keys(localStorage).find(k => k.startsWith('genix_active_company_user_'));
         const organizationId = activeCompanyKey ? localStorage.getItem(activeCompanyKey) : null;
@@ -250,7 +250,7 @@ apiClient.interceptors.response.use(
       }
     }
 
-    // Handle 402 Payment Required — broadcast so PaymentWall can show itself
+    // Handle 402 Payment Required — broadcast so SubscriptionContext can react
     if (error.response?.status === 402) {
       window.dispatchEvent(new CustomEvent('genix:payment-required'));
     }
