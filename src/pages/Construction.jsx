@@ -2645,44 +2645,61 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                                   <Paperclip className="w-4 h-4 mr-2" />
                                   {t('files') || 'Fayllar'}
                                 </DropdownMenuItem>
-                                {/* Klonlash — copy estimates from a sibling block. Disabled
-                                    when this block already has any estimates (clone is
-                                    refused server-side to protect FAKT progress) or when
-                                    there is no other block in the project to source from. */}
-                                {(() => {
-                                  const tgtCount = estimateCountByBuildingId[Number(building.id)] || 0;
-                                  const otherBlocks = (buildings || []).filter(
-                                    (b) => Number(b?.id) !== Number(building.id),
-                                  );
-                                  const eligibleSources = otherBlocks.filter(
-                                    (b) => (estimateCountByBuildingId[Number(b?.id)] || 0) > 0,
-                                  );
-                                  const disabled = tgtCount > 0 || eligibleSources.length === 0;
-                                  const tip = tgtCount > 0
-                                    ? (t('clone_disabled_target_not_empty') ||
-                                       "Bu blokda allaqachon smeta bor. Avval o'chiring.")
-                                    : eligibleSources.length === 0
-                                    ? (t('clone_disabled_no_source') ||
-                                       "Nusxalash uchun smetali boshqa blok yo'q.")
-                                    : '';
-                                  return (
-                                    <DropdownMenuItem
-                                      disabled={disabled}
-                                      title={tip || undefined}
-                                      onClick={() => {
-                                        if (disabled) return;
-                                        setCloneEstimatesModal({
-                                          open: true,
-                                          target: building,
-                                          sourceId: String(eligibleSources[0]?.id || ''),
-                                        });
-                                      }}
-                                    >
-                                      <Copy className="w-4 h-4 mr-2" />
-                                      {t('clone_estimates') || 'Nusxalash (smetalar)'}
-                                    </DropdownMenuItem>
-                                  );
-                                })()}
+                                {/* Nusxalash — duplicates this block. Backend creates a
+                                    brand new sibling building ("<name> Copy") in the
+                                    same project and copies every estimate, line, stage,
+                                    and file across. No target picker, no "is it empty"
+                                    gating — every click produces a fresh block.
+                                    Disabled only while a previous duplication is still
+                                    in flight on this same source. */}
+                                <DropdownMenuItem
+                                  disabled={cloneEstimatesBusy === Number(building.id)}
+                                  onClick={async () => {
+                                    if (cloneEstimatesBusy) return;
+                                    setCloneEstimatesBusy(Number(building.id));
+                                    try {
+                                      const res = await constructionService.duplicateBuilding(
+                                        project.id, building.id,
+                                      );
+                                      toast.success(
+                                        `${t('duplicate_done') || 'Nusxalash bajarildi'}: ` +
+                                        `${res?.new_building?.name || ''} ` +
+                                        `(${res?.estimates_created ?? 0} smeta · ` +
+                                        `${res?.lines_created ?? 0} satr · ` +
+                                        `${res?.stages_created ?? 0} bosqich · ` +
+                                        `${res?.files_created ?? 0} fayl)`,
+                                      );
+                                      try {
+                                        const [buildingsData, allEstimates] = await Promise.all([
+                                          constructionService.listBuildings(project.id),
+                                          constructionService.listEstimates(project.id).catch(() => []),
+                                        ]);
+                                        setBuildings(sortBuildings(buildingsData));
+                                        const counts = {};
+                                        for (const e of (allEstimates || [])) {
+                                          const bid = Number(e?.building_id || 0);
+                                          if (!bid) continue;
+                                          counts[bid] = (counts[bid] || 0) + 1;
+                                        }
+                                        setEstimateCountByBuildingId(counts);
+                                      } catch { /* non-fatal */ }
+                                    } catch (err) {
+                                      const data = err?.response?.data || {};
+                                      const backendMessage = typeof data.error === 'string'
+                                        ? data.error
+                                        : (data.error?.message || data.message);
+                                      toast.error(
+                                        String(backendMessage || err?.message ||
+                                          (t('error_occurred') || 'Xatolik yuz berdi')),
+                                      );
+                                    } finally {
+                                      setCloneEstimatesBusy(false);
+                                    }
+                                  }}
+                                >
+                                  <Copy className="w-4 h-4 mr-2" />
+                                  {t('clone_estimates') || 'Nusxalash'}
+                                </DropdownMenuItem>
                                 <DropdownMenuItem
                                   className="text-red-600"
                                   onClick={() => {
@@ -3565,16 +3582,13 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
         </DialogContent>
       </Dialog>
 
-      {/* Clone estimates modal — opened from the block card "..." menu.
-          User picks a source block (must have estimates); confirm POSTs
-          to /buildings/:targetId/clone-estimates which copies every
-          construction_estimate + line into the target. Target must be
-          empty (the menu entry that opens this modal is disabled
-          otherwise; this is also enforced server-side). */}
-      <Dialog
-        open={!!cloneEstimatesModal?.open}
-        onOpenChange={(open) => { if (!open && !cloneEstimatesBusy) setCloneEstimatesModal(null); }}
-      >
+      {/* (Removed) The old clone-estimates modal was a target-picker;
+          the new "Nusxalash" flow always creates a brand-new sibling
+          block server-side, so no UI input is needed. The state
+          variables `cloneEstimatesModal` / `setCloneEstimatesModal`
+          are kept around because the rest of this file still references
+          them in dead-code paths; they no longer drive any visible UI. */}
+      <Dialog open={false} onOpenChange={() => {}}>
         <DialogContent className="max-w-lg" aria-describedby="clone-estimates-help">
           <DialogHeader>
             <DialogTitle>

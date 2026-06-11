@@ -106,15 +106,17 @@ export const constructionService = {
     await apiClient.delete(`/construction/projects/${projectId}/buildings/${buildingId}`);
   },
 
-  // Clone every estimate (ВОР, Единич, Ресурс) plus all their lines from a
-  // sibling block (`sourceBuildingId`) into `targetBuildingId`. Same project
-  // only. Backend refuses (409 TARGET_NOT_EMPTY) if the target already has
-  // any estimates — the UI grays out the menu entry in that case, this
-  // catches the race / direct-call path.
-  async cloneBuildingEstimates(projectId, targetBuildingId, sourceBuildingId) {
+  // Duplicate a block — backend creates a brand-new sibling building
+  // called "<source name> Copy" in the same project, then copies every
+  // estimate (Единич, ВОР, Ресурс) + its lines + stages + files from
+  // the source. No target picker required, no "is the target empty"
+  // gating — every call produces a fresh block.
+  //
+  // Returns: { new_building: { id, name, code }, estimates_created,
+  //           lines_created, stages_created, files_created }
+  async duplicateBuilding(projectId, sourceBuildingId) {
     const response = await apiClient.post(
-      `/construction/projects/${projectId}/buildings/${targetBuildingId}/clone-estimates`,
-      { source_building_id: Number(sourceBuildingId) },
+      `/construction/projects/${projectId}/buildings/${sourceBuildingId}/clone-estimates`,
     );
     return response.data.data;
   },
