@@ -5,12 +5,14 @@ import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import LanguageSelector from '@/components/ui/language-selector';
 import { Loader2, Lock, CheckCircle2, XCircle, ArrowLeft } from 'lucide-react';
+import { readStoredBrandLogo, resolveBrandLogoUrl } from '@/utils/brandLogo';
 import './Login.scss';
 
 export default function ResetPassword() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
   const navigate = useNavigate();
+  const [brandLogoUrl] = useState(() => resolveBrandLogoUrl(readStoredBrandLogo()));
 
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -93,7 +95,7 @@ export default function ResetPassword() {
       <div className="login-card">
         <div className="login-card__header">
           <img
-            src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68d244cb8a392237a5acfbd9/a049d6898_Logo.png"
+            src={brandLogoUrl}
             alt="Genix Logo"
             className="login-card__logo"
           />

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '@/components/contexts/AuthContext';
 import { authService } from '@/api/services/auth';
@@ -8,10 +8,12 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Lock, CheckCircle2, XCircle, Building2, User } from 'lucide-react';
+import { readStoredBrandLogo, resolveBrandLogoUrl } from '@/utils/brandLogo';
 
 export default function AcceptInvite() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
+  const [brandLogoUrl] = useState(() => resolveBrandLogoUrl(readStoredBrandLogo()));
 
   const [inviteInfo, setInviteInfo] = useState(null);
   const [isValidating, setIsValidating] = useState(true);
@@ -149,7 +151,7 @@ export default function AcceptInvite() {
       <Card className="w-full max-w-md shadow-xl border-0 bg-white/90 backdrop-blur-xl">
         <CardHeader className="text-center pb-2">
           <img
-            src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68d244cb8a392237a5acfbd9/a049d6898_Logo.png"
+            src={brandLogoUrl}
             alt="Genix Logo"
             className="h-20 w-auto object-contain mx-auto mb-4"
           />
