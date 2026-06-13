@@ -492,6 +492,14 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
   const [refreshTick, setRefreshTick] = useState(0); // bump to force a reload
   const [buildingStageCounts, setBuildingStageCounts] = useState({}); // buildingId → stage count
 
+  // ── Infinite-scroll render window ─────────────────────────────────
+  // The full lines/stages stay in memory (progress %, totals, Forma 2,
+  // material engine all see everything); we only paint the first N
+  // stages and reveal more as the user scrolls — no page button.
+  const STAGES_PER_PAGE = 20;
+  const [visibleStageCount, setVisibleStageCount] = useState(STAGES_PER_PAGE);
+  const stagesLoadMoreRef = React.useRef(null);
+
   // Manually-added stages — rows from construction_stages that don't have
   // any works yet under their name. The Bosqichlar list is normally derived
   // from estimate-work parent paths (deriveStages below), so a stage with
@@ -1201,6 +1209,33 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
     // Bottom: imported stages in printed-page (min item_number) order.
     return [...userAddedEmpty, ...pinnedDerived, ...restDerived];
   }, [derivedStages, manualStages, recentlyAddedStageIds]);
+
+  // Render only the first N stages; reveal more on scroll. Full `stages`
+  // is still used everywhere else (counts, progress, exports).
+  const visibleStages = useMemo(
+    () => stages.slice(0, visibleStageCount),
+    [stages, visibleStageCount],
+  );
+  // Reset the window when the active block changes (fresh stage list).
+  useEffect(() => {
+    setVisibleStageCount(STAGES_PER_PAGE);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeBuildingId]);
+  // Grow the window as the bottom sentinel scrolls into view.
+  useEffect(() => {
+    const el = stagesLoadMoreRef.current;
+    if (!el) return undefined;
+    if (visibleStageCount >= stages.length) return undefined;
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) {
+        setVisibleStageCount((n) => Math.min(n + STAGES_PER_PAGE, stages.length));
+      }
+    }, { rootMargin: '400px 0px' });
+    io.observe(el);
+    return () => io.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stages.length, visibleStageCount]);
+
   // Plan-quantity resolver for progress aggregations. Fallback chain:
   //   1. ВОР Miqdor (strict key: section + name + uom).
   //   2. ВОР Miqdor (loose: name only) — rescues files where section
@@ -1756,7 +1791,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
         </div>
       ) : (
         <div className="space-y-3">
-          {stages.map((stage) => {
+          {visibleStages.map((stage) => {
             const stKey = stage.name;
             const expanded = expandedStages.has(stKey);
             const status = stageStatus(stage);
@@ -1953,6 +1988,13 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
               </div>
             );
           })}
+          {/* Infinite-scroll sentinel — grows the window by another page
+              of stages when it scrolls into view. */}
+          {visibleStageCount < stages.length && (
+            <div ref={stagesLoadMoreRef} className="py-6 flex items-center justify-center">
+              <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
+            </div>
+          )}
         </div>
       )}
 
@@ -2389,6 +2431,29 @@ function WorksTable({
   onAddResource,
   t,
 }) {
+  // Infinite-scroll window — paint the first 20 works of this table and
+  // reveal more as the sentinel row scrolls into view. Each WorksTable
+  // (the stage's direct works, and one per sub-stage) keeps its own window.
+  // A work's resources render inside its own expand row, so they're never
+  // split by this. WorksTable unmounts when its stage collapses, so the
+  // window resets naturally on the next expand.
+  const WORKS_PER_PAGE = 20;
+  const [visibleCount, setVisibleCount] = React.useState(WORKS_PER_PAGE);
+  const moreRef = React.useRef(null);
+  React.useEffect(() => { setVisibleCount(WORKS_PER_PAGE); }, [works.length]);
+  React.useEffect(() => {
+    const el = moreRef.current;
+    if (!el) return undefined;
+    if (visibleCount >= works.length) return undefined;
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) {
+        setVisibleCount((n) => Math.min(n + WORKS_PER_PAGE, works.length));
+      }
+    }, { rootMargin: '300px 0px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [visibleCount, works.length]);
+  const visibleWorks = works.slice(0, visibleCount);
   // Total column count (used for the colspan of the expanded sub-row).
   // 1 chevron + # + name + uom + plan + done + progress + status + action = 9
   // + (unit_price + plan_total + fact_total) when canSeeCost = 12
@@ -2420,7 +2485,7 @@ function WorksTable({
           </tr>
         </thead>
         <tbody>
-          {works.map((w, idx) => {
+          {visibleWorks.map((w, idx) => {
             const isLocked = w.approval_status === 'confirmed_engineer';
             const isSupConfirmed = w.approval_status === 'confirmed_supervisor';
             const rowBg = isLocked ? '#F0FDF4' : (isSupConfirmed ? '#FEF7E0' : 'transparent');
@@ -2673,6 +2738,15 @@ function WorksTable({
               </React.Fragment>
             );
           })}
+          {/* Infinite-scroll sentinel — reveals the next 20 works as it
+              scrolls into view. */}
+          {visibleCount < works.length && (
+            <tr ref={moreRef}>
+              <td colSpan={colCount} className="py-3 text-center">
+                <Loader2 className="w-4 h-4 animate-spin text-slate-400 inline-block" />
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
     </div>

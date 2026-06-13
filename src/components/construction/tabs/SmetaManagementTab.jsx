@@ -202,6 +202,19 @@ export default function SmetaManagementTab({ project }) {
   const [collapsedSections, setCollapsedSections] = useState({});
   const [openWorks, setOpenWorks] = useState(new Set());
 
+  // ── Infinite-scroll render window ─────────────────────────────────
+  // We keep the FULL lines array in memory (so the stat cards, "831"
+  // counts, search, "Hammasini yoqish/o'chirish", Forma 2 freeze and
+  // material hisobi all see every line). Only the RENDERED list is paged:
+  // we draw the first WORKS_PER_PAGE *works* and reveal more as the user
+  // scrolls a sentinel into view — no page button, no change to the data
+  // layer. The window counts WORKS, never resources: a work's resources
+  // are child rows that render inside its own card, so a work with 100
+  // resources is one item and is never split across pages.
+  const WORKS_PER_PAGE = 20;
+  const [visibleWorkCount, setVisibleWorkCount] = useState(WORKS_PER_PAGE);
+  const loadMoreRef = React.useRef(null);
+
   // Modal state — separate flags so the two adds are independently
   // controllable. `addTarget` carries the parent line context (could be a
   // work OR a sub-stage when adding resources to a sub-stage).
@@ -444,16 +457,47 @@ export default function SmetaManagementTab({ project }) {
       }
     }
     setLoadingLines(true);
+    setQtyDraft({});
     try {
       const all = [];
-      for (const id of idList) {
-        const rows = await constructionService.listEstimateLines(id, { page_size: 5000 });
-        const arr = Array.isArray(rows) ? rows : (rows?.data || rows?.items || []);
-        all.push(...arr);
+      if (force) {
+        // Refresh / "Yangilash" / post-mutation reload: pull the full set
+        // in a single request (fast, one round-trip) since we already know
+        // we want everything fresh.
+        for (const id of idList) {
+          const rows = await constructionService.listEstimateLines(id, { page_size: 5000 });
+          const arr = Array.isArray(rows) ? rows : (rows?.data || rows?.items || []);
+          all.push(...arr);
+        }
+        setLines(all);
+      } else {
+        // Initial / block-switch load: page through the backend in 20-item
+        // chunks (the backend default). The FIRST page paints immediately
+        // — fast on mobile — then the rest stream in and append, so the
+        // full set still lands in memory and the stat cards, "831" count,
+        // search, "Hammasini yoqish/o'chirish", Forma 2 freeze and material
+        // hisobi all stay correct. Render windowing (visibleWorkCount)
+        // keeps the painted DOM small no matter how much is loaded.
+        const PAGE_SIZE = 20;
+        let firstPainted = false;
+        for (const id of idList) {
+          let pageNum = 1;
+          for (;;) {
+            const { data, meta } = await constructionService.listEstimateLinesPaginated(
+              id, { page: pageNum, page_size: PAGE_SIZE },
+            );
+            const rows = Array.isArray(data) ? data : (data?.items || []);
+            all.push(...rows);
+            setLines([...all]);
+            if (!firstPainted) { setLoadingLines(false); firstPainted = true; }
+            const hasNext = meta?.has_next ?? (rows.length >= PAGE_SIZE);
+            if (rows.length < PAGE_SIZE || !hasNext) break;
+            pageNum += 1;
+          }
+        }
       }
       linesCacheRef.current.set(key, all);
       setLines(all);
-      setQtyDraft({});
     } catch (e) {
       toast.error(formatApiError(e, t, 'Xatolik'));
       setLines([]);
@@ -1329,6 +1373,68 @@ export default function SmetaManagementTab({ project }) {
     return [...pinned, ...imported];
   }, [lines, search, sectionFilter, t, manualSectionNames, manualSectionRows, recentlyAddedSectionIds]);
 
+  // Flatten every work (parent line) into render order so the window can
+  // count works across sections. Mirrors the per-section interleave the
+  // render uses (top-level lines + sub-section lines, ordered by the lead
+  // number of item_number). Resources/sub-stage child rows are NOT counted
+  // here — they belong to a work and render inside its card.
+  const orderedWorkIds = useMemo(() => {
+    const lead = (raw) => {
+      const m = String(raw || '').trim().match(/^\d+(?:\.\d+)?/);
+      return m ? Number(m[0]) : Infinity;
+    };
+    const ids = [];
+    for (const sec of sections) {
+      const entries = [];
+      for (const ln of (sec.lines || [])) entries.push({ k: lead(ln.item_number), kind: 'line', ln });
+      for (const sub of (sec.subSections || [])) {
+        let min = Infinity;
+        for (const s of (sub.lines || [])) { const n = lead(s.item_number); if (n < min) min = n; }
+        entries.push({ k: min, kind: 'sub', sub });
+      }
+      entries.sort((a, b) => a.k - b.k);
+      for (const e of entries) {
+        if (e.kind === 'line') ids.push(Number(e.ln.id));
+        else for (const s of (e.sub.lines || [])) ids.push(Number(s.id));
+      }
+    }
+    return ids;
+  }, [sections]);
+
+  const totalWorks = orderedWorkIds.length;
+  // The set of work ids currently allowed to paint. Everything outside it
+  // is withheld until the user scrolls. Resources of a visible work always
+  // render with it (they aren't in this set — they're WorkCard children).
+  const visibleWorkIds = useMemo(
+    () => new Set(orderedWorkIds.slice(0, visibleWorkCount)),
+    [orderedWorkIds, visibleWorkCount],
+  );
+
+  // Reset the window whenever the view's context changes (block switch,
+  // search, or section filter) so we don't keep a huge window afterwards.
+  useEffect(() => {
+    setVisibleWorkCount(WORKS_PER_PAGE);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buildingId, search, sectionFilter]);
+
+  // Grow the window as the bottom sentinel scrolls into view. Observing a
+  // ref (vs. a scroll listener) keeps it cheap and works inside whatever
+  // scroll container the page sits in.
+  useEffect(() => {
+    if (page !== 'works') return undefined;
+    const el = loadMoreRef.current;
+    if (!el) return undefined;
+    if (visibleWorkCount >= totalWorks) return undefined;
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) {
+        setVisibleWorkCount((n) => Math.min(n + WORKS_PER_PAGE, totalWorks));
+      }
+    }, { rootMargin: '400px 0px' });
+    io.observe(el);
+    return () => io.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, totalWorks, visibleWorkCount]);
+
   // ── Mutations ─────────────────────────────────────────────────────
   // Each line carries its own line.estimate_id, so we route mutations
   // there rather than to the state's `estimateId`. That way edits work
@@ -2136,6 +2242,14 @@ export default function SmetaManagementTab({ project }) {
               </div>
             ) : (
               sections.map((sec) => {
+                // Skip painting a section until at least one of its works
+                // is inside the scroll window. Full data still computes the
+                // counts/totals above — this only defers DOM.
+                const secHasVisible =
+                  (sec.lines || []).some((l) => visibleWorkIds.has(Number(l.id)))
+                  || (sec.subSections || []).some((sub) =>
+                    (sub.lines || []).some((l) => visibleWorkIds.has(Number(l.id))));
+                if (!secHasVisible) return null;
                 const collapsed = !!collapsedSections[sec.name];
                 return (
                   <div key={sec.name} className="mb-6">
@@ -2276,6 +2390,8 @@ export default function SmetaManagementTab({ project }) {
                         return min;
                       };
                       const renderLineEntry = (ln) => {
+                        // Outside the scroll window — withhold until scrolled to.
+                        if (!visibleWorkIds.has(Number(ln.id))) return null;
                         const subs = subByParent.get(Number(ln.id)) || [];
                         const subStages = subs.filter(isSubStageRow);
                         return (
@@ -2409,6 +2525,8 @@ export default function SmetaManagementTab({ project }) {
                             const subName = normTxt(sub.name);
                             let bucketSkipped = false;
                             const visibleLines = (sub.lines || []).filter((ln) => {
+                              // Outside the scroll window — withhold for now.
+                              if (!visibleWorkIds.has(Number(ln.id))) return false;
                               if (bucketSkipped) return true;
                               if (normTxt(ln.name) !== subName) return true;
                               const lnSubs = subByParent.get(Number(ln.id)) || [];
@@ -2714,6 +2832,14 @@ export default function SmetaManagementTab({ project }) {
                   </div>
                 );
               })
+            )}
+            {/* Infinite-scroll sentinel — when it scrolls into view the
+                window grows by another page of works. Rendered only while
+                there are still works outside the window. */}
+            {!loadingLines && visibleWorkCount < totalWorks && (
+              <div ref={loadMoreRef} className="py-6 flex items-center justify-center">
+                <Loader className="py-0" size="w-5 h-5" />
+              </div>
             )}
           </div>
         </div>
