@@ -545,11 +545,17 @@ export default function SmetaManagementTab({ project }) {
   // would re-fire each render, triggering an infinite request loop
   // (one request per render × ~30 renders/s before the rate-limiter
   // returned 429s).
-  const loadSnapshots = useCallback(async (id) => {
-    if (!id) { setSnapshots([]); return; }
+  // Formalar tarixi is scoped to the whole PROJECT, not the selected block.
+  // Forma 2 iterations are project-level (one open per project), but each
+  // freeze pins its snapshot to whichever block's estimate was active — so a
+  // per-estimate query showed nothing whenever the user viewed a different
+  // block than the one they froze from. Listing by project mirrors the
+  // iteration strip; the "Blok" column shows which block each row came from.
+  const loadSnapshots = useCallback(async (projId) => {
+    if (!projId) { setSnapshots([]); return; }
     setLoadingSnapshots(true);
     try {
-      const rows = await constructionService.listForm2Snapshots(id);
+      const rows = await constructionService.listProjectForm2Snapshots(projId);
       setSnapshots(Array.isArray(rows) ? rows : []);
     } catch (e) {
       toast.error(formatApiError(e, t, 'Xatolik'));
@@ -580,31 +586,31 @@ export default function SmetaManagementTab({ project }) {
   // (empty-dep useCallback), and listing them would put us right back
   // in the infinite loop if the empty-dep guarantee ever drifts.
   useEffect(() => {
-    if (page === 'history') loadSnapshots(estimateId);
+    if (page === 'history') loadSnapshots(project?.id);
     if (page === 'audit')   loadAudit(estimateId, auditFilter);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, estimateId, auditFilter]);
+  }, [page, estimateId, auditFilter, project?.id]);
 
   // Background prefetch of snapshot + audit counts so the inner-tab badges
   // ("Formalar tarixi 2", "O'zgarishlar jurnali 13" in v23) show real
   // numbers even before the user opens those tabs. One request each per
   // estimate change; cheap because both endpoints return small payloads.
   useEffect(() => {
-    if (!estimateId) return;
     let cancelled = false;
-    if (page !== 'history') {
-      constructionService.listForm2Snapshots(estimateId)
+    // Snapshot count badge is project-wide (see loadSnapshots note above).
+    if (page !== 'history' && project?.id) {
+      constructionService.listProjectForm2Snapshots(project.id)
         .then((rows) => { if (!cancelled) setSnapshots(Array.isArray(rows) ? rows : []); })
         .catch(() => {});
     }
-    if (page !== 'audit') {
+    if (page !== 'audit' && estimateId) {
       constructionService.listSmetaAudit(estimateId, { limit: 200 })
         .then((rows) => { if (!cancelled) setAuditEntries(Array.isArray(rows) ? rows : []); })
         .catch(() => {});
     }
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [estimateId]);
+  }, [estimateId, project?.id]);
 
   // ── Load Forma 2 iterations ──────────────────────────────────────
   // Powers the iteration tab strip + the isFrozenView gate that puts
@@ -636,6 +642,14 @@ export default function SmetaManagementTab({ project }) {
     [iterations, activeIterationId],
   );
   const isFrozenView = activeIteration ? activeIteration.status === 'frozen' : false;
+
+  // The deletable Forma 2 is the current OPEN (joriy) one — deleting it
+  // re-opens the frozen iteration before it (see handleDeleteIteration). That
+  // is only possible when there's a frozen predecessor to roll back into.
+  const hasFrozenIteration = useMemo(
+    () => iterations.some((it) => it.status === 'frozen'),
+    [iterations],
+  );
 
   // ── Load per-line period_fakt for the active iteration ───────────
   // Same fetch StagesTabV2 does — keeps the Smeta boshqaruvi FAKT
@@ -684,7 +698,7 @@ export default function SmetaManagementTab({ project }) {
       );
       toast.success(t('snapshot_saved') || 'Forma 2 saqlandi');
       // If the user is currently viewing the History tab refresh the list.
-      if (page === 'history') loadSnapshots(estimateId);
+      if (page === 'history') loadSnapshots(project?.id);
       // Bump the iteration strip so the new open iter shows up and the
       // frozen one moves out of "joriy" without a full page reload.
       setIterRefreshTick((n) => n + 1);
@@ -705,14 +719,41 @@ export default function SmetaManagementTab({ project }) {
         try {
           await constructionService.deleteForm2Snapshot(snap.id);
           toast.success(t('deleted') || "O'chirildi");
-          loadSnapshots(estimateId);
+          loadSnapshots(project?.id);
         } catch (e) {
           toast.error(formatApiError(e, t, 'Xatolik'));
         }
       },
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [estimateId]);
+  }, [project?.id]);
+
+  // Delete the current OPEN (joriy) Forma 2. The backend removes it and
+  // re-opens the frozen iteration before it (dropping that one's snapshot),
+  // so the strip rolls back one step. Refreshes the iteration strip and the
+  // history list; the now-reopened predecessor becomes the active tab.
+  const handleDeleteIteration = useCallback((iter) => {
+    if (!iter?.id || !project?.id) return;
+    setConfirmModal({
+      tone: 'red',
+      title: t('forma2_delete_title') || "Joriy Forma 2 ni o'chirish",
+      body: t('forma2_delete_confirm')
+        || "Joriy Forma 2 o'chiriladi va oldingisi muzlatishdan chiqariladi (qayta tahrirlash mumkin bo'ladi). Davom etilsinmi?",
+      confirmLabel: t('delete') || "O'chirish",
+      onConfirm: async () => {
+        try {
+          const res = await constructionService.deleteForm2Iteration(project.id, iter.id);
+          toast.success(t('forma2_deleted') || "Forma 2 o'chirildi");
+          if (res?.reopened_iteration_id) setActiveIterationId(res.reopened_iteration_id);
+          setIterRefreshTick((n) => n + 1);
+          if (page === 'history') loadSnapshots(project?.id);
+        } catch (e) {
+          toast.error(formatApiError(e, t, 'Xatolik'));
+        }
+      },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project?.id, page]);
 
   const handleViewSnapshot = useCallback(async (snap) => {
     if (!snap?.id) return;
@@ -1905,32 +1946,55 @@ export default function SmetaManagementTab({ project }) {
                   {iterations.map((it) => {
                     const active = activeIterationId === it.id;
                     const isOpen = it.status === 'open';
+                    // Only the current (joriy) Forma 2 is deletable — and only
+                    // when there's a frozen iteration before it to unfreeze,
+                    // and the user has construction delete permission.
+                    const canDeleteThis = canDeleteConstruction && isOpen && hasFrozenIteration;
                     return (
-                      <button
+                      <div
                         key={it.id}
-                        type="button"
-                        onClick={() => setActiveIterationId(it.id)}
-                        className="px-4 py-2 rounded-lg text-[13px] font-semibold flex items-center gap-2 transition"
-                        style={{
-                          background: active ? '#0F172A' : '#FFFFFF',
-                          color: active ? '#FFFFFF' : '#64748B',
-                          border: `1.5px solid ${active ? '#0F172A' : '#E5E7EB'}`,
-                        }}
-                        title={isOpen
-                          ? (t('forma2_open_editable') || 'Joriy iteratsiya — tahrirlash mumkin')
-                          : (t('forma2_frozen_readonly') || 'Muzlatilgan — faqat ko\'rish')}
+                        className="flex items-center rounded-lg overflow-hidden"
+                        style={{ border: `1.5px solid ${active ? '#0F172A' : '#E5E7EB'}` }}
                       >
-                        <span>📄 Forma 2 #{it.iteration_seq}</span>
-                        <span
-                          className="text-[10px] px-2 py-0.5 rounded-full font-bold"
+                        <button
+                          type="button"
+                          onClick={() => setActiveIterationId(it.id)}
+                          className="px-4 py-2 text-[13px] font-semibold flex items-center gap-2 transition"
                           style={{
-                            background: active ? (isOpen ? '#047857' : '#64748B') : (isOpen ? '#D1FAE5' : '#E5E7EB'),
-                            color:      active ? '#FFFFFF' : (isOpen ? '#047857' : '#64748B'),
+                            background: active ? '#0F172A' : '#FFFFFF',
+                            color: active ? '#FFFFFF' : '#64748B',
                           }}
+                          title={isOpen
+                            ? (t('forma2_open_editable') || 'Joriy iteratsiya — tahrirlash mumkin')
+                            : (t('forma2_frozen_readonly') || 'Muzlatilgan — faqat ko\'rish')}
                         >
-                          {isOpen ? (t('current_label') || 'joriy') : (t('frozen_label') || 'muzlatilgan')}
-                        </span>
-                      </button>
+                          <span>📄 Forma 2 #{it.iteration_seq}</span>
+                          <span
+                            className="text-[10px] px-2 py-0.5 rounded-full font-bold"
+                            style={{
+                              background: active ? (isOpen ? '#047857' : '#64748B') : (isOpen ? '#D1FAE5' : '#E5E7EB'),
+                              color:      active ? '#FFFFFF' : (isOpen ? '#047857' : '#64748B'),
+                            }}
+                          >
+                            {isOpen ? (t('current_label') || 'joriy') : (t('frozen_label') || 'muzlatilgan')}
+                          </span>
+                        </button>
+                        {canDeleteThis && (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); handleDeleteIteration(it); }}
+                            className="h-full px-2 py-2 flex items-center justify-center transition hover:bg-red-50"
+                            style={{
+                              background: active ? '#1E293B' : '#FFFFFF',
+                              color: '#EF4444',
+                              borderLeft: `1px solid ${active ? '#334155' : '#E5E7EB'}`,
+                            }}
+                            title={t('forma2_delete_title') || "Forma 2 ni o'chirish"}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     );
                   })}
                 </div>
@@ -2680,7 +2744,7 @@ export default function SmetaManagementTab({ project }) {
             snapshots={snapshots}
             onView={handleViewSnapshot}
             onDelete={handleDeleteSnapshot}
-            onRefresh={() => loadSnapshots(estimateId)}
+            onRefresh={() => loadSnapshots(project?.id)}
             onSaveCurrent={() => setForm2Open(true)}
           />
         </div>

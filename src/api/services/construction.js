@@ -471,6 +471,19 @@ export const constructionService = {
     return response.data.data || [];
   },
 
+  // Project-wide history: every saved Forma 2 across all of the project's
+  // blocks/estimates, newest first. Forma 2 iterations are a project-level
+  // series, but each freeze pins its snapshot to whichever block was active,
+  // so the per-estimate list above hides freezes made from a different block.
+  // The Formalar tarixi tab uses this so the history mirrors the iteration
+  // strip; each row carries building_name to show which block it came from.
+  async listProjectForm2Snapshots(projectId) {
+    const response = await apiClient.get(
+      `/construction/projects/${projectId}/form2-snapshots`,
+    );
+    return response.data.data || [];
+  },
+
   async getForm2Snapshot(snapshotId) {
     const response = await apiClient.get(
       `/construction/form2-snapshots/${snapshotId}`,
@@ -534,6 +547,18 @@ export const constructionService = {
     const response = await apiClient.post(
       `/construction/projects/${projectId}/form2-iterations`,
       payload,
+    );
+    return response.data.data;
+  },
+
+  // Delete (undo) the most recent frozen Forma 2. The server re-opens that
+  // iteration for editing, removes the empty open iteration the freeze had
+  // created, and deletes the associated snapshot from Formalar tarixi. Only
+  // the latest frozen iteration is deletable; the backend 409s if the open
+  // iteration already has entered fakt.
+  async deleteForm2Iteration(projectId, iterationId) {
+    const response = await apiClient.delete(
+      `/construction/projects/${projectId}/form2-iterations/${iterationId}`,
     );
     return response.data.data;
   },
