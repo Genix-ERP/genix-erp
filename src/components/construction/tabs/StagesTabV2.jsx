@@ -13,8 +13,6 @@ import { formatApiError } from '@/utils/apiErrors';
 import AddResourcePickerModal from '@/components/construction/AddResourcePickerModal';
 import AddSubWorkModal from '@/components/construction/AddSubWorkModal';
 import { sortLinesManualFirst, sortLinesManualFirstInPlace } from '@/components/construction/utils/sortLines';
-import Form2Preview from '@/components/construction/Form2Preview';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
 
 // =====================================================================
 // StagesTabV2 — full port of construction_module_v2.html
@@ -515,19 +513,11 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
   // display read-only — the fakt inputs are disabled and the cumulative
   // progress is rendered as it stood at freeze time.
   //
-  // The "+ Forma 2 yaratish" button on this strip POSTs to the freeze
-  // endpoint, which also writes a construction_form2_snapshot row so the
-  // Smeta boshqaruvi → Formalar tarixi list automatically shows the new
-  // entry without a separate "Save snapshot" click.
+  // Creating/freezing and deleting Forma 2 iterations lives on the Smeta
+  // boshqaruvi tab. Here the strip is display-only — selecting a tab just
+  // changes which iteration's period_fakt the works table shows.
   const [iterations, setIterations] = useState([]);             // [{id, iteration_seq, status, ...}]
   const [activeIterationId, setActiveIterationId] = useState(null);
-  const [freezingIteration, setFreezingIteration] = useState(false);
-  // "+ Forma 2 yaratish" now opens the same Form2Preview modal the Smeta
-  // boshqaruvi tab uses — the user fills in period dates, other-costs %,
-  // VAT toggle and act number, then clicking Save inside the modal calls
-  // performFreeze with that payload (vs. our prior empty POST which made
-  // a zero-everything snapshot the foreman couldn't actually print).
-  const [form2Open, setForm2Open] = useState(false);
   // Per-iteration period_fakt for the currently SELECTED iteration tab.
   // Map<estimate_line_id, period_fakt>. Rebuilt every time the user
   // switches tabs or the lines refresh. Used as the BAJARILDI input
@@ -1478,45 +1468,6 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
     }
   }, [t]);
 
-  // Freeze the open iteration, write the snapshot the Form2Preview modal
-  // just composed, and open the next iteration. `payload` is whatever
-  // Form2Preview's Save button emits — period dates, other_costs_pct,
-  // use_vat, totals, act_number, and snapshot_data (the full lines+
-  // summary JSON). The backend writes it into construction_form2_snapshot
-  // in the same transaction as the freeze, so Formalar tarixi
-  // automatically gets a real, printable entry.
-  //
-  // payload may be undefined when callers want a no-input freeze (kept
-  // for future use); we forward {} in that case.
-  const performFreeze = useCallback(async (payload) => {
-    if (!project?.id || freezingIteration) return;
-    setFreezingIteration(true);
-    try {
-      const body = payload || {};
-      // The iteration endpoint defaults estimate_id to the project's
-      // first estimate when omitted. When the foreman is actively on a
-      // building/estimate, pin that one so multi-estimate projects
-      // snapshot the right one.
-      if (!body.estimate_id && activeEstimateId) {
-        body.estimate_id = activeEstimateId;
-      }
-      const res = await constructionService.createForm2Iteration(project.id, body);
-      toast.success(t('forma2_frozen_opened_next') || "Forma 2 muzlatildi va keyingisi ochildi");
-      // Snap to the newly-opened iteration so the user can keep typing
-      // fakt without reaching for the tab strip.
-      if (res?.new_iteration_id) {
-        setActiveIterationId(res.new_iteration_id);
-      } else {
-        setActiveIterationId(null);
-      }
-      setForm2Open(false);
-      setRefreshTick((n) => n + 1);
-    } catch (e) {
-      toast.error(formatApiError(e, t, 'Xatolik'));
-    } finally {
-      setFreezingIteration(false);
-    }
-  }, [project?.id, activeEstimateId, freezingIteration, t]);
 
   const submitWork              = (w) => transitionRow(t('sent_for_review'),     () => constructionService.submitWork(w.id));
   const confirmAsSupervisor     = (w) => transitionRow(t('confirmed'),                    () => constructionService.confirmWorkSupervisor(w.id));
@@ -1674,33 +1625,17 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
         />
       </div>
 
-      {/* FORMA 2 ITERATION STRIP — migration 419.
+      {/* FORMA 2 ITERATION STRIP — migration 419. Read-only here.
          Each tab = one submission of the project's Forma 2. The latest tab
          carries "(joriy)" and is editable; older tabs are read-only and
-         show the historical state at the moment of freeze. Pressing
-         "+ Forma 2 yaratish" freezes the current open and opens N+1; the
-         same call also writes a construction_form2_snapshot row so Smeta
-         boshqaruvi → Formalar tarixi shows the new entry automatically. */}
+         show the historical state at the moment of freeze. Creating and
+         deleting Forma 2s lives on the Smeta boshqaruvi tab — this strip is
+         display-only so the foreman can switch which iteration's numbers
+         the works table shows. */}
       {iterations.length > 0 && (
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
             <h2 className="text-base font-bold text-slate-900">📄 {t('forma2_series') || 'Forma 2 iteratsiyalari'}</h2>
-            <button
-              type="button"
-              // Opens Form2Preview where the foreman fills in period
-              // dates, other-costs %, VAT toggle and act number — same
-              // modal used on the Smeta boshqaruvi tab. When the user
-              // hits Save inside the modal, Form2Preview hands us a
-              // fully-composed snapshot payload via onSaveSnapshot →
-              // performFreeze, which freezes + opens next in one POST.
-              onClick={() => setForm2Open(true)}
-              disabled={freezingIteration || !iterations.some((it) => it.status === 'open')}
-              className="px-3 py-1.5 rounded-lg text-[12px] font-semibold border border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100 transition inline-flex items-center gap-1.5 disabled:opacity-50"
-            >
-              {freezingIteration && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              <span className="text-[14px] leading-none">+</span>
-              {t('create_forma2') || "Forma 2 yaratish"}
-            </button>
           </div>
           <div className="flex gap-2 flex-wrap">
             {iterations.map((it) => {
@@ -2033,27 +1968,6 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
           t={t}
         />
       )}
-
-      {/* Forma 2 freeze modal — Form2Preview is the same renderer Smeta
-         boshqaruvi uses for "Forma 2 ni yaratish". The foreman fills in
-         period dates, other-costs %, VAT toggle and the act number;
-         pressing Save inside Form2Preview emits the full snapshot
-         payload to onSaveSnapshot → performFreeze, which freezes the
-         open iteration AND writes the snapshot AND opens the next one,
-         all in one server transaction (migration 419). */}
-      <Dialog open={form2Open} onOpenChange={setForm2Open}>
-        <DialogContent className="max-w-[1200px] w-[95vw] h-[95vh] p-0 overflow-hidden flex flex-col">
-          <div className="flex-1 overflow-auto bg-stone-100">
-            <Form2Preview
-              estimate={estimates.find((e) => Number(e.id) === Number(activeEstimateId)) || null}
-              lines={lines}
-              project={project}
-              onClose={() => setForm2Open(false)}
-              onSaveSnapshot={performFreeze}
-            />
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* Add-resource modal — opened from the per-row "+" button. The new
          sub-line attaches to the work via parent_line_id, so it shows up
