@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { constructionService } from '@/api/services/construction';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -114,6 +114,16 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 20;
+
+  // Infinite-scroll window for the expanded estimate's line table. The
+  // table is a hierarchy (parent line + its sub-lines/resources), and a
+  // single estimate can carry thousands of rows (3611+ on real data), so
+  // we only paint the first N ROOT (parent) lines and reveal more as the
+  // user scrolls. Counting roots — never resources — means a parent always
+  // renders together with all of its children; nothing gets split.
+  const LINES_PER_PAGE = 20;
+  const [visibleLineCount, setVisibleLineCount] = useState(LINES_PER_PAGE);
+  const lineLoadMoreRef = React.useRef(null);
 
   // Import/Export
   const [showImportModal, setShowImportModal] = useState(false);
@@ -261,7 +271,54 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
     }
   };
 
-  const expandedLines = expandedEstimate ? (estimateLines[expandedEstimate] || []) : [];
+  const expandedLines = useMemo(
+    () => (expandedEstimate ? (estimateLines[expandedEstimate] || []) : []),
+    [expandedEstimate, estimateLines],
+  );
+
+  // Count of ROOT (parent) lines in the expanded estimate — mirrors the
+  // root/sub-line classification the line table uses below. Drives the
+  // infinite-scroll window (how many roots to paint) and the sentinel.
+  const expandedRootCount = useMemo(() => {
+    const itemNumToId = new Map();
+    for (const ln of expandedLines) {
+      if (!ln.parent_line_id && ln.item_number) itemNumToId.set(String(ln.item_number), ln.id);
+    }
+    let roots = 0;
+    for (const ln of expandedLines) {
+      if (ln.parent_line_id) continue;
+      if (typeof ln.item_number === 'string') {
+        const m = ln.item_number.match(/^(\d+)-(\d+)$/);
+        if (m) {
+          const resolved = itemNumToId.get(m[1]);
+          if (resolved && resolved !== ln.id) continue; // it's a sub-line
+        }
+      }
+      roots += 1;
+    }
+    return roots;
+  }, [expandedLines]);
+
+  // Reset the window each time a different estimate is expanded.
+  useEffect(() => {
+    setVisibleLineCount(LINES_PER_PAGE);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expandedEstimate]);
+
+  // Grow the window as the sentinel below the table scrolls into view.
+  useEffect(() => {
+    const el = lineLoadMoreRef.current;
+    if (!el) return undefined;
+    if (visibleLineCount >= expandedRootCount) return undefined;
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) {
+        setVisibleLineCount((n) => Math.min(n + LINES_PER_PAGE, expandedRootCount));
+      }
+    }, { rootMargin: '400px 0px' });
+    io.observe(el);
+    return () => io.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expandedEstimate, expandedRootCount, visibleLineCount]);
 
 
   // Load estimates
@@ -1264,7 +1321,12 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                         );
                                       };
 
-                                      for (const parent of roots) {
+                                      // Only paint the first N roots; the rest
+                                      // are revealed as the user scrolls the
+                                      // sentinel below into view. Children ride
+                                      // with their parent, so nothing is split.
+                                      const visibleRoots = roots.slice(0, visibleLineCount);
+                                      for (const parent of visibleRoots) {
                                         rows.push(renderLine(parent, false, null));
                                         const children = byParent.get(parent.id) || [];
                                         for (const c of children) {
@@ -1310,6 +1372,15 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                   )}
                                 </table>
                               </div>
+
+                              {/* Infinite-scroll sentinel — reveals the next
+                                  page of lines as it scrolls into view. Only
+                                  while more root lines remain. */}
+                              {visibleLineCount < expandedRootCount && (
+                                <div ref={lineLoadMoreRef} className="py-4 flex items-center justify-center">
+                                  <Loader className="py-0" size="w-4 h-4" />
+                                </div>
+                              )}
 
                               {/* Summary — only for resurs type */}
                               {est.source_type === 'resurs' && (
