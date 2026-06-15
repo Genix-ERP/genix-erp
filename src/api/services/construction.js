@@ -876,6 +876,16 @@ export const constructionService = {
     return response.data.data;
   },
 
+  // Stat-card aggregates computed server-side (cost breakdown + counts), so
+  // clients don't have to load every line to show the headline numbers.
+  // Returns: { estimate_id, labor, machines, materials, grand, work_count,
+  //            filled_count, resource_count }. Sum across a block's estimate
+  // ids for the block-level totals.
+  async getEstimateSummary(estimateId) {
+    const response = await apiClient.get(`/construction/estimates/${estimateId}/summary`);
+    return response.data.data;
+  },
+
   // Paginated version — returns { data, meta }
   async listEstimateLinesPaginated(estimateId, params = {}) {
     const response = await apiClient.get(`/construction/estimates/${estimateId}/lines`, { params });

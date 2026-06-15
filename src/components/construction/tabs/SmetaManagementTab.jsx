@@ -958,6 +958,40 @@ export default function SmetaManagementTab({ project }) {
     return buckets.size;
   }, [lines]);
 
+  // Server-computed stat-card aggregates — the same numbers as `kpis` /
+  // `resourceCount` but produced in SQL (see GetEstimateSummary), so a
+  // client doesn't have to hold the whole estimate in memory. Summed across
+  // the block's estimate ids. Falls back to the local kpis until it arrives
+  // (or if the endpoint is unavailable), so the web app is never blocked.
+  const [serverKpis, setServerKpis] = useState(null);
+  useEffect(() => {
+    if (activeEstimateIds.length === 0) { setServerKpis(null); return undefined; }
+    let cancelled = false;
+    Promise.all(activeEstimateIds.map((id) =>
+      constructionService.getEstimateSummary(id).catch(() => null)))
+      .then((rows) => {
+        if (cancelled) return;
+        const ok = rows.filter(Boolean);
+        if (ok.length === 0) { setServerKpis(null); return; }
+        setServerKpis(ok.reduce((a, r) => ({
+          labor: a.labor + (Number(r.labor) || 0),
+          machines: a.machines + (Number(r.machines) || 0),
+          materials: a.materials + (Number(r.materials) || 0),
+          grand: a.grand + (Number(r.grand) || 0),
+          filled: a.filled + (Number(r.filled_count) || 0),
+          total: a.total + (Number(r.work_count) || 0),
+          resourceCount: a.resourceCount + (Number(r.resource_count) || 0),
+        }), { labor: 0, machines: 0, materials: 0, grand: 0, filled: 0, total: 0, resourceCount: 0 }));
+      });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeEstimateIds]);
+
+  // Stat cards prefer the server summary; everything falls back to the local
+  // computation so behaviour is unchanged when the endpoint hasn't loaded.
+  const displayKpis = serverKpis || kpis;
+  const displayResourceCount = serverKpis ? serverKpis.resourceCount : resourceCount;
+
   const sections = useMemo(() => {
     // Per-parent effective cost = Σ resource cost across its sub-lines,
     // where each sub-line follows the same plan-vs-topup rule used in
@@ -1994,7 +2028,7 @@ export default function SmetaManagementTab({ project }) {
       >
         {[
           { key: 'works',     icon: ListChecks,  label: t('inner_tab_works')     || 'Ishlar',              count: kpis.total },
-          { key: 'resources', icon: Boxes,       label: t('inner_tab_resources') || 'Resurslar',           count: resourceCount },
+          { key: 'resources', icon: Boxes,       label: t('inner_tab_resources') || 'Resurslar',           count: displayResourceCount },
           { key: 'history',   icon: HistoryIcon, label: t('inner_tab_history')   || 'Formalar tarixi',     count: snapshots.length },
           { key: 'audit',     icon: Activity,    label: t('inner_tab_audit')     || "O'zgarishlar jurnali", count: auditEntries.length },
         ].map((tab) => {
@@ -2115,14 +2149,14 @@ export default function SmetaManagementTab({ project }) {
 
           {/* Stats */}
           <div className="px-8 py-6 grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
-            <StatCard icon={Users} variant="labor"     label={t('labor_resources')       || 'Mehnat resurslari'}     value={kpis.labor} />
-            <StatCard icon={Wrench} variant="mach"     label={t('construction_machines') || 'Qurilish mashinalari'}  value={kpis.machines} />
-            <StatCard icon={Package} variant="mat"     label={t('material_resources')    || 'Material resurslar'}    value={kpis.materials} />
+            <StatCard icon={Users} variant="labor"     label={t('labor_resources')       || 'Mehnat resurslari'}     value={displayKpis.labor} />
+            <StatCard icon={Wrench} variant="mach"     label={t('construction_machines') || 'Qurilish mashinalari'}  value={displayKpis.machines} />
+            <StatCard icon={Package} variant="mat"     label={t('material_resources')    || 'Material resurslar'}    value={displayKpis.materials} />
             <StatCard
-              icon={Grid3x3} variant="grand" label={t('total') || 'JAMI'} value={kpis.grand}
+              icon={Grid3x3} variant="grand" label={t('total') || 'JAMI'} value={displayKpis.grand}
               meta={
                 <>
-                  Hajm kiritilgan: <span style={{ color: C.teal, fontWeight: 600 }}>{kpis.filled}</span> / {kpis.total}
+                  Hajm kiritilgan: <span style={{ color: C.teal, fontWeight: 600 }}>{displayKpis.filled}</span> / {displayKpis.total}
                 </>
               }
             />
