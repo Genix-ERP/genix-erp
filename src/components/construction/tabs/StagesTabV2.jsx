@@ -490,11 +490,6 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
   const [activeEstimateId, setActiveEstimateId] = useState(null); // edinich estimate id of active building
   const [loading, setLoading] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0); // bump to force a reload
-  // Tracks the last building whose lines we progressively paged in. When a
-  // reload fires for the SAME building (a refreshTick bump after a workflow
-  // transition), we pull the full set in one request instead of re-paging
-  // 20-at-a-time — only a genuine block switch / first load pages.
-  const pagedBuildingRef = React.useRef(undefined);
   const [buildingStageCounts, setBuildingStageCounts] = useState({}); // buildingId → stage count
 
   // ── Infinite-scroll render window ─────────────────────────────────
@@ -799,37 +794,16 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
             ? await constructionService.listEstimateLines(vorEst.id, { page_size: 5000 }).catch(() => [])
             : [];
           if (cancelled) return;
-          // Единич lines (the rendered stage tree). A same-building reload
-          // (post-transition refresh) pulls the full set in one request;
-          // first load / block switch pages the backend in 20-item chunks
-          // and appends so the first chunk paints quickly (fast on mobile)
-          // and the rest stream in. deriveStages / progress recompute on
-          // each chunk and end up complete once every page has loaded.
-          const isRefresh = pagedBuildingRef.current === activeBuildingId;
-          pagedBuildingRef.current = activeBuildingId;
-          if (isRefresh) {
-            const rows = await constructionService.listEstimateLines(matchedEst.id, { page_size: 5000 });
-            if (cancelled) return;
-            setLines(Array.isArray(rows) ? rows : (rows?.data || rows?.items || []));
-            setLoading(false);
-          } else {
-            const EDINICH_PAGE_SIZE = 20;
-            const allEdinich = [];
-            let edinichPage = 1;
-            for (;;) {
-              const { data, meta } = await constructionService.listEstimateLinesPaginated(
-                matchedEst.id, { page: edinichPage, page_size: EDINICH_PAGE_SIZE },
-              );
-              if (cancelled) return;
-              const chunk = Array.isArray(data) ? data : (data?.items || []);
-              allEdinich.push(...chunk);
-              setLines([...allEdinich]);
-              if (edinichPage === 1) setLoading(false); // paint after first chunk
-              const hasNext = meta?.has_next ?? (chunk.length >= EDINICH_PAGE_SIZE);
-              if (chunk.length < EDINICH_PAGE_SIZE || !hasNext) break;
-              edinichPage += 1;
-            }
-          }
+          // Единич lines (the rendered stage tree) — pulled in ONE request.
+          // The web app derives the whole stage tree, progress and budget
+          // from the full set, so paging it 20-at-a-time only caused a slow,
+          // flickering load on big blocks. (Mobile uses the 20-paged lines
+          // endpoint + the /summary endpoint instead.) The `cancelled` guard
+          // above already drops a stale load when the user switches block.
+          const rows = await constructionService.listEstimateLines(matchedEst.id, { page_size: 5000 });
+          if (cancelled) return;
+          setLines(Array.isArray(rows) ? rows : (rows?.data || rows?.items || []));
+          setLoading(false);
           // Build the name → qty map. Excel files often disagree on
           // whitespace between the Единич and ВОР sheets — e.g.
           // "В7,5 / М-100/" vs "В7,5 /М-100/" — so we normalise by

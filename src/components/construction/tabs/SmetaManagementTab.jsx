@@ -440,12 +440,19 @@ export default function SmetaManagementTab({ project }) {
   // and the network round-trip only happens on first visit or after the
   // user presses "Yangilash" (which calls forceReloadLines below).
   const linesCacheRef = React.useRef(new Map());
+  // Monotonic token so a block-switch can invalidate an in-flight load: any
+  // setLines from a stale invocation is dropped, preventing the "shaking"
+  // (block A's load writing over block B after you switch).
+  const loadTokenRef = React.useRef(0);
   const cacheKeyFor = useCallback((ids) => {
     const idList = Array.isArray(ids) ? ids : (ids ? [ids] : []);
     return idList.slice().sort((a, b) => Number(a) - Number(b)).join(',');
   }, []);
   const loadLines = useCallback(async (ids, { force = false } = {}) => {
     const idList = Array.isArray(ids) ? ids : (ids ? [ids] : []);
+    // Invalidate any in-flight load — only the latest call may write state.
+    const token = ++loadTokenRef.current;
+    const isCurrent = () => token === loadTokenRef.current;
     if (idList.length === 0) { setLines([]); return; }
     const key = cacheKeyFor(idList);
     if (!force) {
@@ -459,50 +466,28 @@ export default function SmetaManagementTab({ project }) {
     setLoadingLines(true);
     setQtyDraft({});
     try {
+      // The web app needs the full estimate in memory (stat cards, "831"
+      // count, search, "Hammasini yoqish/o'chirish", Forma 2 freeze,
+      // material hisobi), so we pull it in ONE request per estimate — fast
+      // and stable. (Mobile, which can't hold the whole estimate, uses the
+      // 20-paged endpoint + the /summary endpoint instead.) Render windowing
+      // keeps the painted DOM small regardless of how much is loaded.
       const all = [];
-      if (force) {
-        // Refresh / "Yangilash" / post-mutation reload: pull the full set
-        // in a single request (fast, one round-trip) since we already know
-        // we want everything fresh.
-        for (const id of idList) {
-          const rows = await constructionService.listEstimateLines(id, { page_size: 5000 });
-          const arr = Array.isArray(rows) ? rows : (rows?.data || rows?.items || []);
-          all.push(...arr);
-        }
-        setLines(all);
-      } else {
-        // Initial / block-switch load: page through the backend in 20-item
-        // chunks (the backend default). The FIRST page paints immediately
-        // — fast on mobile — then the rest stream in and append, so the
-        // full set still lands in memory and the stat cards, "831" count,
-        // search, "Hammasini yoqish/o'chirish", Forma 2 freeze and material
-        // hisobi all stay correct. Render windowing (visibleWorkCount)
-        // keeps the painted DOM small no matter how much is loaded.
-        const PAGE_SIZE = 20;
-        let firstPainted = false;
-        for (const id of idList) {
-          let pageNum = 1;
-          for (;;) {
-            const { data, meta } = await constructionService.listEstimateLinesPaginated(
-              id, { page: pageNum, page_size: PAGE_SIZE },
-            );
-            const rows = Array.isArray(data) ? data : (data?.items || []);
-            all.push(...rows);
-            setLines([...all]);
-            if (!firstPainted) { setLoadingLines(false); firstPainted = true; }
-            const hasNext = meta?.has_next ?? (rows.length >= PAGE_SIZE);
-            if (rows.length < PAGE_SIZE || !hasNext) break;
-            pageNum += 1;
-          }
-        }
+      for (const id of idList) {
+        const rows = await constructionService.listEstimateLines(id, { page_size: 5000 });
+        if (!isCurrent()) return; // a newer block switch superseded us
+        const arr = Array.isArray(rows) ? rows : (rows?.data || rows?.items || []);
+        all.push(...arr);
       }
+      if (!isCurrent()) return;
       linesCacheRef.current.set(key, all);
       setLines(all);
     } catch (e) {
+      if (!isCurrent()) return;
       toast.error(formatApiError(e, t, 'Xatolik'));
       setLines([]);
     } finally {
-      setLoadingLines(false);
+      if (isCurrent()) setLoadingLines(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cacheKeyFor]);
