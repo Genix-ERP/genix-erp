@@ -372,12 +372,25 @@ export const constructionService = {
   // resources used by that one estimate so the Resurslar tab stays in sync
   // with the estimate selector at the top of the page. Without it, the
   // response covers every estimate in the project (mockup-faithful behaviour).
-  async listResourcePrices(projectId, { type, estimateId } = {}) {
+  // Returns the FULL envelope { data, meta, summary } so callers can drive
+  // infinite-scroll pagination (meta.has_next) and read the server-computed
+  // chip counts (summary.material_type_counts) and modified-price count
+  // (summary.modified_count) without re-deriving them from a partial page.
+  async listResourcePrices(projectId, { type, estimateId, materialType, q, page, pageSize } = {}) {
     const params = {};
     if (type) params.type = type;
     if (estimateId) params.estimate_id = estimateId;
+    if (materialType) params.material_type = materialType;
+    if (q) params.q = q;
+    if (page) params.page = page;
+    if (pageSize) params.page_size = pageSize;
     const response = await apiClient.get(`/construction/projects/${projectId}/resource-prices`, { params });
-    return response.data.data || [];
+    const body = response.data || {};
+    return {
+      data: Array.isArray(body.data) ? body.data : [],
+      meta: body.meta || { page: 1, page_size: pageSize || 20, total: (body.data || []).length, total_pages: 1, has_next: false, has_prev: false },
+      summary: body.summary || { material_type_counts: {}, modified_count: 0 },
+    };
   },
   async bulkUpdateResourcePrice(projectId, payload) {
     // payload: { resource_name, uom, resource_type, new_price, note?, estimate_id? }

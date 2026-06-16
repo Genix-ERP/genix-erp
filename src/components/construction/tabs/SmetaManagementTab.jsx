@@ -561,14 +561,13 @@ export default function SmetaManagementTab({ project }) {
     // Resources are a project-level concept (one cement price across every
     // estimate), so the badge counts every drifted resource regardless of
     // which estimate is selected.
-    constructionService.listResourcePrices(project.id)
-      .then((rows) => {
+    // Use the server-computed project-wide modified count (summary.modified_count)
+    // — the endpoint is paginated now, so counting a single 20-row page client-side
+    // would undercount. page_size=1 keeps the payload tiny; we only need the summary.
+    constructionService.listResourcePrices(project.id, { pageSize: 1 })
+      .then((res) => {
         if (cancelled) return;
-        const n = (rows || []).filter((r) =>
-          Number(r.original_price || 0) > 0
-          && Math.abs(Number(r.price || 0) - Number(r.original_price || 0)) > 0.01,
-        ).length;
-        setChangedCount(n);
+        setChangedCount(Number(res?.summary?.modified_count || 0));
       })
       .catch(() => { if (!cancelled) setChangedCount(0); });
     return () => { cancelled = true; };
