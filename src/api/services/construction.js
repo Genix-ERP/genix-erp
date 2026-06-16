@@ -577,12 +577,19 @@ export const constructionService = {
     return response.data.data || [];
   },
 
-  async listProjectSmetaAudit(projectId, { limit = 500 } = {}) {
+  // Paginated (page/page_size, default 20 server-side). Returns
+  // { data, meta } so the Jurnal can infinite-scroll. `action` filters by
+  // change type.
+  async listProjectSmetaAudit(projectId, { page, page_size, action } = {}) {
+    const params = {};
+    if (page) params.page = page;
+    if (page_size) params.page_size = page_size;
+    if (action) params.action = action;
     const response = await apiClient.get(
       `/construction/projects/${projectId}/smeta-audit`,
-      { params: { limit } },
+      { params },
     );
-    return response.data.data || [];
+    return { data: response.data.data || [], meta: response.data.meta || null };
   },
 
   // =====================================================

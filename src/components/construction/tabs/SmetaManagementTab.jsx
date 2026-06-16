@@ -270,7 +270,15 @@ export default function SmetaManagementTab({ project }) {
   const [snapshotPreview, setSnapshotPreview] = useState(null); // full payload from getForm2Snapshot
   const [auditEntries, setAuditEntries] = useState([]);
   const [loadingAudit, setLoadingAudit] = useState(false);
+  const [loadingMoreAudit, setLoadingMoreAudit] = useState(false);
   const [auditFilter, setAuditFilter] = useState('');
+  // Server-side pagination of the Jurnal (20/page). auditTotal drives the
+  // tab badge; auditPage/auditHasMore drive the scroll-to-load-more.
+  const AUDIT_PAGE_SIZE = 20;
+  const [auditPage, setAuditPage] = useState(1);
+  const [auditTotal, setAuditTotal] = useState(0);
+  const [auditHasMore, setAuditHasMore] = useState(false);
+  const auditMoreRef = React.useRef(null);
 
   // Generic confirmation modal — replaces window.confirm() calls for
   // destructive bulk actions (Hammasini yoqish / Hammasini o'chirish /
@@ -595,20 +603,52 @@ export default function SmetaManagementTab({ project }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const loadAudit = useCallback(async (id, action) => {
-    if (!id) { setAuditEntries([]); return; }
+  // The Jurnal is PROJECT-scoped (like Formalar tarixi). Many changes —
+  // notably resource price edits — are logged project-wide (estimate_id
+  // NULL), and changes also happen across sibling blocks; an estimate-scoped
+  // query would miss all of those and the journal would look empty even
+  // though changes exist. `projId` is the project id.
+  const loadAudit = useCallback(async (projId, action) => {
+    if (!projId) { setAuditEntries([]); setAuditTotal(0); setAuditHasMore(false); return; }
     setLoadingAudit(true);
     try {
-      const rows = await constructionService.listSmetaAudit(id, { limit: 200, action: action || undefined });
-      setAuditEntries(Array.isArray(rows) ? rows : []);
+      const { data, meta } = await constructionService.listProjectSmetaAudit(projId, {
+        page: 1, page_size: AUDIT_PAGE_SIZE, action: action || undefined,
+      });
+      const rows = Array.isArray(data) ? data : [];
+      setAuditEntries(rows);
+      setAuditPage(1);
+      setAuditTotal(meta?.total ?? rows.length);
+      setAuditHasMore(meta?.has_next ?? (rows.length >= AUDIT_PAGE_SIZE));
     } catch (e) {
       toast.error(formatApiError(e, t, 'Xatolik'));
-      setAuditEntries([]);
+      setAuditEntries([]); setAuditTotal(0); setAuditHasMore(false);
     } finally {
       setLoadingAudit(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Fetch the next page and append — driven by the scroll sentinel.
+  const loadMoreAudit = useCallback(async () => {
+    if (loadingMoreAudit || !auditHasMore || !project?.id) return;
+    setLoadingMoreAudit(true);
+    const next = auditPage + 1;
+    try {
+      const { data, meta } = await constructionService.listProjectSmetaAudit(project.id, {
+        page: next, page_size: AUDIT_PAGE_SIZE, action: auditFilter || undefined,
+      });
+      const rows = Array.isArray(data) ? data : [];
+      setAuditEntries((prev) => [...prev, ...rows]);
+      setAuditPage(next);
+      setAuditHasMore(meta?.has_next ?? (rows.length >= AUDIT_PAGE_SIZE));
+    } catch {
+      /* keep what we have; the sentinel will retry on next scroll */
+    } finally {
+      setLoadingMoreAudit(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadingMoreAudit, auditHasMore, project?.id, auditPage, auditFilter]);
 
   // Lazily refresh whenever the user opens Tarix or Jurnal.
   // Deps must NOT include loadSnapshots/loadAudit — they're stable
@@ -616,9 +656,22 @@ export default function SmetaManagementTab({ project }) {
   // in the infinite loop if the empty-dep guarantee ever drifts.
   useEffect(() => {
     if (page === 'history') loadSnapshots(project?.id);
-    if (page === 'audit')   loadAudit(estimateId, auditFilter);
+    if (page === 'audit')   loadAudit(project?.id, auditFilter);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, estimateId, auditFilter, project?.id]);
+
+  // Infinite scroll for the Jurnal — fetch the next 20 when the sentinel
+  // at the bottom of the list scrolls into view.
+  useEffect(() => {
+    if (page !== 'audit') return undefined;
+    const el = auditMoreRef.current;
+    if (!el || !auditHasMore) return undefined;
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) loadMoreAudit();
+    }, { rootMargin: '300px 0px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [page, auditHasMore, loadMoreAudit]);
 
   // Background prefetch of snapshot + audit counts so the inner-tab badges
   // ("Formalar tarixi 2", "O'zgarishlar jurnali 13" in v23) show real
@@ -632,9 +685,16 @@ export default function SmetaManagementTab({ project }) {
         .then((rows) => { if (!cancelled) setSnapshots(Array.isArray(rows) ? rows : []); })
         .catch(() => {});
     }
-    if (page !== 'audit' && estimateId) {
-      constructionService.listSmetaAudit(estimateId, { limit: 200 })
-        .then((rows) => { if (!cancelled) setAuditEntries(Array.isArray(rows) ? rows : []); })
+    if (page !== 'audit' && project?.id) {
+      constructionService.listProjectSmetaAudit(project.id, { page: 1, page_size: AUDIT_PAGE_SIZE })
+        .then(({ data, meta }) => {
+          if (cancelled) return;
+          const rows = Array.isArray(data) ? data : [];
+          setAuditEntries(rows);
+          setAuditPage(1);
+          setAuditTotal(meta?.total ?? rows.length);
+          setAuditHasMore(meta?.has_next ?? (rows.length >= AUDIT_PAGE_SIZE));
+        })
         .catch(() => {});
     }
     return () => { cancelled = true; };
@@ -1866,7 +1926,7 @@ export default function SmetaManagementTab({ project }) {
         }}
       >
         <div>
-          <div className="text-[11px] uppercase tracking-[0.1em]" style={{ color: C.muted }}>
+          <div className="text-[13px] uppercase tracking-[0.1em]" style={{ color: C.muted }}>
             {t('production') || 'Ishlab chiqarish'} · {t('form2_breadcrumb') || 'Форма 2'} · {t('source_type_vor') || 'ВОР'}
           </div>
           <h1 className="text-[22px] font-semibold mt-1" style={{ color: C.text }}>
@@ -1883,7 +1943,7 @@ export default function SmetaManagementTab({ project }) {
           {/* Changed-count badge — only renders when something drifted. */}
           {changedCount > 0 && (
             <div
-              className="px-2.5 py-1 rounded text-[11px] font-medium flex items-center gap-1.5"
+              className="px-2.5 py-1 rounded text-[13px] font-medium flex items-center gap-1.5"
               style={{
                 background: C.tealSoft,
                 color: C.teal,
@@ -1903,7 +1963,7 @@ export default function SmetaManagementTab({ project }) {
              which account is leaving an audit trail. Falls back to
              "— kiriting —" when not signed in (matches mockup copy). */}
           <div
-            className="px-2.5 py-1.5 rounded-md text-[11px] flex items-center gap-1.5"
+            className="px-2.5 py-1.5 rounded-md text-[13px] flex items-center gap-1.5"
             style={{
               background: C.inset,
               color: userDisplay ? C.text : C.muted,
@@ -1964,7 +2024,7 @@ export default function SmetaManagementTab({ project }) {
             style={{ background: C.sec, color: C.teal, border: '1px solid rgba(13,148,136,0.3)' }}
             title={t('add_section_hint') || "Yangi bo'lim qo'shish"}
           >
-            <span className="text-[14px] leading-none font-bold">+</span>
+            <span className="text-[15px] leading-none font-bold">+</span>
             {t('add_section') || "Bo'lim qo'shish"}
           </button>
           {selectedEstimate && (
@@ -2015,7 +2075,7 @@ export default function SmetaManagementTab({ project }) {
           { key: 'works',     icon: ListChecks,  label: t('inner_tab_works')     || 'Ishlar',              count: kpis.total },
           { key: 'resources', icon: Boxes,       label: t('inner_tab_resources') || 'Resurslar',           count: displayResourceCount },
           { key: 'history',   icon: HistoryIcon, label: t('inner_tab_history')   || 'Formalar tarixi',     count: snapshots.length },
-          { key: 'audit',     icon: Activity,    label: t('inner_tab_audit')     || "O'zgarishlar jurnali", count: auditEntries.length },
+          { key: 'audit',     icon: Activity,    label: t('inner_tab_audit')     || "O'zgarishlar jurnali", count: auditTotal },
         ].map((tab) => {
           const active = page === tab.key;
           const Icon = tab.icon;
@@ -2023,7 +2083,7 @@ export default function SmetaManagementTab({ project }) {
             <button
               key={tab.key}
               onClick={() => setPage(tab.key)}
-              className="px-5 py-3 text-[13px] font-medium flex items-center gap-2 transition"
+              className="px-5 py-3 text-[15px] font-medium flex items-center gap-2 transition"
               style={{
                 color: active ? C.teal : C.dim,
                 borderBottom: active ? `2px solid ${C.teal}` : '2px solid transparent',
@@ -2034,7 +2094,7 @@ export default function SmetaManagementTab({ project }) {
               <span>{tab.label}</span>
               {(tab.count !== null && tab.count !== undefined) && (
                 <span
-                  className="text-[10px] font-mono px-1.5 py-0.5 rounded"
+                  className="text-[12px] font-mono px-1.5 py-0.5 rounded"
                   style={{
                     background: active ? C.tealSoft : C.hover,
                     color: active ? C.teal : C.muted,
@@ -2084,7 +2144,7 @@ export default function SmetaManagementTab({ project }) {
                         <button
                           type="button"
                           onClick={() => setActiveIterationId(it.id)}
-                          className="px-4 py-2 text-[13px] font-semibold flex items-center gap-2 transition"
+                          className="px-4 py-2 text-[15px] font-semibold flex items-center gap-2 transition"
                           style={{
                             background: active ? '#0F172A' : '#FFFFFF',
                             color: active ? '#FFFFFF' : '#64748B',
@@ -2095,7 +2155,7 @@ export default function SmetaManagementTab({ project }) {
                         >
                           <span>📄 Forma 2 #{it.iteration_seq}</span>
                           <span
-                            className="text-[10px] px-2 py-0.5 rounded-full font-bold"
+                            className="text-[12px] px-2 py-0.5 rounded-full font-bold"
                             style={{
                               background: active ? (isOpen ? '#047857' : '#64748B') : (isOpen ? '#D1FAE5' : '#E5E7EB'),
                               color:      active ? '#FFFFFF' : (isOpen ? '#047857' : '#64748B'),
@@ -2124,7 +2184,7 @@ export default function SmetaManagementTab({ project }) {
                   })}
                 </div>
                 {isFrozenView && (
-                  <div className="mt-3 px-3 py-2 rounded-md text-[12px] bg-amber-50 border border-amber-200 text-amber-800">
+                  <div className="mt-3 px-3 py-2 rounded-md text-[14px] bg-amber-50 border border-amber-200 text-amber-800">
                     {t('forma2_frozen_notice') || "Bu Forma 2 muzlatilgan. Yangi fakt kiritish uchun joriy iteratsiyani tanlang."}
                   </div>
                 )}
@@ -2160,14 +2220,14 @@ export default function SmetaManagementTab({ project }) {
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder={t('search_work_or_code') || "Ish nomi yoki shifr bo'yicha qidirish..."}
-                  className="w-full pl-9 pr-3 py-2.5 rounded-md text-[13px] outline-none"
+                  className="w-full pl-9 pr-3 py-2.5 rounded-md text-[15px] outline-none"
                   style={{ background: C.inset, color: C.text, border: `1px solid ${C.border2}`, fontFamily: 'inherit' }}
                 />
               </div>
               <select
                 value={sectionFilter}
                 onChange={(e) => setSectionFilter(e.target.value)}
-                className="px-3 py-2.5 rounded-md text-[13px] outline-none cursor-pointer"
+                className="px-3 py-2.5 rounded-md text-[15px] outline-none cursor-pointer"
                 style={{ background: C.inset, color: C.text, border: `1px solid ${C.border2}`, minWidth: 200 }}
               >
                 <option value="">{t('section_all') || "Barcha bo'limlar"}</option>
@@ -2294,14 +2354,14 @@ export default function SmetaManagementTab({ project }) {
                             transform: collapsed ? 'rotate(-90deg)' : 'rotate(0)',
                           }}
                         />
-                        <span className="flex-1 text-left font-semibold text-[13px] tracking-[0.02em]">{sec.name}</span>
+                        <span className="flex-1 text-left font-semibold text-[15px] tracking-[0.02em]">{sec.name}</span>
                         <span
-                          className="text-[11px] font-mono px-2 py-0.5 rounded"
+                          className="text-[13px] font-mono px-2 py-0.5 rounded"
                           style={{ background: C.inset, color: C.muted }}
                         >
                           {sec.lines.length} {t('works_count_suffix') || 'ish'}
                         </span>
-                        <span className="text-[13px] font-mono font-semibold" style={{ color: C.amber }}>
+                        <span className="text-[15px] font-mono font-semibold" style={{ color: C.amber }}>
                           {fmt(sec.total)} {t('currency_som') || "so'm"}
                         </span>
                       </button>
@@ -2318,14 +2378,14 @@ export default function SmetaManagementTab({ project }) {
                           e.stopPropagation();
                           setAddWorkModal({ sectionName: sec.name, name: '', uom: '', code: '' });
                         }}
-                        className="ml-1 px-2.5 py-1.5 rounded-md text-[11px] font-medium flex items-center gap-1 transition"
+                        className="ml-1 px-2.5 py-1.5 rounded-md text-[13px] font-medium flex items-center gap-1 transition"
                         style={{
                           background: 'rgba(13,148,136,0.1)', color: C.teal,
                           border: '1px solid rgba(13,148,136,0.3)',
                         }}
                         title={t('add_work') || "Ish qo'shish"}
                       >
-                        <span className="text-[13px] leading-none font-bold">+</span>
+                        <span className="text-[15px] leading-none font-bold">+</span>
                         {t('add_work_short') || "Ish"}
                       </button>
                       <button
@@ -2339,14 +2399,14 @@ export default function SmetaManagementTab({ project }) {
                           }
                           setAddSubBosqichSection(sec.name);
                         }}
-                        className="ml-1 px-2.5 py-1.5 rounded-md text-[11px] font-medium flex items-center gap-1 transition"
+                        className="ml-1 px-2.5 py-1.5 rounded-md text-[13px] font-medium flex items-center gap-1 transition"
                         style={{
                           background: C.inset, color: C.muted,
                           border: `1px solid ${C.border2}`,
                         }}
                         title={t('add_substage') || "Sub-bosqich qo'shish"}
                       >
-                        <span className="text-[13px] leading-none font-bold">+</span>
+                        <span className="text-[15px] leading-none font-bold">+</span>
                         {t('substage_short') || "Sub-bosqich"}
                       </button>
                       {/* Section delete — cascades through every estimate
@@ -2471,10 +2531,10 @@ export default function SmetaManagementTab({ project }) {
                               borderLeftWidth: 3,
                             }}
                           >
-                            <span className="text-[12px] text-slate-400">└</span>
-                            <span className="flex-1 text-left font-medium text-[12.5px] text-slate-700">{sub.name}</span>
+                            <span className="text-[14px] text-slate-400">└</span>
+                            <span className="flex-1 text-left font-medium text-[14px] text-slate-700">{sub.name}</span>
                             <span
-                              className="text-[10.5px] font-mono px-2 py-0.5 rounded"
+                              className="text-[12px] font-mono px-2 py-0.5 rounded"
                               style={{ background: C.card, color: C.muted }}
                             >
                               {sub.lines.length} {t('works_count_suffix') || 'ish'}
@@ -2484,14 +2544,14 @@ export default function SmetaManagementTab({ project }) {
                               onClick={() => setAddWorkModal({
                                 sectionName: sub.fullName, name: '', uom: '', code: '',
                               })}
-                              className="px-2 py-1 rounded text-[10.5px] font-medium flex items-center gap-1"
+                              className="px-2 py-1 rounded text-[12px] font-medium flex items-center gap-1"
                               style={{
                                 background: 'rgba(13,148,136,0.08)', color: C.teal,
                                 border: '1px solid rgba(13,148,136,0.25)',
                               }}
                               title={t('add_work') || "Ish qo'shish"}
                             >
-                              <span className="text-[12px] leading-none font-bold">+</span>
+                              <span className="text-[14px] leading-none font-bold">+</span>
                               {t('add_work_short') || "Ish"}
                             </button>
                             <button
@@ -2504,14 +2564,14 @@ export default function SmetaManagementTab({ project }) {
                                 }
                                 setAddSubBosqichSection(sub.fullName);
                               }}
-                              className="px-2 py-1 rounded text-[10.5px] font-medium flex items-center gap-1"
+                              className="px-2 py-1 rounded text-[12px] font-medium flex items-center gap-1"
                               style={{
                                 background: C.card, color: C.muted,
                                 border: `1px solid ${C.border2}`,
                               }}
                               title={t('add_substage') || "Sub-bosqich qo'shish"}
                             >
-                              <span className="text-[12px] leading-none font-bold">+</span>
+                              <span className="text-[14px] leading-none font-bold">+</span>
                               {t('substage_short') || "Sub-bosqich"}
                             </button>
                             {canDeleteConstruction && (
@@ -2729,10 +2789,10 @@ export default function SmetaManagementTab({ project }) {
                             borderLeftWidth: 3,
                           }}
                         >
-                          <span className="text-[12px] text-slate-400">└</span>
-                          <span className="flex-1 text-left font-medium text-[12.5px] text-slate-700">{sub.name}</span>
+                          <span className="text-[14px] text-slate-400">└</span>
+                          <span className="flex-1 text-left font-medium text-[14px] text-slate-700">{sub.name}</span>
                           <span
-                            className="text-[10.5px] font-mono px-2 py-0.5 rounded"
+                            className="text-[12px] font-mono px-2 py-0.5 rounded"
                             style={{ background: C.card, color: C.muted }}
                           >
                             {sub.lines.length} {t('works_count_suffix') || 'ish'}
@@ -2742,14 +2802,14 @@ export default function SmetaManagementTab({ project }) {
                             onClick={() => setAddWorkModal({
                               sectionName: sub.fullName, name: '', uom: '', code: '',
                             })}
-                            className="px-2 py-1 rounded text-[10.5px] font-medium flex items-center gap-1"
+                            className="px-2 py-1 rounded text-[12px] font-medium flex items-center gap-1"
                             style={{
                               background: 'rgba(13,148,136,0.08)', color: C.teal,
                               border: '1px solid rgba(13,148,136,0.25)',
                             }}
                             title={t('add_work') || "Ish qo'shish"}
                           >
-                            <span className="text-[12px] leading-none font-bold">+</span>
+                            <span className="text-[14px] leading-none font-bold">+</span>
                             {t('add_work_short') || "Ish"}
                           </button>
                           <button
@@ -2762,14 +2822,14 @@ export default function SmetaManagementTab({ project }) {
                               }
                               setAddSubBosqichSection(sub.fullName);
                             }}
-                            className="px-2 py-1 rounded text-[10.5px] font-medium flex items-center gap-1"
+                            className="px-2 py-1 rounded text-[12px] font-medium flex items-center gap-1"
                             style={{
                               background: C.card, color: C.muted,
                               border: `1px solid ${C.border2}`,
                             }}
                             title={t('add_substage') || "Sub-bosqich qo'shish"}
                           >
-                            <span className="text-[12px] leading-none font-bold">+</span>
+                            <span className="text-[14px] leading-none font-bold">+</span>
                             {t('substage_short') || "Sub-bosqich"}
                           </button>
                           {canDeleteConstruction && (
@@ -2905,7 +2965,10 @@ export default function SmetaManagementTab({ project }) {
             entries={auditEntries}
             filter={auditFilter}
             onFilterChange={(v) => setAuditFilter(v)}
-            onRefresh={() => loadAudit(estimateId, auditFilter)}
+            onRefresh={() => loadAudit(project?.id, auditFilter)}
+            hasMore={auditHasMore}
+            loadingMore={loadingMoreAudit}
+            loadMoreRef={auditMoreRef}
           />
         </div>
       )}
@@ -3244,7 +3307,7 @@ function SmetaAddSectionModal({
             ? (t('add_substage') || "Sub-bosqich qo'shish")
             : (t('add_section') || "Bo'lim qo'shish")}
         </h3>
-        <p className="text-[12px] text-slate-500 mb-4">
+        <p className="text-[14px] text-slate-500 mb-4">
           {isSub
             ? (t('add_substage_hint') || "Yangi sub-bosqich nomi")
             : (t('add_section_hint_long') || "Yangi bo'lim nomi (masalan: \"Pardozlash\", \"Poydevorlar\")")}
@@ -3254,13 +3317,13 @@ function SmetaAddSectionModal({
            user sees exactly which section they're adding under. No
            dropdown: the parent is fixed by the entry point. */}
         {isSub && (
-          <div className="mb-4 px-3 py-2 rounded-lg bg-teal-50 border border-teal-200 text-[12px] text-teal-700">
+          <div className="mb-4 px-3 py-2 rounded-lg bg-teal-50 border border-teal-200 text-[14px] text-teal-700">
             <span className="text-teal-500 mr-1">{t('parent_section_label') || "Asosiy:"}</span>
             <span className="font-medium">{parent}</span>
           </div>
         )}
 
-        <label className="block text-[11px] uppercase tracking-wider font-semibold text-slate-500 mb-1.5">
+        <label className="block text-[13px] uppercase tracking-wider font-semibold text-slate-500 mb-1.5">
           {isSub
             ? (t('substage_name') || "Sub-bosqich nomi")
             : (t('section_name') || "Bo'lim nomi")}
@@ -3368,7 +3431,7 @@ function ResourceTopupModal({ resource, onSubmit, onCancel, t }) {
             <h3 className="text-base font-bold text-slate-900">
               {t('topup_modal_title') || "Qo'shimcha buyurtma qo'shish"}
             </h3>
-            <p className="text-[12px] text-slate-500 mt-1">
+            <p className="text-[14px] text-slate-500 mt-1">
               {t('topup_modal_subtitle')
                 || "Asl smeta saqlanib qoladi — qo'shimcha buyurtma alohida yoziladi."}
             </p>
@@ -3376,12 +3439,12 @@ function ResourceTopupModal({ resource, onSubmit, onCancel, t }) {
         </div>
 
         {/* Resource being topped up */}
-        <div className="rounded-lg p-3 mb-4 text-[12px]" style={{ background: '#F8FAFC', border: '1px solid #E2E8F0' }}>
-          <div className="text-[11px] uppercase font-semibold tracking-[0.06em] text-slate-500 mb-1">
+        <div className="rounded-lg p-3 mb-4 text-[14px]" style={{ background: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+          <div className="text-[13px] uppercase font-semibold tracking-[0.06em] text-slate-500 mb-1">
             {t('resource') || 'Resurs'}
           </div>
           <div className="font-medium text-slate-800">{resource?.name || '—'}</div>
-          <div className="flex flex-wrap gap-3 mt-1 text-[11px] text-slate-500">
+          <div className="flex flex-wrap gap-3 mt-1 text-[13px] text-slate-500">
             <span>
               {t('uom') || "O'lchov"}: <span className="text-slate-700">{resource?.uom || '—'}</span>
             </span>
@@ -3398,7 +3461,7 @@ function ResourceTopupModal({ resource, onSubmit, onCancel, t }) {
 
         <div className="grid grid-cols-2 gap-3 mb-3">
           <div>
-            <label className="block text-[11px] uppercase font-semibold tracking-[0.06em] text-slate-500 mb-1">
+            <label className="block text-[13px] uppercase font-semibold tracking-[0.06em] text-slate-500 mb-1">
               {t('topup_extra_qty') || "Qo'shimcha miqdor"} *
             </label>
             <input
@@ -3413,7 +3476,7 @@ function ResourceTopupModal({ resource, onSubmit, onCancel, t }) {
             />
           </div>
           <div>
-            <label className="block text-[11px] uppercase font-semibold tracking-[0.06em] text-slate-500 mb-1">
+            <label className="block text-[13px] uppercase font-semibold tracking-[0.06em] text-slate-500 mb-1">
               {t('topup_new_price') || 'Yangi narx'} *
             </label>
             <input
@@ -3430,7 +3493,7 @@ function ResourceTopupModal({ resource, onSubmit, onCancel, t }) {
 
         <div className="grid grid-cols-2 gap-3 mb-3">
           <div>
-            <label className="block text-[11px] uppercase font-semibold tracking-[0.06em] text-slate-500 mb-1">
+            <label className="block text-[13px] uppercase font-semibold tracking-[0.06em] text-slate-500 mb-1">
               {t('topup_ordered_at') || 'Buyurtma sanasi'}
             </label>
             <input
@@ -3442,7 +3505,7 @@ function ResourceTopupModal({ resource, onSubmit, onCancel, t }) {
             />
           </div>
           <div>
-            <label className="block text-[11px] uppercase font-semibold tracking-[0.06em] text-slate-500 mb-1">
+            <label className="block text-[13px] uppercase font-semibold tracking-[0.06em] text-slate-500 mb-1">
               {t('topup_subtotal') || 'Summa'}
             </label>
             <div
@@ -3455,7 +3518,7 @@ function ResourceTopupModal({ resource, onSubmit, onCancel, t }) {
         </div>
 
         <div className="mb-4">
-          <label className="block text-[11px] uppercase font-semibold tracking-[0.06em] text-slate-500 mb-1">
+          <label className="block text-[13px] uppercase font-semibold tracking-[0.06em] text-slate-500 mb-1">
             {t('topup_note') || 'Izoh (ixtiyoriy)'}
           </label>
           <textarea
@@ -3528,24 +3591,24 @@ function SmetaAddWorkModal({
         <h3 className="text-base font-bold text-slate-900 mb-1">
           {t('add_work') || "Ish qo'shish"}
         </h3>
-        <p className="text-[12px] text-slate-500 mb-4">
+        <p className="text-[14px] text-slate-500 mb-4">
           {t('add_work_hint') || "Bo'limga yangi ish qo'shing — keyin u uchun resurslar, FAKT, va Forma 2 ishlatish mumkin."}
         </p>
 
         {/* Section breadcrumb pill — fixed by the caller, so read-only. */}
-        <div className="mb-4 px-3 py-2 rounded-lg bg-teal-50 border border-teal-200 text-[12px] text-teal-700">
+        <div className="mb-4 px-3 py-2 rounded-lg bg-teal-50 border border-teal-200 text-[14px] text-teal-700">
           <span className="text-teal-500 mr-1">{t('parent_section_label') || "Asosiy:"}</span>
           <span className="font-medium">{sectionName}</span>
         </div>
 
         {!hasEstimate && (
-          <div className="mb-4 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-[11.5px] text-amber-700">
+          <div className="mb-4 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-[13px] text-amber-700">
             {t('no_estimate_for_work_warn')
               || "Bu blok uchun єдинич smeta topilmadi. Avval Smeta boshqaruvi → smeta yarating yoki import qiling."}
           </div>
         )}
 
-        <label className="block text-[11px] uppercase tracking-wider font-semibold text-slate-500 mb-1.5">
+        <label className="block text-[13px] uppercase tracking-wider font-semibold text-slate-500 mb-1.5">
           {t('work_name') || "Ish nomi"} <span className="text-red-500">*</span>
         </label>
         <input
@@ -3561,7 +3624,7 @@ function SmetaAddWorkModal({
 
         <div className="grid grid-cols-[1fr_1fr] gap-3 mb-5">
           <div>
-            <label className="block text-[11px] uppercase tracking-wider font-semibold text-slate-500 mb-1.5">
+            <label className="block text-[13px] uppercase tracking-wider font-semibold text-slate-500 mb-1.5">
               {t('unit') || "O'lchov"} <span className="text-red-500">*</span>
             </label>
             <input
@@ -3575,7 +3638,7 @@ function SmetaAddWorkModal({
             />
           </div>
           <div>
-            <label className="block text-[11px] uppercase tracking-wider font-semibold text-slate-500 mb-1.5">
+            <label className="block text-[13px] uppercase tracking-wider font-semibold text-slate-500 mb-1.5">
               {t('code') || "Shifr"}
               <span className="ml-1 text-slate-400 normal-case font-normal">({t('optional_short') || 'ixtiyoriy'})</span>
             </label>
@@ -3651,7 +3714,7 @@ function SmetaConfirmModal({ tone = 'amber', title, body, confirmLabel, onConfir
             onClick={onConfirm}
             className={`px-4 py-2 rounded-lg text-xs font-semibold text-white inline-flex items-center gap-1.5 ${palette.bg}`}
           >
-            <span className="text-[14px] leading-none">✓</span>
+            <span className="text-[15px] leading-none">✓</span>
             {confirmLabel || (t('confirm') || 'Tasdiqlash')}
           </button>
         </div>
@@ -3697,7 +3760,7 @@ function StatCard({ icon: Icon, variant, label, value, meta }) {
         </div>
       </div>
       <div
-        className="text-[11px] mb-1.5 relative"
+        className="text-[13px] mb-1.5 relative"
         style={{
           color: isGrand ? C.teal : C.muted,
           letterSpacing: isGrand ? '0.1em' : 'normal',
@@ -3710,7 +3773,7 @@ function StatCard({ icon: Icon, variant, label, value, meta }) {
       <div className="text-[20px] font-semibold mb-1 font-mono tabular-nums relative" style={{ color: C.text }}>
         {fmtShort(value)}
       </div>
-      <div className="text-[10px] relative" style={{ color: C.fade }}>
+      <div className="text-[12px] relative" style={{ color: C.fade }}>
         {meta || "so'm"}
       </div>
     </div>
@@ -3836,13 +3899,13 @@ function WorkCard({
         }}
       >
         <div
-          className="font-mono text-[11px]"
+          className="font-mono text-[13px]"
           style={{ color: isSubStage ? C.teal : C.fade, fontWeight: isSubStage ? 600 : 400 }}
         >
           {line.item_number || ''}
         </div>
         <div
-          className="font-mono text-[11px] font-medium truncate"
+          className="font-mono text-[13px] font-medium truncate"
           style={{ color: C.teal }}
           title={line.code || ''}
         >
@@ -3855,7 +3918,7 @@ function WorkCard({
           {isSubStage ? (line.code || "QO'SH.") : (line.code || '')}
         </div>
         <div
-          className="text-[13px] font-medium leading-snug"
+          className="text-[15px] font-medium leading-snug"
           style={{
             display: '-webkit-box',
             WebkitLineClamp: 2,
@@ -3868,16 +3931,16 @@ function WorkCard({
           {line.name}
           {isSubStage && (
             <span
-              className="ml-2 px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-[0.05em]"
+              className="ml-2 px-1.5 py-0.5 rounded text-[11px] font-semibold uppercase tracking-[0.05em]"
               style={{ background: 'rgba(13,148,136,0.15)', color: C.teal }}
             >
               {t('extra_short') || "Qo'shimcha"}
             </span>
           )}
         </div>
-        <div className="text-[11px] text-center" style={{ color: C.dim }}>{line.uom || ''}</div>
+        <div className="text-[13px] text-center" style={{ color: C.dim }}>{line.uom || ''}</div>
         <div
-          className="text-[12px] font-mono text-right tabular-nums"
+          className="text-[14px] font-mono text-right tabular-nums"
           style={{
             color: isEmpty ? C.amber : (qtyModified ? C.teal : (isSubStage ? C.teal : C.text)),
             fontWeight: isEmpty || qtyModified || isSubStage ? 600 : 400,
@@ -3885,14 +3948,14 @@ function WorkCard({
         >
           {isEmpty ? '⚠ 0' : fmt(qty)}
         </div>
-        <div className="text-[12px] font-mono text-right tabular-nums" style={{ color: C.dim }}>
+        <div className="text-[14px] font-mono text-right tabular-nums" style={{ color: C.dim }}>
           {subResources.length} {t('resources_count_suffix') || 'resurs'}
           {!isSubStage && (subs || []).filter(isSubStageRow).length > 0 && (
             <span style={{ color: C.amber }}> +{(subs || []).filter(isSubStageRow).length} etap</span>
           )}
         </div>
         <div
-          className="text-[13px] font-mono font-bold text-right tabular-nums"
+          className="text-[15px] font-mono font-bold text-right tabular-nums"
           style={{ color: isEmpty ? C.fade : C.amber }}
         >
           {fmt(workTotal)}
@@ -3929,17 +3992,17 @@ function WorkCard({
                 padding / font / height) so the two read as a matched pair
                 in the row. */}
             <div className="flex items-center gap-1.5">
-              <span className="text-[10px] uppercase tracking-[0.08em]" style={{ color: C.fade }}>
+              <span className="text-[12px] uppercase tracking-[0.08em]" style={{ color: C.fade }}>
                 {t('label_norma_short') || 'Norma'}
               </span>
               <span
-                className="px-3 py-2 rounded-[5px] text-[13px] font-mono text-right tabular-nums inline-flex items-center justify-end"
+                className="px-3 py-2 rounded-[5px] text-[15px] font-mono text-right tabular-nums inline-flex items-center justify-end"
                 style={{
                   background: C.hover,
                   color: origQty > 0 ? C.text : C.muted,
                   border: `1px solid ${C.border2}`,
                   width: 120,
-                  height: 38, // matches the input's computed height (text-[13px] + py-2 + 1px borders)
+                  height: 38, // matches the input's computed height (text-[15px] + py-2 + 1px borders)
                   boxSizing: 'border-box',
                 }}
                 title={t('reja_smeta_hint') || "Smeta bo'yicha reja miqdor"}
@@ -3953,12 +4016,12 @@ function WorkCard({
                 no role accidentally types into a locked row even if a
                 browser plugin re-enables disabled inputs. */}
             <div className="flex items-center gap-1.5">
-              <span className="text-[10px] uppercase tracking-[0.08em]" style={{ color: C.fade }}>
+              <span className="text-[12px] uppercase tracking-[0.08em]" style={{ color: C.fade }}>
                 {t('label_fakt_qilingan_hajm_short') || 'Fakt'}
               </span>
               {isLocked ? (
                 <span
-                  className="px-3 py-2 rounded-[5px] text-[13px] font-mono text-right tabular-nums inline-flex items-center justify-end"
+                  className="px-3 py-2 rounded-[5px] text-[15px] font-mono text-right tabular-nums inline-flex items-center justify-end"
                   style={{
                     background: C.hover,
                     color: C.muted,
@@ -3983,7 +4046,7 @@ function WorkCard({
                     if (qtyChanged) commitQty(line, e.target.value);
                     clearQtyDraft();
                   }}
-                  className={`px-3 py-2 rounded-[5px] text-[13px] font-mono text-right outline-none transition ${isEmpty ? 'smeta-empty-pulse' : ''}`}
+                  className={`px-3 py-2 rounded-[5px] text-[15px] font-mono text-right outline-none transition ${isEmpty ? 'smeta-empty-pulse' : ''}`}
                   style={{
                     background: isEmpty ? 'rgba(217,119,6,0.05)' : C.inset,
                     color: isEmpty ? C.amber : (qtyChanged ? C.teal : C.text),
@@ -4014,7 +4077,7 @@ function WorkCard({
                 whose role can change that. */}
             {isLocked && (
               <span
-                className="px-2.5 py-1 rounded-md text-[11px] inline-flex items-center gap-1.5"
+                className="px-2.5 py-1 rounded-md text-[13px] inline-flex items-center gap-1.5"
                 style={{
                   background: 'rgba(16,185,129,0.08)',
                   color: '#065F46',
@@ -4102,7 +4165,7 @@ function WorkCard({
             </div>
           ) : (
             <>
-              <table className="w-full border-collapse text-[12px] mt-3">
+              <table className="w-full border-collapse text-[14px] mt-3">
                 <thead>
                   <tr>
                     {[
@@ -4117,7 +4180,7 @@ function WorkCard({
                     ].map((h, i) => (
                       <th
                         key={i}
-                        className="text-[10px] uppercase tracking-[0.1em] font-semibold py-2 px-2.5"
+                        className="text-[12px] uppercase tracking-[0.1em] font-semibold py-2 px-2.5"
                         style={{
                           background: C.hover,
                           color: C.muted,
@@ -4127,7 +4190,7 @@ function WorkCard({
                         title={h.lock ? "Narxni o'zgartirish uchun Resurslar tabiga o'ting" : undefined}
                       >
                         {h.l}
-                        {h.lock && <span className="ml-1 text-[9px]" style={{ color: C.fade }}>🔒</span>}
+                        {h.lock && <span className="ml-1 text-[11px]" style={{ color: C.fade }}>🔒</span>}
                       </th>
                     ))}
                   </tr>
@@ -4174,7 +4237,7 @@ function WorkCard({
                         >
                           <td className="px-2.5 py-2">
                             <span
-                              className="px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-[0.05em]"
+                              className="px-1.5 py-0.5 rounded text-[11px] font-semibold uppercase tracking-[0.05em]"
                               style={{ background: tag.tagBg, color: tag.tagText }}
                             >
                               {CAT_LABEL[cat]}
@@ -4209,7 +4272,7 @@ function WorkCard({
                               <span>{sub.name}</span>
                               {hasTopups && (
                                 <span
-                                  className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-[0.06em] flex-shrink-0 inline-flex items-center gap-1"
+                                  className="px-2 py-0.5 rounded-full text-[12px] font-bold uppercase tracking-[0.06em] flex-shrink-0 inline-flex items-center gap-1"
                                   style={{
                                     background: C.teal,
                                     color: '#FFFFFF',
@@ -4306,40 +4369,40 @@ function WorkCard({
                             }}>
                               <td className="px-2.5 py-1.5">
                                 <span
-                                  className="px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-[0.05em]"
+                                  className="px-1.5 py-0.5 rounded text-[11px] font-semibold uppercase tracking-[0.05em]"
                                   style={{ background: 'rgba(13,148,136,0.15)', color: C.teal }}
                                   title={tp.note || ''}
                                 >
                                   +ДОП
                                 </span>
                               </td>
-                              <td className="px-2.5 py-1.5 pl-7 text-[11px]" style={{ color: C.dim }}>
+                              <td className="px-2.5 py-1.5 pl-7 text-[13px]" style={{ color: C.dim }}>
                                 <span style={{ color: C.muted }}>↳ </span>
                                 {t('topup_label') || "Qo'shimcha buyurtma"}
                                 {tp.ordered_at ? (
-                                  <span className="ml-2 text-[10px]" style={{ color: C.fade }}>
+                                  <span className="ml-2 text-[12px]" style={{ color: C.fade }}>
                                     {tp.ordered_at}
                                   </span>
                                 ) : null}
                                 {tp.note ? (
-                                  <span className="ml-2 text-[10px] italic" style={{ color: C.fade }}>
+                                  <span className="ml-2 text-[12px] italic" style={{ color: C.fade }}>
                                     — {tp.note}
                                   </span>
                                 ) : null}
                               </td>
-                              <td className="px-2.5 py-1.5 text-center text-[11px]" style={{ color: C.fade }}>
+                              <td className="px-2.5 py-1.5 text-center text-[13px]" style={{ color: C.fade }}>
                                 {sub.uom || ''}
                               </td>
                               <td className="px-2.5 py-1.5"></td>
-                              <td className="px-2.5 py-1.5 text-right font-mono tabular-nums text-[11px]"
+                              <td className="px-2.5 py-1.5 text-right font-mono tabular-nums text-[13px]"
                                   style={{ color: C.dim }}>
                                 {fmt(tpQty)}
                               </td>
-                              <td className="px-2.5 py-1.5 text-right font-mono tabular-nums text-[11px]"
+                              <td className="px-2.5 py-1.5 text-right font-mono tabular-nums text-[13px]"
                                   style={{ color: C.text }}>
                                 {fmt(tpPrice)}
                               </td>
-                              <td className="px-2.5 py-1.5 text-right font-mono tabular-nums text-[11px]"
+                              <td className="px-2.5 py-1.5 text-right font-mono tabular-nums text-[13px]"
                                   style={{ color: C.teal, fontWeight: 600 }}>
                                 {fmt(tpCost)}
                               </td>
@@ -4366,14 +4429,14 @@ function WorkCard({
               </table>
 
               {/* Footer */}
-              <div className="flex justify-between items-center gap-5 pt-3 mt-1 text-[12px] flex-wrap">
+              <div className="flex justify-between items-center gap-5 pt-3 mt-1 text-[14px] flex-wrap">
                 <div className="flex gap-5 flex-wrap">
                   <FooterItem label={t('footer_labor')   || 'Mehnat'}   value={breakdown.labor}    color={C.amber} />
                   <FooterItem label={t('footer_machine') || 'Mashina'}  value={breakdown.machines} color={C.purple} />
                   <FooterItem label={t('footer_material')|| 'Material'} value={breakdown.materials}color={C.teal} />
                 </div>
                 <div className="pl-5 flex items-center gap-2" style={{ borderLeft: `1px solid ${C.border2}` }}>
-                  <span className="text-[11px]" style={{ color: C.muted }}>{t('label_total_caps') || 'JAMI'}:</span>
+                  <span className="text-[13px]" style={{ color: C.muted }}>{t('label_total_caps') || 'JAMI'}:</span>
                   <span className="font-mono font-semibold text-[15px]" style={{ color: C.amber }}>
                     {fmt(workTotal)} {t('currency_som') || "so'm"}
                   </span>
@@ -4390,7 +4453,7 @@ function WorkCard({
 function FooterItem({ label, value, color }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="text-[11px]" style={{ color: C.muted }}>{label}:</span>
+      <span className="text-[13px]" style={{ color: C.muted }}>{label}:</span>
       <span className="font-mono font-semibold" style={{ color }}>{fmt(value)}</span>
     </div>
   );
@@ -4421,12 +4484,12 @@ function HistoryPage({ t, loading, snapshots, onView, onDelete, onRefresh, onSav
     <div>
       <div className="rounded-[10px] p-3 flex items-center gap-2 mb-3"
            style={{ background: C.card, border: `1px solid ${C.border}` }}>
-        <h3 className="text-[13px] font-semibold flex-1" style={{ color: C.text }}>
+        <h3 className="text-[15px] font-semibold flex-1" style={{ color: C.text }}>
           {t('history_saved_form2') || "Saqlangan Forma 2 hujjatlari"}
         </h3>
         <button
           onClick={onRefresh}
-          className="text-[12px] px-3 py-1.5 rounded-[6px] flex items-center gap-1.5"
+          className="text-[14px] px-3 py-1.5 rounded-[6px] flex items-center gap-1.5"
           style={{ background: C.inset, border: `1px solid ${C.border2}`, color: C.dim }}
         >
           <RefreshCw className="w-3 h-3" />
@@ -4434,7 +4497,7 @@ function HistoryPage({ t, loading, snapshots, onView, onDelete, onRefresh, onSav
         </button>
         <button
           onClick={onSaveCurrent}
-          className="text-[12px] px-3 py-1.5 rounded-[6px] flex items-center gap-1.5"
+          className="text-[14px] px-3 py-1.5 rounded-[6px] flex items-center gap-1.5"
           style={{ background: C.teal, color: '#fff' }}
         >
           <SaveIcon className="w-3 h-3" />
@@ -4447,12 +4510,12 @@ function HistoryPage({ t, loading, snapshots, onView, onDelete, onRefresh, onSav
       ) : snapshots.length === 0 ? (
         <div className="rounded-[10px] py-12 text-center" style={{ background: C.card, border: `1px dashed ${C.border2}`, color: C.muted }}>
           <HistoryIcon className="w-6 h-6 mx-auto mb-2" />
-          <div className="text-[13px]">{t('history_empty') || "Hali bironta saqlangan Forma 2 yo'q"}</div>
-          <div className="text-[11px] mt-1">{t('history_empty_hint') || "Forma 2 ni oching va o'ng yuqoridagi 'Saqlash' tugmasini bosing"}</div>
+          <div className="text-[15px]">{t('history_empty') || "Hali bironta saqlangan Forma 2 yo'q"}</div>
+          <div className="text-[13px] mt-1">{t('history_empty_hint') || "Forma 2 ni oching va o'ng yuqoridagi 'Saqlash' tugmasini bosing"}</div>
         </div>
       ) : (
         <div className="rounded-[10px] overflow-hidden" style={{ background: C.card, border: `1px solid ${C.border}` }}>
-          <table className="w-full text-[12px]" style={{ borderCollapse: 'collapse' }}>
+          <table className="w-full text-[14px]" style={{ borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: C.sec, borderBottom: `1px solid ${C.border}` }}>
                 <th className="px-3 py-2 text-left font-medium" style={{ color: C.muted }}>{t('history_col_saved') || 'Sana'}</th>
@@ -4473,7 +4536,7 @@ function HistoryPage({ t, loading, snapshots, onView, onDelete, onRefresh, onSav
                   <td className="px-3 py-2">
                     {s.building_name ? (
                       <span
-                        className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium"
+                        className="inline-flex items-center px-2 py-0.5 rounded-full text-[13px] font-medium"
                         style={{ background: C.inset, color: C.teal, border: `1px solid ${C.border2}` }}
                       >
                         {s.building_name}
@@ -4585,7 +4648,7 @@ function localizeAuditValue(t, raw) {
   return t(`work_status_${s}_long`) || raw;
 }
 
-function AuditPage({ t, language, loading, entries, filter, onFilterChange, onRefresh }) {
+function AuditPage({ t, language, loading, entries, filter, onFilterChange, onRefresh, hasMore, loadingMore, loadMoreRef }) {
   const fmtDate = (s) => {
     if (!s) return '—';
     try {
@@ -4597,13 +4660,13 @@ function AuditPage({ t, language, loading, entries, filter, onFilterChange, onRe
     <div>
       <div className="rounded-[10px] p-3 flex items-center gap-2 mb-3"
            style={{ background: C.card, border: `1px solid ${C.border}` }}>
-        <h3 className="text-[13px] font-semibold flex-1" style={{ color: C.text }}>
+        <h3 className="text-[15px] font-semibold flex-1" style={{ color: C.text }}>
           {t('audit_log_title') || "O'zgarishlar jurnali"}
         </h3>
         <select
           value={filter}
           onChange={(e) => onFilterChange(e.target.value)}
-          className="text-[12px] px-2.5 py-1.5 rounded-[6px]"
+          className="text-[14px] px-2.5 py-1.5 rounded-[6px]"
           style={{ background: C.inset, border: `1px solid ${C.border2}`, color: C.text, minWidth: 180 }}
         >
           <option value="">{t('audit_filter_all') || 'Barchasi'}</option>
@@ -4613,7 +4676,7 @@ function AuditPage({ t, language, loading, entries, filter, onFilterChange, onRe
         </select>
         <button
           onClick={onRefresh}
-          className="text-[12px] px-3 py-1.5 rounded-[6px] flex items-center gap-1.5"
+          className="text-[14px] px-3 py-1.5 rounded-[6px] flex items-center gap-1.5"
           style={{ background: C.inset, border: `1px solid ${C.border2}`, color: C.dim }}
         >
           <RefreshCw className="w-3 h-3" />
@@ -4626,11 +4689,11 @@ function AuditPage({ t, language, loading, entries, filter, onFilterChange, onRe
       ) : entries.length === 0 ? (
         <div className="rounded-[10px] py-12 text-center" style={{ background: C.card, border: `1px dashed ${C.border2}`, color: C.muted }}>
           <Activity className="w-6 h-6 mx-auto mb-2" />
-          <div className="text-[13px]">{t('audit_empty') || "Hech qanday o'zgarish yozib olinmagan"}</div>
+          <div className="text-[15px]">{t('audit_empty') || "Hech qanday o'zgarish yozib olinmagan"}</div>
         </div>
       ) : (
         <div className="rounded-[10px] overflow-hidden" style={{ background: C.card, border: `1px solid ${C.border}` }}>
-          <table className="w-full text-[12px]" style={{ borderCollapse: 'collapse' }}>
+          <table className="w-full text-[14px]" style={{ borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: C.sec, borderBottom: `1px solid ${C.border}` }}>
                 <th className="px-3 py-2 text-left font-medium" style={{ color: C.muted, width: 150 }}>{t('audit_col_when') || 'Vaqt'}</th>
@@ -4660,7 +4723,7 @@ function AuditPage({ t, language, loading, entries, filter, onFilterChange, onRe
                         >
                           <Icon className="w-3 h-3" />
                         </span>
-                        <span className="text-[12px]" style={{ color: meta.color, fontWeight: 500 }}>{actionLabel}</span>
+                        <span className="text-[14px]" style={{ color: meta.color, fontWeight: 500 }}>{actionLabel}</span>
                       </div>
                     </td>
                     <td className="px-3 py-2" style={{ color: C.text }}>
@@ -4675,7 +4738,7 @@ function AuditPage({ t, language, loading, entries, filter, onFilterChange, onRe
                       {e.target && e.target !== 'topup' ? e.target : null}
                       {!e.target || e.target === 'topup' ? (e.description ? null : '—') : null}
                       {e.description && (
-                        <div className="text-[11px]" style={{ color: C.muted }}>{e.description}</div>
+                        <div className="text-[13px]" style={{ color: C.muted }}>{e.description}</div>
                       )}
                     </td>
                     <td className="px-3 py-2 font-mono" style={{ color: C.dim }}>
@@ -4693,6 +4756,16 @@ function AuditPage({ t, language, loading, entries, filter, onFilterChange, onRe
               })}
             </tbody>
           </table>
+          {/* Infinite-scroll sentinel — pulls the next 20 entries when it
+              scrolls into view. */}
+          {hasMore && (
+            <div ref={loadMoreRef} className="py-4 flex items-center justify-center">
+              <Loader className="py-0" size="w-4 h-4" />
+            </div>
+          )}
+          {loadingMore && !hasMore && (
+            <div className="py-3 text-center text-[14px]" style={{ color: C.muted }}>…</div>
+          )}
         </div>
       )}
     </div>
