@@ -1576,7 +1576,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
     : Object.keys(ROLE_META).filter((k) => myRoles.includes(k));
   const roleSwitcher = (
     <div className="rounded-xl border border-slate-200 bg-white p-2 flex items-center gap-1">
-      <span className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold mx-2">
+      <span className="text-[12px] uppercase tracking-widest text-slate-400 font-semibold mx-2">
         {t('switch_role')}
       </span>
       {switchableRoles.map((key) => {
@@ -1593,7 +1593,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
               border: '1.5px solid transparent',
             }}
           >
-            <span className="text-[14px] leading-none">{meta.emoji}</span>
+            <span className="text-[15px] leading-none">{meta.emoji}</span>
             {t(meta.labelKey)}
           </button>
         );
@@ -1639,7 +1639,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
       {/* ROLE BANNER */}
       {ROLE_META[viewRole] && (
         <div
-          className="rounded-lg px-4 py-3 text-[13px]"
+          className="rounded-lg px-4 py-3 text-[15px]"
           style={{
             background: ROLE_META[viewRole].bannerBg,
             color: ROLE_META[viewRole].bannerColor,
@@ -1704,7 +1704,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
                 <button
                   key={it.id}
                   onClick={() => setActiveIterationId(it.id)}
-                  className="px-4 py-2 rounded-lg text-[13px] font-semibold flex items-center gap-2 transition"
+                  className="px-4 py-2 rounded-lg text-[15px] font-semibold flex items-center gap-2 transition"
                   style={{
                     background: active ? '#0F172A' : '#FFFFFF',
                     color: active ? '#FFFFFF' : '#64748B',
@@ -1716,7 +1716,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
                 >
                   <span>📄 Forma 2 #{it.iteration_seq}</span>
                   <span
-                    className="text-[10px] px-2 py-0.5 rounded-full font-bold"
+                    className="text-[12px] px-2 py-0.5 rounded-full font-bold"
                     style={{
                       background: active ? (isOpen ? '#047857' : '#64748B') : (isOpen ? '#D1FAE5' : '#E5E7EB'),
                       color:      active ? '#FFFFFF' : (isOpen ? '#047857' : '#64748B'),
@@ -1729,7 +1729,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
             })}
           </div>
           {isFrozenView && (
-            <div className="mt-3 px-3 py-2 rounded-md text-[12px] bg-amber-50 border border-amber-200 text-amber-800">
+            <div className="mt-3 px-3 py-2 rounded-md text-[14px] bg-amber-50 border border-amber-200 text-amber-800">
               {t('forma2_frozen_notice') || "Bu Forma 2 muzlatilgan. Yangi fakt kiritish uchun #joriy ni tanlang."}
             </div>
           )}
@@ -1752,9 +1752,9 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
             <button
               type="button"
               onClick={() => setAddStageModal({ name: '' })}
-              className="px-3 py-1.5 rounded-lg text-[12px] font-semibold border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition inline-flex items-center gap-1.5"
+              className="px-3 py-1.5 rounded-lg text-[14px] font-semibold border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition inline-flex items-center gap-1.5"
             >
-              <span className="text-[14px] leading-none">+</span>
+              <span className="text-[15px] leading-none">+</span>
               {t('add_stage') || "Bosqich qo'shish"}
             </button>
           )}
@@ -1770,7 +1770,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
                 <button
                   key={b.id}
                   onClick={() => setActiveBuildingId(b.id)}
-                  className="px-4 py-2 rounded-lg text-[13px] font-semibold flex items-center gap-2 transition"
+                  className="px-4 py-2 rounded-lg text-[15px] font-semibold flex items-center gap-2 transition"
                   style={{
                     background: active ? '#0F172A' : '#FFFFFF',
                     color: active ? '#FFFFFF' : '#64748B',
@@ -1779,7 +1779,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
                 >
                   <span>📐 {b.name}</span>
                   <span
-                    className="text-[10px] px-2 py-0.5 rounded-full font-bold"
+                    className="text-[12px] px-2 py-0.5 rounded-full font-bold"
                     style={{
                       background: active ? '#047857' : (hasEst ? '#E5E7EB' : '#FEF3C7'),
                       color: active ? '#FFFFFF' : (hasEst ? '#64748B' : '#B45309'),
@@ -1849,16 +1849,16 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
                 >
                   {/* Stage chevron — mockup uses a CSS-rotated ▶ arrow. */}
                   <span
-                    className="text-slate-400 text-[14px] leading-none transition-transform inline-block w-4"
+                    className="text-slate-400 text-[15px] leading-none transition-transform inline-block w-4"
                     style={{ transform: expanded ? 'rotate(90deg)' : 'rotate(0)' }}
                   >▶</span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2.5 flex-wrap mb-1.5">
-                      <div className="font-bold text-slate-900 text-[14px]">
+                      <div className="font-bold text-slate-900 text-[15px]">
                         {stage.name === UNCATEGORISED_KEY ? t('uncategorized') : stage.name}
                       </div>
                       <span
-                        className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full"
+                        className="text-[12px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full"
                         style={{
                           background: stMeta.bg,
                           color: stMeta.fg,
@@ -1868,12 +1868,12 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
                         {t(stMeta.longKey)}
                       </span>
                       {isLocked && (
-                        <span className="text-[11px] font-semibold px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 inline-flex items-center gap-1">
-                          <span className="text-[12px] leading-none">🔒</span> {t('locked')}
+                        <span className="text-[13px] font-semibold px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 inline-flex items-center gap-1">
+                          <span className="text-[14px] leading-none">🔒</span> {t('locked')}
                         </span>
                       )}
                     </div>
-                    <div className="text-[11.5px] text-slate-500">
+                    <div className="text-[13px] text-slate-500">
                       {/* Mockup: "1 подэтап · 6 работ" — show the sub-stage
                          count when the stage has any, before the work count. */}
                       {(stage.subStages?.length || 0) > 0 && (
@@ -1896,17 +1896,17 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
                         }}
                       />
                     </div>
-                    <div className="text-[11px] font-bold text-emerald-700 min-w-[36px] text-right">
+                    <div className="text-[13px] font-bold text-emerald-700 min-w-[36px] text-right">
                       {pct.toFixed(0)}%
                     </div>
                   </div>
                   <div
-                    className="hidden md:flex items-center justify-end gap-1.5 text-[13px] font-bold min-w-[140px] text-right"
+                    className="hidden md:flex items-center justify-end gap-1.5 text-[15px] font-bold min-w-[140px] text-right"
                     style={{ color: canSeeCost ? '#0F172A' : '#CBD5E1', fontStyle: canSeeCost ? 'normal' : 'italic' }}
                   >
                     {canSeeCost
                       ? <span>{fmt(Math.round(cost))} {t('soum')}</span>
-                      : <span className="inline-flex items-center gap-1.5"><span className="text-[14px] leading-none">🔒</span> {t('hidden')}</span>}
+                      : <span className="inline-flex items-center gap-1.5"><span className="text-[15px] leading-none">🔒</span> {t('hidden')}</span>}
                   </div>
                 </button>
                 {/* Trash icon — cascade-deletes the whole stage (every
@@ -1957,9 +1957,9 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
                           }
                           setAddSubBosqichParent(stage.name);
                         }}
-                        className="px-3 py-1.5 rounded-md text-[11px] font-medium border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 inline-flex items-center gap-1"
+                        className="px-3 py-1.5 rounded-md text-[13px] font-medium border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 inline-flex items-center gap-1"
                       >
-                        <span className="text-[13px] leading-none font-bold">+</span>
+                        <span className="text-[15px] leading-none font-bold">+</span>
                         {t('add_substage') || "Sub-bosqich qo'shish"}
                       </button>
                     </div>
@@ -2158,7 +2158,7 @@ function AddStageModal({
             ? (t('add_substage') || "Sub-bosqich qo'shish")
             : (t('add_stage') || "Bosqich qo'shish")}
         </h3>
-        <p className="text-[12px] text-slate-500 mb-4">
+        <p className="text-[14px] text-slate-500 mb-4">
           {isSub
             ? (t('add_substage_hint') || "Yangi sub-bosqich nomi")
             : (t('add_stage_hint') || "Yangi bosqich nomi (masalan: \"Pardozlash\", \"Elektrika\")")}
@@ -2168,13 +2168,13 @@ function AddStageModal({
            fixed by the entry point (the "+ Sub-bosqich" button on the
            expanded stage card), so we show it read-only. */}
         {isSub && (
-          <div className="mb-4 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-[12px] text-emerald-700">
+          <div className="mb-4 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-[14px] text-emerald-700">
             <span className="text-emerald-500 mr-1">{t('parent_section_label') || "Asosiy:"}</span>
             <span className="font-medium">{parent}</span>
           </div>
         )}
 
-        <label className="block text-[11px] uppercase tracking-wider font-semibold text-slate-500 mb-1.5">
+        <label className="block text-[13px] uppercase tracking-wider font-semibold text-slate-500 mb-1.5">
           {isSub
             ? (t('substage_name') || "Sub-bosqich nomi")
             : (t('stage_name') || "Bosqich nomi")}
@@ -2251,7 +2251,7 @@ function ConfirmModal({ title, body, confirmLabel, onConfirm, onCancel, t }) {
             onClick={onConfirm}
             className="px-4 py-2 rounded-lg text-xs font-semibold bg-emerald-700 hover:bg-emerald-800 text-white inline-flex items-center gap-1.5"
           >
-            <span className="text-[14px] leading-none">✓</span>
+            <span className="text-[15px] leading-none">✓</span>
             {confirmLabel || (t('confirm'))}
           </button>
         </div>
@@ -2333,11 +2333,11 @@ function SubStageCard({ sub, ...props }) {
         onClick={() => setOpen((v) => !v)}
         className="w-full px-4 py-3 flex items-center gap-3 bg-slate-50 hover:bg-slate-100 transition text-left"
       >
-        <span className="text-slate-400 text-[12px] leading-none transition-transform inline-block w-3"
+        <span className="text-slate-400 text-[14px] leading-none transition-transform inline-block w-3"
               style={{ transform: open ? 'rotate(90deg)' : 'rotate(0)' }}>▶</span>
         <span className="text-base leading-none">📂</span>
         <div className="flex-1 min-w-0">
-          <div className="text-[12.5px] font-semibold text-blue-700 truncate">
+          <div className="text-[14px] font-semibold text-blue-700 truncate">
             {sub.name || `${props.t('subgroup')} ${sub.key}`}
           </div>
         </div>
@@ -2345,15 +2345,15 @@ function SubStageCard({ sub, ...props }) {
           <div className="flex-1 h-1 bg-slate-200 rounded-full overflow-hidden min-w-[60px]">
             <div className="h-full bg-emerald-600" style={{ width: `${pct}%` }} />
           </div>
-          <div className="text-[10.5px] font-bold text-emerald-700 min-w-[28px] text-right">
+          <div className="text-[14px] font-bold text-emerald-700 min-w-[28px] text-right">
             {pct.toFixed(0)}%
           </div>
         </div>
-        <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-semibold">
+        <span className="text-[12px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-semibold">
           {finalised}/{sub.works.length} {props.t('works_suffix')}
         </span>
         {props.canSeeCost && (
-          <span className="hidden md:inline-block font-mono text-[11.5px] text-slate-700 min-w-[120px] text-right font-semibold">
+          <span className="hidden md:inline-block font-mono text-[13px] text-slate-700 min-w-[120px] text-right font-semibold">
             {fmt(Math.round(cost))} {props.t('soum')}
           </span>
         )}
@@ -2378,9 +2378,9 @@ function StatCard({ label, value, sub, variant }) {
   }[variant] || '#0F172A';
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4">
-      <div className="text-[11px] text-slate-500 mb-1.5">{label}</div>
+      <div className="text-[13px] text-slate-500 mb-1.5">{label}</div>
       <div className="text-[22px] font-bold font-mono tabular-nums" style={{ color: valueColor }}>{value}</div>
-      <div className="text-[11px] text-slate-400 mt-0.5">{sub}</div>
+      <div className="text-[13px] text-slate-400 mt-0.5">{sub}</div>
     </div>
   );
 }
@@ -2400,7 +2400,7 @@ function StageActions({ stage, viewRole, onSubmitAll, onConfirmAllSupervisor, on
 
   return (
     <div className="mt-4 pt-3.5 border-t border-dashed border-slate-200 flex items-center justify-between flex-wrap gap-2">
-      <div className="text-[11.5px] text-slate-500">
+      <div className="text-[13px] text-slate-500">
         {t('total_works')}: <b className="text-slate-900">{works.length}</b>
         {' · '}{t('on_review')}: <b>{submittedCount}</b>
         {' · '}{t('supervisor_confirmed')}: <b>{supConfirmed}</b>
@@ -2410,19 +2410,19 @@ function StageActions({ stage, viewRole, onSubmitAll, onConfirmAllSupervisor, on
         {canSubmitAny && (
           <button onClick={() => onSubmitAll(stage)}
                   className="px-4 py-2 rounded-md text-xs font-semibold bg-blue-500 hover:bg-blue-600 text-white inline-flex items-center gap-1.5">
-            <span className="text-[14px] leading-none">📤</span> {t('all_to_review')}
+            <span className="text-[15px] leading-none">📤</span> {t('all_to_review')}
           </button>
         )}
         {canConfirmAny && (
           <button onClick={() => onConfirmAllSupervisor(stage)}
                   className="px-4 py-2 rounded-md text-xs font-semibold bg-amber-500 hover:bg-amber-600 text-white inline-flex items-center gap-1.5">
-            <span className="text-[14px] leading-none">✓</span> {t('confirm_all_supervisor')}
+            <span className="text-[15px] leading-none">✓</span> {t('confirm_all_supervisor')}
           </button>
         )}
         {canFinalAny && (
           <button onClick={() => onConfirmAllEngineer(stage)}
                   className="px-4 py-2 rounded-md text-xs font-semibold bg-emerald-700 hover:bg-emerald-800 text-white inline-flex items-center gap-1.5">
-            <span className="text-[14px] leading-none">🛠️</span> {t('finalize_all')}
+            <span className="text-[15px] leading-none">🛠️</span> {t('finalize_all')}
           </button>
         )}
       </div>
@@ -2484,7 +2484,7 @@ function WorksTable({
   const colCount = canSeeCost ? 12 : 9;
   return (
     <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-      <table className="w-full text-[12px] border-collapse">
+      <table className="w-full text-[15px] border-collapse">
         <thead>
           <tr className="bg-slate-50">
             <th className="py-2.5 px-2" style={{ width: 28 }} />
@@ -2493,19 +2493,19 @@ function WorksTable({
                 to two lines ("4-" then "1") in the cell. Widened to
                 64 px and the cell uses whiteSpace:nowrap below so even
                 the longest realistic number ("13-12") stays on one line. */}
-            <th className="text-center py-2.5 px-3 text-[10.5px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 64 }}>#</th>
-            <th className="text-left   py-2.5 px-3 text-[10.5px] uppercase tracking-wider font-bold text-slate-500">{t('work_name')}</th>
-            <th className="text-center py-2.5 px-3 text-[10.5px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 90 }}>{t('unit')}</th>
-            <th className="text-right  py-2.5 px-3 text-[10.5px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 100 }}>{t('plan')}</th>
-            <th className="text-right  py-2.5 px-3 text-[10.5px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 130 }}>{t('done')}</th>
-            <th className="text-center py-2.5 px-3 text-[10.5px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 130 }}>{t('progress')}</th>
+            <th className="text-center py-2.5 px-3 text-[14px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 64 }}>#</th>
+            <th className="text-left   py-2.5 px-3 text-[14px] uppercase tracking-wider font-bold text-slate-500">{t('work_name')}</th>
+            <th className="text-center py-2.5 px-3 text-[14px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 90 }}>{t('unit')}</th>
+            <th className="text-right  py-2.5 px-3 text-[14px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 100 }}>{t('plan')}</th>
+            <th className="text-right  py-2.5 px-3 text-[14px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 130 }}>{t('done')}</th>
+            <th className="text-center py-2.5 px-3 text-[14px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 130 }}>{t('progress')}</th>
             {canSeeCost && (<>
-              <th className="text-right py-2.5 px-3 text-[10.5px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 120 }}>{t('unit_price')}</th>
-              <th className="text-right py-2.5 px-3 text-[10.5px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 150 }}>{t('plan_total')}</th>
-              <th className="text-right py-2.5 px-3 text-[10.5px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 150 }}>{t('fact_total')}</th>
+              <th className="text-right py-2.5 px-3 text-[14px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 120 }}>{t('unit_price')}</th>
+              <th className="text-right py-2.5 px-3 text-[14px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 150 }}>{t('plan_total')}</th>
+              <th className="text-right py-2.5 px-3 text-[14px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 150 }}>{t('fact_total')}</th>
             </>)}
-            <th className="text-center py-2.5 px-3 text-[10.5px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 130 }}>{t('status')}</th>
-            <th className="text-center py-2.5 px-3 text-[10.5px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 200 }}>{t('action')}</th>
+            <th className="text-center py-2.5 px-3 text-[14px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 130 }}>{t('status')}</th>
+            <th className="text-center py-2.5 px-3 text-[14px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 200 }}>{t('action')}</th>
           </tr>
         </thead>
         <tbody>
@@ -2585,7 +2585,7 @@ function WorksTable({
                       title={t('show_consumption') || 'Sarflanishni ko\'rsatish'}
                       className="w-5 h-5 inline-flex items-center justify-center rounded hover:bg-slate-200 text-slate-500"
                     >
-                      <span className="inline-block transition-transform text-[10px]"
+                      <span className="inline-block transition-transform text-[12px]"
                             style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0)' }}>▶</span>
                     </button>
                   )}
@@ -2594,11 +2594,11 @@ function WorksTable({
                 <td className="py-2.5 px-3">
                   <div className="font-medium text-slate-900">{w.name}</div>
                   {w.code && (
-                    <div className="text-[10.5px] text-slate-400 font-mono">{cleanCode(w.code)}</div>
+                    <div className="text-[14px] text-slate-400 font-mono">{cleanCode(w.code)}</div>
                   )}
                 </td>
                 <td className="text-center py-2.5 px-3">
-                  <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10.5px] font-semibold">
+                  <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[14px] font-semibold">
                     {w.uom || ''}
                   </span>
                 </td>
@@ -2619,14 +2619,14 @@ function WorksTable({
                           }
                         }}
                         onFocus={(e) => e.target.select()}
-                        className="w-[90px] px-2 py-1 rounded border border-slate-300 font-mono text-right text-[11.5px] outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                        className="w-[90px] px-2 py-1 rounded border border-slate-300 font-mono text-right text-[13px] outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
                       />
                       {onAddResource && (
                         <button
                           type="button"
                           onClick={() => onAddResource(w)}
                           title={t('add_resource_to_work') || "Resurs qo'shish"}
-                          className="w-6 h-6 inline-flex items-center justify-center rounded border border-teal-600 text-teal-600 hover:bg-teal-50 text-[14px] leading-none font-bold"
+                          className="w-6 h-6 inline-flex items-center justify-center rounded border border-teal-600 text-teal-600 hover:bg-teal-50 text-[15px] leading-none font-bold"
                         >
                           +
                         </button>
@@ -2646,7 +2646,7 @@ function WorksTable({
                     <div className="flex-1 h-1 bg-slate-100 rounded-full overflow-hidden min-w-[50px]">
                       <div className="h-full bg-emerald-600" style={{ width: `${pct}%` }} />
                     </div>
-                    <div className="text-[10.5px] font-bold text-emerald-700 min-w-[28px] text-right">
+                    <div className="text-[14px] font-bold text-emerald-700 min-w-[28px] text-right">
                       {pct.toFixed(0)}%
                     </div>
                   </div>
@@ -2691,7 +2691,7 @@ function WorksTable({
                 })()}
                 <td className="text-center py-2.5 px-3">
                   <span
-                    className="text-[10px] uppercase font-bold tracking-wider px-2 py-1 rounded-full inline-flex items-center gap-1"
+                    className="text-[12px] uppercase font-bold tracking-wider px-2 py-1 rounded-full inline-flex items-center gap-1"
                     style={{
                       background: stMeta.bg,
                       color: stMeta.fg,
@@ -2704,44 +2704,44 @@ function WorksTable({
                 </td>
                 <td className="text-center py-2.5 px-3">
                   {isLocked ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-semibold">
-                      <span className="text-[12px] leading-none">🔒</span> {t('locked')}
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[13px] font-semibold">
+                      <span className="text-[14px] leading-none">🔒</span> {t('locked')}
                     </span>
                   ) : canSubmitToSupervisor(w) ? (
                     <button onClick={() => onSubmit(w)}
-                            className="px-3 py-1 rounded-md text-[11px] font-semibold bg-blue-500 hover:bg-blue-600 text-white inline-flex items-center gap-1">
-                      <span className="text-[12px] leading-none">📤</span> {t('to_review')}
+                            className="px-3 py-1 rounded-md text-[13px] font-semibold bg-blue-500 hover:bg-blue-600 text-white inline-flex items-center gap-1">
+                      <span className="text-[14px] leading-none">📤</span> {t('to_review')}
                     </button>
                   ) : canConfirmAsSupervisor(w) ? (
                     <div className="inline-flex gap-1">
                       <button onClick={() => onConfirmSupervisor(w)}
-                              className="px-3 py-1 rounded-md text-[11px] font-semibold bg-amber-500 hover:bg-amber-600 text-white inline-flex items-center gap-1">
-                        <span className="text-[12px] leading-none">✓</span> {t('confirm')}
+                              className="px-3 py-1 rounded-md text-[13px] font-semibold bg-amber-500 hover:bg-amber-600 text-white inline-flex items-center gap-1">
+                        <span className="text-[14px] leading-none">✓</span> {t('confirm')}
                       </button>
                       <button onClick={() => onRejectSupervisor(w)}
                               title={t('reject_to_foreman')}
                               className="w-7 h-7 rounded-md inline-flex items-center justify-center bg-white text-red-600 border border-red-300 hover:bg-red-50">
-                        <span className="text-[12px] leading-none">↩</span>
+                        <span className="text-[14px] leading-none">↩</span>
                       </button>
                     </div>
                   ) : canConfirmAsEngineer(w) ? (
                     <div className="inline-flex gap-1">
                       <button onClick={() => onConfirmEngineer(w)}
-                              className="px-3 py-1 rounded-md text-[11px] font-semibold bg-emerald-700 hover:bg-emerald-800 text-white inline-flex items-center gap-1">
-                        <span className="text-[12px] leading-none">🛠️</span> {t('finalize')}
+                              className="px-3 py-1 rounded-md text-[13px] font-semibold bg-emerald-700 hover:bg-emerald-800 text-white inline-flex items-center gap-1">
+                        <span className="text-[14px] leading-none">🛠️</span> {t('finalize')}
                       </button>
                       <button onClick={() => onRejectEngineer(w)}
                               title={t('reject_to_supervisor')}
                               className="w-7 h-7 rounded-md inline-flex items-center justify-center bg-white text-red-600 border border-red-300 hover:bg-red-50">
-                        <span className="text-[12px] leading-none">↩</span>
+                        <span className="text-[14px] leading-none">↩</span>
                       </button>
                     </div>
                   ) : w.approval_status === 'submitted' && viewRole !== 'supervisor' ? (
-                    <span className="text-[11px] text-slate-400">{t('waits_supervisor')}</span>
+                    <span className="text-[13px] text-slate-400">{t('waits_supervisor')}</span>
                   ) : w.approval_status === 'confirmed_supervisor' && viewRole !== 'engineer' ? (
-                    <span className="text-[11px] text-slate-400">{t('waits_engineer')}</span>
+                    <span className="text-[13px] text-slate-400">{t('waits_engineer')}</span>
                   ) : (
-                    <span className="text-[11px] text-slate-300">—</span>
+                    <span className="text-[13px] text-slate-300">—</span>
                   )}
                 </td>
               </tr>
@@ -2831,11 +2831,11 @@ function SubResourcesTable({ subs, doneQty, planQty, canSeeCost, workStatus, t }
 
   return (
     <div>
-      <div className="flex items-center gap-2 mb-2 text-[11px] font-semibold text-slate-700 uppercase tracking-wider">
+      <div className="flex items-center gap-2 mb-2 text-[13px] font-semibold text-slate-700 uppercase tracking-wider">
         <span>📋 {t('consumed_resources_title') || 'Sarflanadigan resurslar'}{titleSuffix}</span>
         {(isReserved || isFinalised) && (
           <span
-            className="px-2 py-0.5 rounded-full text-[9.5px] font-bold tracking-wide"
+            className="px-2 py-0.5 rounded-full text-[12px] font-bold tracking-wide"
             style={{
               background: isFinalised ? '#D1FAE5' : '#DBEAFE',
               color: isFinalised ? '#065F46' : '#1E40AF',
@@ -2847,9 +2847,9 @@ function SubResourcesTable({ subs, doneQty, planQty, canSeeCost, workStatus, t }
           </span>
         )}
       </div>
-      <table className="w-full text-[11.5px] border-collapse bg-white rounded-md overflow-hidden border border-slate-200">
+      <table className="w-full text-[13px] border-collapse bg-white rounded-md overflow-hidden border border-slate-200">
         <thead>
-          <tr className="bg-slate-100 text-[10px] uppercase font-bold tracking-wider text-slate-500">
+          <tr className="bg-slate-100 text-[12px] uppercase font-bold tracking-wider text-slate-500">
             <th className="text-left   py-2 px-3" style={{ width: 80 }}>{t('type') || 'Tur'}</th>
             <th className="text-left   py-2 px-3">{t('resource_name') || 'Resurs nomi'}</th>
             <th className="text-center py-2 px-2" style={{ width: 70 }}>{t('unit') || "O'lchov"}</th>
@@ -2884,7 +2884,7 @@ function SubResourcesTable({ subs, doneQty, planQty, canSeeCost, workStatus, t }
               <tr key={s.id} className="border-t border-slate-100">
                 <td className="py-1.5 px-3">
                   <span
-                    className="inline-block px-1.5 py-0.5 rounded text-[9.5px] font-bold uppercase tracking-wide"
+                    className="inline-block px-1.5 py-0.5 rounded text-[12px] font-bold uppercase tracking-wide"
                     style={{ background: tag.bg, color: tag.fg }}
                   >
                     {tag.label}

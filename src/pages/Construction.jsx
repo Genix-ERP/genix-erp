@@ -1118,7 +1118,6 @@ const ProjectDetailView = ({
   // read-only progress label). Parent component owns the API + refresh.
   onProjectStatusChange,
 }) => {
-  const { formatCurrencyCompact } = useCurrencyFormatter();
   const { language } = useLanguage();
 
   // Persist active group / tab in the URL so a hard refresh (or a
@@ -1245,6 +1244,8 @@ const ProjectDetailView = ({
 
   // Modals
   const [showBuildingModal, setShowBuildingModal] = useState(false);
+  // Block "Ko'rish" (view) modal — holds the building being previewed, null = closed.
+  const [viewBuilding, setViewBuilding] = useState(null);
   const [showTeamModal, setShowTeamModal] = useState(false);
 const [showDailyLogModal, setShowDailyLogModal] = useState(false);
   const [showPhotoReportModal, setShowPhotoReportModal] = useState(false);
@@ -2638,6 +2639,10 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => setViewBuilding(building)}>
+                                  <Eye className="w-4 h-4 mr-2" />
+                                  {t('view') || "Ko'rish"}
+                                </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => {
                                   setBuildingForm({
                                     id: building.id,
@@ -3398,6 +3403,68 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
         )}
         </Suspense>
       </div>
+
+      {/* Building view (Ko'rish) modal — read-only block detail. */}
+      <Dialog open={!!viewBuilding} onOpenChange={(o) => { if (!o) setViewBuilding(null); }}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" aria-describedby="building-view-help">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 flex-wrap">
+              <span>{viewBuilding?.name || '—'}</span>
+              {viewBuilding?.status && (
+                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                  {viewBuilding.status === 'completed' ? (t('completed') || 'Tugallangan')
+                    : viewBuilding.status === 'in_progress' ? (t('in_progress') || 'Jarayonda')
+                    : (t('draft') || 'Qoralama')}
+                </span>
+              )}
+            </DialogTitle>
+            <p id="building-view-help" className="text-sm text-slate-500">
+              {t('building_details') || "Blok ma'lumotlari"}
+            </p>
+          </DialogHeader>
+          {viewBuilding && (() => {
+            const dash = (v) => (v === null || v === undefined || v === '' ? '—' : v);
+            const num = (v) => (Number(v) ? Number(v).toLocaleString('ru-RU') : '—');
+            const rows = [
+              [t('code') || 'Kod', dash(viewBuilding.code)],
+              [t('building_type') || 'Bino turi', dash(viewBuilding.building_type)],
+              [t('building_purpose') || 'Bino maqsadi', dash(viewBuilding.building_purpose)],
+              [t('floors_count') || 'Qavatlar soni', num(viewBuilding.floors_count)],
+              [t('total_area') || 'Umumiy maydon (m²)', num(viewBuilding.total_area)],
+              [t('apartments_count') || 'Xonadonlar', num(viewBuilding.apartments_count)],
+              [t('commercial_units') || 'Tijorat birliklari', num(viewBuilding.commercial_units_count)],
+              [t('estimated_cost') || 'Taxminiy narx', Number(viewBuilding.estimated_cost) ? `${Number(viewBuilding.estimated_cost).toLocaleString('ru-RU')} ${t('currency_som') || "so'm"}` : '—'],
+            ];
+            return (
+              <div className="space-y-3">
+                <div className="rounded-lg border border-slate-200 divide-y divide-slate-100">
+                  {rows.map(([label, value]) => (
+                    <div key={label} className="flex items-center justify-between gap-4 px-4 py-2.5">
+                      <span className="text-sm text-slate-500">{label}</span>
+                      <span className="text-sm font-medium text-slate-900 text-right break-words">{value}</span>
+                    </div>
+                  ))}
+                </div>
+                {viewBuilding.description && (
+                  <div className="rounded-lg border border-slate-200 px-4 py-2.5">
+                    <p className="text-xs text-slate-500 mb-1">{t('description') || 'Tavsif'}</p>
+                    <p className="text-sm text-slate-800 whitespace-pre-wrap break-words">{viewBuilding.description}</p>
+                  </div>
+                )}
+                <div className="flex justify-end gap-2 pt-1">
+                  <Button variant="outline" onClick={() => { const b = viewBuilding; setViewBuilding(null); openBuildingFiles(b); }}>
+                    <Paperclip className="w-4 h-4 mr-2" />
+                    {t('files') || 'Fayllar'}
+                  </Button>
+                  <Button onClick={() => setViewBuilding(null)}>
+                    {t('close') || 'Yopish'}
+                  </Button>
+                </div>
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
 
       {/* Building Modal */}
       <Dialog open={showBuildingModal} onOpenChange={setShowBuildingModal}>
@@ -4826,7 +4893,7 @@ export default function Construction() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
+  const { formatCurrency } = useCurrencyFormatter();
   const { activeCompany } = useCompany();
 
   const {
@@ -5424,46 +5491,8 @@ export default function Construction() {
             })}
           </div>
 
-          {/* Summary metrics — compact, non-clickable */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div
-              className="rounded-xl border border-slate-200 bg-white p-4"
-              title={t('contract_total_hint') || "Barcha loyihalar shartnoma summalari yig'indisi"}
-            >
-              <div className="flex items-center justify-between">
-                <div className="min-w-0">
-                  <p className="text-xs font-medium text-slate-500 mb-1">
-                    {t('contract_total') || 'Shartnoma summasi'}
-                  </p>
-                  <p className="text-xl font-semibold text-slate-900 tabular-nums truncate">
-                    {formatCurrencyCompact(stats.totalContractAmount)}
-                  </p>
-                </div>
-                <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0">
-                  <DollarSign className="w-5 h-5 text-emerald-600" strokeWidth={2} />
-                </div>
-              </div>
-            </div>
-
-            <div
-              className="rounded-xl border border-slate-200 bg-white p-4"
-              title={t('total_smeta_hint') || "Barcha loyihalar smetalari bo'yicha umumiy qiymat"}
-            >
-              <div className="flex items-center justify-between">
-                <div className="min-w-0">
-                  <p className="text-xs font-medium text-slate-500 mb-1">
-                    {t('total_smeta') || 'Jami smeta'}
-                  </p>
-                  <p className="text-xl font-semibold text-slate-900 tabular-nums truncate">
-                    {formatCurrencyCompact(stats.totalSmeta)}
-                  </p>
-                </div>
-                <div className="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
-                  <FileSpreadsheet className="w-5 h-5 text-indigo-600" strokeWidth={2} />
-                </div>
-              </div>
-            </div>
-          </div>
+          {/* Summary metrics (Shartnoma summasi / Jami smeta) removed per
+              request — the status filter cards above are enough here. */}
         </div>
 
         {/* Projects List */}
