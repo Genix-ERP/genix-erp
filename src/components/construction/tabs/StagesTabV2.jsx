@@ -474,8 +474,15 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
   // the switcher; ordinary users get whichever role the backend
   // resolved for them, which the page renders implicitly.
   const { user, isSiteAdmin, isOwner } = useAuth();
-  const canSwitchRole = (typeof isSiteAdmin === 'function' && isSiteAdmin())
+  const isAdminLike = (typeof isSiteAdmin === 'function' && isSiteAdmin())
     || (typeof isOwner === 'function' && isOwner());
+  // Every workflow role the backend says this user holds on the project
+  // (from my-role's `roles`). Drives the switcher for multi-role users.
+  const [myRoles, setMyRoles] = useState([]);
+  // The switcher shows for admins/owners (who can impersonate any role) and
+  // for regular users assigned to MORE THAN ONE role, so they can act as
+  // each of theirs. A single-role user just lives with that one role.
+  const canSwitchRole = isAdminLike || myRoles.length > 1;
   // Permission gating for the per-stage trash button. Admins/owners/
   // site-admins are auto-true via the hook; regular employees only see
   // the delete affordance when their role grants `construction.delete`.
@@ -673,8 +680,9 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
       .then((r) => {
         if (cancelled) return;
         setRealRole(r?.role || '');
-        // Default the viewer to the user's real role; tenant admins
-        // (no role assigned) start in foreman view, matching the v2
+        setMyRoles(Array.isArray(r?.roles) ? r.roles : (r?.role ? [r.role] : []));
+        // Default the viewer to the user's real (primary) role; tenant
+        // admins (no role assigned) start in foreman view, matching the v2
         // mockup's default selection.
         setViewRole(r?.role || 'foreman');
       })
@@ -1561,12 +1569,18 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
   // the report-generator button; we render into it only when that
   // node exists, otherwise we fall back to inline rendering at the
   // top of the tab content.
+  // Admins/owners can impersonate any role; a regular multi-role user only
+  // gets buttons for the roles they actually hold.
+  const switchableRoles = isAdminLike
+    ? Object.keys(ROLE_META)
+    : Object.keys(ROLE_META).filter((k) => myRoles.includes(k));
   const roleSwitcher = (
     <div className="rounded-xl border border-slate-200 bg-white p-2 flex items-center gap-1">
       <span className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold mx-2">
         {t('switch_role')}
       </span>
-      {Object.entries(ROLE_META).map(([key, meta]) => {
+      {switchableRoles.map((key) => {
+        const meta = ROLE_META[key];
         const active = viewRole === key;
         return (
           <button
@@ -1595,12 +1609,13 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
 
   return (
     <div className="space-y-4">
-      {/* Role switcher — only system admins / tenant owners see it.
-         Everyone else lives with whichever role the backend resolved
-         for them via tenant_settings + project-team lookup, so the
-         switcher would just be a confusing toy for them.
-         The switcher is portalled into the project topbar when the
-         slot exists; otherwise it falls back to an inline render. */}
+      {/* Role switcher — shown to admins/owners (who can impersonate any
+         role) and to regular users who hold MORE THAN ONE project role, so
+         they can act as each of theirs. Single-role users don't see it —
+         they just live with their one resolved role. The backend enforces
+         the action against the user's full role set on every transition.
+         Portalled into the project topbar when the slot exists; otherwise
+         it falls back to an inline render. */}
       {canSwitchRole && (
         topbarSlot
           ? createPortal(roleSwitcher, topbarSlot)
