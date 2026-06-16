@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { Search, Users, Wrench, Package, Grid3x3, RotateCcw, Clock, X } from 'lucide-react';
 import { toast } from 'sonner';
@@ -86,11 +86,23 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
   const { isSiteAdmin, isOwner } = useAuth();
   const canResetAll = (isSiteAdmin?.() || isOwner?.()) === true;
 
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const PAGE_SIZE = 20;
+
+  const [items, setItems] = useState([]);          // accumulated across pages
+  const [loading, setLoading] = useState(false);    // initial / filter-change load
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasNext, setHasNext] = useState(false);
+  // Server-computed counts (stable regardless of the active page/filter) —
+  // the endpoint is paginated, so deriving these from the loaded rows would
+  // only reflect the current page.
+  const [matCounts, setMatCounts] = useState({ standard: 0, equipment: 0, cable: 0, metal: 0, import: 0 });
+  const [modifiedCount, setModifiedCount] = useState(0);
+
   const [cat, setCat] = useState('all');           // Barchasi / Mehnat / Mashina / Material
   const [matFilter, setMatFilter] = useState(''); // '' | 'standard' | 'equipment' | 'cable' | 'metal' | 'import'
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [priceDraft, setPriceDraft] = useState({});
 
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -100,55 +112,79 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
 
   const rowKey = (r) => `${r.name}::${r.uom || ''}`;
 
-  const load = useCallback(async () => {
+  // Debounce the free-text search so each keystroke doesn't fire a request.
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(id);
+  }, [search]);
+
+  // Fetch one page. append=false replaces (filter change / reload),
+  // append=true adds to the bottom (infinite scroll). All filtering happens
+  // server-side now — category, material-type chip and search are sent as
+  // query params so pagination stays correct across the whole catalog.
+  const fetchPage = useCallback(async (pageToLoad, { append }) => {
     if (!project?.id) return;
-    setLoading(true);
+    if (append) setLoadingMore(true); else setLoading(true);
     try {
-      // Pass estimateId so the catalog matches whatever estimate the
-      // parent tab has selected. If estimateId is undefined we fall back
-      // to the project-wide list.
-      const data = await constructionService.listResourcePrices(project.id, { estimateId });
-      setItems(Array.isArray(data) ? data : []);
-      setPriceDraft({});
+      const res = await constructionService.listResourcePrices(project.id, {
+        estimateId,
+        type: cat === 'all' ? undefined : cat,
+        materialType: matFilter || undefined,
+        q: debouncedSearch || undefined,
+        page: pageToLoad,
+        pageSize: PAGE_SIZE,
+      });
+      const rows = res.data || [];
+      setItems((prev) => (append ? [...prev, ...rows] : rows));
+      setPage(res.meta?.page || pageToLoad);
+      setHasNext(!!res.meta?.has_next);
+      const mc = res.summary?.material_type_counts || {};
+      setMatCounts({
+        standard: mc.standard || 0, equipment: mc.equipment || 0,
+        cable: mc.cable || 0, metal: mc.metal || 0, import: mc.import || 0,
+      });
+      setModifiedCount(Number(res.summary?.modified_count || 0));
+      if (!append) setPriceDraft({});
     } catch (e) {
       toast.error(formatApiError(e, t, 'Xatolik'));
-      setItems([]);
+      if (!append) setItems([]);
     } finally {
-      setLoading(false);
+      if (append) setLoadingMore(false); else setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project?.id, estimateId]);
-  useEffect(() => { load(); }, [load]);
+  }, [project?.id, estimateId, cat, matFilter, debouncedSearch]);
 
-  const filtered = useMemo(() => {
-    let xs = items;
-    if (cat !== 'all') xs = xs.filter((r) => classify(r.resource_type) === cat);
-    // The mat-type chips imply "show only material rows of this bucket".
-    // Only material rows have a material_type, so picking a mat chip also
-    // narrows the category filter to "material" automatically.
-    if (matFilter) {
-      xs = xs.filter((r) => classify(r.resource_type) === 'material'
-        && String(r.material_type || 'standard').toLowerCase() === matFilter);
-    }
-    if (search) {
-      const q = search.toLowerCase();
-      xs = xs.filter((r) => (r.name || '').toLowerCase().includes(q) || (r.uom || '').toLowerCase().includes(q));
-    }
-    return xs;
-  }, [items, cat, matFilter, search]);
+  // Reload from page 1 whenever the project, scope or any filter changes.
+  useEffect(() => {
+    setItems([]);
+    setPage(1);
+    setHasNext(false);
+    fetchPage(1, { append: false });
+  }, [fetchPage]);
 
-  // Counts shown in the AVTO-ANIQLASH strip — how many material rows are
-  // currently classified into each bucket. Updates live as the foreman
-  // re-tags resources via the per-row dropdown.
-  const matCounts = useMemo(() => {
-    const c = { standard: 0, equipment: 0, cable: 0, metal: 0, import: 0 };
-    for (const r of items) {
-      if (classify(r.resource_type) !== 'material') continue;
-      const mt = String(r.material_type || 'standard').toLowerCase();
-      if (c[mt] !== undefined) c[mt] += 1;
-    }
-    return c;
-  }, [items]);
+  const reload = useCallback(() => fetchPage(1, { append: false }), [fetchPage]);
+
+  const loadMore = useCallback(() => {
+    if (loading || loadingMore || !hasNext) return;
+    fetchPage(page + 1, { append: true });
+  }, [loading, loadingMore, hasNext, page, fetchPage]);
+
+  // Infinite scroll — observe a sentinel at the bottom of the list.
+  const sentinelRef = useRef(null);
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return undefined;
+    const obs = new IntersectionObserver(
+      (entries) => { if (entries[0]?.isIntersecting) loadMore(); },
+      { rootMargin: '300px' },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [loadMore]);
+
+  // Server already applied category / material-type / search filters, so the
+  // loaded rows ARE the filtered set.
+  const filtered = items;
 
   // Group filtered rows into the v23 "ТРУД И МАШИНЫ — N ресурсов" /
   // "СТРОЙМАТЕРИАЛЫ — N ресурсов" / "КАБЕЛЬНАЯ ПРОДУКЦИЯ — N ресурсов" /
@@ -177,17 +213,34 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
     return order.map((k) => buckets.get(k)).filter(Boolean);
   }, [filtered]);
 
-  const anyModified = items.some((r) =>
-    Number(r.original_price || 0) > 0
-    && Math.abs(Number(r.price || 0) - Number(r.original_price || 0)) > 0.01,
-  );
+  // Server-computed, project/estimate-wide — not limited to the loaded page.
+  const anyModified = modifiedCount > 0;
+
+  // Refresh ONLY the scope-wide summary (chip counts + modified count) after a
+  // mutation, without re-fetching the list or disturbing scroll position.
+  // material_type_counts / modified_count ignore the active filters, so a
+  // 1-row page is enough to read them.
+  const refreshSummary = useCallback(async () => {
+    if (!project?.id) return;
+    try {
+      const res = await constructionService.listResourcePrices(project.id, { estimateId, pageSize: 1 });
+      const mc = res.summary?.material_type_counts || {};
+      setMatCounts({
+        standard: mc.standard || 0, equipment: mc.equipment || 0,
+        cable: mc.cable || 0, metal: mc.metal || 0, import: mc.import || 0,
+      });
+      setModifiedCount(Number(res.summary?.modified_count || 0));
+    } catch {
+      /* non-critical — counts refresh on next full load */
+    }
+  }, [project?.id, estimateId]);
 
   // Every mutation below carries `estimateId` when set so the UPDATE on
   // the backend is scoped to a single estimate (block). Without this,
   // editing Block 1's cement price would also overwrite Block 2's row,
   // which is exactly what the user asked us to stop doing.
   const commitPrice = useCallback(async (row, raw) => {
-    const newPrice = Number(String(raw).replace(/\s/g, '').replace(',', '.').replace(/[^\d.\-]/g, ''));
+    const newPrice = Number(String(raw).replace(/\s/g, '').replace(',', '.').replace(/[^\d.-]/g, ''));
     if (!Number.isFinite(newPrice) || newPrice < 0) return;
     if (Math.abs(newPrice - Number(row.price || 0)) < 0.001) return;
     try {
@@ -203,11 +256,12 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
         : r));
       toast.success(`${t('saved') || 'Saqlandi'} · ${result?.lines_updated || 0} ${t('rows') || 'qator'}`);
       onResourceChanged?.();
+      refreshSummary();
     } catch (e) {
       toast.error(formatApiError(e, t, 'Xatolik'));
-      load();
+      reload();
     }
-  }, [project?.id, estimateId, t, onResourceChanged, load]);
+  }, [project?.id, estimateId, t, onResourceChanged, reload, refreshSummary]);
 
   const updateMatType = useCallback(async (row, value) => {
     try {
@@ -219,10 +273,11 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
       });
       setItems((rows) => rows.map((r) => rowKey(r) === rowKey(row) ? { ...r, material_type: value } : r));
       onResourceChanged?.();
+      refreshSummary();
     } catch (e) {
       toast.error(formatApiError(e, t, 'Xatolik'));
     }
-  }, [project?.id, estimateId, t, onResourceChanged]);
+  }, [project?.id, estimateId, t, onResourceChanged, refreshSummary]);
 
   const resetPrice = useCallback(async (row) => {
     try {
@@ -237,11 +292,12 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
         : r));
       toast.success(t('reset_price_done') || 'Narx asl qiymatga qaytarildi');
       onResourceChanged?.();
+      refreshSummary();
     } catch (e) {
       toast.error(formatApiError(e, t, 'Xatolik'));
-      load();
+      reload();
     }
-  }, [project?.id, estimateId, t, onResourceChanged, load]);
+  }, [project?.id, estimateId, t, onResourceChanged, reload, refreshSummary]);
 
   // Confirm modal state — replaces window.confirm() for the reset-all
   // bulk action so the prompt matches the rest of the app's styling and
@@ -258,11 +314,11 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
         .replace('{count}', String(result?.resources_affected || 0))
         .replace('{lines}', String(result?.lines_updated || 0)));
       onResourceChanged?.();
-      load();
+      reload();
     } catch (e) {
       toast.error(formatApiError(e, t, 'Xatolik'));
     }
-  }, [project?.id, estimateId, t, onResourceChanged, load]);
+  }, [project?.id, estimateId, t, onResourceChanged, reload]);
 
   const resetAll = useCallback(() => {
     setResetAllConfirm(true);
@@ -656,6 +712,16 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
               </div>
             </div>
           ))
+        )}
+
+        {/* Infinite-scroll sentinel + "loading more" row. The observer fires
+           when this element scrolls into view and there's another page. */}
+        {!loading && hasNext && (
+          <div ref={sentinelRef} className="py-6 flex items-center justify-center">
+            {loadingMore
+              ? <Loader />
+              : <span className="text-[12px]" style={{ color: '#94A3B8' }}>{t('loading') || 'Yuklanmoqda…'}</span>}
+          </div>
         )}
       </div>
 
