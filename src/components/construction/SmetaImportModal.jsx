@@ -1059,7 +1059,21 @@ function parseResurs(workbook) {
     const unitPrice = isNaN(colF) ? 0 : colF;
     const total = isNaN(colG) ? 0 : colG;
 
-    // Material-type resolution:
+    // Resource type — the UoM is the most reliable signal and takes
+    // precedence over the section: ЧЕЛ-Ч is always labour and МАШ-Ч is
+    // always a machine, no matter which section (if any) the row was
+    // detected under. The section type is only the fallback for genuine
+    // material rows. Previously this trusted the section alone, so a
+    // machine/labour row that preceded an undetected section header (or
+    // landed in the default 'material' bucket) was mis-tagged 'material'.
+    // That produced a duplicate, 0-price catalog entry for the same
+    // resource that the Единич import had already imported as 'equipment'.
+    const uomType = detectResourceType(colD);
+    const resType = (uomType === 'labor' || uomType === 'equipment')
+      ? uomType
+      : currentSection.resourceType;
+
+    // Material-type resolution (only meaningful for material rows):
     //   1. Section's explicit material_type wins (КАБЕЛЬНАЯ ПРОДУКЦИЯ →
     //      'cable', ОБОРУДОВАНИЕ → 'equipment', МАТЕРИАЛЬНЫЕ РЕСУРСЫ →
     //      'standard').
@@ -1067,7 +1081,7 @@ function parseResurs(workbook) {
     //      like in Блок 1), let the item-name fallback try to spot the
     //      occasional cable or equipment line mixed in.
     let materialType = null;
-    if (currentSection.resourceType === 'material') {
+    if (resType === 'material') {
       materialType = currentSection.materialType || 'standard';
       if (materialType === 'standard') {
         const guess = classifyMaterialByName(colC);
@@ -1083,7 +1097,7 @@ function parseResurs(workbook) {
       quantity: isNaN(colE) ? 0 : colE,
       unit_price: unitPrice,
       total_price: total,
-      resource_type: currentSection.resourceType,
+      resource_type: resType,
       material_type: materialType,
     });
   }
