@@ -1297,6 +1297,10 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
   // the race / direct-call guard). Shape: { open, target, sourceId } | null.
   const [cloneEstimatesModal, setCloneEstimatesModal] = useState(null);
   const [cloneEstimatesBusy, setCloneEstimatesBusy] = useState(false);
+  // Duplicate-building modal — opened from the block card "..." → Nusxalash.
+  // Lets the user pick HOW MANY copies to create. Each copy is a full clone
+  // (estimates + lines + stages + files). Shape: { building, count } | null.
+  const [duplicateModal, setDuplicateModal] = useState(null);
   // Estimate counts per building id — keyed by Number(building.id). Used
   // to (a) disable the "Klonlash" menu entry on blocks that already have
   // estimates, since they're not eligible as a clone TARGET, and (b)
@@ -2678,48 +2682,10 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                                     Disabled only while a previous duplication is still
                                     in flight on this same source. */}
                                 <DropdownMenuItem
-                                  disabled={cloneEstimatesBusy === Number(building.id)}
-                                  onClick={async () => {
+                                  disabled={!!cloneEstimatesBusy}
+                                  onClick={() => {
                                     if (cloneEstimatesBusy) return;
-                                    setCloneEstimatesBusy(Number(building.id));
-                                    try {
-                                      const res = await constructionService.duplicateBuilding(
-                                        project.id, building.id,
-                                      );
-                                      toast.success(
-                                        `${t('duplicate_done') || 'Nusxalash bajarildi'}: ` +
-                                        `${res?.new_building?.name || ''} ` +
-                                        `(${res?.estimates_created ?? 0} smeta · ` +
-                                        `${res?.lines_created ?? 0} satr · ` +
-                                        `${res?.stages_created ?? 0} bosqich · ` +
-                                        `${res?.files_created ?? 0} fayl)`,
-                                      );
-                                      try {
-                                        const [buildingsData, allEstimates] = await Promise.all([
-                                          constructionService.listBuildings(project.id),
-                                          constructionService.listEstimates(project.id).catch(() => []),
-                                        ]);
-                                        setBuildings(sortBuildings(buildingsData));
-                                        const counts = {};
-                                        for (const e of (allEstimates || [])) {
-                                          const bid = Number(e?.building_id || 0);
-                                          if (!bid) continue;
-                                          counts[bid] = (counts[bid] || 0) + 1;
-                                        }
-                                        setEstimateCountByBuildingId(counts);
-                                      } catch { /* non-fatal */ }
-                                    } catch (err) {
-                                      const data = err?.response?.data || {};
-                                      const backendMessage = typeof data.error === 'string'
-                                        ? data.error
-                                        : (data.error?.message || data.message);
-                                      toast.error(
-                                        String(backendMessage || err?.message ||
-                                          (t('error_occurred') || 'Xatolik yuz berdi')),
-                                      );
-                                    } finally {
-                                      setCloneEstimatesBusy(false);
-                                    }
+                                    setDuplicateModal({ building, count: 1 });
                                   }}
                                 >
                                   <Copy className="w-4 h-4 mr-2" />
@@ -3809,6 +3775,112 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
               {cloneEstimatesBusy
                 ? (t('cloning') || 'Nusxalanmoqda...')
                 : (t('clone') || 'Nusxalash')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Duplicate-building modal — asks how many copies to create, then
+          clones the source block that many times. Each call is sequential so
+          the backend's "<name> Copy", "Copy (2)", "Copy (3)"… auto-numbering
+          stays correct. The full-page blur loader (cloneEstimatesBusy) covers
+          the whole run. */}
+      <Dialog open={!!duplicateModal} onOpenChange={(o) => { if (!o && !cloneEstimatesBusy) setDuplicateModal(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t('duplicate_building') || 'Binoni nusxalash'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <p className="text-sm text-slate-500">
+              {duplicateModal?.building?.name
+                ? `"${duplicateModal.building.name}" — ${t('how_many_copies') || 'nechta nusxa yaratamiz?'}`
+                : (t('how_many_copies') || 'Nechta nusxa yaratamiz?')}
+            </p>
+            <div>
+              <Label htmlFor="dup-count">{t('copies_count') || 'Nusxalar soni'}</Label>
+              <Input
+                id="dup-count"
+                type="number"
+                min={1}
+                max={50}
+                className="mt-1"
+                value={duplicateModal?.count ?? 1}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setDuplicateModal((m) => (m ? { ...m, count: v } : m));
+                }}
+              />
+              <p className="text-xs text-slate-400 mt-1">
+                {t('copies_count_hint') || "Har bir nusxa smeta, satr, bosqich va fayllar bilan to'liq ko'chiriladi (1–50)."}
+              </p>
+            </div>
+          </div>
+          <DialogFooter className="flex-col-reverse sm:flex-row gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!!cloneEstimatesBusy}
+              onClick={() => setDuplicateModal(null)}
+            >
+              {t('cancel') || 'Bekor qilish'}
+            </Button>
+            <Button
+              type="button"
+              disabled={!!cloneEstimatesBusy || !duplicateModal?.building?.id}
+              onClick={async () => {
+                const building = duplicateModal?.building;
+                if (!building?.id || !project?.id) return;
+                const n = Math.max(1, Math.min(50, Math.floor(Number(duplicateModal?.count) || 1)));
+                setDuplicateModal(null);
+                setCloneEstimatesBusy(Number(building.id));
+                let ok = 0;
+                let fail = 0;
+                let lastErr = '';
+                // Sequential — each copy must commit before the next so the
+                // backend sees the previous "<name> Copy" and increments.
+                for (let i = 0; i < n; i++) {
+                  try {
+                    await constructionService.duplicateBuilding(project.id, building.id);
+                    ok += 1;
+                  } catch (err) {
+                    fail += 1;
+                    const data = err?.response?.data || {};
+                    lastErr = typeof data.error === 'string'
+                      ? data.error
+                      : (data.error?.message || data.message || err?.message || '');
+                  }
+                }
+                // Refresh the block list + estimate counts once at the end.
+                try {
+                  const [buildingsData, allEstimates] = await Promise.all([
+                    constructionService.listBuildings(project.id),
+                    constructionService.listEstimates(project.id).catch(() => []),
+                  ]);
+                  setBuildings(sortBuildings(buildingsData));
+                  const counts = {};
+                  for (const e of (allEstimates || [])) {
+                    const bid = Number(e?.building_id || 0);
+                    if (!bid) continue;
+                    counts[bid] = (counts[bid] || 0) + 1;
+                  }
+                  setEstimateCountByBuildingId(counts);
+                } catch { /* non-fatal */ }
+                if (ok > 0) {
+                  toast.success(
+                    `${t('duplicate_done') || 'Nusxalash bajarildi'}: ` +
+                    `${ok} ${t('copies_short') || 'nusxa'}` +
+                    (fail > 0 ? ` · ${fail} ${t('failed_short') || 'xato'}` : ''),
+                  );
+                }
+                if (ok === 0) {
+                  toast.error(String(lastErr || (t('error_occurred') || 'Xatolik yuz berdi')));
+                }
+                setCloneEstimatesBusy(false);
+              }}
+            >
+              {cloneEstimatesBusy
+                ? (t('cloning') || 'Nusxalanmoqda...')
+                : (t('create') || 'Yaratish')}
             </Button>
           </DialogFooter>
         </DialogContent>
