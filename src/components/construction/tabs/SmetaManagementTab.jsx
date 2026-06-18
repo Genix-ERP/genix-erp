@@ -452,6 +452,10 @@ export default function SmetaManagementTab({ project }) {
   // setLines from a stale invocation is dropped, preventing the "shaking"
   // (block A's load writing over block B after you switch).
   const loadTokenRef = React.useRef(0);
+  // After a mutation that forces a reload (add resource / sub-stage), remember
+  // which work to scroll back to once the fresh lines paint — otherwise the
+  // loader swap drops the user at the top of the page.
+  const pendingScrollWorkRef = React.useRef(null);
   const cacheKeyFor = useCallback((ids) => {
     const idList = Array.isArray(ids) ? ids : (ids ? [ids] : []);
     return idList.slice().sort((a, b) => Number(a) - Number(b)).join(',');
@@ -513,6 +517,30 @@ export default function SmetaManagementTab({ project }) {
   // loadLines with { force: true } so their fresh state replaces the
   // cached copy.
   useEffect(() => { loadLines(activeEstimateIds, { force: false }); }, [activeEstimateIds, loadLines]);
+
+  // Reload that remembers a work to return to. Used by the add-resource /
+  // add-sub-stage flows so the page doesn't jump to the top after saving.
+  const reloadKeepingWork = useCallback((workId) => {
+    if (workId != null) {
+      pendingScrollWorkRef.current = Number(workId);
+      // Keep the work expanded so its resource list is visible on return.
+      setOpenWorks((s) => { const n = new Set(s); n.add(Number(workId)); return n; });
+    }
+    loadLines(activeEstimateIds, { force: true });
+  }, [activeEstimateIds, loadLines]);
+
+  // Once the forced reload finishes painting, scroll the remembered work back
+  // into view. Two rAFs wait for the windowed list to re-render.
+  useEffect(() => {
+    if (loadingLines) return;
+    const id = pendingScrollWorkRef.current;
+    if (id == null) return;
+    pendingScrollWorkRef.current = null;
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const el = document.getElementById(`work-anchor-${id}`);
+      if (el) el.scrollIntoView({ behavior: 'auto', block: 'center' });
+    }));
+  }, [loadingLines, lines]);
 
   // ── Manually-added sections (construction_stages) ─────────────────
   // Fetched whenever the active block changes or "+ Yangi seksiya" was
@@ -2980,7 +3008,7 @@ export default function SmetaManagementTab({ project }) {
         estimateId={Number(estimateId)}
         parent={addTarget}
         nextSeq={addTarget ? nextSeqFor(addTarget.id) : 1}
-        onSaved={() => loadLines(activeEstimateIds, { force: true })}
+        onSaved={() => reloadKeepingWork(addTarget?.id)}
       />
       <AddSubWorkModal
         open={addStageOpen}
@@ -2989,7 +3017,7 @@ export default function SmetaManagementTab({ project }) {
         estimateId={Number(estimateId)}
         parent={addTarget}
         nextSeq={addTarget ? nextSeqFor(addTarget.id) : 1}
-        onSaved={() => loadLines(activeEstimateIds, { force: true })}
+        onSaved={() => reloadKeepingWork(addTarget?.id)}
       />
 
       {/* Second mount of the same modal in parentSection mode — handles
@@ -3873,6 +3901,10 @@ function WorkCard({
 
   return (
     <div
+      // Stable anchor so the page can scroll this work back into view after a
+      // mutation reload (add resource / sub-stage). scrollMarginTop keeps it
+      // clear of the sticky header when scrolled to.
+      id={`work-anchor-${line.id}`}
       className="rounded-lg mb-1.5 overflow-hidden transition"
       style={{
         background: isSubStage
@@ -3886,6 +3918,7 @@ function WorkCard({
           : `1px solid ${C.border}`,
         marginLeft: isSubStage ? 32 : 0,
         opacity: isEmpty && !isOpen ? 0.7 : 1,
+        scrollMarginTop: 90,
       }}
     >
       {/* Head row */}
