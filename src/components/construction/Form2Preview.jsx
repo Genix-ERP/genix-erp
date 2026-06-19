@@ -115,6 +115,16 @@ function fmtRu(n) {
   return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(Number(n)).replace(/\u00A0/g, ' ');
 }
 
+// Quantity formatter \u2014 keeps up to 7 fraction digits so small norm-based
+// quantities (e.g. 0,0018) are shown in full instead of rounding to 0 like
+// the money formatter (fmtRu) does. Trailing zeros are trimmed
+// automatically. Used ONLY for the \u041A\u043E\u043B-\u0432\u043E column; prices and sums stay at
+// 2-decimal money formatting.
+function fmtQty(n) {
+  if (n === null || n === undefined || Number.isNaN(Number(n))) return '\u2014';
+  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 7 }).format(Number(n)).replace(/\u00A0/g, ' ');
+}
+
 function getMaterialType(line) {
   const mt = String(line?.material_type || 'standard').toLowerCase();
   // metal/import buckets were retired — fold those rows into the standard
@@ -1393,7 +1403,7 @@ ${linkParts.join('\n')}
                             <td className="border border-stone-300 px-1.5 py-1.5 font-mono text-[10px] font-semibold">{work.code || ''}</td>
                             <td className="border border-stone-300 px-2 py-1.5 font-semibold text-slate-900">{work.name}</td>
                             <td className="border border-stone-300 px-1.5 py-1.5 text-center font-semibold">{work.uom || ''}</td>
-                            <td className="border border-stone-300 px-1.5 py-1.5 text-right font-mono font-semibold">{fmtRu(qty)}</td>
+                            <td className="border border-stone-300 px-1.5 py-1.5 text-right font-mono font-semibold">{fmtQty(qty)}</td>
                             <td className="border border-stone-300 px-1.5 py-1.5 text-right font-mono font-semibold">{fmtRu(Math.round(pricePerUnit * 100) / 100)}</td>
                             <td className="border border-stone-300 px-1.5 py-1.5 text-right font-mono font-bold text-orange-700">{fmtRu(Math.round(brutto.base * 100) / 100)}</td>
                           </tr>
@@ -1414,7 +1424,7 @@ ${linkParts.join('\n')}
                                     {r.name}
                                   </td>
                                   <td className="border border-emerald-200 px-1.5 py-1.5 text-center text-emerald-700">{r.uom || ''}</td>
-                                  <td className="border border-emerald-200 px-1.5 py-1.5 text-right font-mono text-emerald-700">{fmtRu(Number(r.quantity || 0))}</td>
+                                  <td className="border border-emerald-200 px-1.5 py-1.5 text-right font-mono text-emerald-700">{fmtQty(Number(r.quantity || 0))}</td>
                                   <td className="border border-emerald-200 px-1.5 py-1.5 text-right font-mono text-emerald-700">{fmtRu(Number(r.unit_rate || 0))}</td>
                                   <td className="border border-emerald-200 px-1.5 py-1.5 text-right font-mono font-semibold text-emerald-800">
                                     {fmtRu(Math.round(stageTotal * 100) / 100)}
@@ -1470,7 +1480,7 @@ ${linkParts.join('\n')}
                                     )}
                                   </td>
                                   <td className="border border-stone-200 px-1.5 py-1.5 text-center text-slate-600">{r.uom || ''}</td>
-                                  <td className="border border-stone-200 px-1.5 py-1.5 text-right font-mono text-slate-600">{fmtRu(totQ)}</td>
+                                  <td className="border border-stone-200 px-1.5 py-1.5 text-right font-mono text-slate-600">{fmtQty(totQ)}</td>
                                   <td className="border border-stone-200 px-1.5 py-1.5 text-right font-mono text-slate-600">{fmtRu(price)}</td>
                                   <td className="border border-stone-200 px-1.5 py-1.5 text-right font-mono">
                                     {fmtRu(Math.round(summaForRow * 100) / 100)}
@@ -1496,7 +1506,7 @@ ${linkParts.join('\n')}
                                         ) : null}
                                       </td>
                                       <td className="border border-teal-200 px-1.5 py-1 text-center text-[10px] text-teal-700">{r.uom || ''}</td>
-                                      <td className="border border-teal-200 px-1.5 py-1 text-right font-mono text-[10px] text-teal-700">{fmtRu(tpQty)}</td>
+                                      <td className="border border-teal-200 px-1.5 py-1 text-right font-mono text-[10px] text-teal-700">{fmtQty(tpQty)}</td>
                                       <td className="border border-teal-200 px-1.5 py-1 text-right font-mono text-[10px] text-teal-700">{fmtRu(tpPrice)}</td>
                                       <td className="border border-teal-200 px-1.5 py-1 text-right font-mono text-[10px] font-semibold text-teal-800">
                                         {fmtRu(Math.round(tpTotal * 100) / 100)}

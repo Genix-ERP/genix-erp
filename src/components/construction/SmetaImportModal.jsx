@@ -76,6 +76,128 @@ function isTopSectionHeader(name) {
   return TOP_SECTION_PATTERNS.some((re) => re.test(name));
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// HEADER-ROW ANCHORING (template-independent)
+//
+// The two smeta templates we ship support — Юксалиш (Госархстрой XLS)
+// and Саттепо (modern XLSX) — share the same column-header text but
+// stack a DIFFERENT number of banner rows above it. Hard-coding "data
+// starts at row 12" (the old `for (let i = 11; ...)`) silently worked
+// on Саттепо and silently mis-parsed Юксалиш:
+//
+//   • Юксалиш banner depth: 14 rows. Row 13 holds the numeric column
+//     reference (1.0 2.0 3.0 4.0 5.0 6.0); starting at row 12 ingests
+//     that row as a phantom "work #1" and skips the РАЗДЕЛ N. divider.
+//   • Саттепо banner depth: 11 rows. Row 11 is the numeric reference;
+//     starting at row 12 lands on real data, so the bug never showed
+//     during development.
+//
+// `findHeaderAnchor` scans the first ~30 rows looking for the row whose
+// columns spell out the standard ВОР / Единич header: "N п.п." in col A
+// AND "Наименование" in col C (and ideally "Единица" in col D). That
+// row is the structural pivot — three rows below it is guaranteed to
+// be the first data row in every smeta template I've inspected:
+//
+//   header row     →  "N п.п. | Шифр | Наименование | Ед. изм. | Кол-во"
+//   header + 1     →  merged sub-labels of "Количество"
+//                     ("на ед. измерения | по проектным данным")
+//   header + 2     →  numeric column reference (1 2 3 4 5 6 / 1.0 2.0 …)
+//   header + 3     →  first data row (section divider or work).
+//
+// Returns { headerRowIdx, firstDataRowIdx } both ZERO-INDEXED, or null
+// if no recognisable header was found in the first 30 rows (callers
+// then fall back to the legacy index 11 so a brand-new template variant
+// doesn't fail open with zero rows).
+function findHeaderAnchor(rawData) {
+  const MAX_SCAN = Math.min(30, rawData.length);
+  for (let i = 0; i < MAX_SCAN; i++) {
+    const row = rawData[i];
+    if (!row) continue;
+    const colA = row[0] != null ? String(row[0]).trim().toLowerCase() : '';
+    const colC = row[2] != null ? String(row[2]).trim().toLowerCase() : '';
+    const colD = row[3] != null ? String(row[3]).trim().toLowerCase() : '';
+    // "N п.п." appears as "N п.п.", "№ п/п", "N п/п" depending on
+    // template — accept any letter+ "п" combination with dot/slash.
+    const isItemNoCol = /^[n№]\s*п[./]п/i.test(colA);
+    const isNameCol   = colC.includes('наименование');
+    const isUomCol    = colD.includes('единица') || colD.includes('ед.') || colD === '';
+    if (isItemNoCol && isNameCol && isUomCol) {
+      return { headerRowIdx: i, firstDataRowIdx: i + 3 };
+    }
+  }
+  return null;
+}
+
+// Pulls the "object name" from rows ABOVE the column-header row. The
+// legacy scan would happily grab parenthesised placeholder banners like
+// "(наименование работ и затрат, наименование объекта)" because they
+// contain the substring "объект" — that placeholder then became the
+// imported section's name on the Saatepo / Юксалиш Тип-3 import.
+//
+// Rules:
+//   1. Only scan rows STRICTLY ABOVE the column header (banner area).
+//   2. Reject any cell that is wrapped in parentheses — those are
+//      template placeholders, never real data.
+//   3. Prefer cells that match the explicit "объект - <name>" or
+//      "Блок ..." patterns; fall back to the first plain-text cell that
+//      survives the placeholder filter.
+function extractObjectName(rawData, headerRowIdx) {
+  const stopRow = headerRowIdx > 0 ? headerRowIdx : Math.min(10, rawData.length);
+  const isPlaceholder = (s) => /^\s*\(.*\)\s*$/.test(s);
+  // First pass — look for the explicit "объект -" pattern.
+  for (let r = 0; r < stopRow; r++) {
+    const row = rawData[r];
+    if (!row) continue;
+    for (let c = 0; c < Math.min(8, row.length); c++) {
+      const v = row[c];
+      if (!v || typeof v !== 'string') continue;
+      const s = v.trim();
+      if (!s || isPlaceholder(s)) continue;
+      const m = s.match(/объект\s*[-–:]\s*(.+)/i);
+      if (m && m[1] && m[1].trim().length > 2) {
+        return m[1].trim();
+      }
+    }
+  }
+  // Second pass — accept anything mentioning "Блок" or "блок".
+  for (let r = 0; r < stopRow; r++) {
+    const row = rawData[r];
+    if (!row) continue;
+    for (let c = 0; c < Math.min(8, row.length); c++) {
+      const v = row[c];
+      if (!v || typeof v !== 'string') continue;
+      const s = v.trim();
+      if (!s || isPlaceholder(s)) continue;
+      if (/блок/i.test(s) && s.length > 5) {
+        return s;
+      }
+    }
+  }
+  return '';
+}
+
+// Catalog-code shape validator. Real estimate work rows have a
+// recognisable catalog code in col B (Е0101-..., Ц1008-..., С, or a
+// bare numeric resource code on resource sub-rows). The phantom row
+// "1.0 | 2.0 | 3.0 | 4.0 | 5.0 | 6.0" — the numeric column reference
+// that lives 2 rows below the column-header — has col B = "2.0" which
+// would slip past a naive "col B is truthy" check. This validator
+// returns true when col B looks like ANY of the known catalog formats,
+// false for bare integers ≤ 10 (those are the column-reference row).
+function looksLikeCatalogCode(colB) {
+  if (!colB) return false;
+  const s = String(colB).trim();
+  // Bare integer ≤ 10 → almost certainly the "1 2 3 4 5 6" reference row.
+  // Real resource codes can be bare integers too (e.g. "1", "3", "258",
+  // "1940" in ВОР sub-rows), but they're usually > 10 once you're past
+  // the labor codes 1/3; the false positive on rows 1 and 3 is acceptable
+  // because those are real resource lines with actual content beside them.
+  if (/^\d+(?:\.0+)?$/.test(s) && Number(s) <= 6 && /^\d/.test(s)) {
+    return false;
+  }
+  return true;
+}
+
 // Robust cell-to-number converter. The Excel imports here are
 // Russian-locale files where decimal numbers display with a COMMA
 // ("10,272" = 10.272). If a cell is text-formatted (common when
@@ -108,43 +230,19 @@ function parseVOR(workbook) {
   const rawData = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
   const merges = sheet['!merges'] || [];
 
-  // Extract object name from row 7 (index 6) — merged cell in column C
-  let objectName = '';
-  for (let row = 4; row < 10; row++) {
-    const rowData = rawData[row];
-    if (rowData) {
-      // Check columns B-F for object name (often in merged cells)
-      for (let col = 1; col < 6; col++) {
-        const val = rowData[col];
-        if (val && typeof val === 'string' && val.includes('объект')) {
-          // Extract the part after "объект - " or "объект:"
-          const match = val.match(/объект\s*[-–:]\s*(.+)/i);
-          if (match) objectName = match[1].trim();
-          else objectName = val.trim();
-          break;
-        }
-      }
-    }
-  }
+  // Find the column-header row ("N п.п. | Шифр | Наименование | Ед. изм. | Кол-во")
+  // and derive the first data row from it. Falls back to the legacy
+  // offset 11 if no recognisable header exists, so genuinely-broken
+  // files still pretend to parse (yielding zero items) instead of
+  // throwing — same behaviour as before.
+  const anchor = findHeaderAnchor(rawData);
+  const firstDataRowIdx = anchor ? anchor.firstDataRowIdx : 11;
 
-  // Also check for merged cell values that might contain object name
-  if (!objectName) {
-    for (let row = 5; row < 9; row++) {
-      const rowData = rawData[row];
-      if (rowData) {
-        for (let col = 0; col < 7; col++) {
-          const val = rowData[col];
-          if (val && typeof val === 'string' && (val.includes('Блок') || val.includes('блок'))) {
-            objectName = val.trim();
-            break;
-          }
-        }
-      }
-      if (objectName) break;
-    }
-  }
+  // Object name — only scan rows above the header, ignore parenthesised
+  // template placeholders ("(наименование работ и затрат…)" etc.).
+  const objectName = extractObjectName(rawData, anchor ? anchor.headerRowIdx : 8);
 
-  // Parse data rows starting from row 12 (index 11). The ВОР sheet has
+  // Parse data rows starting from firstDataRowIdx. The ВОР sheet has
   // up to three header levels: top-level sections (СЕКЦИЯ / РАЗДЕЛ),
   // stages, and sub-stages. We track the current header at each level
   // so every work row carries its full path in `parent_item_number`.
@@ -177,7 +275,7 @@ function parseVOR(workbook) {
     currentSection = { name: pathOf(), items: [] };
   };
 
-  for (let i = 11; i < rawData.length; i++) {
+  for (let i = firstDataRowIdx; i < rawData.length; i++) {
     const row = rawData[i];
     if (!row || row.every((cell) => cell == null || cell === '')) continue;
 
@@ -188,15 +286,32 @@ function parseVOR(workbook) {
     // toNum handles Russian comma-decimal text cells safely.
     const colE = toNum(row[4]);
 
-    // Skip empty description rows
-    if (!colC) continue;
-
-    // Skip ИТОГО / subtotal rows
+    // Skip ИТОГО / subtotal rows (text can sit in either col A or col C).
     if (colC.toUpperCase().includes('ИТОГО')) continue;
+    if (colA.toUpperCase().includes('ИТОГО')) continue;
 
-    // Detect section headers:
-    // 1) Classic: no item number in A, no code in B, uppercase text in C
-    // 2) Numbered: has number in A but NO uom (D), NO quantity (E), text is all uppercase
+    // Detect section headers. Two distinct layouts we need to handle:
+    //   1) "РАЗДЕЛ N.<NAME>" in col A only — Юксалиш / Госархстрой XLS.
+    //      Cols B-F are blank; the divider sits entirely in column A.
+    //   2) Classic: no item number in A, no code in B, uppercase text in
+    //      col C — Саттепо and most modern XLSX templates.
+    //   3) Numbered: integer in A, no uom (D), no quantity (E),
+    //      all-uppercase text in C — older mixed templates.
+    const isRazdelDivider = /^\s*РАЗДЕЛ\s+\d/i.test(colA) && !colB && !colC && !colD;
+    if (isRazdelDivider) {
+      // Strip the "РАЗДЕЛ N." prefix so the section name reads cleanly
+      // ("ЗЕМЛЯНЫЕ РАБОТЫ" instead of "РАЗДЕЛ 1.ЗЕМЛЯНЫЕ РАБОТЫ").
+      const divName = colA.replace(/^\s*РАЗДЕЛ\s+\d+\s*[.:]?\s*/i, '').trim() || colA;
+      currentTopSection = divName;
+      currentStage      = '';
+      currentSubStage   = '';
+      startSection();
+      continue;
+    }
+
+    // Skip empty description rows AFTER the РАЗДЕЛ check (which lives in
+    // col A, not col C).
+    if (!colC) continue;
     const isClassicHeader =
       !colA &&
       !colB &&
@@ -235,8 +350,21 @@ function parseVOR(workbook) {
     // Data row: must have something in A (item number) or at least a code in B
     if (!colA && !colB) continue;
 
-    // Skip sub-items (like 1.1, 1.2) — these are resource breakdowns in ВОР
-    // Actually in ВОР sheet, there are typically no sub-items. But if present, include them.
+    // Reject the numeric column-reference row that lives 2 rows below the
+    // column-header. Its shape is "1 | 2 | 3 | 4 | 5 | 6" (or "1.0 | 2.0 |
+    // ..." in Юксалиш XLS). It would otherwise sneak through as a phantom
+    // work — col A "1.0" passes the truthy test, col B "2.0" passes the
+    // truthy test, col D "4.0" passes the uom test, etc. Detected when
+    // col A is a small integer (≤6) AND col C is also a small integer —
+    // a real work would have a description in col C.
+    const colAAsNum = Number(String(colA).replace(',', '.'));
+    const colCAsNum = Number(String(colC).replace(',', '.'));
+    if (
+      Number.isFinite(colAAsNum) && colAAsNum <= 6 && colAAsNum > 0 &&
+      Number.isFinite(colCAsNum) && colCAsNum <= 6 && colCAsNum > 0
+    ) {
+      continue;
+    }
 
     currentSection.items.push({
       item_number: colA,
@@ -267,67 +395,180 @@ function detectResourceType(uom) {
   return 'material';
 }
 
-function parseEdinich(workbook) {
-  // Find единич sheet
-  const sheetName = workbook.SheetNames.find(
-    (name) => name.toLowerCase().includes('единич')
+// Detects which sheet in the workbook actually carries the work +
+// resource hierarchy. Same naming convention is used by two
+// structurally-different smeta templates and they swap meaning:
+//
+//   XLSX (Саттепо / modern):  единич = work hierarchy ; ВОР = flat list
+//   XLS  (Юксалиш / legacy):  ВОР    = work hierarchy ; единич = resource catalog
+//
+// The "work hierarchy" signature is the presence of dotted item
+// numbers ("1.1", "1.2", "2.1", …) — resource sub-rows under a parent
+// work. A flat resource catalog has only bare integers ("1", "2", "3"…)
+// because the same item-number scheme restarts inside each catalog
+// bucket (ТРУДОВЫЕ РЕСУРСЫ → СТРОИТЕЛЬНЫЕ МАШИНЫ → …).
+//
+// Returns the sheet name to use, or null if neither sheet looks like
+// the work hierarchy. The caller can then keep the user's selection.
+function pickWorkHierarchySheet(workbook) {
+  const candidateNames = workbook.SheetNames.filter(
+    (n) => /единич|вор/i.test(n),
   );
+  if (candidateNames.length === 0) return null;
+  let best = null;
+  let bestScore = 0;
+  for (const name of candidateNames) {
+    const sheet = workbook.Sheets[name];
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
+    // Two shapes of "work + resource sub-row" signature:
+    //   • Dotted item numbers ("1.1", "1.2" …) — XLS Юксалиш ВОР style.
+    //   • Empty-col-A rows immediately following an integer-col-A row,
+    //     with col C carrying a resource name — XLSX Саттепо единич
+    //     style. The work row sits at "648 / Ц1008-002-02 / ИЗВЕЩАТЕЛИ"
+    //     and the labour/equipment children below have blank A/B and
+    //     just the resource name in C.
+    // Either signature counts as a "work hierarchy" indicator. A pure
+    // resource catalog (XLS Юксалиш единич) hits neither — every row
+    // has a bare integer in col A because numbering restarts within
+    // each ТРУДОВЫЕ РЕСУРСЫ / СТРОИТЕЛЬНЫЕ МАШИНЫ … bucket.
+    let score = 0;
+    let prevA = '';
+    let prevC = '';
+    for (let i = 0; i < Math.min(rows.length, 200); i++) {
+      const row = rows[i];
+      if (!row) { prevA = ''; prevC = ''; continue; }
+      const colA = row[0] != null ? String(row[0]).trim() : '';
+      const colB = row[1] != null ? String(row[1]).trim() : '';
+      const colC = row[2] != null ? String(row[2]).trim() : '';
+      if (/^\d+\.\d+$/.test(colA)) {
+        score++;
+      } else if (
+        !colA && !colB && colC && colC.length > 3
+        && /^\d+$/.test(prevA) && prevC && prevC.length > 3
+      ) {
+        score++;
+      }
+      prevA = colA;
+      prevC = colC;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      best = name;
+    }
+  }
+  // Need at least a handful of hierarchy rows to be confident. Below
+  // that, fall back to the caller's pick (preserves single-sheet edge
+  // cases like a brand-new template variant).
+  return bestScore >= 5 ? best : null;
+}
+
+function parseEdinich(workbook) {
+  // Prefer whichever sheet actually carries the work + resource hierarchy.
+  // For XLSX (Саттепо) this is the единич sheet (work rows + dotted sub-
+  // rows). For XLS (Юксалиш Тип-3) it's the ВОР sheet — the file's
+  // единич sheet is a flat resource catalog (the ТРУДОВЫЕ РЕСУРСЫ /
+  // СТРОИТЕЛЬНЫЕ МАШИНЫ И МЕХАНИЗМЫ / МАТЕРИАЛЫ buckets with restart-
+  // numbering) and parsing it as if it were a work hierarchy was the
+  // root cause of "14 ish ЗАТРАТЫ ТРУДА duplicated 7× under a single
+  // section" — 7 sub-bills × 2 labour codes, all bucketed identically.
+  // pickWorkHierarchySheet probes both candidate sheets for dotted
+  // resource sub-rows ("1.1", "1.2") and returns the one that scores
+  // highest; falls back to whichever sheet name matches "единич" if
+  // neither shows the work-hierarchy signature.
+  const sheetName =
+    pickWorkHierarchySheet(workbook) ||
+    workbook.SheetNames.find((name) => name.toLowerCase().includes('единич'));
   if (!sheetName) return null;
 
   const sheet = workbook.Sheets[sheetName];
   const rawData = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
   const merges = sheet['!merges'] || [];
 
-  // Build a set of merged-cell rows (C column merged across D+) — these are section headers
+  // Find the column-header row and derive data start — same anchor rule
+  // as parseVOR above. Юксалиш XLS pushes the header to row 12 (idx 11)
+  // because of the deeper banner; Саттепо XLSX has it at row 9 (idx 8).
+  // Old code assumed idx 8 globally and ingested the numeric reference
+  // row (1.0 2.0 3.0 4.0 5.0 6.0) as a phantom work + skipped РАЗДЕЛ N.
+  // section dividers because the section name lived in col A only.
+  const anchor = findHeaderAnchor(rawData);
+  const firstDataRowIdx = anchor ? anchor.firstDataRowIdx : 11;
+  const headerRowIdx    = anchor ? anchor.headerRowIdx    : 8;
+
+  // Merged-cell section headers — anchor the row floor to the actual
+  // first-data row instead of the hard-coded 11 so deeper banners still
+  // catch their merged-C section titles.
   const mergedSectionRows = new Set();
   for (const m of merges) {
-    // Merged range starting at column C (index 2) and spanning to D or beyond
-    if (m.s.c === 2 && m.e.c > 2 && m.s.r >= 11) {
+    if (m.s.c === 2 && m.e.c > 2 && m.s.r >= firstDataRowIdx) {
       mergedSectionRows.add(m.s.r);
     }
   }
 
-  // Extract object name from rows 1-10
-  let objectName = '';
-  for (let row = 0; row < 10; row++) {
-    const rowData = rawData[row];
-    if (rowData) {
-      for (let col = 0; col < 7; col++) {
-        const val = rowData[col];
-        if (val && typeof val === 'string' && (val.includes('Блок') || val.includes('блок') || val.includes('объект'))) {
-          const match = val.match(/объект\s*[-–:]\s*(.+)/i);
-          objectName = match ? match[1].trim() : val.trim();
-          break;
-        }
-      }
-      if (objectName) break;
+  // Object name — banner-row scan, placeholder-aware (rejects strings
+  // wrapped in parens like "(наименование работ и затрат, наименование
+  // объекта)" which the old scan happily accepted).
+  const objectName = extractObjectName(rawData, headerRowIdx);
+
+  // Юксалиш Тип-3 XLS structure note
+  // ---------------------------------
+  // Both the ВОР sheet and the единич sheet stack SEVEN
+  // "Локальный ресурсный сметный расчет" sub-bills, one per discipline
+  // (ОБЩЕСТРОИТЕЛЬНЫЕ РАБОТЫ(КЖ), ОБЩЕСТРОИТЕЛЬНЫЕ РАБОТЫ(АР),
+  // ВОДОПРОВОД И КАНАЛИЗАЦИЯ (ВК), ОТОПЛЕНИЕ И ВЕНТИЛЯЦИЯ(ОВ),
+  // ЭЛЕКТРОСНАБЖЕНИЕ(ЭС), СЛАБОТОЧНЫЕ СЕТИ (ВН_СКС), СЛАБОТОЧНЫЕ СЕТИ (ЛВС)).
+  //
+  // Each sub-bill begins with a row containing the literal word "на".
+  // The discipline name sits in the cell IMMEDIATELY TO THE RIGHT of
+  // "на" — but the two sheets use DIFFERENT columns for this:
+  //
+  //   единич sheet:  col A = '',   col B = 'на',  col C = discipline name
+  //   ВОР    sheet:  col A = 'на', col B = discipline name, col C = ''
+  //
+  // We accept either layout. The discipline name often carries trailing
+  // boilerplate after a comma ("...РАБОТЫ(КЖ), МНОГОЭТАЖНЫЙ ... ТИП-3");
+  // strip everything from the first comma onwards so the resulting
+  // stage names match what the user's existing XLSX-derived stages
+  // look like (just "ОБЩЕСТРОИТЕЛЬНЫЕ РАБОТЫ(КЖ)" etc.).
+  //
+  // pickDisciplineFromRow → null if the row isn't a "на" marker,
+  // otherwise the trimmed discipline name.
+  const pickDisciplineFromRow = (row) => {
+    if (!row) return null;
+    const cA = row[0] != null ? String(row[0]).trim().toLowerCase() : '';
+    const cB = row[1] != null ? String(row[1]).trim().toLowerCase() : '';
+    let candidate = '';
+    if (cA === 'на') {
+      candidate = row[1] != null ? String(row[1]).trim() : '';
+    } else if (cB === 'на') {
+      candidate = row[2] != null ? String(row[2]).trim() : '';
     }
-  }
-  // Fallback: use project description from row 2 (index 1) if no object name found
-  if (!objectName) {
-    for (let row = 0; row < 5; row++) {
-      const rowData = rawData[row];
-      if (rowData) {
-        for (let col = 0; col < 7; col++) {
-          const val = rowData[col];
-          if (val && typeof val === 'string' && val.length > 15 && !val.includes('наименование') && !val.includes('ведомость') && !val.includes('смета')) {
-            objectName = val.trim().replace(/\.$/, '');
-            break;
-          }
-        }
-        if (objectName) break;
-      }
-    }
+    if (!candidate || candidate.length < 4) return null;
+    // Drop trailing project boilerplate after the first comma.
+    const trimmed = candidate.split(',')[0].trim();
+    return trimmed.length >= 4 ? trimmed : candidate;
+  };
+
+  // Sub-bill 1's "на" marker sits inside the banner area ABOVE the
+  // column-header row, so we pre-scan rows 0..firstDataRowIdx to seed
+  // `initialTopSection`. Sub-bills 2-7 fire inside the data loop via
+  // the inline check below.
+  let initialTopSection = '';
+  for (let r = 0; r < firstDataRowIdx; r++) {
+    const name = pickDisciplineFromRow(rawData[r]);
+    if (name) { initialTopSection = name; break; }
   }
 
-  // Parse data rows starting from row 12 (index 11). See parseVOR above
+  // Parse data rows starting from firstDataRowIdx. See parseVOR above
   // for the rationale behind the three-level hierarchy bookkeeping —
   // same idea here, just adapted to the единич sheet.
   const sections = [];
-  let currentTopSection = '';
+  let currentTopSection = initialTopSection;
   let currentStage = '';
   let currentSubStage = '';
-  let currentSection = { name: objectName || 'Imported', items: [] };
+  let currentSection = {
+    name: initialTopSection || objectName || 'Imported',
+    items: [],
+  };
   let lastParentNumber = '';
   const pathOf = () => {
     const parts = [];
@@ -341,7 +582,7 @@ function parseEdinich(workbook) {
     currentSection = { name: pathOf(), items: [] };
   };
 
-  for (let i = 11; i < rawData.length; i++) {
+  for (let i = firstDataRowIdx; i < rawData.length; i++) {
     const row = rawData[i];
     if (!row || row.every((cell) => cell == null || cell === '')) continue;
 
@@ -357,14 +598,99 @@ function parseEdinich(workbook) {
     const colE = toNum(row[4]);
     const colF = toNum(row[5]);
 
+    // Discipline marker (Юксалиш Тип-3 XLS sub-bill boundary). Two
+    // layouts (handled by pickDisciplineFromRow above):
+    //   единич sheet: col A empty, col B == "на",  col C == discipline
+    //   ВОР    sheet: col A == "на", col B == discipline, col C empty
+    //
+    // Reset every level of the path because a new discipline starts
+    // fresh: no carried-over current stage / sub-stage from the previous
+    // sub-bill, no orphan resource parent pointer.
+    const disciplineName = pickDisciplineFromRow(row);
+    if (disciplineName) {
+      currentTopSection = disciplineName;
+      currentStage      = '';
+      currentSubStage   = '';
+      lastParentNumber  = '';
+      startSection();
+      continue;
+    }
+
+    // РАЗДЕЛ N.<NAME> divider in col A — Юксалиш / Госархстрой XLS
+    // section format. The row carries no col B/C/D so the legacy
+    // "skip if !colC" guard below would silently drop it.
+    //
+    // KEY DESIGN POINT: a РАЗДЕЛ nests UNDER whatever discipline is
+    // already on `currentTopSection` (set by the "на" marker upstream),
+    // not on top of it. Earlier this assigned `currentTopSection =
+    // divName`, which threw away the discipline context — so КЖ's
+    // ЗЕМЛЯНЫЕ РАБОТЫ + ФУНДАМЕНТНАЯ ПЛИТА + … and ВК's ХОЗ. ПИТЬЕВОЙ
+    // ВОДОПРОВОД + … all surfaced as sibling top-level stages instead
+    // of being grouped under their parent discipline. With each РАЗДЕЛ
+    // restarting its work numbering at 1, the Bosqichlar tab ended up
+    // showing "line number started from 1 multiple times" — the exact
+    // symptom you reported.
+    //
+    // Now: РАЗДЕЛ becomes the STAGE (currentStage) under the current
+    // discipline. If there is no discipline above (no "на" marker —
+    // single-discipline file, e.g. earlier XLS templates), pathOf()
+    // gracefully falls back to "<stage>" instead of "<discipline> ›
+    // <stage>", so single-discipline behaviour is unchanged.
+    if (/^\s*РАЗДЕЛ\s+\d/i.test(colA) && !colB && !colC && !colD) {
+      const divName = colA.replace(/^\s*РАЗДЕЛ\s+\d+\s*[.:]?\s*/i, '').trim() || colA;
+      currentStage      = divName;
+      currentSubStage   = '';
+      startSection();
+      lastParentNumber  = '';
+      continue;
+    }
+
+    // Reject the "1 2 3 4 5 6" numeric column-reference row that sits
+    // 2 rows below the column-header. parseEdinich's "rows with bare
+    // integer in A" branch (further down) would otherwise treat it as
+    // a parent work and push a phantom row "{item_number:'1',
+    // code:'2.0', name:'3.0', uom:'4.0', quantity:0}" into the imported
+    // smeta — same symptom the screenshot showed on Юксалиш Тип-3.
+    const colAAsNum = Number(String(colA).replace(',', '.'));
+    const colCAsNum = Number(String(colC).replace(',', '.'));
+    if (
+      Number.isFinite(colAAsNum) && colAAsNum <= 6 && colAAsNum > 0 &&
+      Number.isFinite(colCAsNum) && colCAsNum <= 6 && colCAsNum > 0
+    ) {
+      continue;
+    }
+
     if (!colC) continue;
     if (colC.toUpperCase().includes('ИТОГО')) continue;
 
-    // Section headers: merged cells (C spans into D+) with no item number,
-    // OR numbered rows with no UOM/quantity and uppercase text
+    // Section headers — three layouts now handled here:
+    //   1) "Merged" (XLSX): col C spans into col D+, no item number.
+    //      Carried over from the legacy parser; remains the primary
+    //      check for the Саттепо / Block 1.xlsx / Block 3.xlsx family.
+    //   2) "Numbered" (legacy): integer in col A, no UOM/qty, uppercase C.
+    //   3) "Classic" (XLS resource catalogs): cols A and B both empty,
+    //      uppercase text in col C. This is the rule that catches the
+    //      ТРУДОВЫЕ РЕСУРСЫ / СТРОИТЕЛЬНЫЕ МАШИНЫ И МЕХАНИЗМЫ / МАТЕРИАЛЫ
+    //      dividers that the Юксалиш Тип-3 XLS sheet uses. SheetJS
+    //      doesn't expose XLS merge metadata reliably so (1) didn't
+    //      fire — every divider fell through to the resource sub-row
+    //      branch below and got captured as a phantom resource under
+    //      whichever work happened to precede it. Result was 684
+    //      "works" all dumped into a single "Imported" bucket. With
+    //      (3) in place those dividers become real section breaks
+    //      again. Matches the structurally-identical rule parseVOR
+    //      uses above, so XLSX behaviour is unchanged (the merged path
+    //      already fired first there).
     const isMergedHeader = mergedSectionRows.has(i) && !colA;
     const isNumberedHeader = colA && /^\d+$/.test(colA) && !colD && (colE === 0) && colC.length > 5 && colC === colC.toUpperCase() && !/\d{2,}/.test(colC);
-    if (isMergedHeader || isNumberedHeader) {
+    const isClassicHeader =
+      !colA &&
+      !colB &&
+      colC.length > 5 &&
+      colC === colC.toUpperCase() &&
+      !/\d{2,}/.test(colC) &&
+      colE === 0;
+    if (isMergedHeader || isNumberedHeader || isClassicHeader) {
       if (isTopSectionHeader(colC)) {
         currentTopSection = colC;
         currentStage      = '';
@@ -375,6 +701,12 @@ function parseEdinich(workbook) {
         currentStage    = colC;
         currentSubStage = '';
       }
+      // Reset the parent pointer so an unrelated "empty A & B" resource
+      // row in the new section doesn't get attributed to whichever work
+      // happened to be the last parent in the previous section. Fixes
+      // an orphan-attribution risk that became visible once the new
+      // classic-header detection started firing on XLS files.
+      lastParentNumber = '';
       startSection();
       continue;
     }
@@ -395,17 +727,24 @@ function parseEdinich(workbook) {
       // Children's per-unit norm is captured below in
       // `quantity_per_unit`; child.quantity stays 0 so the cascade
       // `parent.qty × norm` resolves to 0 too.
+      // Parent rows store their project quantity in COL E in most
+      // Госархитектстрой templates (older files put it in col F).
+      // We try col E first and fall back to col F. Reading just col F
+      // historically left modern files with parent qty = 0 because
+      // that column is blank for parents in their layout.
+      //
+      // We also keep NEGATIVE values — subtraction positions
+      // ("ВЫЧИТАЕТСЯ ПОЗИЦИЯ") store a negative qty so the work
+      // deducts from the totals. Dropping them to 0 would lose the
+      // intended deduction.
+      const parentRaw = colE !== 0 ? colE : colF;
       currentSection.items.push({
         item_number: colA,
         code: colB,
         name: colC,
         uom: colD,
         quantity: 0,
-        // colF is already a clean number via toNum (handles comma-
-        // decimal). Old code used `isNaN(colF) ? 0 : colF` which was
-        // a workaround for parseFloat's NaN on bad input; toNum
-        // already guarantees a finite number.
-        norma_quantity: colF,
+        norma_quantity: parentRaw,
         quantity_per_unit: 0,
         is_parent: hasCode,
         resource_type: '',
@@ -479,13 +818,17 @@ function parseEdinich(workbook) {
   // whose colE > 0 to do the inversion (children with empty norms can't
   // help). If no usable child exists we leave the parent at 0 — there's
   // no way to derive it from the data we have.
+  // Post-pass uses !== 0 instead of > 0 so NEGATIVE quantities also
+  // get derived. Subtraction positions ("ВЫЧИТАЕТСЯ ПОЗИЦИЯ") store
+  // negative values; the > 0 guard previously dropped them and made
+  // the parent + every child render as 0.
   for (const sec of sections) {
     if (!Array.isArray(sec.items)) continue;
     for (let i = 0; i < sec.items.length; i++) {
       const it = sec.items[i];
-      // Only parents whose own col F was empty/zero get patched.
+      // Only parents whose own value was empty get patched.
       if (it.is_parent !== undefined && !it.is_parent) continue;
-      if (Number(it.norma_quantity) > 0) continue;
+      if (Number(it.norma_quantity) !== 0) continue;
       const parentNumStr = String(it.item_number || '').trim();
       if (!parentNumStr) continue;
       for (let j = i + 1; j < sec.items.length; j++) {
@@ -493,7 +836,7 @@ function parseEdinich(workbook) {
         if (String(child.parent_item_number || '') !== parentNumStr) break;
         const childTotal = Number(child.norma_quantity || 0);
         const perUnit    = Number(child.quantity_per_unit || 0);
-        if (childTotal > 0 && perUnit > 0) {
+        if (childTotal !== 0 && perUnit !== 0) {
           it.norma_quantity = childTotal / perUnit;
           break;
         }
@@ -716,7 +1059,21 @@ function parseResurs(workbook) {
     const unitPrice = isNaN(colF) ? 0 : colF;
     const total = isNaN(colG) ? 0 : colG;
 
-    // Material-type resolution:
+    // Resource type — the UoM is the most reliable signal and takes
+    // precedence over the section: ЧЕЛ-Ч is always labour and МАШ-Ч is
+    // always a machine, no matter which section (if any) the row was
+    // detected under. The section type is only the fallback for genuine
+    // material rows. Previously this trusted the section alone, so a
+    // machine/labour row that preceded an undetected section header (or
+    // landed in the default 'material' bucket) was mis-tagged 'material'.
+    // That produced a duplicate, 0-price catalog entry for the same
+    // resource that the Единич import had already imported as 'equipment'.
+    const uomType = detectResourceType(colD);
+    const resType = (uomType === 'labor' || uomType === 'equipment')
+      ? uomType
+      : currentSection.resourceType;
+
+    // Material-type resolution (only meaningful for material rows):
     //   1. Section's explicit material_type wins (КАБЕЛЬНАЯ ПРОДУКЦИЯ →
     //      'cable', ОБОРУДОВАНИЕ → 'equipment', МАТЕРИАЛЬНЫЕ РЕСУРСЫ →
     //      'standard').
@@ -724,7 +1081,7 @@ function parseResurs(workbook) {
     //      like in Блок 1), let the item-name fallback try to spot the
     //      occasional cable or equipment line mixed in.
     let materialType = null;
-    if (currentSection.resourceType === 'material') {
+    if (resType === 'material') {
       materialType = currentSection.materialType || 'standard';
       if (materialType === 'standard') {
         const guess = classifyMaterialByName(colC);
@@ -740,7 +1097,7 @@ function parseResurs(workbook) {
       quantity: isNaN(colE) ? 0 : colE,
       unit_price: unitPrice,
       total_price: total,
-      resource_type: currentSection.resourceType,
+      resource_type: resType,
       material_type: materialType,
     });
   }
@@ -1540,7 +1897,11 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
         let importedQuantity;
         if (isResurs && item.quantity != null) {
           importedQuantity = Number(item.quantity) || 0;
-        } else if (item.norma_quantity != null && Number(item.norma_quantity) > 0) {
+        } else if (item.norma_quantity != null && Number(item.norma_quantity) !== 0) {
+          // !== 0 instead of > 0 so NEGATIVE quantities survive the
+          // round-trip. Subtraction positions ("ВЫЧИТАЕТСЯ ПОЗИЦИЯ")
+          // legitimately store negative qtys; dropping them as
+          // undefined would render them as 0 on the Smetalar tab.
           importedQuantity = Number(item.norma_quantity);
         } else {
           importedQuantity = undefined;

@@ -18,9 +18,9 @@ export default function ManufacturingReport() {
   const [dateTo, setDateTo] = useState('');
 
   const l = {
-    en: { title: 'Manufacturing Report', subtitle: 'Production orders overview by category', all: 'All', order_code: 'Order Code', product: 'Product', qty_planned: 'Planned', qty_produced: 'Produced', good_qty: 'Good', reject_qty: 'Reject', loss: 'Loss', status: 'Status', shortfall_reason: 'Shortfall Reason', total_produced: 'Total Produced', total_good: 'Total Good', total_reject: 'Total Reject', total_loss: 'Total Loss', no_orders: 'No production orders found', uncategorized: 'Uncategorized', by_order: 'By Order', by_product: 'By Product', orders_count: 'Orders', efficiency: 'Efficiency' },
-    uz: { title: 'Ishlab chiqarish hisoboti', subtitle: 'Kategoriya bo\'yicha ishlab chiqarish buyurtmalari', all: 'Barchasi', order_code: 'Buyurtma kodi', product: 'Mahsulot', qty_planned: 'Rejalashtirilgan', qty_produced: 'Ishlab chiqarilgan', good_qty: 'Yaxshi', reject_qty: 'Yaroqsiz', loss: 'Zarar', status: 'Holat', shortfall_reason: 'Kamomad sababi', total_produced: 'Jami ishlab chiqarilgan', total_good: 'Jami yaxshi', total_reject: 'Jami yaroqsiz', total_loss: 'Jami zarar', no_orders: 'Ishlab chiqarish buyurtmalari topilmadi', uncategorized: 'Kategoriyasiz', by_order: 'Buyurtma bo\'yicha', by_product: 'Mahsulot bo\'yicha', orders_count: 'Buyurtmalar', efficiency: 'Samaradorlik' },
-    ru: { title: 'Отчёт производства', subtitle: 'Обзор производственных заказов по категориям', all: 'Все', order_code: 'Код заказа', product: 'Продукт', qty_planned: 'План', qty_produced: 'Произведено', good_qty: 'Годные', reject_qty: 'Брак', loss: 'Убыток', status: 'Статус', shortfall_reason: 'Причина недостачи', total_produced: 'Всего произведено', total_good: 'Всего годных', total_reject: 'Всего брак', total_loss: 'Всего убыток', no_orders: 'Производственные заказы не найдены', uncategorized: 'Без категории', by_order: 'По заказам', by_product: 'По продуктам', orders_count: 'Заказов', efficiency: 'Эффективность' },
+    en: { title: 'Manufacturing Report', subtitle: 'Production orders overview by category', all: 'All', order_code: 'Order Code', product: 'Product', qty_planned: 'Planned', qty_produced: 'Produced', good_qty: 'Good', reject_qty: 'Reject', loss: 'Loss', status: 'Status', shortfall_reason: 'Shortfall Reason', total_produced: 'Total Produced', total_good: 'Total Good', total_reject: 'Total Reject', total_loss: 'Total Loss', no_orders: 'No production orders found', uncategorized: 'Uncategorized', by_order: 'By Order', by_product: 'By Product', orders_count: 'Orders', efficiency: 'Efficiency', unit_cost: 'Cost/Unit' },
+    uz: { title: 'Ishlab chiqarish hisoboti', subtitle: 'Kategoriya bo\'yicha ishlab chiqarish buyurtmalari', all: 'Barchasi', order_code: 'Buyurtma kodi', product: 'Mahsulot', qty_planned: 'Rejalashtirilgan', qty_produced: 'Ishlab chiqarilgan', good_qty: 'Yaxshi', reject_qty: 'Yaroqsiz', loss: 'Zarar', status: 'Holat', shortfall_reason: 'Kamomad sababi', total_produced: 'Jami ishlab chiqarilgan', total_good: 'Jami yaxshi', total_reject: 'Jami yaroqsiz', total_loss: 'Jami zarar', no_orders: 'Ishlab chiqarish buyurtmalari topilmadi', uncategorized: 'Kategoriyasiz', by_order: 'Buyurtma bo\'yicha', by_product: 'Mahsulot bo\'yicha', orders_count: 'Buyurtmalar', efficiency: 'Samaradorlik', unit_cost: 'Narx/birlik' },
+    ru: { title: 'Отчёт производства', subtitle: 'Обзор производственных заказов по категориям', all: 'Все', order_code: 'Код заказа', product: 'Продукт', qty_planned: 'План', qty_produced: 'Произведено', good_qty: 'Годные', reject_qty: 'Брак', loss: 'Убыток', status: 'Статус', shortfall_reason: 'Причина недостачи', total_produced: 'Всего произведено', total_good: 'Всего годных', total_reject: 'Всего брак', total_loss: 'Всего убыток', no_orders: 'Производственные заказы не найдены', uncategorized: 'Без категории', by_order: 'По заказам', by_product: 'По продуктам', orders_count: 'Заказов', efficiency: 'Эффективность', unit_cost: 'Цена/ед.' },
   }[language] || { title: 'Manufacturing Report', subtitle: 'Production orders overview by category', all: 'All', order_code: 'Order Code', product: 'Product', qty_planned: 'Planned', qty_produced: 'Produced', good_qty: 'Good', reject_qty: 'Reject', loss: 'Loss', status: 'Status', shortfall_reason: 'Shortfall Reason', total_produced: 'Total Produced', total_good: 'Total Good', total_reject: 'Total Reject', total_loss: 'Total Loss', no_orders: 'No production orders found', uncategorized: 'Uncategorized' };
 
   const calcLoss = (order) => {
@@ -232,6 +232,7 @@ export default function ManufacturingReport() {
                     <TableHead className="text-right">{l.good_qty}</TableHead>
                     <TableHead className="text-right">{l.reject_qty}</TableHead>
                     <TableHead className="text-right">{l.efficiency}</TableHead>
+                    <TableHead className="text-right">{l.unit_cost || 'Narx/birlik'}</TableHead>
                     <TableHead className="text-right">{l.loss}</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -241,19 +242,25 @@ export default function ManufacturingReport() {
                     filteredOrders.forEach(po => {
                       const key = po.product_id || po.product_name;
                       if (!grouped[key]) {
-                        grouped[key] = { name: po.product_name, orders: 0, planned: 0, produced: 0, good: 0, reject: 0, loss: 0 };
+                        grouped[key] = { name: po.product_name, uom: po.uom || '', orders: 0, planned: 0, produced: 0, good: 0, reject: 0, loss: 0, cost: 0 };
                       }
+                      if (!grouped[key].uom && po.uom) grouped[key].uom = po.uom;
                       grouped[key].orders += 1;
                       grouped[key].planned += po.quantity_planned || 0;
                       grouped[key].produced += po.quantity_produced || 0;
                       grouped[key].good += po.good_quantity || 0;
                       grouped[key].reject += po.reject_quantity || 0;
                       grouped[key].loss += calcLoss(po);
+                      // Production cost per order (actual → planned → material fallback) for unit-cost rollup.
+                      grouped[key].cost += (po.actual_cost || po.planned_cost || po.material_cost || 0);
                     });
                     return Object.entries(grouped)
                       .sort((a, b) => b[1].produced - a[1].produced)
                       .map(([key, data]) => {
                         const efficiency = data.produced > 0 ? ((data.good / data.produced) * 100).toFixed(1) : 0;
+                        // Production cost per unit = total cost ÷ quantity (produced, else planned), shown per UOM.
+                        const qtyForCost = data.produced > 0 ? data.produced : data.planned;
+                        const unitCost = qtyForCost > 0 ? data.cost / qtyForCost : 0;
                         return (
                           <TableRow key={key} className="hover:bg-slate-50/50">
                             <TableCell className="font-medium">{data.name}</TableCell>
@@ -267,6 +274,7 @@ export default function ManufacturingReport() {
                                 {efficiency}%
                               </span>
                             </TableCell>
+                            <TableCell className="text-right">{unitCost > 0 ? `${formatCurrency(unitCost)}${data.uom ? ' / ' + data.uom : ''}` : '—'}</TableCell>
                             <TableCell className="text-right text-amber-700 font-medium">{data.loss > 0 ? formatCurrency(data.loss) : '—'}</TableCell>
                           </TableRow>
                         );

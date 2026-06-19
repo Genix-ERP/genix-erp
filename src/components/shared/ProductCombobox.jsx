@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Check, ChevronDown, Loader2 } from "lucide-react";
+import { Check, ChevronDown, Loader2, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -7,7 +7,6 @@ import {
   Command,
   CommandInput,
   CommandList,
-  CommandEmpty,
   CommandGroup,
   CommandItem,
 } from "@/components/ui/command";
@@ -19,7 +18,11 @@ import apiClient from "@/api/client";
 // happens on edit screens where `products` is paginated or filtered by
 // org and may not include the line's product. Without this fallback
 // the combobox renders the placeholder even when a real id is selected.
-export default function ProductCombobox({ products: initialProducts = [], value, valueLabel, onValueChange, placeholder = "Mahsulot tanlang", t = (k) => k }) {
+// `onCreateNew` (optional): when provided, a "+ create product" action is shown
+// at the bottom of the list. It receives the current search text so the parent
+// can prefill the new product's name. The parent owns the create modal and is
+// responsible for adding the new product to `products` and selecting it.
+export default function ProductCombobox({ products: initialProducts = [], value, valueLabel, onValueChange, onCreateNew, placeholder = "Mahsulot tanlang", t = (k) => k }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [searchResults, setSearchResults] = useState([]);
@@ -115,13 +118,29 @@ export default function ProductCombobox({ products: initialProducts = [], value,
               default `max-h-[300px]` regardless of Tailwind class ordering.
               className was getting silently overridden inside the dialog
               and the list stayed un-scrollable past the first ~9 items. */}
-          <CommandList style={{ maxHeight: 340, overflowY: 'auto' }}>
+          <CommandList style={{ maxHeight: 240, overflowY: 'auto' }}>
             {isSearching ? (
               <div className="flex items-center justify-center py-6">
                 <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
               </div>
             ) : displayProducts.length === 0 ? (
-              <CommandEmpty>{search.length >= 2 ? (t('not_found') || "Topilmadi") : (t('type_to_search') || "Qidirish uchun yozing...")}</CommandEmpty>
+              <div className="px-2 py-4 text-center">
+                <p className="text-sm text-slate-500">
+                  {search.length >= 2 ? (t('not_found') || "Topilmadi") : (t('type_to_search') || "Qidirish uchun yozing...")}
+                </p>
+                {onCreateNew && (
+                  <button
+                    type="button"
+                    className="mt-3 inline-flex items-center gap-2 rounded-md border border-teal-200 bg-teal-50 px-3 py-2 text-sm font-medium text-teal-700 hover:bg-teal-100"
+                    onClick={() => { const q = search; setOpen(false); setSearch(""); onCreateNew(q); }}
+                  >
+                    <Plus className="h-4 w-4 shrink-0" />
+                    <span className="truncate max-w-[240px]">
+                      {(t('add_new_product') || "Yangi mahsulot qo'shish")}{search.trim() ? `: "${search.trim()}"` : ''}
+                    </span>
+                  </button>
+                )}
+              </div>
             ) : (
               <CommandGroup>
                 {displayProducts.map((product) => (
@@ -172,6 +191,26 @@ export default function ProductCombobox({ products: initialProducts = [], value,
               </CommandGroup>
             )}
           </CommandList>
+          {onCreateNew && displayProducts.length > 0 && (
+            <div className="border-t p-1">
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-sm text-teal-700 hover:bg-teal-50"
+                onClick={() => {
+                  const q = search;
+                  setOpen(false);
+                  setSearch("");
+                  onCreateNew(q);
+                }}
+              >
+                <Plus className="h-4 w-4 shrink-0" />
+                <span className="truncate">
+                  {(t('add_new_product') || "Yangi mahsulot qo'shish")}
+                  {search.trim() ? `: "${search.trim()}"` : ''}
+                </span>
+              </button>
+            </div>
+          )}
         </Command>
       </PopoverContent>
     </Popover>

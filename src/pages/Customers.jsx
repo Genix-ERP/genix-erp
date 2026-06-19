@@ -56,6 +56,7 @@ import CallInterface from "@/components/crm/CallInterface";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useCustomers } from "@/components/contexts/CustomersContext";
+import { contactsService } from "@/api/services/contacts";
 import { useCompany } from "@/components/contexts/CompanyContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
@@ -784,6 +785,9 @@ export default function Customers() {
   const [leadToDelete, setLeadToDelete] = useState(null);
   const [customerToCall, setCustomerToCall] = useState(null);
   const [callLogs, setCallLogs] = useState([]);
+  const [salesHistoryCustomer, setSalesHistoryCustomer] = useState(null);
+  const [salesHistory, setSalesHistory] = useState([]);
+  const [salesHistoryLoading, setSalesHistoryLoading] = useState(false);
 
   // Load call logs
   useEffect(() => {
@@ -826,6 +830,32 @@ export default function Customers() {
     try {
       if (editingCustomer) {
         await updateCustomer(editingCustomer.id, customerData);
+      } else if (customerData.__order) {
+        // Combined "customer + sales order + manufacture order (+ upfront payment)" in one save.
+        const o = customerData.__order;
+        const res = await contactsService.createFullOrder({
+          customer: {
+            name: customerData.company_name,
+            contact_name: customerData.contact_name,
+            email: customerData.email,
+            phone: customerData.phone,
+            address: customerData.address?.street,
+            city: customerData.address?.city,
+            country: customerData.address?.country,
+            notes: customerData.notes,
+          },
+          product_id: o.product_id,
+          quantity: o.quantity,
+          profit_percent: o.profit_percent,
+          paid_amount: o.paid_amount,
+          components: o.components,
+          notes: customerData.notes,
+        });
+        toast({
+          title: t('success') || 'Success',
+          description: `${t('customer_order_created') || 'Mijoz va buyurtma yaratildi'}${res?.order_number ? ` (${res.order_number})` : ''}`,
+        });
+        if (typeof refreshData === 'function') await refreshData();
       } else {
         await createCustomer(customerData);
       }
@@ -848,6 +878,20 @@ export default function Customers() {
           description: error.response?.data?.error?.message || error.message || 'Failed to save',
         });
       }
+    }
+  };
+
+  const openSalesHistory = async (customer) => {
+    setSalesHistoryCustomer(customer);
+    setSalesHistory([]);
+    setSalesHistoryLoading(true);
+    try {
+      const data = await contactsService.getSales(customer.id);
+      setSalesHistory(Array.isArray(data) ? data : []);
+    } catch (e) {
+      setSalesHistory([]);
+    } finally {
+      setSalesHistoryLoading(false);
     }
   };
 
@@ -1151,6 +1195,14 @@ export default function Customers() {
                                   {t('edit')}
                                 </Button>
                               )}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => openSalesHistory(customer)}
+                                title={t('sales') || 'Sotuvlar'}
+                              >
+                                {t('sales') || 'Sotuvlar'}
+                              </Button>
                               {canDelete(MODULES.CUSTOMERS) && (
                                 <Button
                                   variant="outline"
@@ -1255,6 +1307,45 @@ export default function Customers() {
           }}
           language={language}
         />
+      )}
+
+      {/* Customer sales history */}
+      {salesHistoryCustomer && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setSalesHistoryCustomer(null)}>
+          <div className="bg-white rounded-lg w-full max-w-2xl max-h-[85vh] overflow-y-auto p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium">{(salesHistoryCustomer.company_name || salesHistoryCustomer.name)} — {t('sales') || 'Sotuvlar'}</h3>
+              <button type="button" className="text-slate-400 hover:text-slate-700 text-xl leading-none" onClick={() => setSalesHistoryCustomer(null)}>✕</button>
+            </div>
+            {salesHistoryLoading ? (
+              <p className="text-slate-500 text-sm py-8 text-center">{t('loading') || 'Yuklanmoqda...'}</p>
+            ) : salesHistory.length === 0 ? (
+              <p className="text-slate-500 text-sm py-8 text-center">{t('no_sales_yet') || "Sotuvlar yo'q"}</p>
+            ) : (
+              <div className="divide-y">
+                {salesHistory.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => navigate('/salesorders', { state: { openOrderId: s.id } })}
+                    className="w-full flex items-center justify-between py-2.5 px-2 text-left hover:bg-slate-50 rounded"
+                  >
+                    <div>
+                      <div className="font-medium text-sm">{s.order_number}</div>
+                      <div className="text-xs text-slate-500">
+                        {new Date(s.order_date || s.created_at).toLocaleDateString()} · {s.status} · {s.payment_status}
+                      </div>
+                    </div>
+                    <div className="text-right text-sm">
+                      <div className="font-medium">{formatCurrency ? formatCurrency(s.total_amount) : s.total_amount}</div>
+                      <div className="text-xs text-slate-500">{t('remaining') || 'Qoldiq'}: {formatCurrency ? formatCurrency(s.remaining) : s.remaining}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Lead Form Modal */}

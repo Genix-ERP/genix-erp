@@ -106,6 +106,21 @@ export const constructionService = {
     await apiClient.delete(`/construction/projects/${projectId}/buildings/${buildingId}`);
   },
 
+  // Duplicate a block — backend creates a brand-new sibling building
+  // called "<source name> Copy" in the same project, then copies every
+  // estimate (Единич, ВОР, Ресурс) + its lines + stages + files from
+  // the source. No target picker required, no "is the target empty"
+  // gating — every call produces a fresh block.
+  //
+  // Returns: { new_building: { id, name, code }, estimates_created,
+  //           lines_created, stages_created, files_created }
+  async duplicateBuilding(projectId, sourceBuildingId) {
+    const response = await apiClient.post(
+      `/construction/projects/${projectId}/buildings/${sourceBuildingId}/clone-estimates`,
+    );
+    return response.data.data;
+  },
+
   // =====================================================
   // BUILDING FILES
   // =====================================================
@@ -326,9 +341,18 @@ export const constructionService = {
     return response.data.data;
   },
 
-  // Estimate resources by type (for substage dropdowns)
-  async listEstimateResources(projectId, type) {
-    const params = type ? { type } : {};
+  // Estimate resources by type (for substage dropdowns). The second arg
+  // can be either a bare type string (legacy callers) or an options
+  // object `{ type, q }` — passing `q` enables server-side substring
+  // search so resources past the alphabetical LIMIT cap still show up.
+  async listEstimateResources(projectId, typeOrOpts) {
+    const params = {};
+    if (typeof typeOrOpts === 'string') {
+      if (typeOrOpts) params.type = typeOrOpts;
+    } else if (typeOrOpts && typeof typeOrOpts === 'object') {
+      if (typeOrOpts.type) params.type = typeOrOpts.type;
+      if (typeOrOpts.q)    params.q    = typeOrOpts.q;
+    }
     const response = await apiClient.get(`/construction/projects/${projectId}/estimate-resources`, { params });
     return response.data.data;
   },
@@ -348,12 +372,25 @@ export const constructionService = {
   // resources used by that one estimate so the Resurslar tab stays in sync
   // with the estimate selector at the top of the page. Without it, the
   // response covers every estimate in the project (mockup-faithful behaviour).
-  async listResourcePrices(projectId, { type, estimateId } = {}) {
+  // Returns the FULL envelope { data, meta, summary } so callers can drive
+  // infinite-scroll pagination (meta.has_next) and read the server-computed
+  // chip counts (summary.material_type_counts) and modified-price count
+  // (summary.modified_count) without re-deriving them from a partial page.
+  async listResourcePrices(projectId, { type, estimateId, materialType, q, page, pageSize } = {}) {
     const params = {};
     if (type) params.type = type;
     if (estimateId) params.estimate_id = estimateId;
+    if (materialType) params.material_type = materialType;
+    if (q) params.q = q;
+    if (page) params.page = page;
+    if (pageSize) params.page_size = pageSize;
     const response = await apiClient.get(`/construction/projects/${projectId}/resource-prices`, { params });
-    return response.data.data || [];
+    const body = response.data || {};
+    return {
+      data: Array.isArray(body.data) ? body.data : [],
+      meta: body.meta || { page: 1, page_size: pageSize || 20, total: (body.data || []).length, total_pages: 1, has_next: false, has_prev: false },
+      summary: body.summary || { material_type_counts: {}, modified_count: 0 },
+    };
   },
   async bulkUpdateResourcePrice(projectId, payload) {
     // payload: { resource_name, uom, resource_type, new_price, note?, estimate_id? }
@@ -447,6 +484,19 @@ export const constructionService = {
     return response.data.data || [];
   },
 
+  // Project-wide history: every saved Forma 2 across all of the project's
+  // blocks/estimates, newest first. Forma 2 iterations are a project-level
+  // series, but each freeze pins its snapshot to whichever block was active,
+  // so the per-estimate list above hides freezes made from a different block.
+  // The Formalar tarixi tab uses this so the history mirrors the iteration
+  // strip; each row carries building_name to show which block it came from.
+  async listProjectForm2Snapshots(projectId) {
+    const response = await apiClient.get(
+      `/construction/projects/${projectId}/form2-snapshots`,
+    );
+    return response.data.data || [];
+  },
+
   async getForm2Snapshot(snapshotId) {
     const response = await apiClient.get(
       `/construction/form2-snapshots/${snapshotId}`,
@@ -478,6 +528,55 @@ export const constructionService = {
   },
 
   // =====================================================
+  // FORMA 2 ITERATIONS  (Bosqichlar tab strip — migration 419)
+  // =====================================================
+  // A project's Forma 2 is built up over MULTIPLE submissions. Each press
+  // of "+ Forma 2 yaratish" freezes the open iteration and opens N+1 with
+  // period_fakt = 0 on every line. updateWorkDoneQuantity now writes that
+  // period contribution; line.done_quantity stays as the cumulative
+  // (Σ period_fakt) so Bosqichlar progress %, Smetalar, reports are
+  // unchanged.
+
+  async listForm2Iterations(projectId) {
+    const response = await apiClient.get(
+      `/construction/projects/${projectId}/form2-iterations`,
+    );
+    return response.data.data || [];
+  },
+
+  async getForm2IterationLines(projectId, iterationId) {
+    const response = await apiClient.get(
+      `/construction/projects/${projectId}/form2-iterations/${iterationId}/lines`,
+    );
+    return response.data.data || [];
+  },
+
+  // Freeze the current open iteration + open the next. Server writes a
+  // construction_form2_snapshot row in the same transaction, so the
+  // Smeta boshqaruvi → Formalar tarixi list automatically gains an entry.
+  // Payload mirrors createForm2Snapshot — totals/period/act_number are
+  // optional and default to zeros + today when omitted.
+  async createForm2Iteration(projectId, payload = {}) {
+    const response = await apiClient.post(
+      `/construction/projects/${projectId}/form2-iterations`,
+      payload,
+    );
+    return response.data.data;
+  },
+
+  // Delete (undo) the most recent frozen Forma 2. The server re-opens that
+  // iteration for editing, removes the empty open iteration the freeze had
+  // created, and deletes the associated snapshot from Formalar tarixi. Only
+  // the latest frozen iteration is deletable; the backend 409s if the open
+  // iteration already has entered fakt.
+  async deleteForm2Iteration(projectId, iterationId) {
+    const response = await apiClient.delete(
+      `/construction/projects/${projectId}/form2-iterations/${iterationId}`,
+    );
+    return response.data.data;
+  },
+
+  // =====================================================
   // SMETA AUDIT LOG  (Smeta boshqaruvi → Jurnal tab)
   // =====================================================
 
@@ -491,12 +590,19 @@ export const constructionService = {
     return response.data.data || [];
   },
 
-  async listProjectSmetaAudit(projectId, { limit = 500 } = {}) {
+  // Paginated (page/page_size, default 20 server-side). Returns
+  // { data, meta } so the Jurnal can infinite-scroll. `action` filters by
+  // change type.
+  async listProjectSmetaAudit(projectId, { page, page_size, action } = {}) {
+    const params = {};
+    if (page) params.page = page;
+    if (page_size) params.page_size = page_size;
+    if (action) params.action = action;
     const response = await apiClient.get(
       `/construction/projects/${projectId}/smeta-audit`,
-      { params: { limit } },
+      { params },
     );
-    return response.data.data || [];
+    return { data: response.data.data || [], meta: response.data.meta || null };
   },
 
   // =====================================================
@@ -744,8 +850,17 @@ export const constructionService = {
     return response.data.data;
   },
 
-  async getEstimate(id) {
-    const response = await apiClient.get(`/construction/estimates/${id}`);
+  async getEstimate(id, opts = {}) {
+    // opts.includeManual — when explicitly set to false, the backend
+    // hides lines added via the Smeta boshqaruvi / Bosqichlar UI
+    // (migration 417's is_manual flag). The Smetalar tab passes false
+    // so its read-only "what the file said" view doesn't show
+    // user-added rows.
+    const params = {};
+    if (opts && opts.includeManual === false) {
+      params.include_manual = 'false';
+    }
+    const response = await apiClient.get(`/construction/estimates/${id}`, { params });
     return response.data.data;
   },
 
@@ -781,6 +896,16 @@ export const constructionService = {
     return response.data.data;
   },
 
+  // Stat-card aggregates computed server-side (cost breakdown + counts), so
+  // clients don't have to load every line to show the headline numbers.
+  // Returns: { estimate_id, labor, machines, materials, grand, work_count,
+  //            filled_count, resource_count }. Sum across a block's estimate
+  // ids for the block-level totals.
+  async getEstimateSummary(estimateId) {
+    const response = await apiClient.get(`/construction/estimates/${estimateId}/summary`);
+    return response.data.data;
+  },
+
   // Paginated version — returns { data, meta }
   async listEstimateLinesPaginated(estimateId, params = {}) {
     const response = await apiClient.get(`/construction/estimates/${estimateId}/lines`, { params });
@@ -789,6 +914,21 @@ export const constructionService = {
 
   async createEstimateLine(estimateId, data) {
     const response = await apiClient.post(`/construction/estimates/${estimateId}/lines`, data);
+    return response.data.data;
+  },
+
+  // Clone-by-code variant of createEstimateLine. Creates the new line and,
+  // when an existing parent line in the same project shares `source_code`,
+  // copies all of its resources onto the new line in one round-trip. Use
+  // for "+ Ish" / "+ Yangi qo'shimcha etap" submissions where the user
+  // entered a SHRNK code that may already exist elsewhere in the smeta.
+  //
+  // Returns: { id, cloned_resources, source_id?, source_name? }
+  async cloneEstimateLineByCode(estimateId, data) {
+    const response = await apiClient.post(
+      `/construction/estimates/${estimateId}/lines/clone-by-code`,
+      data,
+    );
     return response.data.data;
   },
 

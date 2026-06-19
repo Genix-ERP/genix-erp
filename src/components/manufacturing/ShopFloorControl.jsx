@@ -90,12 +90,12 @@ function KanbanCard({ wo, labels, language, workCenters, productionOrders, curre
         </Badge>
       </div>
 
-      {/* Production order */}
+      {/* Production order: order number + order name */}
       {po && (
         <div className="flex items-center gap-1.5 text-xs text-slate-500">
           <Package className="w-3.5 h-3.5 shrink-0 text-blue-400" />
           <span className="truncate font-medium text-slate-600">{po.code || po.product_name}</span>
-          {po.product_name && po.code && <span className="truncate text-slate-400">— {po.product_name}</span>}
+          {(po.name || po.product_name) && <span className="truncate text-slate-400">— {po.name || po.product_name}</span>}
         </div>
       )}
 

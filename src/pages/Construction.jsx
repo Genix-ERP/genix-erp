@@ -73,6 +73,8 @@ import {
   Paperclip,
   ChevronsUpDown,
   Check,
+  Copy,
+  Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -1116,9 +1118,40 @@ const ProjectDetailView = ({
   // read-only progress label). Parent component owns the API + refresh.
   onProjectStatusChange,
 }) => {
-  const { formatCurrencyCompact } = useCurrencyFormatter();
-  const [activeGroup, setActiveGroup] = useState('dashboard');
-  const [activeTab, setActiveTab] = useState('overview');
+  const { language } = useLanguage();
+
+  // Persist active group / tab in the URL so a hard refresh (or a
+  // copy-pasted link) lands the user back on the same view. Falls
+  // back to the previous defaults ('dashboard' / 'overview') when the
+  // params aren't present. The two-way sync below keeps the URL in
+  // step with state changes from the in-page navigation.
+  const [projectViewParams, setProjectViewParams] = useSearchParams();
+  const initialGroup = projectViewParams.get('group') || 'dashboard';
+  const initialTab   = projectViewParams.get('tab')   || 'overview';
+  const [activeGroup, setActiveGroup] = useState(initialGroup);
+  const [activeTab,   setActiveTab]   = useState(initialTab);
+  // Whenever the user navigates, mirror the change to the URL. We use
+  // `replace: true` so each click doesn't push a new history entry —
+  // the back button still does what users expect (return to the
+  // project list), not walk through every tab they touched.
+  useEffect(() => {
+    const next = new URLSearchParams(projectViewParams);
+    let changed = false;
+    if (next.get('group') !== activeGroup) {
+      if (activeGroup === 'dashboard') next.delete('group');
+      else next.set('group', activeGroup);
+      changed = true;
+    }
+    if (next.get('tab') !== activeTab) {
+      if (activeTab === 'overview') next.delete('tab');
+      else next.set('tab', activeTab);
+      changed = true;
+    }
+    if (changed) setProjectViewParams(next, { replace: true });
+    // We intentionally don't list projectViewParams in deps — that
+    // would re-run on every URL change and create a feedback loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeGroup, activeTab]);
 
   // Top-level navigation groups for the project page.
   //
@@ -1211,6 +1244,8 @@ const ProjectDetailView = ({
 
   // Modals
   const [showBuildingModal, setShowBuildingModal] = useState(false);
+  // Block "Ko'rish" (view) modal — holds the building being previewed, null = closed.
+  const [viewBuilding, setViewBuilding] = useState(null);
   const [showTeamModal, setShowTeamModal] = useState(false);
 const [showDailyLogModal, setShowDailyLogModal] = useState(false);
   const [showPhotoReportModal, setShowPhotoReportModal] = useState(false);
@@ -1237,7 +1272,11 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
   const [buildingForm, setBuildingForm] = useState({
     name: '', code: '', description: '', building_type: '', building_purpose: '',
     floors_count: '', total_area: '', apartments_count: '', commercial_units_count: '',
-    estimated_cost: '', status: 'draft'
+    estimated_cost: '', status: 'draft',
+    // CRM link fields — only persisted via the separate setBuildingCRMLink
+    // PUT after the main building save succeeds. crm_block_id can be null;
+    // current_crm_stage defaults to 'foundation'; crm_auto_sync defaults true.
+    crm_block_id: null, current_crm_stage: 'foundation', crm_auto_sync: true,
   });
   const [teamForm, setTeamForm] = useState({ employee_id: '', role: '', responsibilities: '', start_date: '' });
   const [materialRequestForm, setMaterialRequestForm] = useState({
@@ -1250,6 +1289,25 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
   const [variantsByProduct, setVariantsByProduct] = useState({});
   const [confirmApprove, setConfirmApprove] = useState({ open: false, requestId: null });
   const [confirmDelete, setConfirmDelete] = useState({ open: false, onConfirm: null, title: null, description: null });
+  // Clone-estimates modal — opened from the block card "..." menu. The
+  // user picks a sibling source block; on confirm we POST to the backend
+  // which copies every estimate (Единич, ВОР, Ресурс) + all their lines
+  // into the target. Same project only. Backend refuses if target already
+  // has estimates (the menu entry below is disabled in that case, this is
+  // the race / direct-call guard). Shape: { open, target, sourceId } | null.
+  const [cloneEstimatesModal, setCloneEstimatesModal] = useState(null);
+  const [cloneEstimatesBusy, setCloneEstimatesBusy] = useState(false);
+  // Duplicate-building modal — opened from the block card "..." → Nusxalash.
+  // Lets the user pick HOW MANY copies to create. Each copy is a full clone
+  // (estimates + lines + stages + files). Shape: { building, count } | null.
+  const [duplicateModal, setDuplicateModal] = useState(null);
+  // Estimate counts per building id — keyed by Number(building.id). Used
+  // to (a) disable the "Klonlash" menu entry on blocks that already have
+  // estimates, since they're not eligible as a clone TARGET, and (b)
+  // surface "no estimates yet" on candidate SOURCES inside the modal.
+  // Loaded once per project alongside the buildings list — see the
+  // listEstimates effect lower down.
+  const [estimateCountByBuildingId, setEstimateCountByBuildingId] = useState({});
   const [lightboxSrc, setLightboxSrc] = useState(null);
   const [dailyLogForm, setDailyLogForm] = useState({
     id: null,
@@ -1361,13 +1419,26 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
             break;
           case 'buildings':
             try {
-              const [buildingsData, wbsData] = await Promise.all([
+              // Estimate counts power the Klonlash menu entry on each
+              // block card: target must be empty, so we need to know
+              // which blocks already have estimates to disable the
+              // "clone INTO this" path and surface counts on candidate
+              // sources inside the modal.
+              const [buildingsData, wbsData, allEstimates] = await Promise.all([
                 constructionService.listBuildings(project.id),
-                constructionService.getWBSTree(project.id)
+                constructionService.getWBSTree(project.id),
+                constructionService.listEstimates(project.id).catch(() => []),
               ]);
               setBuildings(sortBuildings(buildingsData));
               setWbsTree(wbsData || []);
-            } catch (e) { setBuildings([]); setWbsTree([]); }
+              const counts = {};
+              for (const e of (allEstimates || [])) {
+                const bid = Number(e?.building_id || 0);
+                if (!bid) continue;
+                counts[bid] = (counts[bid] || 0) + 1;
+              }
+              setEstimateCountByBuildingId(counts);
+            } catch (e) { setBuildings([]); setWbsTree([]); setEstimateCountByBuildingId({}); }
             break;
           case 'team':
             try {
@@ -1525,12 +1596,33 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
         estimated_cost: estCost,
       };
 
+      let savedBuildingId = buildingForm.id;
       if (buildingForm.id) {
         await constructionService.updateBuilding(project.id, buildingForm.id, formData);
         toast.success(t('building_updated') || 'Bino yangilandi');
       } else {
-        await constructionService.createBuilding(project.id, formData);
+        const created = await constructionService.createBuilding(project.id, formData);
+        savedBuildingId = created?.id || created?.data?.id || savedBuildingId;
         toast.success(t('building_created') || "Bino qo'shildi");
+      }
+
+      // Persist CRM link separately — backend has dedicated /crm-link route
+      // (the main building POST/PUT does not touch crm_block_id). Only send
+      // if the parent project is linked to CRM, otherwise the call is a
+      // no-op at best (no CRM block can be picked).
+      if (savedBuildingId && project?.crm_project_id) {
+        try {
+          await constructionService.setBuildingCRMLink(project.id, savedBuildingId, {
+            crmBlockId: buildingForm.crm_block_id ?? null,
+            currentStage: buildingForm.current_crm_stage || 'foundation',
+            autoSync: buildingForm.crm_auto_sync !== false,
+          });
+        } catch (linkErr) {
+          // Non-fatal: building itself saved fine. Surface a warning so the
+          // operator knows the CRM link didn't persist and can retry.
+          console.warn('CRM link save failed:', linkErr);
+          toast.error(t('crm_link_save_failed') || 'CRM ulanish saqlanmadi');
+        }
       }
 
       const buildingsData = await constructionService.listBuildings(project.id);
@@ -1539,7 +1631,8 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
       setBuildingForm({
         name: '', code: '', description: '', building_type: '', building_purpose: '',
         floors_count: '', total_area: '', apartments_count: '', commercial_units_count: '',
-        estimated_cost: '', status: 'draft'
+        estimated_cost: '', status: 'draft',
+        crm_block_id: null, current_crm_stage: 'foundation', crm_auto_sync: true,
       });
     } catch (error) {
       console.error('Error saving building:', error);
@@ -2297,6 +2390,25 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
 
   return (
     <div className="space-y-6">
+      {/* Full-page blocking overlay while a block is being duplicated.
+          Block cloning can take several seconds in production (it copies
+          every estimate, line, stage, and file), and the success toast only
+          appears once the backend responds. Until then we blur the whole
+          page and show a spinner so the user knows work is in progress and
+          can't fire a second duplication or navigate away mid-flight. */}
+      {cloneEstimatesBusy && (
+        <div
+          className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-4 bg-white/40 backdrop-blur-sm cursor-wait"
+          role="status"
+          aria-live="assertive"
+          aria-busy="true"
+        >
+          <Loader2 className="h-12 w-12 animate-spin text-[#185FA5]" />
+          <p className="text-sm font-medium text-slate-700">
+            {t('cloning_in_progress') || 'Nusxalanmoqda, kuting...'}
+          </p>
+        </div>
+      )}
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3 min-w-0">
@@ -2531,6 +2643,10 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => setViewBuilding(building)}>
+                                  <Eye className="w-4 h-4 mr-2" />
+                                  {t('view') || "Ko'rish"}
+                                </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => {
                                   setBuildingForm({
                                     id: building.id,
@@ -2544,7 +2660,10 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                                     apartments_count: building.apartments_count || '',
                                     commercial_units_count: building.commercial_units_count || '',
                                     estimated_cost: building.estimated_cost || '',
-                                    status: building.status || 'draft'
+                                    status: building.status || 'draft',
+                                    crm_block_id: building.crm_block_id ?? null,
+                                    current_crm_stage: building.current_crm_stage || 'foundation',
+                                    crm_auto_sync: building.crm_auto_sync ?? true,
                                   });
                                   setShowBuildingModal(true);
                                 }}>
@@ -2554,6 +2673,23 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                                 <DropdownMenuItem onClick={() => openBuildingFiles(building)}>
                                   <Paperclip className="w-4 h-4 mr-2" />
                                   {t('files') || 'Fayllar'}
+                                </DropdownMenuItem>
+                                {/* Nusxalash — duplicates this block. Backend creates a
+                                    brand new sibling building ("<name> Copy") in the
+                                    same project and copies every estimate, line, stage,
+                                    and file across. No target picker, no "is it empty"
+                                    gating — every click produces a fresh block.
+                                    Disabled only while a previous duplication is still
+                                    in flight on this same source. */}
+                                <DropdownMenuItem
+                                  disabled={!!cloneEstimatesBusy}
+                                  onClick={() => {
+                                    if (cloneEstimatesBusy) return;
+                                    setDuplicateModal({ building, count: 1 });
+                                  }}
+                                >
+                                  <Copy className="w-4 h-4 mr-2" />
+                                  {t('clone_estimates') || 'Nusxalash'}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                   className="text-red-600"
@@ -3234,6 +3370,68 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
         </Suspense>
       </div>
 
+      {/* Building view (Ko'rish) modal — read-only block detail. */}
+      <Dialog open={!!viewBuilding} onOpenChange={(o) => { if (!o) setViewBuilding(null); }}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" aria-describedby="building-view-help">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 flex-wrap">
+              <span>{viewBuilding?.name || '—'}</span>
+              {viewBuilding?.status && (
+                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                  {viewBuilding.status === 'completed' ? (t('completed') || 'Tugallangan')
+                    : viewBuilding.status === 'in_progress' ? (t('in_progress') || 'Jarayonda')
+                    : (t('draft') || 'Qoralama')}
+                </span>
+              )}
+            </DialogTitle>
+            <p id="building-view-help" className="text-sm text-slate-500">
+              {t('building_details') || "Blok ma'lumotlari"}
+            </p>
+          </DialogHeader>
+          {viewBuilding && (() => {
+            const dash = (v) => (v === null || v === undefined || v === '' ? '—' : v);
+            const num = (v) => (Number(v) ? Number(v).toLocaleString('ru-RU') : '—');
+            const rows = [
+              [t('code') || 'Kod', dash(viewBuilding.code)],
+              [t('building_type') || 'Bino turi', dash(viewBuilding.building_type)],
+              [t('building_purpose') || 'Bino maqsadi', dash(viewBuilding.building_purpose)],
+              [t('floors_count') || 'Qavatlar soni', num(viewBuilding.floors_count)],
+              [t('total_area') || 'Umumiy maydon (m²)', num(viewBuilding.total_area)],
+              [t('apartments_count') || 'Xonadonlar', num(viewBuilding.apartments_count)],
+              [t('commercial_units') || 'Tijorat birliklari', num(viewBuilding.commercial_units_count)],
+              [t('estimated_cost') || 'Taxminiy narx', Number(viewBuilding.estimated_cost) ? `${Number(viewBuilding.estimated_cost).toLocaleString('ru-RU')} ${t('currency_som') || "so'm"}` : '—'],
+            ];
+            return (
+              <div className="space-y-3">
+                <div className="rounded-lg border border-slate-200 divide-y divide-slate-100">
+                  {rows.map(([label, value]) => (
+                    <div key={label} className="flex items-center justify-between gap-4 px-4 py-2.5">
+                      <span className="text-sm text-slate-500">{label}</span>
+                      <span className="text-sm font-medium text-slate-900 text-right break-words">{value}</span>
+                    </div>
+                  ))}
+                </div>
+                {viewBuilding.description && (
+                  <div className="rounded-lg border border-slate-200 px-4 py-2.5">
+                    <p className="text-xs text-slate-500 mb-1">{t('description') || 'Tavsif'}</p>
+                    <p className="text-sm text-slate-800 whitespace-pre-wrap break-words">{viewBuilding.description}</p>
+                  </div>
+                )}
+                <div className="flex justify-end gap-2 pt-1">
+                  <Button variant="outline" onClick={() => { const b = viewBuilding; setViewBuilding(null); openBuildingFiles(b); }}>
+                    <Paperclip className="w-4 h-4 mr-2" />
+                    {t('files') || 'Fayllar'}
+                  </Button>
+                  <Button onClick={() => setViewBuilding(null)}>
+                    {t('close') || 'Yopish'}
+                  </Button>
+                </div>
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+
       {/* Building Modal */}
       <Dialog open={showBuildingModal} onOpenChange={setShowBuildingModal}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby="building-form-help">
@@ -3389,6 +3587,44 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                 </Select>
               </div>
             )}
+
+            {/* CRM block link — only meaningful once the building has been
+                saved (so we have an ID for the /crm-link PUT) AND the parent
+                project is linked to a CRM project (so we can filter the
+                block dropdown by it). */}
+            {buildingForm.id && project?.crm_project_id && (
+              <CRMLinkPanel
+                mode="block"
+                crmProjectId={project.crm_project_id}
+                value={{
+                  crmBlockId: buildingForm.crm_block_id,
+                  currentStage: buildingForm.current_crm_stage,
+                  autoSync: buildingForm.crm_auto_sync,
+                }}
+                onChange={(v) => setBuildingForm({
+                  ...buildingForm,
+                  crm_block_id: v.crmBlockId,
+                  current_crm_stage: v.currentStage,
+                  crm_auto_sync: v.autoSync,
+                })}
+                language={language}
+              />
+            )}
+            {buildingForm.id && !project?.crm_project_id && (
+              <div className="border rounded-lg p-3 bg-amber-50 border-amber-200 text-xs text-amber-800">
+                {(() => {
+                  // t() returns the key itself when no translation exists, so
+                  // the || fallback never fires. Detect that and hand back the
+                  // hand-rolled Uzbek message instead of the raw key.
+                  const translated = t('link_project_to_crm_first');
+                  if (!translated || translated === 'link_project_to_crm_first') {
+                    return "Avval loyihani CRM bilan bog'lang (loyihani tahrirlash) — keyin shu binoni CRM blokiga ulay olasiz.";
+                  }
+                  return translated;
+                })()}
+              </div>
+            )}
+
             <DialogFooter className="flex-col-reverse sm:flex-row gap-2">
               <Button type="button" variant="outline" onClick={() => setShowBuildingModal(false)}>
                 {t('cancel') || 'Bekor qilish'}
@@ -3396,6 +3632,257 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
               <Button type="submit">{buildingForm.id ? (t('update') || 'Yangilash') : (t('create') || 'Yaratish')}</Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* (Removed) The old clone-estimates modal was a target-picker;
+          the new "Nusxalash" flow always creates a brand-new sibling
+          block server-side, so no UI input is needed. The state
+          variables `cloneEstimatesModal` / `setCloneEstimatesModal`
+          are kept around because the rest of this file still references
+          them in dead-code paths; they no longer drive any visible UI. */}
+      <Dialog open={false} onOpenChange={() => {}}>
+        <DialogContent className="max-w-lg" aria-describedby="clone-estimates-help">
+          <DialogHeader>
+            <DialogTitle>
+              {t('clone_estimates') || 'Smetalarni klonlash'}
+            </DialogTitle>
+          </DialogHeader>
+          <div id="clone-estimates-help" className="space-y-4 text-sm">
+            <p className="text-slate-600">
+              {(t('clone_estimates_help') ||
+                "Boshqa blokdagi barcha smetalar (Единич, ВОР, Ресурс), ularning satrlari va bosqichlari joriy blokga nusxalanadi. FAKT ma'lumotlari (bajarilgan ish, sana, status) nusxalanmaydi. Bu amal blokda hozircha smeta bo'lmaganda ishlaydi.")}
+            </p>
+
+            <div>
+              <Label className="text-slate-500 text-xs">
+                {t('target_block') || 'Maqsad blok'}
+              </Label>
+              <div className="mt-1 font-medium">
+                {cloneEstimatesModal?.target?.name || '—'}
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="clone-source-block">
+                {t('source_block') || 'Manba blok'}
+              </Label>
+              <Select
+                value={cloneEstimatesModal?.sourceId || ''}
+                onValueChange={(v) =>
+                  setCloneEstimatesModal((m) => (m ? { ...m, sourceId: v } : m))
+                }
+              >
+                <SelectTrigger id="clone-source-block" className="mt-1">
+                  <SelectValue placeholder={t('select') || 'Tanlang'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {(buildings || [])
+                    .filter((b) => Number(b?.id) !== Number(cloneEstimatesModal?.target?.id))
+                    .filter((b) => (estimateCountByBuildingId[Number(b?.id)] || 0) > 0)
+                    .map((b) => {
+                      const n = estimateCountByBuildingId[Number(b?.id)] || 0;
+                      return (
+                        <SelectItem key={b.id} value={String(b.id)}>
+                          {b.name} · {n} {t('smeta_short') || 'smeta'}
+                        </SelectItem>
+                      );
+                    })}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-slate-400 mt-1">
+                {(t('clone_source_hint') ||
+                  "Faqat smetasi bor bloklar ko'rsatiladi.")}
+              </p>
+            </div>
+          </div>
+          <DialogFooter className="flex-col-reverse sm:flex-row gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={cloneEstimatesBusy}
+              onClick={() => setCloneEstimatesModal(null)}
+            >
+              {t('cancel') || 'Bekor qilish'}
+            </Button>
+            <Button
+              type="button"
+              disabled={cloneEstimatesBusy || !cloneEstimatesModal?.sourceId}
+              onClick={async () => {
+                const target = cloneEstimatesModal?.target;
+                const sourceId = cloneEstimatesModal?.sourceId;
+                if (!target?.id || !sourceId || !project?.id) return;
+                setCloneEstimatesBusy(true);
+                try {
+                  const res = await constructionService.cloneBuildingEstimates(
+                    project.id, target.id, sourceId,
+                  );
+                  toast.success(
+                    `${t('clone_done') || 'Nusxalash bajarildi'}: ` +
+                    `${res?.estimates_created ?? 0} smeta · ` +
+                    `${res?.lines_created ?? 0} satr · ` +
+                    `${res?.stages_created ?? 0} bosqich · ` +
+                    `${res?.files_created ?? 0} fayl`,
+                  );
+                  // Refresh block list AND estimate counts so the menu
+                  // entry on the target is now correctly disabled and
+                  // the Smetalar tab shows the copies on next visit.
+                  try {
+                    const [buildingsData, allEstimates] = await Promise.all([
+                      constructionService.listBuildings(project.id),
+                      constructionService.listEstimates(project.id).catch(() => []),
+                    ]);
+                    setBuildings(sortBuildings(buildingsData));
+                    const counts = {};
+                    for (const e of (allEstimates || [])) {
+                      const bid = Number(e?.building_id || 0);
+                      if (!bid) continue;
+                      counts[bid] = (counts[bid] || 0) + 1;
+                    }
+                    setEstimateCountByBuildingId(counts);
+                  } catch { /* non-fatal — the next tab visit will reload */ }
+                  setCloneEstimatesModal(null);
+                } catch (err) {
+                  // The backend uses two error envelope shapes depending on
+                  // which helper fired:
+                  //   { success:false, code: "TARGET_NOT_EMPTY", error: "string" }  ← gin.H from CloneBuildingEstimates
+                  //   { success:false, error: { code: 500, message: "..." } }       ← response.InternalError wrapper
+                  // Read `code` from either, and pull the human-readable
+                  // text out of whichever string-shaped field actually has
+                  // one. toast.error must receive a string — passing the
+                  // object directly broke React with "Objects are not valid
+                  // as a React child (found: object with keys {code, message})".
+                  const data = err?.response?.data || {};
+                  const code = data.code
+                    || (typeof data.error === 'object' ? data.error?.code : undefined);
+                  const backendMessage = typeof data.error === 'string'
+                    ? data.error
+                    : (data.error?.message || data.message);
+                  const msg = code === 'TARGET_NOT_EMPTY'
+                    ? (t('clone_target_not_empty') ||
+                       "Maqsad blokda allaqachon smeta bor.")
+                    : code === 'SOURCE_EMPTY'
+                    ? (t('clone_source_empty') ||
+                       "Manba blokda smeta yo'q.")
+                    : (backendMessage || err?.message ||
+                       (t('error_occurred') || 'Xatolik yuz berdi'));
+                  toast.error(String(msg));
+                } finally {
+                  setCloneEstimatesBusy(false);
+                }
+              }}
+            >
+              {cloneEstimatesBusy
+                ? (t('cloning') || 'Nusxalanmoqda...')
+                : (t('clone') || 'Nusxalash')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Duplicate-building modal — asks how many copies to create, then
+          clones the source block that many times. Each call is sequential so
+          the backend's "<name> Copy", "Copy (2)", "Copy (3)"… auto-numbering
+          stays correct. The full-page blur loader (cloneEstimatesBusy) covers
+          the whole run. */}
+      <Dialog open={!!duplicateModal} onOpenChange={(o) => { if (!o && !cloneEstimatesBusy) setDuplicateModal(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t('duplicate_building') || 'Binoni nusxalash'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <p className="text-sm text-slate-500">
+              {duplicateModal?.building?.name
+                ? `"${duplicateModal.building.name}" — ${t('how_many_copies') || 'nechta nusxa yaratamiz?'}`
+                : (t('how_many_copies') || 'Nechta nusxa yaratamiz?')}
+            </p>
+            <div>
+              <Label htmlFor="dup-count">{t('copies_count') || 'Nusxalar soni'}</Label>
+              <Input
+                id="dup-count"
+                type="number"
+                min={1}
+                max={50}
+                className="mt-1"
+                value={duplicateModal?.count ?? 1}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setDuplicateModal((m) => (m ? { ...m, count: v } : m));
+                }}
+              />
+              <p className="text-xs text-slate-400 mt-1">
+                {t('copies_count_hint') || "Har bir nusxa smeta, satr, bosqich va fayllar bilan to'liq ko'chiriladi (1–50)."}
+              </p>
+            </div>
+          </div>
+          <DialogFooter className="flex-col-reverse sm:flex-row gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!!cloneEstimatesBusy}
+              onClick={() => setDuplicateModal(null)}
+            >
+              {t('cancel') || 'Bekor qilish'}
+            </Button>
+            <Button
+              type="button"
+              disabled={!!cloneEstimatesBusy || !duplicateModal?.building?.id}
+              onClick={async () => {
+                const building = duplicateModal?.building;
+                if (!building?.id || !project?.id) return;
+                const n = Math.max(1, Math.min(50, Math.floor(Number(duplicateModal?.count) || 1)));
+                setDuplicateModal(null);
+                setCloneEstimatesBusy(Number(building.id));
+                let ok = 0;
+                let fail = 0;
+                let lastErr = '';
+                // Sequential — each copy must commit before the next so the
+                // backend sees the previous "<name> Copy" and increments.
+                for (let i = 0; i < n; i++) {
+                  try {
+                    await constructionService.duplicateBuilding(project.id, building.id);
+                    ok += 1;
+                  } catch (err) {
+                    fail += 1;
+                    const data = err?.response?.data || {};
+                    lastErr = typeof data.error === 'string'
+                      ? data.error
+                      : (data.error?.message || data.message || err?.message || '');
+                  }
+                }
+                // Refresh the block list + estimate counts once at the end.
+                try {
+                  const [buildingsData, allEstimates] = await Promise.all([
+                    constructionService.listBuildings(project.id),
+                    constructionService.listEstimates(project.id).catch(() => []),
+                  ]);
+                  setBuildings(sortBuildings(buildingsData));
+                  const counts = {};
+                  for (const e of (allEstimates || [])) {
+                    const bid = Number(e?.building_id || 0);
+                    if (!bid) continue;
+                    counts[bid] = (counts[bid] || 0) + 1;
+                  }
+                  setEstimateCountByBuildingId(counts);
+                } catch { /* non-fatal */ }
+                if (ok > 0) {
+                  toast.success(
+                    `${t('duplicate_done') || 'Nusxalash bajarildi'}: ` +
+                    `${ok} ${t('copies_short') || 'nusxa'}` +
+                    (fail > 0 ? ` · ${fail} ${t('failed_short') || 'xato'}` : ''),
+                  );
+                }
+                if (ok === 0) {
+                  toast.error(String(lastErr || (t('error_occurred') || 'Xatolik yuz berdi')));
+                }
+                setCloneEstimatesBusy(false);
+              }}
+            >
+              {cloneEstimatesBusy
+                ? (t('cloning') || 'Nusxalanmoqda...')
+                : (t('create') || 'Yaratish')}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -4478,7 +4965,7 @@ export default function Construction() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
+  const { formatCurrency } = useCurrencyFormatter();
   const { activeCompany } = useCompany();
 
   const {
@@ -4746,6 +5233,10 @@ export default function Construction() {
       contract_number: '', object_full_name: '',
       client_director_name: '',
       client_chief_accountant_name: '',
+      // CRM link starts unset on a new project. The CRMLinkPanel only
+      // appears for edits (gated on editingProject), so this default is
+      // mostly defensive — keeps the form shape consistent.
+      crm_project_id: null,
     });
     setEditingProject(null);
   };
@@ -4780,6 +5271,12 @@ export default function Construction() {
       object_full_name: project.object_full_name || '',
       client_director_name: project.client_director_name || '',
       client_chief_accountant_name: project.client_chief_accountant_name || '',
+      // CRM link — copy through so the CRMLinkPanel dropdown pre-fills with
+      // the currently-linked project. Backend includes crm_project_id in
+      // the list/detail SELECT (see df3afe7); we were silently dropping it
+      // here, which is why the dropdown looked empty on every reopen even
+      // though the link was persisted server-side.
+      crm_project_id: project.crm_project_id ?? null,
     });
     setShowProjectModal(true);
   };
@@ -5066,46 +5563,8 @@ export default function Construction() {
             })}
           </div>
 
-          {/* Summary metrics — compact, non-clickable */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div
-              className="rounded-xl border border-slate-200 bg-white p-4"
-              title={t('contract_total_hint') || "Barcha loyihalar shartnoma summalari yig'indisi"}
-            >
-              <div className="flex items-center justify-between">
-                <div className="min-w-0">
-                  <p className="text-xs font-medium text-slate-500 mb-1">
-                    {t('contract_total') || 'Shartnoma summasi'}
-                  </p>
-                  <p className="text-xl font-semibold text-slate-900 tabular-nums truncate">
-                    {formatCurrencyCompact(stats.totalContractAmount)}
-                  </p>
-                </div>
-                <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0">
-                  <DollarSign className="w-5 h-5 text-emerald-600" strokeWidth={2} />
-                </div>
-              </div>
-            </div>
-
-            <div
-              className="rounded-xl border border-slate-200 bg-white p-4"
-              title={t('total_smeta_hint') || "Barcha loyihalar smetalari bo'yicha umumiy qiymat"}
-            >
-              <div className="flex items-center justify-between">
-                <div className="min-w-0">
-                  <p className="text-xs font-medium text-slate-500 mb-1">
-                    {t('total_smeta') || 'Jami smeta'}
-                  </p>
-                  <p className="text-xl font-semibold text-slate-900 tabular-nums truncate">
-                    {formatCurrencyCompact(stats.totalSmeta)}
-                  </p>
-                </div>
-                <div className="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
-                  <FileSpreadsheet className="w-5 h-5 text-indigo-600" strokeWidth={2} />
-                </div>
-              </div>
-            </div>
-          </div>
+          {/* Summary metrics (Shartnoma summasi / Jami smeta) removed per
+              request — the status filter cards above are enough here. */}
         </div>
 
         {/* Projects List */}

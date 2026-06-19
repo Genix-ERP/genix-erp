@@ -62,6 +62,29 @@ function interpolate(template, details) {
  */
 export function formatApiError(err, t, fallback) {
   if (typeof err === 'string') return err || fallback;
+
+  // Network / timeout / aborted requests never reach the backend, so
+  // there's no err.response.data — axios surfaces a code instead. We
+  // detect those here and emit a translated, foreman-friendly message
+  // ("Tarmoq aloqasini tekshiring") rather than the raw axios string
+  // ("timeout of 120000ms exceeded") which scared real users into
+  // thinking the data had been lost.
+  const code = err?.code;
+  const isTimeout = code === 'ECONNABORTED' || code === 'ETIMEDOUT'
+    || /timeout/i.test(String(err?.message || ''));
+  const isNetwork = code === 'ERR_NETWORK' || code === 'ENOTFOUND'
+    || (err?.message === 'Network Error');
+  if (isTimeout || isNetwork) {
+    if (typeof t === 'function') {
+      const key = isTimeout ? 'error_network_timeout' : 'error_network_connection';
+      const translated = t(key);
+      if (translated && translated !== key) return translated;
+    }
+    return isTimeout
+      ? "Tarmoq aloqasini tekshiring — so'rov javob bermadi."
+      : "Tarmoq aloqasini tekshiring.";
+  }
+
   const data = err?.response?.data;
   if (!data) return err?.message || fallback;
 

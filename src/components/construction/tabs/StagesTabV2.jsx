@@ -12,6 +12,7 @@ import { constructionService } from '@/api/services/construction';
 import { formatApiError } from '@/utils/apiErrors';
 import AddResourcePickerModal from '@/components/construction/AddResourcePickerModal';
 import AddSubWorkModal from '@/components/construction/AddSubWorkModal';
+import { sortLinesManualFirst, sortLinesManualFirstInPlace } from '@/components/construction/utils/sortLines';
 
 // =====================================================================
 // StagesTabV2 — full port of construction_module_v2.html
@@ -473,8 +474,15 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
   // the switcher; ordinary users get whichever role the backend
   // resolved for them, which the page renders implicitly.
   const { user, isSiteAdmin, isOwner } = useAuth();
-  const canSwitchRole = (typeof isSiteAdmin === 'function' && isSiteAdmin())
+  const isAdminLike = (typeof isSiteAdmin === 'function' && isSiteAdmin())
     || (typeof isOwner === 'function' && isOwner());
+  // Every workflow role the backend says this user holds on the project
+  // (from my-role's `roles`). Drives the switcher for multi-role users.
+  const [myRoles, setMyRoles] = useState([]);
+  // The switcher shows for admins/owners (who can impersonate any role) and
+  // for regular users assigned to MORE THAN ONE role, so they can act as
+  // each of theirs. A single-role user just lives with that one role.
+  const canSwitchRole = isAdminLike || myRoles.length > 1;
   // Permission gating for the per-stage trash button. Admins/owners/
   // site-admins are auto-true via the hook; regular employees only see
   // the delete affordance when their role grants `construction.delete`.
@@ -491,6 +499,14 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
   const [refreshTick, setRefreshTick] = useState(0); // bump to force a reload
   const [buildingStageCounts, setBuildingStageCounts] = useState({}); // buildingId → stage count
 
+  // ── Infinite-scroll render window ─────────────────────────────────
+  // The full lines/stages stay in memory (progress %, totals, Forma 2,
+  // material engine all see everything); we only paint the first N
+  // stages and reveal more as the user scrolls — no page button.
+  const STAGES_PER_PAGE = 20;
+  const [visibleStageCount, setVisibleStageCount] = useState(STAGES_PER_PAGE);
+  const stagesLoadMoreRef = React.useRef(null);
+
   // Manually-added stages — rows from construction_stages that don't have
   // any works yet under their name. The Bosqichlar list is normally derived
   // from estimate-work parent paths (deriveStages below), so a stage with
@@ -504,6 +520,28 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
   // bumps refreshTick so the merged list pulls the new row in.
   const [addStageModal, setAddStageModal] = useState(null);
   const [addStageBusy, setAddStageBusy] = useState(false);
+
+  // ── Forma 2 iterations (migration 419) ───────────────────────────
+  // Multi-run Forma 2 series. iterations[] is ordered oldest→newest by
+  // iteration_seq. activeIterationId controls which tab is selected;
+  // null/undefined means "the open one" (current). Frozen iterations
+  // display read-only — the fakt inputs are disabled and the cumulative
+  // progress is rendered as it stood at freeze time.
+  //
+  // Creating/freezing and deleting Forma 2 iterations lives on the Smeta
+  // boshqaruvi tab. Here the strip is display-only — selecting a tab just
+  // changes which iteration's period_fakt the works table shows.
+  const [iterations, setIterations] = useState([]);             // [{id, iteration_seq, status, ...}]
+  const [activeIterationId, setActiveIterationId] = useState(null);
+  // Per-iteration period_fakt for the currently SELECTED iteration tab.
+  // Map<estimate_line_id, period_fakt>. Rebuilt every time the user
+  // switches tabs or the lines refresh. Used as the BAJARILDI input
+  // value so the new iteration starts at 0 even though
+  // line.done_quantity (the cumulative) carries the prior progress.
+  // The PROGRESS bar still reads done_quantity so cumulative completion
+  // stays visible across iterations — exactly what the user described:
+  // "new tab takes fakt as 0 but progress stays same."
+  const [periodFaktByLine, setPeriodFaktByLine] = useState(new Map());
 
   // IDs of stages the user added via "+ Bosqich qo'shish".
   //
@@ -555,6 +593,13 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
   // keys by name only. resolveWorkQty + the WorkTable JSX try strict
   // first, then fall back to loose.
   const [vorPlanByName, setVorPlanByName] = useState(() => ({
+    // byItem — keyed by the row's item_number (the № column the user
+    // sees on the printed smeta). When єдинич and ВОР come from the
+    // same source XLSX their row numbers are aligned, so this gives a
+    // deterministic match even when the SAME work name+code appears
+    // in multiple sections (e.g. УСТРОЙСТВО ПОЯСОВ at rows 33, 52, 109
+    // — all with code E0603-002-01 but different planned qtys).
+    byItem: new Map(),
     strict: new Map(),
     loose: new Map(),
   }));
@@ -635,14 +680,65 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
       .then((r) => {
         if (cancelled) return;
         setRealRole(r?.role || '');
-        // Default the viewer to the user's real role; tenant admins
-        // (no role assigned) start in foreman view, matching the v2
+        setMyRoles(Array.isArray(r?.roles) ? r.roles : (r?.role ? [r.role] : []));
+        // Default the viewer to the user's real (primary) role; tenant
+        // admins (no role assigned) start in foreman view, matching the v2
         // mockup's default selection.
         setViewRole(r?.role || 'foreman');
       })
       .catch(() => { /* leave realRole empty → admin/demo mode */ });
     return () => { cancelled = true; };
   }, [project?.id]);
+
+  // ── Load Forma 2 iterations ──────────────────────────────────────
+  // Refresh on project change AND on refreshTick so the freeze button
+  // can trigger a reload without re-running everything else.
+  useEffect(() => {
+    if (!project?.id) return;
+    let cancelled = false;
+    constructionService.listForm2Iterations(project.id)
+      .then((rows) => {
+        if (cancelled) return;
+        const list = Array.isArray(rows) ? rows : [];
+        setIterations(list);
+        // Default to the open iteration so the user lands on the
+        // editable view. If none is open (shouldn't happen post-
+        // migration 419), fall back to the newest.
+        const openOne = list.find((it) => it.status === 'open');
+        const fallback = list[list.length - 1];
+        setActiveIterationId((cur) => {
+          if (cur && list.some((it) => it.id === cur)) return cur;
+          return (openOne || fallback)?.id ?? null;
+        });
+      })
+      .catch(() => { /* iterations load is non-blocking; bosqichlar still renders */ });
+    return () => { cancelled = true; };
+  }, [project?.id, refreshTick]);
+
+  // ── Load per-line period_fakt for the active iteration ───────────
+  // Without this every BAJARILDI input would show the cumulative
+  // done_quantity, defeating the whole "new iter starts at 0" point.
+  // GetForm2IterationLines returns [{estimate_line_id, period_fakt}, …]
+  // for the selected iter; we turn it into a Map keyed by line id so
+  // the WorksTable can look up O(1) per row.
+  useEffect(() => {
+    if (!project?.id || !activeIterationId) {
+      setPeriodFaktByLine(new Map());
+      return;
+    }
+    let cancelled = false;
+    constructionService.getForm2IterationLines(project.id, activeIterationId)
+      .then((rows) => {
+        if (cancelled) return;
+        const m = new Map();
+        for (const r of (Array.isArray(rows) ? rows : [])) {
+          m.set(Number(r.estimate_line_id), Number(r.period_fakt || 0));
+        }
+        setPeriodFaktByLine(m);
+      })
+      .catch(() => { /* leave empty; rows default to 0 in the input */ });
+    return () => { cancelled = true; };
+  }, [project?.id, activeIterationId, refreshTick]);
 
   // ── Load estimate + lines when active building changes ───────────
   useEffect(() => {
@@ -693,20 +789,29 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
         if (!matchedEst) {
           setLines([]);
           setActiveEstimateId(null);
-          setVorPlanByName({ strict: new Map(), loose: new Map() });
+          setVorPlanByName({ byItem: new Map(), strict: new Map(), loose: new Map() });
           setLoading(false);
           return;
         }
         setActiveEstimateId(matchedEst.id);
         try {
-          const [lineRows, vorRows] = await Promise.all([
-            constructionService.listEstimateLines(matchedEst.id, { page_size: 5000 }),
-            vorEst
-              ? constructionService.listEstimateLines(vorEst.id, { page_size: 5000 }).catch(() => [])
-              : Promise.resolve([]),
-          ]);
+          // ВОР side-fetch stays a SINGLE request: it isn't rendered, it
+          // only feeds the REJA plan-qty maps below, which must be complete
+          // before works show a correct planned quantity.
+          const vorRows = vorEst
+            ? await constructionService.listEstimateLines(vorEst.id, { page_size: 5000 }).catch(() => [])
+            : [];
           if (cancelled) return;
-          setLines(Array.isArray(lineRows) ? lineRows : (lineRows?.data || lineRows?.items || []));
+          // Единич lines (the rendered stage tree) — pulled in ONE request.
+          // The web app derives the whole stage tree, progress and budget
+          // from the full set, so paging it 20-at-a-time only caused a slow,
+          // flickering load on big blocks. (Mobile uses the 20-paged lines
+          // endpoint + the /summary endpoint instead.) The `cancelled` guard
+          // above already drops a stale load when the user switches block.
+          const rows = await constructionService.listEstimateLines(matchedEst.id, { page_size: 5000 });
+          if (cancelled) return;
+          setLines(Array.isArray(rows) ? rows : (rows?.data || rows?.items || []));
+          setLoading(false);
           // Build the name → qty map. Excel files often disagree on
           // whitespace between the Единич and ВОР sheets — e.g.
           // "В7,5 / М-100/" vs "В7,5 /М-100/" — so we normalise by
@@ -724,6 +829,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
           // Авеню Блок 2 Угловой" — see compoundKey doc above). For
           // files where Единич and ВОР disagree on section labels,
           // the loose map still rescues the lookup.
+          const byItem = new Map();
           const strict = new Map();
           const loose = new Map();
           for (const r of vorList) {
@@ -732,8 +838,38 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
             if (r.parent_line_id) continue;
             const n = normName(r.name);
             if (!n) continue;
-            const q = Number(r.quantity || 0);
+            // Read the planned figure with the SAME priority the
+            // Smetalar (EstimatesTab) tab uses to display it:
+            //   1. imported_quantity — file's literal value preserved
+            //      by migration 413 (col F on Единич / Кол-во on ВОР).
+            //   2. original_quantity — parent-only anchor from
+            //      migration 349 (for rows that predate 413).
+            //   3. live `quantity` — last fallback for legacy rows.
+            //
+            // Without this priority chain, ВОР rows whose ledger
+            // `quantity` was overwritten after import (or whose
+            // template-mode import zero'd quantity but preserved
+            // imported_quantity) feed Bosqichlar a wrong REJA — the
+            // user sees Smetalar's 0.301 but Bosqichlar's 0.1893.
+            const imp = Number(r.imported_quantity || 0);
+            const oq  = Number(r.original_quantity || 0);
+            const lq  = Number(r.quantity || 0);
+            const q = imp > 0 ? imp : (oq > 0 ? oq : lq);
             if (!(q > 0)) continue;
+
+            // byItem — keyed on item_number (the printed row #). This is
+            // the user-confirmed disambiguator for files where the same
+            // work name+code appears in multiple sections with different
+            // planned qtys. We also key on (item_number, code) so a
+            // mismatched code wouldn't accidentally hit the wrong row.
+            const itemNum = String(r.item_number || '').trim();
+            if (itemNum) {
+              const codeKey = String(r.code || '').trim().toLowerCase();
+              if (!byItem.has(itemNum)) byItem.set(itemNum, q);
+              const dualKey = `${itemNum}|${codeKey}`;
+              if (!byItem.has(dualKey)) byItem.set(dualKey, q);
+            }
+
             const key = compoundKey(r.parent_item_number, r.name, r.uom);
             // First-write-wins for strict so the original section's qty
             // sticks; later duplicates land under their own section
@@ -745,7 +881,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
             // overwrite the first and reintroduce the original bug.
             if (!loose.has(n)) loose.set(n, q);
           }
-          setVorPlanByName({ strict, loose });
+          setVorPlanByName({ byItem, strict, loose });
         } catch (e) {
           if (!cancelled) toast.error(formatApiError(e, t, 'Xatolik'));
         }
@@ -902,37 +1038,221 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
   // Once the user adds works under such a stage via Smeta boshqaruvi,
   // the derived stage takes over and the entry is no longer "empty".
   const stages = useMemo(() => {
-    const derivedNames = new Set(
-      derivedStages.map((s) => String(s.name || '').trim().toLowerCase()),
-    );
-    // Only stages whose id is in the localStorage-tracked "user
-    // explicitly added" set show up as empty extras at the TOP. Other
-    // construction_stages rows that have no loaded lines (e.g.
-    // auto-import ghosts from a re-imported єdinich whose lines aren't
-    // the active єdinich) are intentionally HIDDEN — they would
-    // otherwise flood the Bosqichlar list with 0-ish entries that the
-    // user has no way to act on. Stages with works are rendered by the
-    // derivedStages list regardless.
+    // Build a name → manual-stage-id index of every stage the user
+    // explicitly added via "+ Bosqich qo'shish" (tracked in
+    // localStorage so it survives page reloads). This lets us
+    // recognise a manual stage in BOTH branches — whether it's still
+    // empty (no works yet) or whether the user has since attached
+    // works to it (which would otherwise have it appear in
+    // derivedStages alongside imported stages).
     const userAddedSet = new Set(recentlyAddedStageIds.map(Number));
-    const userAdded = [];
+    const manualByName = new Map();
     for (const ms of manualStages) {
       if (!userAddedSet.has(Number(ms.id))) continue;
       const key = String(ms.name || '').trim().toLowerCase();
       if (!key) continue;
-      if (derivedNames.has(key)) continue; // already in derived (has works)
-      userAdded.push({
+      if (!manualByName.has(key)) manualByName.set(key, Number(ms.id));
+    }
+
+    const derivedNames = new Set(
+      derivedStages.map((s) => String(s.name || '').trim().toLowerCase()),
+    );
+
+    // Pull derived stages that match a user-added manual stage to the
+    // FRONT of the list — these are user-added stages that already
+    // have works, so they need their progress/cost from derived data
+    // but their position must still be "pinned at top".
+    //
+    // A stage counts as manual when EITHER:
+    //   1. Its name matches a construction_stages row tracked in
+    //      localStorage (manualByName) — explicit user-add this session.
+    //   2. Every work + sub-stage carries is_manual = TRUE (migration
+    //      417 + backend writes).
+    //
+    // The earlier item_number-based heuristic was removed because it
+    // false-positived for imported єдинич/ВОР works that lack a
+    // pure-numeric item_number (common in files that use SHRNK codes
+    // as the row identifier). Production users wanted imports left
+    // in their original order — the heuristic was reshuffling them.
+    const looksManualStage = (ds) => {
+      const allWorks = [];
+      const visit = (w) => {
+        if (!w) return;
+        allWorks.push(w);
+        if (Array.isArray(w.subStages)) {
+          for (const ss of w.subStages) visit(ss);
+        }
+      };
+      for (const w of (ds.works || [])) visit(w);
+      for (const ss of (ds.subStages || [])) visit(ss);
+      if (allWorks.length === 0) return true;
+      return allWorks.every((w) => w.is_manual === true);
+    };
+
+    const pinnedDerived = [];
+    const restDerived   = [];
+    for (const ds of derivedStages) {
+      const key = String(ds.name || '').trim().toLowerCase();
+      const mid = manualByName.get(key);
+      if (mid != null) {
+        pinnedDerived.push({ ...ds, manual_stage_id: mid });
+      } else if (looksManualStage(ds)) {
+        pinnedDerived.push({ ...ds, manual_stage_id: 0 });
+      } else {
+        restDerived.push(ds);
+      }
+    }
+
+    // Empty user-added stages — those whose name isn't in
+    // derivedStages because no works exist yet. Render as a 0% / 0
+    // works card. Auto-import "ghost" stages (construction_stages
+    // rows that AREN'T in the user-added set) are intentionally
+    // hidden so they don't flood the list with empty extras.
+    const userAddedEmpty = [];
+    for (const ms of manualStages) {
+      if (!userAddedSet.has(Number(ms.id))) continue;
+      const key = String(ms.name || '').trim().toLowerCase();
+      if (!key) continue;
+      if (derivedNames.has(key)) continue; // covered by pinnedDerived above
+      userAddedEmpty.push({
         name: ms.name,
         works: [],
         subStages: [],
         manual_stage_id: ms.id,
       });
     }
-    // Newest user-add first (highest id).
-    userAdded.sort((a, b) =>
-      Number(b.manual_stage_id || 0) - Number(a.manual_stage_id || 0),
-    );
-    return [...userAdded, ...derivedStages];
+
+    // Newest add first (highest id) within each pinned bucket so the
+    // most recent "+ Bosqich qo'shish" lands at the very top.
+    const byNewest = (a, b) =>
+      Number(b.manual_stage_id || 0) - Number(a.manual_stage_id || 0);
+    userAddedEmpty.sort(byNewest);
+    pinnedDerived.sort(byNewest);
+
+    // Imported stages: sort by the MIN DB row id across every work they
+    // contain (own works + nested sub-stage works). Bulk imports INSERT
+    // rows in file order, so min id == "first row of this stage in the
+    // source file." This is exactly the rule SmetaManagementTab uses for
+    // its imported-section bucket — keeping the two tabs in sync is
+    // important because the user navigates between them and expects the
+    // same order in both.
+    //
+    // Item_number stays as a tiebreaker only. The earlier "sort by min
+    // item_number" was correct for single-discipline files where each
+    // РАЗДЕЛ continued the numbering (1, 7, 10, 17…). It broke on the
+    // multi-discipline Юксалиш Тип-3 XLS where each discipline restarts
+    // at 1 — KЖ's ЗЕМЛЯНЫЕ РАБОТЫ (item 1) and ВК's ХОЗ. ПИТЬЕВОЙ
+    // ВОДОПРОВОД (also item 1) tied and the user got "line number
+    // started from 1 multiple times" with the stages in arbitrary order.
+    // Two sort keys, in priority order:
+    //   1. min sort_order across every reachable work
+    //   2. min line id (fallback for legacy rows with sort_order=0)
+    //
+    // sort_order is captured at import time as a continuously-incrementing
+    // counter across the whole file (parseEdinich → buildImportPayloadFor),
+    // so KЖ's rows have low sort_orders and ЛВС's rows have high ones —
+    // exactly the file-order signal we need. line.id is more brittle
+    // because re-imports / partial deletes can interleave the
+    // auto-increment range across disciplines.
+    //
+    // The previous version walked w.subStages instead of node.works /
+    // node.subStages, so stages whose works all lived inside sub-stages
+    // (КЖ has 11 sub-stages, ZERO direct works) returned Infinity, and
+    // ЛВС (no РАЗДЕЛ N. → flat works on the stage) floated to the top.
+    const minStageKey = (stage, field) => {
+      let min = Number.POSITIVE_INFINITY;
+      const visit = (node) => {
+        if (!node) return;
+        const v = Number(node[field]);
+        if (Number.isFinite(v) && v > 0 && v < min) min = v;
+        if (Array.isArray(node.works)) {
+          for (const w of node.works) visit(w);
+        }
+        if (Array.isArray(node.subStages)) {
+          for (const ss of node.subStages) visit(ss);
+        }
+      };
+      for (const w of (stage.works || [])) visit(w);
+      for (const ss of (stage.subStages || [])) visit(ss);
+      return min;
+    };
+    const minStageSortOrder = (stage) => minStageKey(stage, 'sort_order');
+    const minStageLineId    = (stage) => minStageKey(stage, 'id');
+    const minStageItemNum = (stage) => {
+      let min = Number.POSITIVE_INFINITY;
+      // Same recursion fix as minStageLineId above — walk node.works
+      // AND node.subStages so multi-substage stages don't silently
+      // tie at Infinity.
+      const visit = (node) => {
+        if (!node) return;
+        const raw = String(node.item_number || '').trim();
+        const m = raw.match(/^\d+(?:\.\d+)?/);
+        if (m) {
+          const n = Number(m[0]);
+          if (Number.isFinite(n) && n < min) min = n;
+        }
+        if (Array.isArray(node.works)) {
+          for (const w of node.works) visit(w);
+        }
+        if (Array.isArray(node.subStages)) {
+          for (const ss of node.subStages) visit(ss);
+        }
+      };
+      for (const w of (stage.works || [])) visit(w);
+      for (const ss of (stage.subStages || [])) visit(ss);
+      return min;
+    };
+    restDerived.sort((a, b) => {
+      // Primary: file order via sort_order (set at import time,
+      // continuously incremented across all sections — KЖ low, ЛВС high).
+      const soa = minStageSortOrder(a);
+      const sob = minStageSortOrder(b);
+      if (soa !== sob && Number.isFinite(soa) && Number.isFinite(sob)) {
+        return soa - sob;
+      }
+      // Secondary: min line.id (legacy / single-discipline fallback).
+      const ida = minStageLineId(a);
+      const idb = minStageLineId(b);
+      if (ida !== idb) return ida - idb;
+      // Tertiary: min item_number (last-ditch).
+      const ka = minStageItemNum(a);
+      const kb = minStageItemNum(b);
+      if (ka !== kb) return ka - kb;
+      return 0;
+    });
+
+    // Top: empty extras (no works yet) — most recent first.
+    // Middle: user-added stages that now have works — most recent first.
+    // Bottom: imported stages in printed-page (min item_number) order.
+    return [...userAddedEmpty, ...pinnedDerived, ...restDerived];
   }, [derivedStages, manualStages, recentlyAddedStageIds]);
+
+  // Render only the first N stages; reveal more on scroll. Full `stages`
+  // is still used everywhere else (counts, progress, exports).
+  const visibleStages = useMemo(
+    () => stages.slice(0, visibleStageCount),
+    [stages, visibleStageCount],
+  );
+  // Reset the window when the active block changes (fresh stage list).
+  useEffect(() => {
+    setVisibleStageCount(STAGES_PER_PAGE);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeBuildingId]);
+  // Grow the window as the bottom sentinel scrolls into view.
+  useEffect(() => {
+    const el = stagesLoadMoreRef.current;
+    if (!el) return undefined;
+    if (visibleStageCount >= stages.length) return undefined;
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) {
+        setVisibleStageCount((n) => Math.min(n + STAGES_PER_PAGE, stages.length));
+      }
+    }, { rootMargin: '400px 0px' });
+    io.observe(el);
+    return () => io.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stages.length, visibleStageCount]);
+
   // Plan-quantity resolver for progress aggregations. Fallback chain:
   //   1. ВОР Miqdor (strict key: section + name + uom).
   //   2. ВОР Miqdor (loose: name only) — rescues files where section
@@ -948,19 +1268,43 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
   //      custom-added rows the user entered a value on.
   const resolveWorkQty = useCallback((w) => {
     if (!w) return 0;
+    // Priority — ВОР is the project's Bill of Quantities, so its
+    // (item_number, code) match wins first. It's the AUTHORITATIVE
+    // project plan; when ВОР and єдинич disagree on the same row
+    // (e.g. ВОР row 29 = 0.102, єдинич row 29 = 0.012 for an
+    // arm-ie work that appears twice), the ВОР figure is the one
+    // the foreman should target.
+    //
+    // Chain:
+    //   1. ВОР byItem  (item_number + code) — deterministic
+    //   2. ВОР strict  (section + name + uom)
+    //   3. єдинич's original_quantity (col F anchor) — fallback when
+    //      ВОР has no matching row at all (some єдинич-only works
+    //      don't surface in the project's ВОР sheet).
+    //   4. ВОР loose   (name only) — last-ditch ВОР rescue.
+    //   5. live `quantity` — final fallback for legacy rows.
+    const byItem = vorPlanByName?.byItem;
     const strict = vorPlanByName?.strict;
     const loose = vorPlanByName?.loose;
+    if (byItem) {
+      const itemNum = String(w.item_number || '').trim();
+      if (itemNum) {
+        const codeKey = String(w.code || '').trim().toLowerCase();
+        const v = Number(byItem.get(`${itemNum}|${codeKey}`) || byItem.get(itemNum) || 0);
+        if (v > 0) return v;
+      }
+    }
     if (strict) {
       const sk = compoundKey(w.parent_item_number, w.name, w.uom);
       const v = strict.get(sk) || 0;
       if (v > 0) return v;
     }
+    const origQty = Number(w.original_quantity || 0);
+    if (origQty > 0) return origQty;
     if (loose) {
       const v = loose.get(normName(w.name)) || 0;
       if (v > 0) return v;
     }
-    const origQty = Number(w.original_quantity || 0);
-    if (origQty > 0) return origQty;
     return Number(w.quantity || 0);
   }, [vorPlanByName]);
   const blockProg = useMemo(() => blockProgress(stages, resolveWorkQty), [stages, resolveWorkQty]);
@@ -1026,6 +1370,10 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
       if (!m.has(parentId)) m.set(parentId, []);
       m.get(parentId).push(l);
     }
+    // Unified manuals-first sort — see utils/sortLines.js.
+    for (const arr of m.values()) {
+      sortLinesManualFirstInPlace(arr);
+    }
     return m;
   }, [lines]);
 
@@ -1058,12 +1406,31 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
     return total;
   }, [stages, subResourcesByWork, resolveWorkQty]);
 
+  // Derived: which iteration is the user looking at, and is it frozen?
+  // Declared BEFORE the permission helpers so canEditQty (below) can
+  // reference isFrozenView without depending on TDZ-then-closure semantics.
+  // Frozen iterations show historical state with read-only inputs —
+  // attempts to type fakt are blocked client-side and the backend
+  // wouldn't accept them anyway (UpdateWorkDoneQuantity only writes
+  // into the currently-open iteration_line).
+  const activeIteration = useMemo(
+    () => iterations.find((it) => it.id === activeIterationId) || null,
+    [iterations, activeIterationId],
+  );
+  const isFrozenView = activeIteration ? activeIteration.status === 'frozen' : false;
+
   // Permission helpers — based on viewRole (what the user is currently
   // simulating) for UI gating; the server independently enforces using
   // the real role on every action.
   const canSeeCost = viewRole !== 'foreman';
   const canEditQty = (w) =>
-    viewRole === 'foreman'
+    !isFrozenView
+    // isFrozenView gate (migration 419) — when the user is looking at a
+    // frozen Forma 2 iteration tab, the fakt input is read-only. The
+    // backend would reject writes against a frozen iter anyway (the open-
+    // iter lookup wouldn't return the frozen one), but disabling the
+    // input on the client gives a clearer UX than failing silently.
+    && viewRole === 'foreman'
     && (w.approval_status === 'pending' || w.approval_status === 'in_progress');
   const canSubmitToSupervisor = (w) =>
     viewRole === 'foreman'
@@ -1076,34 +1443,53 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
 
   // ── Action handlers ──────────────────────────────────────────────
   const updateDone = useCallback(async (work, raw) => {
+    if (isFrozenView) {
+      // Belt-and-braces — the input is also disabled by JSX. This guard
+      // catches any leftover keyboard handlers (e.g. Enter on a focused
+      // disabled field with browser quirks).
+      toast.error(t('forma2_frozen_readonly') || 'Bu Forma 2 muzlatilgan');
+      return;
+    }
     const v = Number(String(raw).replace(/\s/g, '').replace(',', '.'));
     // Template-mode imports leave plan quantity = 0; the foreman's
     // BAJARILDI IS the recorded work volume. So the only constraint is
     // non-negative — we don't cap at work.quantity any more (which used
     // to lock everyone at 0 because the smeta plan was 0). The backend
     // also doesn't enforce a ceiling, so this matches.
-    const newQty = Number.isFinite(v) ? Math.max(0, v) : 0;
-    if (Math.abs(newQty - Number(work.done_quantity || 0)) < 0.0001) return;
+    const newPeriod = Number.isFinite(v) ? Math.max(0, v) : 0;
+    // The user's typed value is the THIS-PERIOD contribution (matches
+    // what's shown in the BAJARILDI input). Skip the round-trip when it
+    // equals the cached period_fakt for the active iteration.
+    const prevPeriod = periodFaktByLine.get(Number(work.id)) || 0;
+    if (Math.abs(newPeriod - prevPeriod) < 0.0001) return;
     try {
-      await constructionService.updateWorkDoneQuantity(work.id, newQty);
-      // Optimistic patch — the backend now mirrors done_quantity →
-      // quantity (so Smeta boshqaruvi's ISH HAJMI matches Bosqichlar's
-      // BAJARILDI) and cascades non-override children. Patch all of
-      // those locally so the UI doesn't flash a stale value.
+      // Backend treats body.done_quantity as the open iter's period_fakt
+      // (see UpdateWorkDoneQuantity comment block, migration 419) — wire
+      // field name stays `done_quantity` for backwards compatibility but
+      // the semantics changed under the hood.
+      await constructionService.updateWorkDoneQuantity(work.id, newPeriod);
+      // Optimistic patch — the cumulative for this line is
+      //   newCumulative = oldCumulative - prevPeriod + newPeriod
+      // because all other iterations' period_fakt values are unchanged.
+      // We also update the local periodFaktByLine map so the input
+      // immediately shows the freshly-typed value as the new "starting
+      // point" if the user blurs and re-focuses.
       const childParentId = Number(work.id);
+      const oldCumulative = Number(work.done_quantity || 0);
+      const newCumulative = oldCumulative - prevPeriod + newPeriod;
       setLines((rows) => rows.map((r) => {
         if (r.id === work.id) {
           return {
             ...r,
-            done_quantity: newQty,
-            quantity: newQty,
-            total_amount: newQty * Number(r.unit_rate || 0),
-            approval_status: newQty > 0 ? 'in_progress' : 'pending',
+            done_quantity: newCumulative,
+            quantity: newCumulative,
+            total_amount: newCumulative * Number(r.unit_rate || 0),
+            approval_status: newCumulative > 0 ? 'in_progress' : 'pending',
           };
         }
         if (Number(r.parent_line_id) === childParentId && !r.quantity_override) {
           const norm = Number(r.norm_rate || 0);
-          const childQty = newQty * norm;
+          const childQty = newCumulative * norm;
           return {
             ...r,
             quantity: childQty,
@@ -1112,12 +1498,17 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
         }
         return r;
       }));
+      setPeriodFaktByLine((m) => {
+        const n = new Map(m);
+        n.set(Number(work.id), newPeriod);
+        return n;
+      });
       toast.success(t('saved'));
     } catch (e) {
       toast.error(formatApiError(e, t, 'Xatolik'));
       reload();
     }
-  }, [t]);
+  }, [t, isFrozenView, periodFaktByLine]);
 
   const transitionRow = useCallback(async (label, fn) => {
     try {
@@ -1128,6 +1519,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
       toast.error(formatApiError(e, t, 'Xatolik'));
     }
   }, [t]);
+
 
   const submitWork              = (w) => transitionRow(t('sent_for_review'),     () => constructionService.submitWork(w.id));
   const confirmAsSupervisor     = (w) => transitionRow(t('confirmed'),                    () => constructionService.confirmWorkSupervisor(w.id));
@@ -1177,12 +1569,18 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
   // the report-generator button; we render into it only when that
   // node exists, otherwise we fall back to inline rendering at the
   // top of the tab content.
+  // Admins/owners can impersonate any role; a regular multi-role user only
+  // gets buttons for the roles they actually hold.
+  const switchableRoles = isAdminLike
+    ? Object.keys(ROLE_META)
+    : Object.keys(ROLE_META).filter((k) => myRoles.includes(k));
   const roleSwitcher = (
     <div className="rounded-xl border border-slate-200 bg-white p-2 flex items-center gap-1">
-      <span className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold mx-2">
+      <span className="text-[12px] uppercase tracking-widest text-slate-400 font-semibold mx-2">
         {t('switch_role')}
       </span>
-      {Object.entries(ROLE_META).map(([key, meta]) => {
+      {switchableRoles.map((key) => {
+        const meta = ROLE_META[key];
         const active = viewRole === key;
         return (
           <button
@@ -1195,7 +1593,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
               border: '1.5px solid transparent',
             }}
           >
-            <span className="text-[14px] leading-none">{meta.emoji}</span>
+            <span className="text-[15px] leading-none">{meta.emoji}</span>
             {t(meta.labelKey)}
           </button>
         );
@@ -1211,12 +1609,13 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
 
   return (
     <div className="space-y-4">
-      {/* Role switcher — only system admins / tenant owners see it.
-         Everyone else lives with whichever role the backend resolved
-         for them via tenant_settings + project-team lookup, so the
-         switcher would just be a confusing toy for them.
-         The switcher is portalled into the project topbar when the
-         slot exists; otherwise it falls back to an inline render. */}
+      {/* Role switcher — shown to admins/owners (who can impersonate any
+         role) and to regular users who hold MORE THAN ONE project role, so
+         they can act as each of theirs. Single-role users don't see it —
+         they just live with their one resolved role. The backend enforces
+         the action against the user's full role set on every transition.
+         Portalled into the project topbar when the slot exists; otherwise
+         it falls back to an inline render. */}
       {canSwitchRole && (
         topbarSlot
           ? createPortal(roleSwitcher, topbarSlot)
@@ -1240,7 +1639,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
       {/* ROLE BANNER */}
       {ROLE_META[viewRole] && (
         <div
-          className="rounded-lg px-4 py-3 text-[13px]"
+          className="rounded-lg px-4 py-3 text-[15px]"
           style={{
             background: ROLE_META[viewRole].bannerBg,
             color: ROLE_META[viewRole].bannerColor,
@@ -1285,6 +1684,58 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
         />
       </div>
 
+      {/* FORMA 2 ITERATION STRIP — migration 419. Read-only here.
+         Each tab = one submission of the project's Forma 2. The latest tab
+         carries "(joriy)" and is editable; older tabs are read-only and
+         show the historical state at the moment of freeze. Creating and
+         deleting Forma 2s lives on the Smeta boshqaruvi tab — this strip is
+         display-only so the foreman can switch which iteration's numbers
+         the works table shows. */}
+      {iterations.length > 0 && (
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <h2 className="text-base font-bold text-slate-900">📄 {t('forma2_series') || 'Forma 2 iteratsiyalari'}</h2>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            {iterations.map((it) => {
+              const active = activeIterationId === it.id;
+              const isOpen = it.status === 'open';
+              return (
+                <button
+                  key={it.id}
+                  onClick={() => setActiveIterationId(it.id)}
+                  className="px-4 py-2 rounded-lg text-[15px] font-semibold flex items-center gap-2 transition"
+                  style={{
+                    background: active ? '#0F172A' : '#FFFFFF',
+                    color: active ? '#FFFFFF' : '#64748B',
+                    border: `1.5px solid ${active ? '#0F172A' : '#E5E7EB'}`,
+                  }}
+                  title={isOpen
+                    ? (t('forma2_open_editable') || 'Joriy iteratsiya — tahrirlash mumkin')
+                    : (t('forma2_frozen_readonly') || 'Muzlatilgan — faqat ko\'rish')}
+                >
+                  <span>📄 Forma 2 #{it.iteration_seq}</span>
+                  <span
+                    className="text-[12px] px-2 py-0.5 rounded-full font-bold"
+                    style={{
+                      background: active ? (isOpen ? '#047857' : '#64748B') : (isOpen ? '#D1FAE5' : '#E5E7EB'),
+                      color:      active ? '#FFFFFF' : (isOpen ? '#047857' : '#64748B'),
+                    }}
+                  >
+                    {isOpen ? (t('current_label') || 'joriy') : (t('frozen_label') || 'muzlatilgan')}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          {isFrozenView && (
+            <div className="mt-3 px-3 py-2 rounded-md text-[14px] bg-amber-50 border border-amber-200 text-amber-800">
+              {t('forma2_frozen_notice') || "Bu Forma 2 muzlatilgan. Yangi fakt kiritish uchun #joriy ni tanlang."}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* BLOCK TABS — the "Smeta yuklash" CTA used to live in this header
          row, but the user prefers the upload affordance to stay in
          Moliya → Smetalar where the actual import-from-Excel flow is.
@@ -1301,9 +1752,9 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
             <button
               type="button"
               onClick={() => setAddStageModal({ name: '' })}
-              className="px-3 py-1.5 rounded-lg text-[12px] font-semibold border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition inline-flex items-center gap-1.5"
+              className="px-3 py-1.5 rounded-lg text-[14px] font-semibold border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition inline-flex items-center gap-1.5"
             >
-              <span className="text-[14px] leading-none">+</span>
+              <span className="text-[15px] leading-none">+</span>
               {t('add_stage') || "Bosqich qo'shish"}
             </button>
           )}
@@ -1319,7 +1770,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
                 <button
                   key={b.id}
                   onClick={() => setActiveBuildingId(b.id)}
-                  className="px-4 py-2 rounded-lg text-[13px] font-semibold flex items-center gap-2 transition"
+                  className="px-4 py-2 rounded-lg text-[15px] font-semibold flex items-center gap-2 transition"
                   style={{
                     background: active ? '#0F172A' : '#FFFFFF',
                     color: active ? '#FFFFFF' : '#64748B',
@@ -1328,7 +1779,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
                 >
                   <span>📐 {b.name}</span>
                   <span
-                    className="text-[10px] px-2 py-0.5 rounded-full font-bold"
+                    className="text-[12px] px-2 py-0.5 rounded-full font-bold"
                     style={{
                       background: active ? '#047857' : (hasEst ? '#E5E7EB' : '#FEF3C7'),
                       color: active ? '#FFFFFF' : (hasEst ? '#64748B' : '#B45309'),
@@ -1364,7 +1815,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
         </div>
       ) : (
         <div className="space-y-3">
-          {stages.map((stage) => {
+          {visibleStages.map((stage) => {
             const stKey = stage.name;
             const expanded = expandedStages.has(stKey);
             const status = stageStatus(stage);
@@ -1398,16 +1849,16 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
                 >
                   {/* Stage chevron — mockup uses a CSS-rotated ▶ arrow. */}
                   <span
-                    className="text-slate-400 text-[14px] leading-none transition-transform inline-block w-4"
+                    className="text-slate-400 text-[15px] leading-none transition-transform inline-block w-4"
                     style={{ transform: expanded ? 'rotate(90deg)' : 'rotate(0)' }}
                   >▶</span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2.5 flex-wrap mb-1.5">
-                      <div className="font-bold text-slate-900 text-[14px]">
+                      <div className="font-bold text-slate-900 text-[15px]">
                         {stage.name === UNCATEGORISED_KEY ? t('uncategorized') : stage.name}
                       </div>
                       <span
-                        className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full"
+                        className="text-[12px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full"
                         style={{
                           background: stMeta.bg,
                           color: stMeta.fg,
@@ -1417,12 +1868,12 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
                         {t(stMeta.longKey)}
                       </span>
                       {isLocked && (
-                        <span className="text-[11px] font-semibold px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 inline-flex items-center gap-1">
-                          <span className="text-[12px] leading-none">🔒</span> {t('locked')}
+                        <span className="text-[13px] font-semibold px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 inline-flex items-center gap-1">
+                          <span className="text-[14px] leading-none">🔒</span> {t('locked')}
                         </span>
                       )}
                     </div>
-                    <div className="text-[11.5px] text-slate-500">
+                    <div className="text-[13px] text-slate-500">
                       {/* Mockup: "1 подэтап · 6 работ" — show the sub-stage
                          count when the stage has any, before the work count. */}
                       {(stage.subStages?.length || 0) > 0 && (
@@ -1445,17 +1896,17 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
                         }}
                       />
                     </div>
-                    <div className="text-[11px] font-bold text-emerald-700 min-w-[36px] text-right">
+                    <div className="text-[13px] font-bold text-emerald-700 min-w-[36px] text-right">
                       {pct.toFixed(0)}%
                     </div>
                   </div>
                   <div
-                    className="hidden md:flex items-center justify-end gap-1.5 text-[13px] font-bold min-w-[140px] text-right"
+                    className="hidden md:flex items-center justify-end gap-1.5 text-[15px] font-bold min-w-[140px] text-right"
                     style={{ color: canSeeCost ? '#0F172A' : '#CBD5E1', fontStyle: canSeeCost ? 'normal' : 'italic' }}
                   >
                     {canSeeCost
                       ? <span>{fmt(Math.round(cost))} {t('soum')}</span>
-                      : <span className="inline-flex items-center gap-1.5"><span className="text-[14px] leading-none">🔒</span> {t('hidden')}</span>}
+                      : <span className="inline-flex items-center gap-1.5"><span className="text-[15px] leading-none">🔒</span> {t('hidden')}</span>}
                   </div>
                 </button>
                 {/* Trash icon — cascade-deletes the whole stage (every
@@ -1506,9 +1957,9 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
                           }
                           setAddSubBosqichParent(stage.name);
                         }}
-                        className="px-3 py-1.5 rounded-md text-[11px] font-medium border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 inline-flex items-center gap-1"
+                        className="px-3 py-1.5 rounded-md text-[13px] font-medium border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 inline-flex items-center gap-1"
                       >
-                        <span className="text-[13px] leading-none font-bold">+</span>
+                        <span className="text-[15px] leading-none font-bold">+</span>
                         {t('add_substage') || "Sub-bosqich qo'shish"}
                       </button>
                     </div>
@@ -1524,6 +1975,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
                       canRejectAsEngineer={canRejectAsEngineer}
                       doneDraft={doneDraft}
                       setDoneDraft={setDoneDraft}
+                      periodFaktByLine={periodFaktByLine}
                       onUpdateDone={updateDone}
                       onSubmit={submitWork}
                       onConfirmSupervisor={confirmAsSupervisor}
@@ -1560,6 +2012,13 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
               </div>
             );
           })}
+          {/* Infinite-scroll sentinel — grows the window by another page
+              of stages when it scrolls into view. */}
+          {visibleStageCount < stages.length && (
+            <div ref={stagesLoadMoreRef} className="py-6 flex items-center justify-center">
+              <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
+            </div>
+          )}
         </div>
       )}
 
@@ -1699,7 +2158,7 @@ function AddStageModal({
             ? (t('add_substage') || "Sub-bosqich qo'shish")
             : (t('add_stage') || "Bosqich qo'shish")}
         </h3>
-        <p className="text-[12px] text-slate-500 mb-4">
+        <p className="text-[14px] text-slate-500 mb-4">
           {isSub
             ? (t('add_substage_hint') || "Yangi sub-bosqich nomi")
             : (t('add_stage_hint') || "Yangi bosqich nomi (masalan: \"Pardozlash\", \"Elektrika\")")}
@@ -1709,13 +2168,13 @@ function AddStageModal({
            fixed by the entry point (the "+ Sub-bosqich" button on the
            expanded stage card), so we show it read-only. */}
         {isSub && (
-          <div className="mb-4 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-[12px] text-emerald-700">
+          <div className="mb-4 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-[14px] text-emerald-700">
             <span className="text-emerald-500 mr-1">{t('parent_section_label') || "Asosiy:"}</span>
             <span className="font-medium">{parent}</span>
           </div>
         )}
 
-        <label className="block text-[11px] uppercase tracking-wider font-semibold text-slate-500 mb-1.5">
+        <label className="block text-[13px] uppercase tracking-wider font-semibold text-slate-500 mb-1.5">
           {isSub
             ? (t('substage_name') || "Sub-bosqich nomi")
             : (t('stage_name') || "Bosqich nomi")}
@@ -1765,9 +2224,15 @@ function AddStageModal({
 // CONFIRM MODAL
 // =====================================================================
 function ConfirmModal({ title, body, confirmLabel, onConfirm, onCancel, t }) {
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center"
-         style={{ background: 'rgba(15,23,42,0.5)' }}
+  // Portal to document.body so the backdrop covers the FULL viewport,
+  // including the project header / sub-pill nav at the top of the
+  // Construction page. Rendering inline meant the modal was trapped
+  // inside StagesTabV2's stacking context, leaving a visible "line" of
+  // un-dimmed page chrome between the browser bar and the modal —
+  // exactly the issue raised after the iteration freeze button shipped.
+  return createPortal(
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center"
+         style={{ background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(2px)' }}
          onClick={onCancel}>
       <div className="bg-white rounded-2xl p-6 max-w-[520px] w-[90%] shadow-2xl"
            onClick={(e) => e.stopPropagation()}>
@@ -1786,12 +2251,13 @@ function ConfirmModal({ title, body, confirmLabel, onConfirm, onCancel, t }) {
             onClick={onConfirm}
             className="px-4 py-2 rounded-lg text-xs font-semibold bg-emerald-700 hover:bg-emerald-800 text-white inline-flex items-center gap-1.5"
           >
-            <span className="text-[14px] leading-none">✓</span>
+            <span className="text-[15px] leading-none">✓</span>
             {confirmLabel || (t('confirm'))}
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -1816,7 +2282,12 @@ function StageBody(props) {
     ? explicitSubs.map((s) => ({ key: s.name, name: s.name, works: s.works }))
     : (heuristicSubs || []);
 
-  const directWorks = props.stage.works;
+  // Stage's direct works — same unified sort as Smeta boshqaruvi uses
+  // for top-level work lines (utils/sortLines.js). One rule, no drift.
+  const directWorks = useMemo(
+    () => sortLinesManualFirst(props.stage.works || []),
+    [props.stage.works],
+  );
 
   if (subs.length === 0) {
     // Flat layout: just a works table.
@@ -1862,11 +2333,11 @@ function SubStageCard({ sub, ...props }) {
         onClick={() => setOpen((v) => !v)}
         className="w-full px-4 py-3 flex items-center gap-3 bg-slate-50 hover:bg-slate-100 transition text-left"
       >
-        <span className="text-slate-400 text-[12px] leading-none transition-transform inline-block w-3"
+        <span className="text-slate-400 text-[14px] leading-none transition-transform inline-block w-3"
               style={{ transform: open ? 'rotate(90deg)' : 'rotate(0)' }}>▶</span>
         <span className="text-base leading-none">📂</span>
         <div className="flex-1 min-w-0">
-          <div className="text-[12.5px] font-semibold text-blue-700 truncate">
+          <div className="text-[14px] font-semibold text-blue-700 truncate">
             {sub.name || `${props.t('subgroup')} ${sub.key}`}
           </div>
         </div>
@@ -1874,15 +2345,15 @@ function SubStageCard({ sub, ...props }) {
           <div className="flex-1 h-1 bg-slate-200 rounded-full overflow-hidden min-w-[60px]">
             <div className="h-full bg-emerald-600" style={{ width: `${pct}%` }} />
           </div>
-          <div className="text-[10.5px] font-bold text-emerald-700 min-w-[28px] text-right">
+          <div className="text-[14px] font-bold text-emerald-700 min-w-[28px] text-right">
             {pct.toFixed(0)}%
           </div>
         </div>
-        <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-semibold">
+        <span className="text-[12px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-semibold">
           {finalised}/{sub.works.length} {props.t('works_suffix')}
         </span>
         {props.canSeeCost && (
-          <span className="hidden md:inline-block font-mono text-[11.5px] text-slate-700 min-w-[120px] text-right font-semibold">
+          <span className="hidden md:inline-block font-mono text-[13px] text-slate-700 min-w-[120px] text-right font-semibold">
             {fmt(Math.round(cost))} {props.t('soum')}
           </span>
         )}
@@ -1907,9 +2378,9 @@ function StatCard({ label, value, sub, variant }) {
   }[variant] || '#0F172A';
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4">
-      <div className="text-[11px] text-slate-500 mb-1.5">{label}</div>
+      <div className="text-[13px] text-slate-500 mb-1.5">{label}</div>
       <div className="text-[22px] font-bold font-mono tabular-nums" style={{ color: valueColor }}>{value}</div>
-      <div className="text-[11px] text-slate-400 mt-0.5">{sub}</div>
+      <div className="text-[13px] text-slate-400 mt-0.5">{sub}</div>
     </div>
   );
 }
@@ -1929,7 +2400,7 @@ function StageActions({ stage, viewRole, onSubmitAll, onConfirmAllSupervisor, on
 
   return (
     <div className="mt-4 pt-3.5 border-t border-dashed border-slate-200 flex items-center justify-between flex-wrap gap-2">
-      <div className="text-[11.5px] text-slate-500">
+      <div className="text-[13px] text-slate-500">
         {t('total_works')}: <b className="text-slate-900">{works.length}</b>
         {' · '}{t('on_review')}: <b>{submittedCount}</b>
         {' · '}{t('supervisor_confirmed')}: <b>{supConfirmed}</b>
@@ -1939,19 +2410,19 @@ function StageActions({ stage, viewRole, onSubmitAll, onConfirmAllSupervisor, on
         {canSubmitAny && (
           <button onClick={() => onSubmitAll(stage)}
                   className="px-4 py-2 rounded-md text-xs font-semibold bg-blue-500 hover:bg-blue-600 text-white inline-flex items-center gap-1.5">
-            <span className="text-[14px] leading-none">📤</span> {t('all_to_review')}
+            <span className="text-[15px] leading-none">📤</span> {t('all_to_review')}
           </button>
         )}
         {canConfirmAny && (
           <button onClick={() => onConfirmAllSupervisor(stage)}
                   className="px-4 py-2 rounded-md text-xs font-semibold bg-amber-500 hover:bg-amber-600 text-white inline-flex items-center gap-1.5">
-            <span className="text-[14px] leading-none">✓</span> {t('confirm_all_supervisor')}
+            <span className="text-[15px] leading-none">✓</span> {t('confirm_all_supervisor')}
           </button>
         )}
         {canFinalAny && (
           <button onClick={() => onConfirmAllEngineer(stage)}
                   className="px-4 py-2 rounded-md text-xs font-semibold bg-emerald-700 hover:bg-emerald-800 text-white inline-flex items-center gap-1.5">
-            <span className="text-[14px] leading-none">🛠️</span> {t('finalize_all')}
+            <span className="text-[15px] leading-none">🛠️</span> {t('finalize_all')}
           </button>
         )}
       </div>
@@ -1972,6 +2443,7 @@ function WorksTable({
   canConfirmAsEngineer,
   canRejectAsEngineer,
   doneDraft, setDoneDraft,
+  periodFaktByLine,
   onUpdateDone, onSubmit,
   onConfirmSupervisor, onRejectSupervisor,
   onConfirmEngineer, onRejectEngineer,
@@ -1983,13 +2455,36 @@ function WorksTable({
   onAddResource,
   t,
 }) {
+  // Infinite-scroll window — paint the first 20 works of this table and
+  // reveal more as the sentinel row scrolls into view. Each WorksTable
+  // (the stage's direct works, and one per sub-stage) keeps its own window.
+  // A work's resources render inside its own expand row, so they're never
+  // split by this. WorksTable unmounts when its stage collapses, so the
+  // window resets naturally on the next expand.
+  const WORKS_PER_PAGE = 20;
+  const [visibleCount, setVisibleCount] = React.useState(WORKS_PER_PAGE);
+  const moreRef = React.useRef(null);
+  React.useEffect(() => { setVisibleCount(WORKS_PER_PAGE); }, [works.length]);
+  React.useEffect(() => {
+    const el = moreRef.current;
+    if (!el) return undefined;
+    if (visibleCount >= works.length) return undefined;
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) {
+        setVisibleCount((n) => Math.min(n + WORKS_PER_PAGE, works.length));
+      }
+    }, { rootMargin: '300px 0px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [visibleCount, works.length]);
+  const visibleWorks = works.slice(0, visibleCount);
   // Total column count (used for the colspan of the expanded sub-row).
   // 1 chevron + # + name + uom + plan + done + progress + status + action = 9
   // + (unit_price + plan_total + fact_total) when canSeeCost = 12
   const colCount = canSeeCost ? 12 : 9;
   return (
     <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-      <table className="w-full text-[12px] border-collapse">
+      <table className="w-full text-[15px] border-collapse">
         <thead>
           <tr className="bg-slate-50">
             <th className="py-2.5 px-2" style={{ width: 28 }} />
@@ -1998,59 +2493,83 @@ function WorksTable({
                 to two lines ("4-" then "1") in the cell. Widened to
                 64 px and the cell uses whiteSpace:nowrap below so even
                 the longest realistic number ("13-12") stays on one line. */}
-            <th className="text-center py-2.5 px-3 text-[10.5px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 64 }}>#</th>
-            <th className="text-left   py-2.5 px-3 text-[10.5px] uppercase tracking-wider font-bold text-slate-500">{t('work_name')}</th>
-            <th className="text-center py-2.5 px-3 text-[10.5px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 90 }}>{t('unit')}</th>
-            <th className="text-right  py-2.5 px-3 text-[10.5px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 100 }}>{t('plan')}</th>
-            <th className="text-right  py-2.5 px-3 text-[10.5px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 130 }}>{t('done')}</th>
-            <th className="text-center py-2.5 px-3 text-[10.5px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 130 }}>{t('progress')}</th>
+            <th className="text-center py-2.5 px-3 text-[14px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 64 }}>#</th>
+            <th className="text-left   py-2.5 px-3 text-[14px] uppercase tracking-wider font-bold text-slate-500">{t('work_name')}</th>
+            <th className="text-center py-2.5 px-3 text-[14px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 90 }}>{t('unit')}</th>
+            <th className="text-right  py-2.5 px-3 text-[14px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 100 }}>{t('plan')}</th>
+            <th className="text-right  py-2.5 px-3 text-[14px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 130 }}>{t('done')}</th>
+            <th className="text-center py-2.5 px-3 text-[14px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 130 }}>{t('progress')}</th>
             {canSeeCost && (<>
-              <th className="text-right py-2.5 px-3 text-[10.5px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 120 }}>{t('unit_price')}</th>
-              <th className="text-right py-2.5 px-3 text-[10.5px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 150 }}>{t('plan_total')}</th>
-              <th className="text-right py-2.5 px-3 text-[10.5px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 150 }}>{t('fact_total')}</th>
+              <th className="text-right py-2.5 px-3 text-[14px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 120 }}>{t('unit_price')}</th>
+              <th className="text-right py-2.5 px-3 text-[14px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 150 }}>{t('plan_total')}</th>
+              <th className="text-right py-2.5 px-3 text-[14px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 150 }}>{t('fact_total')}</th>
             </>)}
-            <th className="text-center py-2.5 px-3 text-[10.5px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 130 }}>{t('status')}</th>
-            <th className="text-center py-2.5 px-3 text-[10.5px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 200 }}>{t('action')}</th>
+            <th className="text-center py-2.5 px-3 text-[14px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 130 }}>{t('status')}</th>
+            <th className="text-center py-2.5 px-3 text-[14px] uppercase tracking-wider font-bold text-slate-500" style={{ width: 200 }}>{t('action')}</th>
           </tr>
         </thead>
         <tbody>
-          {works.map((w, idx) => {
+          {visibleWorks.map((w, idx) => {
             const isLocked = w.approval_status === 'confirmed_engineer';
             const isSupConfirmed = w.approval_status === 'confirmed_supervisor';
             const rowBg = isLocked ? '#F0FDF4' : (isSupConfirmed ? '#FEF7E0' : 'transparent');
-            // REJA = the planned project quantity. Sourced from the
-            // matching ВОР smeta's Miqdor (built into `vorPlanByName`
-            // upstream); falls back to the единич line's own quantity
-            // when there's no ВОР match. The lookup tries the strict
-            // (section + name + uom) key first to disambiguate Excel
-            // files where the same work name appears in multiple
-            // sub-blocks with different qtys (e.g. "Жилдом Жавохир
-            // Авеню Блок 2 Угловой"), then falls back to a name-only
-            // map for files where Единич and ВОР disagree on section
-            // labels.
-            let vorQty = 0;
-            if (vorPlanByName?.strict) {
-              vorQty = Number(vorPlanByName.strict.get(
+            // REJA priority — mirrors resolveWorkQty above:
+            //   1. ВОР byItem (item_number + code) — the project's BoQ
+            //      figure, deterministic and authoritative.
+            //   2. ВОР strict (section + name + uom).
+            //   3. єдинич's original_quantity — fallback when ВОР has
+            //      no matching row.
+            //   4. ВОР loose (name only) — last-ditch ВОР rescue.
+            //   5. live `quantity` — final fallback.
+            const origQty = Number(w.original_quantity || 0);
+            const ownQty = Number(w.quantity || 0);
+            let vorByItemQty = 0;
+            if (vorPlanByName?.byItem) {
+              const itemNum = String(w.item_number || '').trim();
+              if (itemNum) {
+                const codeKey = String(w.code || '').trim().toLowerCase();
+                vorByItemQty = Number(
+                  vorPlanByName.byItem.get(`${itemNum}|${codeKey}`)
+                  || vorPlanByName.byItem.get(itemNum)
+                  || 0
+                );
+              }
+            }
+            let vorStrictQty = 0;
+            if (vorByItemQty <= 0 && vorPlanByName?.strict) {
+              vorStrictQty = Number(vorPlanByName.strict.get(
                 compoundKey(w.parent_item_number, w.name, w.uom),
               ) || 0);
             }
-            if (vorQty <= 0 && vorPlanByName?.loose) {
-              vorQty = Number(vorPlanByName.loose.get(normName(w.name)) || 0);
+            let vorLooseQty = 0;
+            if (vorByItemQty <= 0 && vorStrictQty <= 0
+                && origQty <= 0 && vorPlanByName?.loose) {
+              vorLooseQty = Number(vorPlanByName.loose.get(normName(w.name)) || 0);
             }
-            // Fall back to the Единич row's `original_quantity` (col F
-            // "по проектным данным", anchored at import) BEFORE the
-            // live quantity ledger — see resolveWorkQty above for the
-            // rationale. Without this, projects without a ВОР sheet
-            // render REJA as 0 because template-mode Единич imports
-            // zero `quantity` to let the foreman fill FAKT.
-            const origQty = Number(w.original_quantity || 0);
-            const ownQty = Number(w.quantity || 0);
-            const planQty = vorQty > 0 ? vorQty : (origQty > 0 ? origQty : ownQty);
+            const planQty =
+              vorByItemQty > 0 ? vorByItemQty
+              : vorStrictQty > 0 ? vorStrictQty
+              : origQty > 0 ? origQty
+              : vorLooseQty > 0 ? vorLooseQty
+              : ownQty;
             const doneQty = Number(w.done_quantity || 0);
             const pct = planQty > 0 ? Math.min((doneQty / planQty) * 100, 100) : 0;
             const stMeta = STATUS_META[w.approval_status] || STATUS_META.pending;
             const draftKey = `q_${w.id}`;
-            const inputValue = doneDraft[draftKey] !== undefined ? doneDraft[draftKey] : fmt(doneQty);
+            // PERIOD FAKT vs CUMULATIVE (migration 419) — the BAJARILDI
+            // input shows THIS iteration's contribution (starts at 0 in
+            // a fresh iter), while the PROGRESS bar above keeps using
+            // doneQty (the cumulative) so completed lines still read
+            // 100% after the freeze. Without this split the user
+            // reported "i said new tab should take fakt as 0 but
+            // progress stays same" — both columns were showing the
+            // cumulative and the iter feature looked broken.
+            const periodFakt = periodFaktByLine
+              ? Number(periodFaktByLine.get(Number(w.id)) || 0)
+              : doneQty;
+            const inputValue = doneDraft[draftKey] !== undefined
+              ? doneDraft[draftKey]
+              : fmt(periodFakt);
             const subs = subResourcesByWork?.get(Number(w.id)) || [];
             const isExpanded = expandedWorks?.has(Number(w.id)) || false;
             const hasSubs = subs.length > 0;
@@ -2066,7 +2585,7 @@ function WorksTable({
                       title={t('show_consumption') || 'Sarflanishni ko\'rsatish'}
                       className="w-5 h-5 inline-flex items-center justify-center rounded hover:bg-slate-200 text-slate-500"
                     >
-                      <span className="inline-block transition-transform text-[10px]"
+                      <span className="inline-block transition-transform text-[12px]"
                             style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0)' }}>▶</span>
                     </button>
                   )}
@@ -2075,11 +2594,11 @@ function WorksTable({
                 <td className="py-2.5 px-3">
                   <div className="font-medium text-slate-900">{w.name}</div>
                   {w.code && (
-                    <div className="text-[10.5px] text-slate-400 font-mono">{cleanCode(w.code)}</div>
+                    <div className="text-[14px] text-slate-400 font-mono">{cleanCode(w.code)}</div>
                   )}
                 </td>
                 <td className="text-center py-2.5 px-3">
-                  <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10.5px] font-semibold">
+                  <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[14px] font-semibold">
                     {w.uom || ''}
                   </span>
                 </td>
@@ -2100,21 +2619,26 @@ function WorksTable({
                           }
                         }}
                         onFocus={(e) => e.target.select()}
-                        className="w-[90px] px-2 py-1 rounded border border-slate-300 font-mono text-right text-[11.5px] outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                        className="w-[90px] px-2 py-1 rounded border border-slate-300 font-mono text-right text-[13px] outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
                       />
                       {onAddResource && (
                         <button
                           type="button"
                           onClick={() => onAddResource(w)}
                           title={t('add_resource_to_work') || "Resurs qo'shish"}
-                          className="w-6 h-6 inline-flex items-center justify-center rounded border border-teal-600 text-teal-600 hover:bg-teal-50 text-[14px] leading-none font-bold"
+                          className="w-6 h-6 inline-flex items-center justify-center rounded border border-teal-600 text-teal-600 hover:bg-teal-50 text-[15px] leading-none font-bold"
                         >
                           +
                         </button>
                       )}
                     </div>
                   ) : (
-                    <span className="font-mono text-slate-500">{fmt(doneQty)}</span>
+                    // Read-only BAJARILDI (frozen iter view, or non-foreman
+                    // role). Show the period contribution for the active
+                    // iteration so frozen tabs reproduce "what was reported
+                    // this period" rather than the running total — which
+                    // the PROGRESS column to the right already conveys.
+                    <span className="font-mono text-slate-500">{fmt(periodFakt)}</span>
                   )}
                 </td>
                 <td className="text-center py-2.5 px-3">
@@ -2122,7 +2646,7 @@ function WorksTable({
                     <div className="flex-1 h-1 bg-slate-100 rounded-full overflow-hidden min-w-[50px]">
                       <div className="h-full bg-emerald-600" style={{ width: `${pct}%` }} />
                     </div>
-                    <div className="text-[10.5px] font-bold text-emerald-700 min-w-[28px] text-right">
+                    <div className="text-[14px] font-bold text-emerald-700 min-w-[28px] text-right">
                       {pct.toFixed(0)}%
                     </div>
                   </div>
@@ -2167,7 +2691,7 @@ function WorksTable({
                 })()}
                 <td className="text-center py-2.5 px-3">
                   <span
-                    className="text-[10px] uppercase font-bold tracking-wider px-2 py-1 rounded-full inline-flex items-center gap-1"
+                    className="text-[12px] uppercase font-bold tracking-wider px-2 py-1 rounded-full inline-flex items-center gap-1"
                     style={{
                       background: stMeta.bg,
                       color: stMeta.fg,
@@ -2180,44 +2704,44 @@ function WorksTable({
                 </td>
                 <td className="text-center py-2.5 px-3">
                   {isLocked ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-semibold">
-                      <span className="text-[12px] leading-none">🔒</span> {t('locked')}
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[13px] font-semibold">
+                      <span className="text-[14px] leading-none">🔒</span> {t('locked')}
                     </span>
                   ) : canSubmitToSupervisor(w) ? (
                     <button onClick={() => onSubmit(w)}
-                            className="px-3 py-1 rounded-md text-[11px] font-semibold bg-blue-500 hover:bg-blue-600 text-white inline-flex items-center gap-1">
-                      <span className="text-[12px] leading-none">📤</span> {t('to_review')}
+                            className="px-3 py-1 rounded-md text-[13px] font-semibold bg-blue-500 hover:bg-blue-600 text-white inline-flex items-center gap-1">
+                      <span className="text-[14px] leading-none">📤</span> {t('to_review')}
                     </button>
                   ) : canConfirmAsSupervisor(w) ? (
                     <div className="inline-flex gap-1">
                       <button onClick={() => onConfirmSupervisor(w)}
-                              className="px-3 py-1 rounded-md text-[11px] font-semibold bg-amber-500 hover:bg-amber-600 text-white inline-flex items-center gap-1">
-                        <span className="text-[12px] leading-none">✓</span> {t('confirm')}
+                              className="px-3 py-1 rounded-md text-[13px] font-semibold bg-amber-500 hover:bg-amber-600 text-white inline-flex items-center gap-1">
+                        <span className="text-[14px] leading-none">✓</span> {t('confirm')}
                       </button>
                       <button onClick={() => onRejectSupervisor(w)}
                               title={t('reject_to_foreman')}
                               className="w-7 h-7 rounded-md inline-flex items-center justify-center bg-white text-red-600 border border-red-300 hover:bg-red-50">
-                        <span className="text-[12px] leading-none">↩</span>
+                        <span className="text-[14px] leading-none">↩</span>
                       </button>
                     </div>
                   ) : canConfirmAsEngineer(w) ? (
                     <div className="inline-flex gap-1">
                       <button onClick={() => onConfirmEngineer(w)}
-                              className="px-3 py-1 rounded-md text-[11px] font-semibold bg-emerald-700 hover:bg-emerald-800 text-white inline-flex items-center gap-1">
-                        <span className="text-[12px] leading-none">🛠️</span> {t('finalize')}
+                              className="px-3 py-1 rounded-md text-[13px] font-semibold bg-emerald-700 hover:bg-emerald-800 text-white inline-flex items-center gap-1">
+                        <span className="text-[14px] leading-none">🛠️</span> {t('finalize')}
                       </button>
                       <button onClick={() => onRejectEngineer(w)}
                               title={t('reject_to_supervisor')}
                               className="w-7 h-7 rounded-md inline-flex items-center justify-center bg-white text-red-600 border border-red-300 hover:bg-red-50">
-                        <span className="text-[12px] leading-none">↩</span>
+                        <span className="text-[14px] leading-none">↩</span>
                       </button>
                     </div>
                   ) : w.approval_status === 'submitted' && viewRole !== 'supervisor' ? (
-                    <span className="text-[11px] text-slate-400">{t('waits_supervisor')}</span>
+                    <span className="text-[13px] text-slate-400">{t('waits_supervisor')}</span>
                   ) : w.approval_status === 'confirmed_supervisor' && viewRole !== 'engineer' ? (
-                    <span className="text-[11px] text-slate-400">{t('waits_engineer')}</span>
+                    <span className="text-[13px] text-slate-400">{t('waits_engineer')}</span>
                   ) : (
-                    <span className="text-[11px] text-slate-300">—</span>
+                    <span className="text-[13px] text-slate-300">—</span>
                   )}
                 </td>
               </tr>
@@ -2238,6 +2762,15 @@ function WorksTable({
               </React.Fragment>
             );
           })}
+          {/* Infinite-scroll sentinel — reveals the next 20 works as it
+              scrolls into view. */}
+          {visibleCount < works.length && (
+            <tr ref={moreRef}>
+              <td colSpan={colCount} className="py-3 text-center">
+                <Loader2 className="w-4 h-4 animate-spin text-slate-400 inline-block" />
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
     </div>
@@ -2298,11 +2831,11 @@ function SubResourcesTable({ subs, doneQty, planQty, canSeeCost, workStatus, t }
 
   return (
     <div>
-      <div className="flex items-center gap-2 mb-2 text-[11px] font-semibold text-slate-700 uppercase tracking-wider">
+      <div className="flex items-center gap-2 mb-2 text-[13px] font-semibold text-slate-700 uppercase tracking-wider">
         <span>📋 {t('consumed_resources_title') || 'Sarflanadigan resurslar'}{titleSuffix}</span>
         {(isReserved || isFinalised) && (
           <span
-            className="px-2 py-0.5 rounded-full text-[9.5px] font-bold tracking-wide"
+            className="px-2 py-0.5 rounded-full text-[12px] font-bold tracking-wide"
             style={{
               background: isFinalised ? '#D1FAE5' : '#DBEAFE',
               color: isFinalised ? '#065F46' : '#1E40AF',
@@ -2314,9 +2847,9 @@ function SubResourcesTable({ subs, doneQty, planQty, canSeeCost, workStatus, t }
           </span>
         )}
       </div>
-      <table className="w-full text-[11.5px] border-collapse bg-white rounded-md overflow-hidden border border-slate-200">
+      <table className="w-full text-[13px] border-collapse bg-white rounded-md overflow-hidden border border-slate-200">
         <thead>
-          <tr className="bg-slate-100 text-[10px] uppercase font-bold tracking-wider text-slate-500">
+          <tr className="bg-slate-100 text-[12px] uppercase font-bold tracking-wider text-slate-500">
             <th className="text-left   py-2 px-3" style={{ width: 80 }}>{t('type') || 'Tur'}</th>
             <th className="text-left   py-2 px-3">{t('resource_name') || 'Resurs nomi'}</th>
             <th className="text-center py-2 px-2" style={{ width: 70 }}>{t('unit') || "O'lchov"}</th>
@@ -2351,7 +2884,7 @@ function SubResourcesTable({ subs, doneQty, planQty, canSeeCost, workStatus, t }
               <tr key={s.id} className="border-t border-slate-100">
                 <td className="py-1.5 px-3">
                   <span
-                    className="inline-block px-1.5 py-0.5 rounded text-[9.5px] font-bold uppercase tracking-wide"
+                    className="inline-block px-1.5 py-0.5 rounded text-[12px] font-bold uppercase tracking-wide"
                     style={{ background: tag.bg, color: tag.fg }}
                   >
                     {tag.label}

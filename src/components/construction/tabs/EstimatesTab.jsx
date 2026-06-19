@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { constructionService } from '@/api/services/construction';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -114,6 +114,16 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 20;
+
+  // Infinite-scroll window for the expanded estimate's line table. The
+  // table is a hierarchy (parent line + its sub-lines/resources), and a
+  // single estimate can carry thousands of rows (3611+ on real data), so
+  // we only paint the first N ROOT (parent) lines and reveal more as the
+  // user scrolls. Counting roots — never resources — means a parent always
+  // renders together with all of its children; nothing gets split.
+  const LINES_PER_PAGE = 20;
+  const [visibleLineCount, setVisibleLineCount] = useState(LINES_PER_PAGE);
+  const lineLoadMoreRef = React.useRef(null);
 
   // Import/Export
   const [showImportModal, setShowImportModal] = useState(false);
@@ -261,7 +271,54 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
     }
   };
 
-  const expandedLines = expandedEstimate ? (estimateLines[expandedEstimate] || []) : [];
+  const expandedLines = useMemo(
+    () => (expandedEstimate ? (estimateLines[expandedEstimate] || []) : []),
+    [expandedEstimate, estimateLines],
+  );
+
+  // Count of ROOT (parent) lines in the expanded estimate — mirrors the
+  // root/sub-line classification the line table uses below. Drives the
+  // infinite-scroll window (how many roots to paint) and the sentinel.
+  const expandedRootCount = useMemo(() => {
+    const itemNumToId = new Map();
+    for (const ln of expandedLines) {
+      if (!ln.parent_line_id && ln.item_number) itemNumToId.set(String(ln.item_number), ln.id);
+    }
+    let roots = 0;
+    for (const ln of expandedLines) {
+      if (ln.parent_line_id) continue;
+      if (typeof ln.item_number === 'string') {
+        const m = ln.item_number.match(/^(\d+)-(\d+)$/);
+        if (m) {
+          const resolved = itemNumToId.get(m[1]);
+          if (resolved && resolved !== ln.id) continue; // it's a sub-line
+        }
+      }
+      roots += 1;
+    }
+    return roots;
+  }, [expandedLines]);
+
+  // Reset the window each time a different estimate is expanded.
+  useEffect(() => {
+    setVisibleLineCount(LINES_PER_PAGE);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expandedEstimate]);
+
+  // Grow the window as the sentinel below the table scrolls into view.
+  useEffect(() => {
+    const el = lineLoadMoreRef.current;
+    if (!el) return undefined;
+    if (visibleLineCount >= expandedRootCount) return undefined;
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) {
+        setVisibleLineCount((n) => Math.min(n + LINES_PER_PAGE, expandedRootCount));
+      }
+    }, { rootMargin: '400px 0px' });
+    io.observe(el);
+    return () => io.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expandedEstimate, expandedRootCount, visibleLineCount]);
 
 
   // Load estimates
@@ -429,18 +486,47 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
     return Number.isFinite(projected) ? projected : 0;
   }, [projectedAmounts]);
 
-  // Load lines for an estimate
-  const loadEstimateLines = async (estimateId) => {
-    setLinesLoading(estimateId);
-    try {
-      const data = await constructionService.getEstimate(estimateId);
-      setEstimateLines(prev => ({ ...prev, [estimateId]: data?.lines || [] }));
-    } catch (error) {
-      console.error('Error loading estimate lines:', error);
-      setEstimateLines(prev => ({ ...prev, [estimateId]: [] }));
-    } finally {
-      setLinesLoading(null);
+  // Open/close cache (Smetalar tab) — keep a ref-backed set of estimate
+  // ids whose lines have already been fetched in this session. The
+  // existing `estimateLines[estId]` check covers the common case, but
+  // the user reported that opening → closing → opening the same file
+  // still triggered a network fetch. The ref makes the cache decision
+  // independent of React's render cycle: even if a re-render somewhere
+  // hands us a stale `estimateLines` reference, the ref tells us "this
+  // id was already loaded — skip the round-trip." A successful mutation
+  // path (Edit / Add subline / Delete) calls loadEstimateLines with
+  // `{ force: true }` to drop and re-fetch.
+  const linesLoadedRef = React.useRef(new Set());
+  const linesInflightRef = React.useRef(new Map()); // estimateId → Promise — dedupes concurrent toggles
+  const loadEstimateLines = async (estimateId, { force = false } = {}) => {
+    if (!force) {
+      if (linesLoadedRef.current.has(estimateId)) return; // already in estimateLines
+      const existing = linesInflightRef.current.get(estimateId);
+      if (existing) return existing;
+    } else {
+      linesLoadedRef.current.delete(estimateId);
     }
+    setLinesLoading(estimateId);
+    const promise = (async () => {
+      try {
+        // includeManual: false — hides lines added via the Smeta
+        // boshqaruvi / Bosqichlar UI (migration 417). The Smetalar tab
+        // is the read-only view of the file's original content; user
+        // edits live on the editing tabs.
+        const data = await constructionService.getEstimate(estimateId, { includeManual: false });
+        setEstimateLines(prev => ({ ...prev, [estimateId]: data?.lines || [] }));
+        linesLoadedRef.current.add(estimateId);
+      } catch (error) {
+        console.error('Error loading estimate lines:', error);
+        setEstimateLines(prev => ({ ...prev, [estimateId]: [] }));
+        // Don't add to loaded set on error — next toggle should retry.
+      } finally {
+        setLinesLoading(null);
+        linesInflightRef.current.delete(estimateId);
+      }
+    })();
+    linesInflightRef.current.set(estimateId, promise);
+    return promise;
   };
 
   // Toggle estimate expansion
@@ -449,7 +535,10 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
       setExpandedEstimate(null);
     } else {
       setExpandedEstimate(estId);
-      if (!estimateLines[estId]) {
+      // Ref check first — handles the open/close/open replay where
+      // estimateLines might be in transit, then a defensive
+      // estimateLines fallback for cases where the ref was reset.
+      if (!linesLoadedRef.current.has(estId) && !estimateLines[estId]) {
         loadEstimateLines(estId);
       }
     }
@@ -561,7 +650,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
       await loadEstimates();
       // Reload lines if this estimate is expanded
       if (expandedEstimate === editEstimateForm.id) {
-        await loadEstimateLines(editEstimateForm.id);
+        await loadEstimateLines(editEstimateForm.id, { force: true });
       }
     } catch (error) {
       console.error('Error updating estimate:', error);
@@ -610,7 +699,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
         }
       }
 
-      await loadEstimateLines(estId);
+      await loadEstimateLines(estId, { force: true });
       await loadEstimates();
       setShowLineModal(false);
       setLineForm({ id: null, estimate_id: null, product_id: '', name: '', uom: '', quantity: '', material_rate: '', labor_rate: '', equipment_rate: '', sort_order: '0' });
@@ -630,7 +719,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
       onConfirm: async () => {
         try {
           await constructionService.deleteEstimateLine(estId, lineId);
-          await loadEstimateLines(estId);
+          await loadEstimateLines(estId, { force: true });
           await loadEstimates();
         } catch (error) {
           console.error('Error deleting line:', error);
@@ -1174,29 +1263,20 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                               </td>
                                             )}
                                             {est.source_type !== 'resurs' && (
-                                              // Show the file's "по проектным данным" value (col F on
-                                              // the Единич sheet) when available. This is what fills
-                                              // in the Miqdori column for BOTH parents and child
-                                              // resources — without it, Единич sub-rows displayed "0"
-                                              // because templateMode zeroes the live `quantity` ledger.
-                                              //
                                               // Fallback chain (most specific → least):
-                                              //   1. imported_quantity — file's literal value, captured
-                                              //      by the Единич parser into norma_quantity and
-                                              //      persisted via migration 413. DISPLAY-ONLY: no
-                                              //      cascade, NORMA pill, ledger, or budget path reads
-                                              //      it. Set for both parent works and child resources
-                                              //      after migration 413.
-                                              //   2. original_quantity — the parent-only anchor from
-                                              //      migration 349. Present on older rows that predate
-                                              //      413; on those rows children still render 0 because
-                                              //      the legacy parser dropped col F for children.
-                                              //   3. live `quantity` — last-ditch fallback for
-                                              //      pre-migration-349 rows.
+                                              //   1. imported_quantity — file's literal value.
+                                              //   2. original_quantity — parent-only anchor.
+                                              //   3. live `quantity` — last fallback.
+                                              //
+                                              // Use !== 0 instead of > 0 so NEGATIVE values
+                                              // (subtraction positions like ВЫЧИТАЕТСЯ ПОЗИЦИЯ)
+                                              // surface as -1.03 / -30.9 instead of falling
+                                              // through to 0. The file legitimately stores
+                                              // negative qtys for deductive rows.
                                               <td className="py-2 px-2 text-right text-xs whitespace-nowrap">
-                                                {line.imported_quantity != null && Number(line.imported_quantity) > 0
+                                                {line.imported_quantity != null && Number(line.imported_quantity) !== 0
                                                   ? Number(line.imported_quantity)
-                                                  : (Number(line.original_quantity) > 0
+                                                  : (Number(line.original_quantity) !== 0
                                                       ? line.original_quantity
                                                       : line.quantity)}
                                               </td>
@@ -1215,19 +1295,21 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                                 <td className="py-2 px-2 text-right text-xs text-slate-700 whitespace-nowrap">
                                                   {line.imported_quantity != null
                                                     ? Number(line.imported_quantity)
-                                                    : (Number(line.original_quantity) > 0
+                                                    : (Number(line.original_quantity) !== 0
                                                         ? line.original_quantity
-                                                        : (Number(line.quantity) > 0 ? line.quantity : '—'))}
+                                                        : (Number(line.quantity) !== 0 ? line.quantity : '—'))}
                                                 </td>
                                                 <td className="py-2 px-2 text-right text-xs font-medium whitespace-nowrap">{formatCurrency(line.unit_rate)}</td>
                                                 {/* Jami — show the file's "Сметная стоимость в базисном
                                                    уровне" verbatim. Same display-only contract as
                                                    Miqdor. Falls back to the computed total_amount so
-                                                   pre-migration rows still render a useful figure. */}
+                                                   pre-migration rows still render a useful figure.
+                                                   Uses !== 0 so negative totals (deductions) display
+                                                   instead of falling through to an em-dash. */}
                                                 <td className="py-2 px-2 text-right text-xs font-semibold whitespace-nowrap">
                                                   {line.imported_total != null
                                                     ? formatCurrency(Number(line.imported_total))
-                                                    : (Number(line.total_amount) > 0
+                                                    : (Number(line.total_amount) !== 0
                                                         ? formatCurrency(line.total_amount)
                                                         : '—')}
                                                 </td>
@@ -1239,7 +1321,12 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                         );
                                       };
 
-                                      for (const parent of roots) {
+                                      // Only paint the first N roots; the rest
+                                      // are revealed as the user scrolls the
+                                      // sentinel below into view. Children ride
+                                      // with their parent, so nothing is split.
+                                      const visibleRoots = roots.slice(0, visibleLineCount);
+                                      for (const parent of visibleRoots) {
                                         rows.push(renderLine(parent, false, null));
                                         const children = byParent.get(parent.id) || [];
                                         for (const c of children) {
@@ -1285,6 +1372,15 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                   )}
                                 </table>
                               </div>
+
+                              {/* Infinite-scroll sentinel — reveals the next
+                                  page of lines as it scrolls into view. Only
+                                  while more root lines remain. */}
+                              {visibleLineCount < expandedRootCount && (
+                                <div ref={lineLoadMoreRef} className="py-4 flex items-center justify-center">
+                                  <Loader className="py-0" size="w-4 h-4" />
+                                </div>
+                              )}
 
                               {/* Summary — only for resurs type */}
                               {est.source_type === 'resurs' && (
@@ -1769,7 +1865,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
         initial={sublineDialog.initial}
         onSaved={async () => {
           if (sublineDialog.estimateId) {
-            await loadEstimateLines(sublineDialog.estimateId);
+            await loadEstimateLines(sublineDialog.estimateId, { force: true });
             await loadEstimates();
           }
         }}
@@ -1784,7 +1880,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
         estimateId={editLineDialog.estimateId}
         onSaved={async () => {
           if (editLineDialog.estimateId) {
-            await loadEstimateLines(editLineDialog.estimateId);
+            await loadEstimateLines(editLineDialog.estimateId, { force: true });
             await loadEstimates();
           }
         }}
