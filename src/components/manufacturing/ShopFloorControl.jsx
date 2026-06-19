@@ -99,6 +99,14 @@ function KanbanCard({ wo, labels, language, workCenters, productionOrders, curre
         </div>
       )}
 
+      {/* Customer (when the production order is for a customer) */}
+      {po?.customer_name && (
+        <div className="flex items-center gap-1.5 text-xs text-slate-500">
+          <Users className="w-3.5 h-3.5 shrink-0 text-purple-400" />
+          <span className="truncate font-medium text-slate-600">{po.customer_name}</span>
+        </div>
+      )}
+
       {/* Progress */}
       <div className="space-y-1">
         <div className="flex justify-between text-xs text-slate-500">
