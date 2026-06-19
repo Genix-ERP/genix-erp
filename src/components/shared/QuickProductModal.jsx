@@ -4,8 +4,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2 } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from "@/components/ui/command";
+import { Loader2, ChevronDown, Check } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { inventoryService } from "@/api/services/inventory";
 import { formatPriceInput, parsePriceInput } from "@/utils/formatCurrency";
 import apiClient from "@/api/client";
@@ -27,12 +30,12 @@ import apiClient from "@/api/client";
 //   t — translator
 export default function QuickProductModal({ open, onClose, initialName = "", organizationIds = [], onCreated, t = (k) => k }) {
   const [name, setName] = useState(initialName);
-  const [sku, setSku] = useState("");
   const [costPrice, setCostPrice] = useState("");
   const [type, setType] = useState("product");
   // Finance accounting type (matches the full form's "Tovar turi (buxgalteriya)").
   const [inventoryType, setInventoryType] = useState("trade");
   const [categoryId, setCategoryId] = useState("none");
+  const [catOpen, setCatOpen] = useState(false);
   const [uom, setUom] = useState("unit");
   const [categories, setCategories] = useState([]);
   const [uomList, setUomList] = useState([]);
@@ -42,7 +45,6 @@ export default function QuickProductModal({ open, onClose, initialName = "", org
   useEffect(() => {
     if (!open) return;
     setName(initialName || "");
-    setSku("");
     setCostPrice("");
     setType("product");
     setInventoryType("trade");
@@ -96,7 +98,6 @@ export default function QuickProductModal({ open, onClose, initialName = "", org
         purchase_uom: uom,
         organization_ids: Array.isArray(organizationIds) ? organizationIds.filter(Boolean) : [],
       };
-      if (sku.trim()) payload.sku = sku.trim();
       if (categoryId && categoryId !== 'none') payload.category_id = categoryId;
       const newProduct = await inventoryService.createProduct(payload);
       toast.success(t('product_created') || "Mahsulot yaratildi");
@@ -182,28 +183,58 @@ export default function QuickProductModal({ open, onClose, initialName = "", org
 
           <div>
             <Label>{t('category') || "Kategoriya"}</Label>
-            <Select value={categoryId} onValueChange={setCategoryId}>
-              <SelectTrigger className="mt-1">
-                <SelectValue placeholder={t('select_category') || "Kategoriyani tanlang"} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">{t('none') || "Yo'q"}</SelectItem>
-                {categories.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Popover open={catOpen} onOpenChange={setCatOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={catOpen}
+                  className="mt-1 w-full justify-between font-normal"
+                >
+                  <span className="truncate">
+                    {categoryId !== 'none'
+                      ? (categories.find((c) => c.id === categoryId)?.name || (t('none') || "Yo'q"))
+                      : (t('none') || "Yo'q")}
+                  </span>
+                  <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              {/* noPortal: rendered inside a Radix Dialog, so keep the popover
+                  in-tree or its wheel/scroll events get blocked by the dialog. */}
+              <PopoverContent noPortal className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                <Command>
+                  <CommandInput placeholder={t('search') || "Qidirish..."} />
+                  <CommandList style={{ maxHeight: 240, overflowY: 'auto' }}>
+                    <CommandEmpty>{t('not_found') || "Topilmadi"}</CommandEmpty>
+                    <CommandGroup>
+                      <CommandItem
+                        value={t('none') || "Yo'q"}
+                        onSelect={() => { setCategoryId('none'); setCatOpen(false); }}
+                      >
+                        <Check className={cn("mr-2 h-4 w-4", categoryId === 'none' ? "opacity-100" : "opacity-0")} />
+                        {t('none') || "Yo'q"}
+                      </CommandItem>
+                      {categories.map((c) => (
+                        <CommandItem
+                          key={c.id}
+                          value={c.name}
+                          onSelect={() => { setCategoryId(c.id); setCatOpen(false); }}
+                        >
+                          <Check className={cn("mr-2 h-4 w-4", categoryId === c.id ? "opacity-100" : "opacity-0")} />
+                          <span className="truncate">{c.name}</span>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label htmlFor="qp-sku">{t('sku') || "SKU"}</Label>
-              <Input id="qp-sku" className="mt-1" value={sku} onChange={(e) => setSku(e.target.value)} />
-            </div>
-            <div>
-              <Label htmlFor="qp-cost">{t('cost_price') || "Narx"}</Label>
-              <Input id="qp-cost" className="mt-1" inputMode="decimal" value={costPrice} onChange={(e) => setCostPrice(formatPriceInput(e.target.value))} />
-            </div>
+          <div>
+            <Label htmlFor="qp-cost">{t('cost_price') || "Narx"}</Label>
+            <Input id="qp-cost" className="mt-1" inputMode="decimal" value={costPrice} onChange={(e) => setCostPrice(formatPriceInput(e.target.value))} />
           </div>
         </div>
         <DialogFooter className="flex-col-reverse sm:flex-row gap-2">
