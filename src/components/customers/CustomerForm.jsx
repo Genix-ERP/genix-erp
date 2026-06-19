@@ -366,13 +366,12 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
                       ))}
                     </div>
 
-                    {/* Live preview (server adds BOM cost to the final total) */}
+                    {/* Live preview — just the total (and remaining when something is paid). */}
                     <div className="bg-slate-50 rounded-lg p-3 text-sm space-y-1">
-                      <div className="flex justify-between"><span>{t('components_cost') || 'Komponentlar'}</span><span>{formatPriceInput(componentsCost)}</span></div>
-                      <div className="flex justify-between text-slate-400"><span>+ BOM ({t('server_side') || 'serverda'})</span><span>—</span></div>
-                      <div className="flex justify-between font-medium"><span>{(t('est_total') || 'Taxminiy jami')} (+{order.profit_percent || 0}%)</span><span>{formatPriceInput(estTotal)}</span></div>
-                      <div className="flex justify-between"><span>{t('remaining') || 'Qoldiq'}</span><span>{formatPriceInput(remaining)}</span></div>
-                      <p className="text-xs text-slate-400">{t('bom_note') || "Yakuniy jami serverda mahsulot BOM narxi qo'shilgan holda hisoblanadi."}</p>
+                      <div className="flex justify-between font-semibold text-base"><span>{t('est_total')}</span><span>{formatPriceInput(estTotal)}</span></div>
+                      {(Number(order.paid_amount) || 0) > 0 && (
+                        <div className="flex justify-between text-slate-600"><span>{t('remaining')}</span><span>{formatPriceInput(remaining)}</span></div>
+                      )}
                     </div>
                   </div>
                 )}
