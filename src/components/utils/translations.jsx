@@ -14783,7 +14783,7 @@ export const translations = {
     "add_rule": "Qoida qo'shish",
     "apply_to": "Qo'llash",
     "all_products": "Barcha mahsulotlar",
-    "product_category": "Mahsulot kategoriyasi",
+    "product_category": "Kategoriya",
     "specific_product": "Maxsus mahsulot",
     "min_quantity": "Minimal miqdor",
     "min_qty": "Min miqdor",

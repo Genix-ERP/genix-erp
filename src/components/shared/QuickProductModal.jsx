@@ -182,7 +182,7 @@ export default function QuickProductModal({ open, onClose, initialName = "", org
           )}
 
           <div>
-            <Label>{t('category') || "Kategoriya"}</Label>
+            <Label>{t('product_category') || "Kategoriya"}</Label>
             <Popover open={catOpen} onOpenChange={setCatOpen}>
               <PopoverTrigger asChild>
                 <Button
