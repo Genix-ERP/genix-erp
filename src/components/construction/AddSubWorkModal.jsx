@@ -50,11 +50,16 @@ export default function AddSubWorkModal({
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [uom, setUom] = useState('');
+  // Custom UoM mode — when true the user sees a free-text input
+  // instead of the preset dropdown. Triggered by picking the
+  // "+ Boshqa..." sentinel option below, so the user can enter any
+  // unit not in UOMS_BY_CATEGORY (e.g. "ШТ", "RUL", "ПОГ.М²").
+  const [customUomMode, setCustomUomMode] = useState(false);
   const [qty, setQty] = useState('0');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (open) { setCode(''); setName(''); setUom(''); setQty('0'); }
+    if (open) { setCode(''); setName(''); setUom(''); setCustomUomMode(false); setQty('0'); }
   }, [open]);
 
   const handleSave = async () => {
@@ -67,9 +72,56 @@ export default function AddSubWorkModal({
       return;
     }
     const q = Number(String(qty).replace(/\s/g, '').replace(',', '.').replace(/[^\d.\-]/g, '')) || 0;
+    const trimmedCode = code.trim();
     setSaving(true);
     try {
-      if (isSection) {
+      // Code-match clone path — when the user typed a SHRNK code, ask the
+      // backend to look for an existing parent line with the same code
+      // anywhere in the project and copy its resources onto the new line.
+      // The endpoint falls back to a plain insert when no match is found,
+      // so it's safe to use it unconditionally whenever code is present.
+      if (trimmedCode) {
+        const body = isSection
+          ? {
+              source_code: trimmedCode,
+              parent_item_number: `${parentSection} › ${name.trim()}`,
+              name: name.trim(),
+              uom,
+              code: trimmedCode,
+              quantity: q,
+            }
+          : {
+              source_code: trimmedCode,
+              parent_line_id: parent?.id,
+              name: name.trim(),
+              uom,
+              code: trimmedCode,
+              quantity: q,
+              item_number: (parent?.item_number || String(parent?.id || ''))
+                ? `${parent?.item_number || parent?.id}-${nextSeq || 1}`
+                : undefined,
+            };
+        const res = await constructionService.cloneEstimateLineByCode(estimateId, body);
+        const cloned = Number(res?.cloned_resources || 0);
+        if (cloned > 0) {
+          toast.success(
+            (t('cloned_with_resources') || "Etap yaratildi va {n} ta resurs ko'chirildi")
+              .replace('{n}', String(cloned)),
+          );
+        } else if (res?.source_id) {
+          // Source matched but had no resources to copy.
+          toast.success(
+            t('cloned_source_empty')
+              || "Etap yaratildi (mos kod topildi, lekin resurslari yo'q edi)",
+          );
+        } else {
+          // No matching code in the project — fell through to a plain insert.
+          toast.success(
+            t('cloned_no_match')
+              || "Etap yaratildi (kod loyihada topilmadi — resurslar ko'chirilmadi)",
+          );
+        }
+      } else if (isSection) {
         // Sub-section / sub-stage mode — top-level line under a section
         // path. parent_item_number = "PARENT › NEW_NAME" so the
         // hierarchical grouping treats this as a new sub-stage under
@@ -77,7 +129,7 @@ export default function AddSubWorkModal({
         await constructionService.createEstimateLine(estimateId, {
           parent_line_id: 0,
           parent_item_number: `${parentSection} › ${name.trim()}`,
-          code: code.trim() || undefined,
+          code: undefined,
           name: name.trim(),
           uom,
           resource_type: '',
@@ -89,15 +141,12 @@ export default function AddSubWorkModal({
           labor_rate: 0,
           equipment_rate: 0,
         });
+        toast.success(t('stage_created') || 'Etap yaratildi');
       } else {
         const parentNum = parent?.item_number || String(parent?.id || '');
         await constructionService.createEstimateLine(estimateId, {
           parent_line_id: parent?.id,
-          // `code` is the optional shifr (e.g. "1A", "2-3", "K-1") the user
-          // can pin on a stage so it lines up with their printed Forma 2
-          // numbering. Backend (CreateEstimateLineInput) accepts it as
-          // `code` and stores it on construction_estimate_line.code.
-          code: code.trim() || undefined,
+          code: undefined,
           name: name.trim(),
           uom,
           resource_type: '',
@@ -107,8 +156,8 @@ export default function AddSubWorkModal({
           quantity: q,
           item_number: parentNum ? `${parentNum}-${nextSeq || 1}` : undefined,
         });
+        toast.success(t('stage_created') || 'Etap yaratildi');
       }
-      toast.success(t('stage_created') || 'Etap yaratildi');
       onSaved?.();
       onClose?.();
     } catch (e) {
@@ -221,32 +270,80 @@ export default function AddSubWorkModal({
 
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
-                <label className="text-[11px] block mb-1.5" style={{ color: '#64748B' }}>
-                  {t('uom') || "O'lchov birligi"} *
-                </label>
-                <select
-                  value={uom}
-                  onChange={(e) => setUom(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-md text-[13px] outline-none cursor-pointer"
-                  style={{ background: '#FFFFFF', color: '#0F172A', border: '1px solid #CBD5E1', fontFamily: 'inherit' }}
-                >
-                  <option value="">{t('select') || '— tanlang —'}</option>
-                  {Object.entries(UOMS_BY_CATEGORY).map(([cat, units]) => (
-                    <optgroup
-                      key={cat}
-                      label={
-                        cat === 'labor'    ? (t('group_labor')    || "Mehnat (chel-soat)")
-                      : cat === 'machines' ? (t('group_machines') || "Mashina (mashina-soat)")
-                                           : (t('group_material') || "Material (o'lchov)")
-                      }
-                      style={{ background: '#FFFFFF', color: '#0F766E', fontWeight: 600 }}
+                <div className="flex items-baseline justify-between mb-1.5">
+                  <label className="text-[11px]" style={{ color: '#64748B' }}>
+                    {t('uom') || "O'lchov birligi"} *
+                  </label>
+                  {customUomMode && (
+                    // Small "back to list" link so the user can revert to
+                    // the dropdown if they picked custom by mistake. Clears
+                    // the typed value to avoid carrying a half-typed string
+                    // into the saved estimate line.
+                    <button
+                      type="button"
+                      onClick={() => { setCustomUomMode(false); setUom(''); }}
+                      className="text-[11px] underline cursor-pointer"
+                      style={{ color: '#0F766E', background: 'transparent', border: 'none', padding: 0 }}
                     >
-                      {units.map((u) => (
-                        <option key={u} value={u} style={{ background: '#FFFFFF', color: '#0F172A' }}>{u}</option>
-                      ))}
-                    </optgroup>
-                  ))}
-                </select>
+                      {t('uom_back_to_list') || "ro'yxatdan tanlash"}
+                    </button>
+                  )}
+                </div>
+                {customUomMode ? (
+                  <input
+                    type="text"
+                    value={uom}
+                    onChange={(e) => setUom(e.target.value)}
+                    placeholder={t('uom_custom_placeholder') || "Masalan: ШТ, RUL, M²"}
+                    className="w-full px-3 py-2.5 rounded-md text-[13px] outline-none"
+                    style={{ background: '#FFFFFF', color: '#0F172A', border: '1px solid #CBD5E1', fontFamily: 'inherit' }}
+                    autoFocus
+                  />
+                ) : (
+                  <select
+                    value={uom}
+                    onChange={(e) => {
+                      // Sentinel value "__custom__" switches the field into
+                      // free-text mode. Anything else just assigns the
+                      // chosen preset unit. The sentinel is never persisted
+                      // because we don't store the value until the user
+                      // either picks a preset or types something while in
+                      // custom mode.
+                      if (e.target.value === '__custom__') {
+                        setCustomUomMode(true);
+                        setUom('');
+                      } else {
+                        setUom(e.target.value);
+                      }
+                    }}
+                    className="w-full px-3 py-2.5 rounded-md text-[13px] outline-none cursor-pointer"
+                    style={{ background: '#FFFFFF', color: '#0F172A', border: '1px solid #CBD5E1', fontFamily: 'inherit' }}
+                  >
+                    <option value="">{t('select') || '— tanlang —'}</option>
+                    {Object.entries(UOMS_BY_CATEGORY).map(([cat, units]) => (
+                      <optgroup
+                        key={cat}
+                        label={
+                          cat === 'labor'    ? (t('group_labor')    || "Mehnat (chel-soat)")
+                        : cat === 'machines' ? (t('group_machines') || "Mashina (mashina-soat)")
+                                             : (t('group_material') || "Material (o'lchov)")
+                        }
+                        style={{ background: '#FFFFFF', color: '#0F766E', fontWeight: 600 }}
+                      >
+                        {units.map((u) => (
+                          <option key={u} value={u} style={{ background: '#FFFFFF', color: '#0F172A' }}>{u}</option>
+                        ))}
+                      </optgroup>
+                    ))}
+                    {/* "+ Boshqa..." sentinel — selecting it flips the field
+                       into the free-text input above so the user can enter
+                       a UoM that isn't in the preset list (the construction
+                       industry has plenty: ШТ, ПОГ.М², ТУБ, etc.). */}
+                    <option value="__custom__" style={{ background: '#FFFFFF', color: '#0F766E', fontWeight: 600 }}>
+                      + {t('uom_other') || 'Boshqa...'}
+                    </option>
+                  </select>
+                )}
               </div>
               <div>
                 <label className="text-[11px] block mb-1.5" style={{ color: '#64748B' }}>

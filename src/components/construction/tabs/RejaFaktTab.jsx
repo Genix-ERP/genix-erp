@@ -12,7 +12,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Plus, Trash2, ChevronDown, ChevronRight, ChevronLeft, Package, Wrench, Edit, TrendingUp, TrendingDown, Minus, AlertTriangle, Download, Clock, Printer, ShieldCheck, Users, Truck } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, ChevronRight, ChevronLeft, Package, Wrench, Edit, TrendingUp, TrendingDown, Minus, AlertTriangle, Download, Clock, Printer, ShieldCheck, Users, Truck, Loader2 } from 'lucide-react';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { sortBuildings } from '@/utils/naturalSort';
@@ -504,7 +504,16 @@ const RejaFaktTab = ({ project }) => {
   };
 
   if (loading) {
-    return <div className="text-center py-12 text-slate-400">{t('loading')}</div>;
+    // Spinner instead of plain "Yuklanmoqda" text. The Reja vs Fakt tab's
+    // initial fetch can take a few seconds while the backend aggregates
+    // per-stage material + equipment summaries — without a visible
+    // animation the user couldn't tell the page was actually working.
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+        <Loader2 className="w-8 h-8 animate-spin mb-3" />
+        <p className="text-sm">{t('loading')}</p>
+      </div>
+    );
   }
 
   const summary = data?.summary || {};

@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import ProductCombobox from "@/components/shared/ProductCombobox";
+import QuickProductModal from "@/components/shared/QuickProductModal";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { inventoryService } from '@/api/services/inventory';
 import apiClient from '@/api/client';
@@ -128,6 +129,10 @@ export default function PurchaseOrders() {
   // Products list for selection
   const [products, setProducts] = useState([]);
   const [productsLoading, setProductsLoading] = useState(false);
+  // Quick "create product" from a line's product dropdown. Shape:
+  // { name, onPick(product) } | null. onPick selects the new product into the
+  // line that triggered the create.
+  const [quickCreate, setQuickCreate] = useState(null);
 
   // Warehouses for selection
   const [warehouses, setWarehouses] = useState([]);
@@ -444,12 +449,14 @@ export default function PurchaseOrders() {
     }
   }, []);
 
-  const handleLineChange = async (index, field, value) => {
+  const handleLineChange = async (index, field, value, productObj = null) => {
     const newLines = [...newPO.lines];
     newLines[index] = { ...newLines[index], [field]: value };
 
     if (field === 'product_id' && value) {
-      const selectedProduct = products.find(p => p.id === value);
+      // `productObj` fallback: a just-created product isn't in `products` yet
+      // (setProducts is async), so use the passed object to populate price/name.
+      const selectedProduct = products.find(p => p.id === value) || productObj;
       if (selectedProduct) {
         // Default to product's purchase price
         let unitPrice = selectedProduct.purchase_price || selectedProduct.cost_price || selectedProduct.price || 0;
@@ -803,12 +810,12 @@ export default function PurchaseOrders() {
     });
   };
 
-  const handleEditLineChange = async (index, field, value) => {
+  const handleEditLineChange = async (index, field, value, productObj = null) => {
     if (!editPO) return;
     const newLines = [...editPO.lines];
     newLines[index] = { ...newLines[index], [field]: value };
     if (field === 'product_id' && value) {
-      const product = products.find(p => p.id === value);
+      const product = products.find(p => p.id === value) || productObj;
       if (product) {
         let unitPrice = product.purchase_price || product.cost_price || product.list_price || 0;
         let leadTimeDays = product.lead_time_days || 0;
@@ -1412,6 +1419,10 @@ export default function PurchaseOrders() {
                           products={products}
                           value={line.product_id || ''}
                           onValueChange={(value) => handleLineChange(index, 'product_id', value)}
+                          onCreateNew={(name) => setQuickCreate({
+                            name,
+                            onPick: (product) => handleLineChange(index, 'product_id', product.id, product),
+                          })}
                           placeholder={t('select_product') || 'Mahsulot tanlang'}
                           t={t}
                         />
@@ -1815,6 +1826,10 @@ export default function PurchaseOrders() {
                               value={line.product_id || ''}
                               valueLabel={line.product_name || line.description || ''}
                               onValueChange={(value) => handleEditLineChange(index, 'product_id', value)}
+                              onCreateNew={(name) => setQuickCreate({
+                                name,
+                                onPick: (product) => handleEditLineChange(index, 'product_id', product.id, product),
+                              })}
                               placeholder={t('select_product') || 'Mahsulot tanlang'}
                               t={t}
                             />
@@ -2165,6 +2180,24 @@ export default function PurchaseOrders() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Quick "create product" from a line's product dropdown. On success the
+          new product is added to the list and selected into the line that
+          triggered it. */}
+      <QuickProductModal
+        open={!!quickCreate}
+        initialName={quickCreate?.name || ''}
+        organizationIds={activeCompany?.id ? [activeCompany.id] : []}
+        onClose={() => setQuickCreate(null)}
+        onCreated={(product) => {
+          if (product?.id) {
+            setProducts((prev) => [product, ...prev]);
+            quickCreate?.onPick?.(product);
+          }
+          setQuickCreate(null);
+        }}
+        t={t}
+      />
     </div>
   );
 }

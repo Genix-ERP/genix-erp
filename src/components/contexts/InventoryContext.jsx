@@ -1304,6 +1304,32 @@ export function InventoryProvider({ children }) {
     }, 0);
   }, [backendAvailable, inventory, products]);
 
+  // Re-fetch stockMovements with server-side filters (date_from, date_to,
+  // warehouse_id, product_id, type). Used by StockReport so a date-range
+  // query returns ALL transactions in that window, not just whatever the
+  // initial 1000-row page happened to contain. Without this, products with
+  // older issue/chiqim rows that have aged out of the top 1000 falsely
+  // appear to have "no chiqim" in the Hisobotlar tab.
+  const reloadMovements = useCallback(async (params = {}) => {
+    if (!backendAvailable) return stockMovements;
+    try {
+      const cleanParams = { limit: 10000, ...params };
+      // Drop empty/undefined keys so we don't send "warehouse_id=all" etc.
+      Object.keys(cleanParams).forEach((k) => {
+        const v = cleanParams[k];
+        if (v === undefined || v === null || v === '' || v === 'all') {
+          delete cleanParams[k];
+        }
+      });
+      const movementsData = await inventoryService.listInventoryMovements(cleanParams);
+      setStockMovements(movementsData || []);
+      return movementsData || [];
+    } catch (err) {
+      console.error('reloadMovements failed:', err);
+      return stockMovements;
+    }
+  }, [backendAvailable, stockMovements]);
+
   const getInventorySummary = useCallback(() => {
     const totalValue = inventory.reduce((total, item) => {
       const product = products.find(p => p.id === item.product_id);
@@ -2106,6 +2132,7 @@ export function InventoryProvider({ children }) {
     // Inventory
     inventory,
     stockMovements,
+    reloadMovements,
     adjustInventory,
     transferInventory,
     getInventoryValuation,
@@ -2185,7 +2212,7 @@ export function InventoryProvider({ children }) {
     isAutoReorderEnabled: () => inventorySettings.autoReorderEnabled,
     getDefaultUnit: () => inventorySettings.defaultUnit,
     getUnitsOfMeasure: () => inventorySettings.unitsOfMeasure
-  }), [products, createProduct, updateProduct, deleteProduct, categories, createCategory, updateCategory, deleteCategory, warehouses, createWarehouse, updateWarehouse, deleteWarehouse, createWarehouseLocation, updateWarehouseLocation, deleteWarehouseLocation, inventory, stockMovements, adjustInventory, transferInventory, getInventoryValuation, getInventorySummary, getProductStock, getWarehouseInventory, lots, createLot, updateLot, deleteLot, consumeLot, getProductLots, getExpiringLots, stockCounts, createStockCount, updateStockCountLine, completeStockCount, cancelStockCount, boms, bomLines, createBOM, updateBOM, deleteBOM, createBOMLine, updateBOMLine, deleteBOMLine, getBOMLinesByBOM, calculateBOMCost, reorderRules, createReorderRule, updateReorderRule, deleteReorderRule, getReorderRulesByProduct, checkReorderNeeded, scrapOrders, createScrapOrder, updateScrapOrder, confirmScrapOrder, cancelScrapOrder, getScrapSummary, items, isLoading, backendAvailable, error, loadData, inventorySettings]);
+  }), [products, createProduct, updateProduct, deleteProduct, categories, createCategory, updateCategory, deleteCategory, warehouses, createWarehouse, updateWarehouse, deleteWarehouse, createWarehouseLocation, updateWarehouseLocation, deleteWarehouseLocation, inventory, stockMovements, reloadMovements, adjustInventory, transferInventory, getInventoryValuation, getInventorySummary, getProductStock, getWarehouseInventory, lots, createLot, updateLot, deleteLot, consumeLot, getProductLots, getExpiringLots, stockCounts, createStockCount, updateStockCountLine, completeStockCount, cancelStockCount, boms, bomLines, createBOM, updateBOM, deleteBOM, createBOMLine, updateBOMLine, deleteBOMLine, getBOMLinesByBOM, calculateBOMCost, reorderRules, createReorderRule, updateReorderRule, deleteReorderRule, getReorderRulesByProduct, checkReorderNeeded, scrapOrders, createScrapOrder, updateScrapOrder, confirmScrapOrder, cancelScrapOrder, getScrapSummary, items, isLoading, backendAvailable, error, loadData, inventorySettings]);
 
   return (
     <InventoryContext.Provider value={value}>

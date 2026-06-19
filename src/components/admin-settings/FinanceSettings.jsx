@@ -1,11 +1,15 @@
-import React from 'react';
+import { useState } from 'react';
+import { toast } from 'sonner';
 import { useAdminSettings } from '@/components/contexts/AdminSettingsContext';
 import { useLanguage } from '@/components/contexts/LanguageContext';
+import { useCompany } from '@/components/contexts/CompanyContext';
 import { useTranslation } from '@/components/utils/translations';
 import { SettingsSection, SettingsField, SettingsRow, SettingsToggle } from './SettingsSection';
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar, FileText, Percent, Coins, Landmark, BookOpen, Lock, Users } from 'lucide-react';
+import { Calendar, FileText, Percent, Coins, Landmark, BookOpen, Lock, Users, RotateCcw } from 'lucide-react';
+import apiClient from '@/api/client';
 import TaxRates from '@/components/finance/TaxRates';
 import EmployeeTaxes from '@/components/finance/EmployeeTaxes';
 import CompanyTaxRates from '@/components/finance/CompanyTaxRates';
@@ -16,8 +20,26 @@ export default function FinanceSettings() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { settings, updateSetting, resetSection } = useAdminSettings();
+  const { companies } = useCompany();
 
   const finance = settings.finance || {};
+
+  // Restore soft-deleted accounts for a chosen company.
+  const [restoreCompanyId, setRestoreCompanyId] = useState('');
+  const [restoring, setRestoring] = useState(false);
+  const handleRestoreAccounts = async () => {
+    if (!restoreCompanyId) return;
+    setRestoring(true);
+    try {
+      const res = await apiClient.post(`/organizations/${restoreCompanyId}/restore-accounts`);
+      const n = res.data?.data?.restored ?? 0;
+      toast.success((t('accounts_restored') || '{n} ta hisob tiklandi').replace('{n}', n));
+    } catch (e) {
+      toast.error(e?.response?.data?.message || e?.response?.data?.error || t('error_occurred') || 'Xatolik');
+    } finally {
+      setRestoring(false);
+    }
+  };
 
   const CHART_TEMPLATES = [
     { value: 'standard', label: t('standard_chart_of_accounts') },
@@ -168,6 +190,40 @@ export default function FinanceSettings() {
             </div>
           </div>
         </div>
+      </SettingsSection>
+
+      {/* Restore deleted accounts — un-delete a company's soft-deleted chart */}
+      <SettingsSection
+        title={t('restore_deleted_accounts') || "O'chirilgan hisoblarni tiklash"}
+        description={t('restore_deleted_accounts_desc') || "Tanlangan kompaniyaning o'chirilgan hisoblar rejasini tiklaydi"}
+        icon={RotateCcw}
+      >
+        <SettingsRow>
+          <SettingsField label={t('company') || 'Kompaniya'}>
+            <Select value={restoreCompanyId} onValueChange={setRestoreCompanyId}>
+              <SelectTrigger>
+                <SelectValue placeholder={t('select_company') || 'Kompaniyani tanlang'} />
+              </SelectTrigger>
+              <SelectContent>
+                {(companies || []).map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.company_name || c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </SettingsField>
+          <SettingsField label={t('action') || 'Amal'}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!restoreCompanyId || restoring}
+              onClick={handleRestoreAccounts}
+              className="w-full"
+            >
+              <RotateCcw className="w-4 h-4 mr-2" />
+              {restoring ? (t('restoring') || 'Tiklanmoqda...') : (t('restore_accounts') || 'Hisoblarni tiklash')}
+            </Button>
+          </SettingsField>
+        </SettingsRow>
       </SettingsSection>
 
       {/* Tax Rates */}
