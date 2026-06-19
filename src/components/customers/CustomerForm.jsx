@@ -79,10 +79,13 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
 
   const pickProduct = (p) => {
     const price = Number(p.cost_price || p.unit_cost || p.price || 0);
+    // The products list exposes the unit of measure as unit_name (units_of_measure.name),
+    // e.g. "metr kub" — not `uom`. Fall back through the known shapes.
+    const productUom = p.unit_name || p.unit_code || p.uom || p.unit?.name || '';
     if (searchTarget === 'main') {
       setOrder(o => ({ ...o, product_id: p.id, product_name: p.name }));
     } else {
-      setNewComp(c => ({ ...c, product_id: p.id, product_name: p.name, unit: p.uom || c.unit, unit_price: price }));
+      setNewComp(c => ({ ...c, product_id: p.id, product_name: p.name, unit: productUom || c.unit, unit_price: price }));
     }
     setProdSearch(''); setProdResults([]); setSearchTarget(null);
   };
