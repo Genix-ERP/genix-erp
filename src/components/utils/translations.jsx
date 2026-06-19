@@ -1,5 +1,18 @@
 export const translations = {
   en: {
+    create_order_with_customer: 'Create order with this customer',
+    components_cost: 'Components cost',
+    est_total: 'Est. total',
+    server_side: 'server-side',
+    bom_note: 'Final total is computed on the server (includes the product\'s BOM cost).',
+    search_product: 'Search product...',
+    unit: 'Unit',
+    price: 'Price',
+    sales: 'Sales',
+    no_sales_yet: 'No sales yet',
+    customer_order_created: 'Customer and order created',
+    success: 'Success',
+    loading: 'Loading...',
     // General
     "loading": "Loading",
     "error": "Error",
@@ -8160,6 +8173,19 @@ export const translations = {
   },
 
   uz: {
+    create_order_with_customer: 'Mijoz bilan buyurtma yaratish',
+    components_cost: 'Komponentlar narxi',
+    est_total: 'Taxminiy jami',
+    server_side: 'serverda',
+    bom_note: 'Yakuniy jami serverda mahsulot BOM narxi qo\'shilgan holda hisoblanadi.',
+    search_product: 'Mahsulot qidirish...',
+    unit: 'Birlik',
+    price: 'Narxi',
+    sales: 'Sotuvlar',
+    no_sales_yet: 'Hali sotuvlar yo\'q',
+    customer_order_created: 'Mijoz va buyurtma yaratildi',
+    success: 'Muvaffaqiyatli',
+    loading: 'Yuklanmoqda...',
     // General
     "loading": "Yuklanmoqda",
     "error": "Xato",
@@ -16561,6 +16587,19 @@ export const translations = {
   },
 
   ru: {
+    create_order_with_customer: 'Создать заказ с клиентом',
+    components_cost: 'Стоимость компонентов',
+    est_total: 'Примерно итого',
+    server_side: 'на сервере',
+    bom_note: 'Итоговая сумма рассчитывается на сервере (с учётом стоимости BOM).',
+    search_product: 'Поиск товара...',
+    unit: 'Ед.',
+    price: 'Цена',
+    sales: 'Продажи',
+    no_sales_yet: 'Продаж пока нет',
+    customer_order_created: 'Клиент и заказ созданы',
+    success: 'Успешно',
+    loading: 'Загрузка...',
     // Construction Form-2 tabs
     "smeta_lines": "Сметные работы",
     "actual_materials": "Фактические материалы",
