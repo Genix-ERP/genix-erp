@@ -306,6 +306,18 @@ export default function SalesOrders() {
     }
   }, [location.state]);
 
+  // Open a specific order's detail when navigated with openOrderId
+  // (e.g. from a customer's sales history on the CRM page).
+  useEffect(() => {
+    if (location.state?.openOrderId && Array.isArray(salesOrders) && salesOrders.length) {
+      const found = salesOrders.find(o => o.id === location.state.openOrderId);
+      if (found) {
+        setSelectedOrder(found);
+        window.history.replaceState({}, '');
+      }
+    }
+  }, [location.state, salesOrders]);
+
   const [discountCodeInput, setDiscountCodeInput] = useState('');
   const [discountValidation, setDiscountValidation] = useState({ valid: false, message: '' });
   const [editingOrder, setEditingOrder] = useState(null);
