@@ -107,6 +107,21 @@ export const adminSettingsService = {
       console.error('Error importing settings:', error);
       throw error;
     }
+  },
+
+  // --- AI settings (tenant-wide; the API key is never returned in full) ---
+
+  // Returns { provider, model, has_key, key_preview }
+  async getAISettings() {
+    const response = await apiClient.get('/admin/ai-settings');
+    return response.data.data || response.data;
+  },
+
+  // payload: { provider, model, api_key?, clear_key? }
+  // Omit api_key (or send "") to keep the existing stored key.
+  async updateAISettings(payload) {
+    const response = await apiClient.put('/admin/ai-settings', payload);
+    return response.data.data || response.data;
   }
 };
 
