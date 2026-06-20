@@ -26,7 +26,6 @@ import {
   LayoutDashboard,
   Building2,
   FileQuestion,
-  FileText,
   History,
   DollarSign,
   Package,
@@ -49,7 +48,6 @@ import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 import Suppliers from '@/components/procurement/Suppliers';
 import RFQManagement from '@/components/procurement/RFQManagement';
-import Contracts from '@/components/procurement/Contracts';
 import PriceHistory from '@/components/procurement/PriceHistory';
 import PurchaseRequisitions from '@/components/procurement/PurchaseRequisitions';
 import GoodsReceipt from '@/components/procurement/GoodsReceipt';
@@ -66,7 +64,6 @@ export default function Procurement() {
     suppliers,
     purchaseOrders,
     rfqs,
-    contracts,
     createPurchaseOrder,
     updatePurchaseOrder,
     getSupplierById,
@@ -82,6 +79,12 @@ export default function Procurement() {
 
   const activeTab = searchParams.get("tab") || "dashboard";
   const setActiveTab = (tab) => setSearchParams({ tab }, { replace: true });
+  // The three price-related tabs are merged under one "Narxlar" (pricing) tab
+  // with sub-tabs. We keep using the ?tab= URL param for the sub-tab so deep
+  // links (?tab=rfq, ?tab=price-comparison, ?tab=price-history) still work.
+  const PRICE_TABS = ['rfq', 'price-comparison', 'price-history'];
+  const topTab = PRICE_TABS.includes(activeTab) ? 'pricing' : activeTab;
+  const priceSub = PRICE_TABS.includes(activeTab) ? activeTab : 'rfq';
   const [filteredOrders, setFilteredOrders] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -516,7 +519,7 @@ export default function Procurement() {
       <div className="max-w-7xl mx-auto space-y-6">
 
         {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <Tabs value={topTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="w-full bg-white/80 backdrop-blur-sm p-1.5 rounded-xl border border-slate-200/60 shadow-lg flex flex-wrap justify-start gap-1 h-auto">
             <TabsTrigger
               value="dashboard"
@@ -552,38 +555,14 @@ export default function Procurement() {
               <span className="sm:hidden">GR</span>
             </TabsTrigger>
 
+            {/* Narx so'rovi + Narx solishtirish + Narx tarixi merged into one
+                "Narxlar" tab with sub-tabs (see the pricing TabsContent). */}
             <TabsTrigger
-              value="price-comparison"
+              value="pricing"
               className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
             >
-              <Award className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('price_comparison') || 'Narx solishtirish'}</span>
-              <span className="sm:hidden">PC</span>
-            </TabsTrigger>
-
-            {/* Moved to the end at user request; requisitions (Talablar) removed. */}
-            <TabsTrigger
-              value="rfq"
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
-            >
-              <FileQuestion className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('rfq') || 'RFQ'}</span>
-            </TabsTrigger>
-
-            <TabsTrigger
-              value="contracts"
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
-            >
-              <FileText className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('contracts') || 'Contracts'}</span>
-            </TabsTrigger>
-
-            <TabsTrigger
-              value="price-history"
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
-            >
-              <History className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('price_history') || 'Price History'}</span>
+              <DollarSign className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('pricing') || 'Narxlar'}</span>
             </TabsTrigger>
 
           </TabsList>
@@ -664,19 +643,6 @@ export default function Procurement() {
                 </CardContent>
               </Card>
 
-              <Card className="bg-white/80 backdrop-blur-sm">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs text-slate-500">{t('contracts') || 'Contracts'}</p>
-                      <p className="text-2xl font-bold text-pink-600">{contracts.filter(c => c.status === 'active').length}</p>
-                    </div>
-                    <div className="w-10 h-10 bg-pink-100 rounded-lg flex items-center justify-center">
-                      <FileText className="w-5 h-5 text-pink-600" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
             </div>
 
             {/* AI Insights Panel */}
@@ -797,21 +763,6 @@ export default function Procurement() {
             <PurchaseOrders />
           </TabsContent>
 
-          {/* RFQ Tab */}
-          <TabsContent value="rfq" className="mt-6">
-            <RFQManagement />
-          </TabsContent>
-
-          {/* Contracts Tab */}
-          <TabsContent value="contracts" className="mt-6">
-            <Contracts />
-          </TabsContent>
-
-          {/* Price History Tab */}
-          <TabsContent value="price-history" className="mt-6">
-            <PriceHistory />
-          </TabsContent>
-
           {/* Purchase Requisitions Tab */}
           <TabsContent value="requisitions" className="mt-6">
             <PurchaseRequisitions />
@@ -822,9 +773,43 @@ export default function Procurement() {
             <GoodsReceipt />
           </TabsContent>
 
-          {/* Price Comparison Tab */}
-          <TabsContent value="price-comparison" className="mt-6">
-            <PriceComparison />
+          {/* Pricing Tab — Narx so'rovi / Narx solishtirish / Narx tarixi as sub-tabs */}
+          <TabsContent value="pricing" className="mt-6">
+            <Tabs value={priceSub} onValueChange={setActiveTab} className="w-full">
+              <TabsList className="bg-slate-100 p-1 rounded-lg inline-flex gap-1 h-auto mb-4">
+                <TabsTrigger
+                  value="rfq"
+                  className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium data-[state=active]:bg-white data-[state=active]:text-indigo-700 data-[state=active]:shadow-sm data-[state=inactive]:text-slate-600"
+                >
+                  <FileQuestion className="w-4 h-4" />
+                  {t('rfq') || 'RFQ'}
+                </TabsTrigger>
+                <TabsTrigger
+                  value="price-comparison"
+                  className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium data-[state=active]:bg-white data-[state=active]:text-indigo-700 data-[state=active]:shadow-sm data-[state=inactive]:text-slate-600"
+                >
+                  <Award className="w-4 h-4" />
+                  {t('price_comparison') || 'Narx solishtirish'}
+                </TabsTrigger>
+                <TabsTrigger
+                  value="price-history"
+                  className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium data-[state=active]:bg-white data-[state=active]:text-indigo-700 data-[state=active]:shadow-sm data-[state=inactive]:text-slate-600"
+                >
+                  <History className="w-4 h-4" />
+                  {t('price_history') || 'Price History'}
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="rfq" className="mt-0">
+                <RFQManagement />
+              </TabsContent>
+              <TabsContent value="price-comparison" className="mt-0">
+                <PriceComparison />
+              </TabsContent>
+              <TabsContent value="price-history" className="mt-0">
+                <PriceHistory />
+              </TabsContent>
+            </Tabs>
           </TabsContent>
 
         </Tabs>
