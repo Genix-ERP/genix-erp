@@ -20,6 +20,20 @@ import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { toast } from 'sonner';
 import ProductCombobox from '@/components/shared/ProductCombobox';
 
+// How much of the bulk one packaged piece consumes, relative to the bulk's unit
+// (m, m³, kg…). Priority: explicit weight (legacy size-factor) > full volume
+// L×W×H > length alone > 1. Must match backend CompleteSplitOutput (production_split.go).
+const splitPieceFactor = (product) => {
+  const w = parseFloat(product?.weight) || 0;
+  if (w > 0) return w;
+  const L = parseFloat(product?.length) || 0;
+  const W = parseFloat(product?.width) || 0;
+  const H = parseFloat(product?.height) || 0;
+  if (L > 0 && W > 0 && H > 0) return L * W * H;
+  if (L > 0) return L;
+  return 1;
+};
+
 export default function ProductionOrders() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
@@ -463,23 +477,28 @@ export default function ProductionOrders() {
 
   // Split output helpers
   const openSplitModal = async (orderId) => {
-    // Ensure the PO is in 'packaging' status before showing the modal
-    try {
-      await updateProductionOrder(orderId, {
-        current_stage: 'packaging',
-        status: 'packaging',
-        progress_percent: 95
-      });
-      if (selectedOrder?.id === orderId) {
-        setSelectedOrder(prev => ({ ...prev, current_stage: 'packaging', status: 'packaging' }));
+    const sourcePO = productionOrders.find(o => o.id === orderId) || selectedOrder;
+    // Move to 'packaging' only if not already there/finished. Re-setting
+    // 'packaging' on a packaging-status order is rejected by the backend
+    // (UpdateProductionOrder only allows draft/confirmed/in_progress/packaging),
+    // and a completed split order must not be reverted.
+    if (sourcePO?.status !== 'packaging' && sourcePO?.status !== 'completed') {
+      try {
+        await updateProductionOrder(orderId, {
+          current_stage: 'packaging',
+          status: 'packaging',
+          progress_percent: 95
+        });
+        if (selectedOrder?.id === orderId) {
+          setSelectedOrder(prev => ({ ...prev, current_stage: 'packaging', status: 'packaging' }));
+        }
+      } catch (error) {
+        console.error('Error moving to packaging:', error);
+        // Even if the status update fails, still try to show the modal
       }
-    } catch (error) {
-      console.error('Error moving to packaging:', error);
-      // Even if the status update fails, still try to show the modal
     }
     setSplitPoId(orderId);
     // Capture bulk produced quantity to constrain split totals
-    const sourcePO = orders.find(o => o.id === orderId) || selectedOrder;
     const bulkQty = parseFloat(
       sourcePO?.quantity_produced ?? sourcePO?.good_quantity ?? sourcePO?.quantity ?? 0
     ) || 0;
@@ -490,7 +509,8 @@ export default function ProductionOrders() {
   };
 
   // Live total of how much of the bulk has been allocated across split rows.
-  // Each output product's `weight` field is its size factor (meters/kg per piece).
+  // Each output piece consumes `splitPieceFactor` units of the bulk — derived
+  // from the product's weight or dimensions (see helper at top of file).
   const splitUsage = useMemo(() => {
     if (!splitBulkQty) return { used: 0, remaining: 0, over: false };
     const productList = inventoryProducts || products || [];
@@ -498,7 +518,7 @@ export default function ProductionOrders() {
       const qty = parseFloat(it.quantity) || 0;
       if (!qty || !it.product_id) return sum;
       const product = productList.find(p => p.id === it.product_id);
-      const factor = parseFloat(product?.weight) || 1;
+      const factor = splitPieceFactor(product);
       return sum + qty * factor;
     }, 0);
     return { used, remaining: splitBulkQty - used, over: used > splitBulkQty + 1e-6 };
@@ -513,7 +533,7 @@ export default function ProductionOrders() {
       const productList = inventoryProducts || products || [];
       const totalUsed = validItems.reduce((sum, it) => {
         const product = productList.find(p => p.id === it.product_id);
-        const factor = parseFloat(product?.weight) || 1;
+        const factor = splitPieceFactor(product);
         return sum + (parseFloat(it.quantity) || 0) * factor;
       }, 0);
       if (totalUsed > splitBulkQty + 1e-6) {

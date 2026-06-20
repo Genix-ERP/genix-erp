@@ -35,6 +35,22 @@ import apiClient from '@/api/client';
 import { format, differenceInMinutes, parseISO } from 'date-fns';
 import { parseSpreadsheetFile } from '@/components/shared/ImportExport';
 
+// How much of the bulk one packaged piece consumes, relative to the bulk's unit
+// (m, m³, kg…). Priority: explicit weight (legacy size-factor) > full volume
+// L×W×H > length alone > 1. So a 5.9 m piece with no weight consumes 5.9 per
+// unit; once width & height are filled it switches to true volume L×W×H.
+// Must match the backend CASE in CompleteSplitOutput (production_split.go).
+const splitPieceFactor = (product) => {
+  const w = parseFloat(product?.weight) || 0;
+  if (w > 0) return w;
+  const L = parseFloat(product?.length) || 0;
+  const W = parseFloat(product?.width) || 0;
+  const H = parseFloat(product?.height) || 0;
+  if (L > 0 && W > 0 && H > 0) return L * W * H;
+  if (L > 0) return L;
+  return 1;
+};
+
 const WORK_ORDER_STATUS = {
   pending: { color: 'bg-slate-100 text-slate-700 border-slate-200', icon: Clock },
   ready: { color: 'bg-blue-100 text-blue-700 border-blue-200', icon: Clock },
@@ -574,7 +590,7 @@ export default function ShopFloorControl({ isActive }) {
     if (splitBulkQty > 0) {
       const totalUsed = validItems.reduce((sum, it) => {
         const product = (products || []).find(p => p.id === it.product_id);
-        const factor = parseFloat(product?.weight) || 1;
+        const factor = splitPieceFactor(product);
         return sum + (parseFloat(it.quantity) || 0) * factor;
       }, 0);
       if (totalUsed > splitBulkQty + 1e-6) {
@@ -639,15 +655,15 @@ export default function ShopFloorControl({ isActive }) {
   const updateSplitItemMaterial = (itemIdx, matIdx, field, value) => setSplitItems(prev => prev.map((it, i) => i === itemIdx ? { ...it, materials: it.materials.map((m, mi) => mi === matIdx ? { ...m, [field]: value } : m) } : it));
 
   // Compute how much of the bulk has been allocated across split rows.
-  // Each output product's `weight` field is its size factor — meters per piece,
-  // kg per piece, etc. — relative to the bulk material's unit.
+  // Each output piece consumes `splitPieceFactor` units of the bulk — derived
+  // from the product's weight or dimensions (see helper at top of file).
   const splitUsage = useMemo(() => {
     if (!splitBulkQty) return { used: 0, remaining: 0, over: false };
     const used = splitItems.reduce((sum, it) => {
       const qty = parseFloat(it.quantity) || 0;
       if (!qty || !it.product_id) return sum;
       const product = (products || []).find(p => p.id === it.product_id);
-      const factor = parseFloat(product?.weight) || 1;
+      const factor = splitPieceFactor(product);
       return sum + qty * factor;
     }, 0);
     const remaining = splitBulkQty - used;
