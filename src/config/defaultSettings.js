@@ -21,7 +21,9 @@ export const DEFAULT_ADMIN_SETTINGS = {
         phone: '+998',
         website: ''
       },
-      logo_url: null
+      logo_url: null,
+      favicon_url: null,
+      browser_title: null
     },
     localization: {
       language: 'uz',

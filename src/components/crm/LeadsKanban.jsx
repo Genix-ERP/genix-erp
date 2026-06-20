@@ -699,9 +699,14 @@ export default function LeadsKanban({
                   <UserPlus className="w-4 h-4 mr-1" />{t('add_lead') || 'Add Lead'}
                 </Button>
               )}
-              <div className="text-center bg-blue-50 px-3 py-1 rounded-lg border border-blue-200">
-                <div className="text-lg font-bold text-blue-700">{kanbanState.leads.length}</div>
-                <div className="text-[10px] text-slate-600">{t('total_leads') || 'Total'}</div>
+              <div className="flex items-center gap-2.5 bg-blue-50 px-3.5 py-1.5 rounded-xl border border-blue-200/70 shadow-sm">
+                <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-blue-100 text-blue-600">
+                  <Target className="w-4 h-4" />
+                </div>
+                <div className="flex flex-col leading-none">
+                  <span className="text-base font-bold text-blue-700 tabular-nums">{kanbanState.leads.length}</span>
+                  <span className="text-[11px] font-medium text-slate-500 mt-0.5">{t('total_leads') || 'Total'}</span>
+                </div>
               </div>
             </div>
           </div>
