@@ -26,8 +26,6 @@ export default function CustomerMetrics({ customers, leads, opportunities, langu
     {
       title: t('total_customers'),
       value: metrics.totalCustomers.toLocaleString(),
-      change: "+12%",
-      changeText: t('vs_last_month'),
       icon: Users,
       iconBg: "bg-blue-100",
       iconColor: "text-blue-600",
@@ -36,8 +34,6 @@ export default function CustomerMetrics({ customers, leads, opportunities, langu
     {
       title: t('total_leads'),
       value: metrics.totalLeads.toLocaleString(),
-      change: "+8%",
-      changeText: t('vs_last_month'),
       icon: UserPlus,
       iconBg: "bg-green-100",
       iconColor: "text-green-600",
@@ -46,8 +42,6 @@ export default function CustomerMetrics({ customers, leads, opportunities, langu
     {
       title: t('avg_deal_size'),
       value: Math.round(metrics.avgDealSize).toLocaleString(),
-      change: "+5%",
-      changeText: t('vs_last_month'),
       icon: TrendingUp,
       iconBg: "bg-purple-100",
       iconColor: "text-purple-600",
@@ -71,10 +65,6 @@ export default function CustomerMetrics({ customers, leads, opportunities, langu
               <div className={`${metric.iconBg} p-3 rounded-xl shadow-sm group-hover:scale-110 transition-transform duration-300`}>
                 <metric.icon className={`w-6 h-6 ${metric.iconColor}`} />
               </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-green-600">{metric.change}</span>
-              <span className="text-xs text-slate-500">{metric.changeText}</span>
             </div>
             <div className={`absolute inset-0 bg-gradient-to-br ${metric.gradient} opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10`}></div>
           </CardContent>

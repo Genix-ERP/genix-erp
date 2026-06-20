@@ -20,17 +20,12 @@ import {
 } from "@/components/ui/table";
 import {
   TrendingUp,
-  TrendingDown,
   Award,
   AlertTriangle,
   Clock,
-  DollarSign,
-  Package,
   ThumbsUp,
   Star,
   Search,
-  BarChart3,
-  Target,
   Zap
 } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -65,29 +60,20 @@ export default function SupplierPerformance() {
       const onTimeRate = totalOrders > 0 ? (onTimeDeliveries / Math.max(receivedOrders.length, 1)) * 100 : 100;
       const totalSpend = supplierOrders.reduce((sum, po) => sum + (po.total_amount || 0), 0);
 
-      // Use supplier's existing rating or default
-      const rating = supplier.rating || supplier.overall_rating || 4.0;
-      const qualityScore = supplier.quality_score || (rating / 5) * 100;
-      const defectRate = supplier.defect_rate || 100 - qualityScore;
-
-      // Calculate overall performance score
-      const performanceScore = Math.round((onTimeRate * 0.4) + (qualityScore * 0.4) + (rating * 4));
+      // Use supplier's existing rating (real data only)
+      const rating = supplier.rating || supplier.overall_rating || null;
 
       return {
         id: supplier.id,
         vendor_name: supplier.name,
         rating: rating,
-        performance_score: Math.min(performanceScore, 100),
         on_time_rate: onTimeRate,
         on_time_deliveries: onTimeDeliveries,
         total_orders: totalOrders,
-        quality_score: qualityScore,
-        defect_rate: defectRate,
         total_spend: totalSpend,
-        avg_lead_time: supplier.lead_time_days || supplier.avg_lead_time || 7,
+        avg_lead_time: supplier.lead_time_days || supplier.avg_lead_time || null,
         issues: supplier.open_issues || 0,
-        returns: supplier.returns_count || 0,
-        trend: performanceScore >= 80 ? 'up' : 'down'
+        returns: supplier.returns_count || 0
       };
     });
   }, [contextSuppliers, purchaseOrders]);
@@ -104,38 +90,18 @@ export default function SupplierPerformance() {
 
     if (performanceFilter !== 'all') {
       if (performanceFilter === 'excellent') {
-        filtered = filtered.filter(s => s.performance_score >= 90);
+        filtered = filtered.filter(s => s.on_time_rate >= 90);
       } else if (performanceFilter === 'good') {
-        filtered = filtered.filter(s => s.performance_score >= 80 && s.performance_score < 90);
+        filtered = filtered.filter(s => s.on_time_rate >= 80 && s.on_time_rate < 90);
       } else if (performanceFilter === 'fair') {
-        filtered = filtered.filter(s => s.performance_score >= 70 && s.performance_score < 80);
+        filtered = filtered.filter(s => s.on_time_rate >= 70 && s.on_time_rate < 80);
       } else if (performanceFilter === 'poor') {
-        filtered = filtered.filter(s => s.performance_score < 70);
+        filtered = filtered.filter(s => s.on_time_rate < 70);
       }
     }
 
     return filtered;
   }, [suppliers, searchTerm, performanceFilter]);
-
-  const getPerformanceBadge = (score) => {
-    if (score >= 90) {
-      return <Badge className="bg-green-600">Excellent</Badge>;
-    } else if (score >= 80) {
-      return <Badge className="bg-blue-600">Good</Badge>;
-    } else if (score >= 70) {
-      return <Badge className="bg-yellow-600">Fair</Badge>;
-    } else {
-      return <Badge variant="destructive">Poor</Badge>;
-    }
-  };
-
-  const getTrendIcon = (trend) => {
-    if (trend === 'up') {
-      return <TrendingUp className="w-4 h-4 text-green-600" />;
-    } else {
-      return <TrendingDown className="w-4 h-4 text-red-600" />;
-    }
-  };
 
   const getRatingStars = (rating) => {
     const stars = [];
@@ -156,20 +122,12 @@ export default function SupplierPerformance() {
   };
 
   // Calculate statistics
-  const avgPerformanceScore = suppliers.length > 0
-    ? suppliers.reduce((sum, s) => sum + s.performance_score, 0) / suppliers.length
-    : 0;
-
   const avgOnTimeRate = suppliers.length > 0
     ? suppliers.reduce((sum, s) => sum + s.on_time_rate, 0) / suppliers.length
     : 0;
 
-  const avgQualityScore = suppliers.length > 0
-    ? suppliers.reduce((sum, s) => sum + s.quality_score, 0) / suppliers.length
-    : 0;
-
-  const topPerformers = suppliers.filter(s => s.performance_score >= 90).length;
-  const needsImprovement = suppliers.filter(s => s.performance_score < 80).length;
+  const totalSpendAll = suppliers.reduce((sum, s) => sum + s.total_spend, 0);
+  const totalIssues = suppliers.reduce((sum, s) => sum + s.issues, 0);
 
   return (
     <div className="space-y-6">
@@ -202,17 +160,11 @@ export default function SupplierPerformance() {
         <Card>
           <CardHeader className="pb-2">
             <CardDescription className="flex items-center gap-2">
-              <Target className="w-4 h-4" />
-              {t('avg_performance_score') || 'Avg Performance'}
+              <Award className="w-4 h-4" />
+              {t('suppliers') || 'Suppliers'}
             </CardDescription>
-            <CardTitle className="text-3xl">{avgPerformanceScore.toFixed(1)}%</CardTitle>
+            <CardTitle className="text-3xl">{suppliers.length}</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-sm text-green-600 flex items-center gap-1">
-              <TrendingUp className="w-3 h-3" />
-              +2.3% {t('vs_last_month') || 'vs last month'}
-            </div>
-          </CardContent>
         </Card>
 
         <Card>
@@ -233,31 +185,21 @@ export default function SupplierPerformance() {
         <Card>
           <CardHeader className="pb-2">
             <CardDescription className="flex items-center gap-2">
-              <ThumbsUp className="w-4 h-4" />
-              {t('quality_score') || 'Quality Score'}
+              <TrendingUp className="w-4 h-4" />
+              {t('total_spend') || 'Total Spend'}
             </CardDescription>
-            <CardTitle className="text-3xl">{avgQualityScore.toFixed(1)}%</CardTitle>
+            <CardTitle className="text-3xl">{(totalSpendAll / 1000000).toFixed(1)}M</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-sm text-muted-foreground">
-              {suppliers.reduce((sum, s) => sum + s.defect_rate, 0).toFixed(1) / suppliers.length}% {t('avg_defect_rate') || 'avg defect rate'}
-            </div>
-          </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2">
             <CardDescription className="flex items-center gap-2">
-              <Award className="w-4 h-4" />
-              {t('top_performers') || 'Top Performers'}
+              <AlertTriangle className="w-4 h-4" />
+              {t('issues') || 'Issues'}
             </CardDescription>
-            <CardTitle className="text-3xl">{topPerformers}</CardTitle>
+            <CardTitle className="text-3xl">{totalIssues}</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-sm text-orange-600">
-              {needsImprovement} {t('need_improvement') || 'need improvement'}
-            </div>
-          </CardContent>
         </Card>
       </div>
 
@@ -299,13 +241,10 @@ export default function SupplierPerformance() {
                 <TableRow>
                   <TableHead>{t('supplier') || 'Supplier'}</TableHead>
                   <TableHead className="text-center">{t('rating') || 'Rating'}</TableHead>
-                  <TableHead className="text-center">{t('performance') || 'Performance'}</TableHead>
                   <TableHead className="text-center">{t('on_time') || 'On-Time'}</TableHead>
-                  <TableHead className="text-center">{t('quality') || 'Quality'}</TableHead>
                   <TableHead className="text-right">{t('total_spend') || 'Total Spend'}</TableHead>
                   <TableHead className="text-center">{t('lead_time') || 'Lead Time'}</TableHead>
                   <TableHead className="text-center">{t('issues') || 'Issues'}</TableHead>
-                  <TableHead className="text-center">{t('trend') || 'Trend'}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -313,16 +252,14 @@ export default function SupplierPerformance() {
                   <TableRow key={supplier.id}>
                     <TableCell className="font-medium">{supplier.vendor_name}</TableCell>
                     <TableCell className="text-center">
-                      <div className="flex flex-col items-center gap-1">
-                        {getRatingStars(supplier.rating)}
-                        <span className="text-xs text-muted-foreground">{supplier.rating.toFixed(1)}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <div className="flex flex-col items-center gap-1">
-                        {getPerformanceBadge(supplier.performance_score)}
-                        <span className="text-sm font-semibold">{supplier.performance_score}%</span>
-                      </div>
+                      {supplier.rating != null ? (
+                        <div className="flex flex-col items-center gap-1">
+                          {getRatingStars(supplier.rating)}
+                          <span className="text-xs text-muted-foreground">{supplier.rating.toFixed(1)}</span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-center">
                       <div className="flex flex-col items-center gap-1">
@@ -335,19 +272,13 @@ export default function SupplierPerformance() {
                         <span className="text-xs">{supplier.on_time_rate.toFixed(1)}%</span>
                       </div>
                     </TableCell>
-                    <TableCell className="text-center">
-                      <div className="flex flex-col items-center gap-1">
-                        <span className="text-sm font-semibold">{supplier.quality_score}%</span>
-                        <span className="text-xs text-red-600">{supplier.defect_rate}% {t('defects') || 'defects'}</span>
-                      </div>
-                    </TableCell>
                     <TableCell className="text-right font-semibold">
                       {(supplier.total_spend / 1000000).toFixed(1)}M
                     </TableCell>
                     <TableCell className="text-center">
                       <div className="flex flex-col items-center gap-1">
                         <Clock className="w-4 h-4 text-muted-foreground" />
-                        <span className="text-sm">{supplier.avg_lead_time} {t('days') || 'days'}</span>
+                        <span className="text-sm">{supplier.avg_lead_time != null ? `${supplier.avg_lead_time} ${t('days') || 'days'}` : '—'}</span>
                       </div>
                     </TableCell>
                     <TableCell className="text-center">
@@ -358,9 +289,6 @@ export default function SupplierPerformance() {
                         <span className="text-xs text-muted-foreground">{supplier.returns} {t('returns') || 'returns'}</span>
                       </div>
                     </TableCell>
-                    <TableCell className="text-center">
-                      {getTrendIcon(supplier.trend)}
-                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -369,107 +297,43 @@ export default function SupplierPerformance() {
         </CardContent>
       </Card>
 
-      {/* Key Performance Indicators */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BarChart3 className="w-5 h-5" />
-              {t('performance_distribution') || 'Performance Distribution'}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div>
-                <div className="flex justify-between mb-2">
-                  <span className="text-sm">{t('excellent') || 'Excellent'} (90+)</span>
-                  <span className="text-sm font-semibold">{suppliers.filter(s => s.performance_score >= 90).length} {t('suppliers') || 'suppliers'}</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-3">
-                  <div
-                    className="bg-green-600 h-3 rounded-full"
-                    style={{ width: `${(suppliers.filter(s => s.performance_score >= 90).length / suppliers.length) * 100}%` }}
-                  ></div>
-                </div>
-              </div>
-              <div>
-                <div className="flex justify-between mb-2">
-                  <span className="text-sm">{t('good') || 'Good'} (80-89)</span>
-                  <span className="text-sm font-semibold">{suppliers.filter(s => s.performance_score >= 80 && s.performance_score < 90).length} {t('suppliers') || 'suppliers'}</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-3">
-                  <div
-                    className="bg-blue-600 h-3 rounded-full"
-                    style={{ width: `${(suppliers.filter(s => s.performance_score >= 80 && s.performance_score < 90).length / suppliers.length) * 100}%` }}
-                  ></div>
-                </div>
-              </div>
-              <div>
-                <div className="flex justify-between mb-2">
-                  <span className="text-sm">{t('fair') || 'Fair'} (70-79)</span>
-                  <span className="text-sm font-semibold">{suppliers.filter(s => s.performance_score >= 70 && s.performance_score < 80).length} {t('suppliers') || 'suppliers'}</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-3">
-                  <div
-                    className="bg-yellow-600 h-3 rounded-full"
-                    style={{ width: `${(suppliers.filter(s => s.performance_score >= 70 && s.performance_score < 80).length / suppliers.length) * 100}%` }}
-                  ></div>
-                </div>
-              </div>
-              <div>
-                <div className="flex justify-between mb-2">
-                  <span className="text-sm">{t('poor') || 'Poor'} (&lt;70)</span>
-                  <span className="text-sm font-semibold">{suppliers.filter(s => s.performance_score < 70).length} {t('suppliers') || 'suppliers'}</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-3">
-                  <div
-                    className="bg-red-600 h-3 rounded-full"
-                    style={{ width: `${(suppliers.filter(s => s.performance_score < 70).length / suppliers.length) * 100}%` }}
-                  ></div>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Zap className="w-5 h-5" />
-              {t('action_items') || 'Action Items'}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {suppliers
-                .filter(s => s.performance_score < 80 || s.issues > 5)
-                .slice(0, 5)
-                .map(supplier => (
-                  <div key={supplier.id} className="flex items-start gap-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
-                    <AlertTriangle className="w-5 h-5 text-orange-600 mt-0.5" />
-                    <div className="flex-1">
-                      <h4 className="font-semibold text-sm">{supplier.vendor_name}</h4>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {supplier.performance_score < 80 && `Performance: ${supplier.performance_score}%. `}
-                        {supplier.issues > 5 && `${supplier.issues} open issues. `}
-                        {supplier.defect_rate > 5 && `High defect rate: ${supplier.defect_rate}%.`}
-                      </p>
-                    </div>
-                    <Button size="sm" variant="outline">
-                      {t('review') || 'Review'}
-                    </Button>
+      {/* Action Items */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Zap className="w-5 h-5" />
+            {t('action_items') || 'Action Items'}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            {suppliers
+              .filter(s => (s.total_orders > 0 && s.on_time_rate < 80) || s.issues > 5)
+              .slice(0, 5)
+              .map(supplier => (
+                <div key={supplier.id} className="flex items-start gap-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                  <AlertTriangle className="w-5 h-5 text-orange-600 mt-0.5" />
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-sm">{supplier.vendor_name}</h4>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {supplier.total_orders > 0 && supplier.on_time_rate < 80 && `${t('on_time_delivery') || 'On-time delivery'}: ${supplier.on_time_rate.toFixed(1)}%. `}
+                      {supplier.issues > 5 && `${supplier.issues} ${t('open_issues') || 'open issues'}. `}
+                    </p>
                   </div>
-                ))}
-              {suppliers.filter(s => s.performance_score < 80 || s.issues > 5).length === 0 && (
-                <div className="text-center py-8 text-muted-foreground">
-                  <ThumbsUp className="w-8 h-8 mx-auto mb-2" />
-                  <p>{t('no_action_items') || 'All suppliers performing well!'}</p>
+                  <Button size="sm" variant="outline">
+                    {t('review') || 'Review'}
+                  </Button>
                 </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+              ))}
+            {suppliers.filter(s => (s.total_orders > 0 && s.on_time_rate < 80) || s.issues > 5).length === 0 && (
+              <div className="text-center py-8 text-muted-foreground">
+                <ThumbsUp className="w-8 h-8 mx-auto mb-2" />
+                <p>{t('no_action_items') || 'All suppliers performing well!'}</p>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

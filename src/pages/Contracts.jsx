@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useModules } from '@/components/contexts/ModulesContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,10 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, FileText, AlertTriangle, CheckCircle, Clock, Brain, Bell, Target, Lightbulb, Eye, Edit2, Trash2, Building2 } from 'lucide-react';
+import { Plus, Search, FileText, AlertTriangle, CheckCircle, Clock, Bell, Eye, Edit2, Trash2, Building2 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { ru, uz } from 'date-fns/locale';
-import { analyzeContracts } from '@/api/services/aiAnalytics';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 
@@ -31,8 +30,6 @@ export default function Contracts() {
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
   const { formatCurrency } = useCurrencyFormatter();
 
-  // AI Analysis
-  const contractAnalysis = useMemo(() => analyzeContracts(contracts, language), [contracts, language]);
   const [filteredContracts, setFilteredContracts] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -432,76 +429,6 @@ Provide only analysis results based on the numbers and specific contract data, n
             </CardContent>
           </Card>
         </div>
-
-        {/* AI Insights Panel */}
-        {(contractAnalysis.insights.length > 0 || contractAnalysis.recommendations.length > 0) && (
-          <Card className="bg-gradient-to-r from-rose-50 to-pink-50 border-rose-200/50">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Brain className="w-5 h-5 text-rose-600" />
-                {t('ai_contract_insights')}
-                <Badge className="bg-rose-100 text-rose-700 text-xs">{t('live')}</Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {contractAnalysis.insights.slice(0, 3).map((insight, index) => (
-                  <div key={index} className="bg-white rounded-lg p-4 shadow-sm border border-rose-100">
-                    <div className="flex items-start gap-3">
-                      {insight.type === 'positive' ? (
-                        <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
-                      ) : insight.type === 'warning' ? (
-                        <AlertTriangle className="w-5 h-5 text-orange-500 mt-0.5" />
-                      ) : (
-                        <Target className="w-5 h-5 text-blue-500 mt-0.5" />
-                      )}
-                      <div>
-                        <h4 className="font-medium text-slate-900 text-sm">{insight.title}</h4>
-                        <p className="text-xs text-slate-600 mt-0.5">{insight.description}</p>
-                        {insight.metric && (
-                          <p className="text-lg font-bold text-rose-600 mt-1">{insight.metric}</p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {contractAnalysis.recommendations.length > 0 && (
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {contractAnalysis.recommendations.map((rec, index) => {
-                    // Map recommendation actions to handlers
-                    const getActionHandler = (action) => {
-                      const actionKey = action.toLowerCase();
-                      if (actionKey.includes('renewal') || actionKey.includes('yangilash')) {
-                        return handleInitiateRenewals;
-                      }
-                      if (actionKey.includes('review') || actionKey.includes('ko\'rib chiqish')) {
-                        return handleContractReview;
-                      }
-                      return null;
-                    };
-
-                    const handler = getActionHandler(rec.action);
-
-                    return (
-                      <button
-                        key={index}
-                        onClick={handler}
-                        disabled={!handler}
-                        className={`flex items-center gap-2 text-xs bg-white rounded-full px-3 py-1.5 border border-rose-100 transition-all ${
-                          handler ? 'hover:bg-rose-50 hover:border-rose-300 cursor-pointer' : 'cursor-default'
-                        }`}
-                      >
-                        <Lightbulb className="w-3 h-3 text-yellow-500" />
-                        <span className="text-slate-700">{rec.action}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
 
         {/* Contracts List */}
         <Card className="bg-white/80 backdrop-blur-sm">

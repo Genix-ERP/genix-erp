@@ -25,6 +25,15 @@ const DEFAULT_TYPE_COLORS = {
   hidden_work: 'bg-amber-100 text-amber-700',
 };
 
+// Format an ISO date string (YYYY-MM-DD, optionally with time) as dd.mm.yyyy
+// for display. Returns '' for empty/invalid input. Used only for display —
+// the create form keeps ISO because <input type="date"> requires it.
+const fmtDate = (s) => {
+  if (!s) return '';
+  const p = String(s).slice(0, 10).split('-');
+  return p.length === 3 ? `${p[2]}.${p[1]}.${p[0]}` : String(s);
+};
+
 const STATE_COLORS = {
   draft: 'bg-slate-100 text-slate-700',
   submitted: 'bg-yellow-100 text-yellow-700',
@@ -328,7 +337,7 @@ const ActsTab = ({ project }) => {
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
               <div><p className="text-slate-500">{t('type') || 'Turi'}</p><p className="font-medium">{TYPE_LABELS[selectedAct.act_type]}</p></div>
-              {selectedAct.period_from && <div><p className="text-slate-500">{t('period') || 'Davr'}</p><p className="font-medium">{selectedAct.period_from} — {selectedAct.period_to}</p></div>}
+              {selectedAct.period_from && <div><p className="text-slate-500">{t('period') || 'Davr'}</p><p className="font-medium">{fmtDate(selectedAct.period_from)} — {fmtDate(selectedAct.period_to)}</p></div>}
               {selectedAct.subcontract_name && <div><p className="text-slate-500">{t('subcontractor') || 'Subpudratchi'}</p><p className="font-medium">{selectedAct.subcontract_name}</p></div>}
               <div><p className="text-slate-500">{t('amount') || 'Summa'}</p><p className="font-medium">{formatCurrency(selectedAct.amount_total || 0)}</p></div>
             </div>
@@ -513,7 +522,7 @@ const ActsTab = ({ project }) => {
                       <tr key={act.id} className="border-b hover:bg-slate-50">
                         <td className="py-2 px-3 font-medium">{act.name}{act.act_number ? ` #${act.act_number}` : ''}</td>
                         <td className="py-2 px-3"><Badge className={TYPE_COLORS[act.act_type]}>{TYPE_LABELS[act.act_type] || act.act_type}</Badge></td>
-                        <td className="py-2 px-3 whitespace-nowrap">{act.period_from ? `${act.period_from} — ${act.period_to}` : '—'}</td>
+                        <td className="py-2 px-3 whitespace-nowrap">{act.period_from ? `${fmtDate(act.period_from)} — ${fmtDate(act.period_to)}` : '—'}</td>
                         <td className="py-2 px-3">{act.subcontract_name || '—'}</td>
                         <td className="py-2 px-3 text-right font-medium whitespace-nowrap">{formatCurrency(act.amount_total || 0)}</td>
                         <td className="py-2 px-3"><Badge className={STATE_COLORS[act.state]}>{STATE_LABELS[act.state] || act.state}</Badge></td>

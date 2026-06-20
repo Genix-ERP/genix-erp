@@ -265,6 +265,51 @@ export const inventoryService = {
     return response.data.data;
   },
 
+  // As-of date stock report. Replays inventory_transactions on the
+  // backend up to `asOf` (YYYY-MM-DD) and returns per-product /
+  // per-warehouse quantity + weighted-average cost. Soft-deleted
+  // products are included by default — they're the whole reason this
+  // endpoint exists (so a user can see SKUs that existed on that day
+  // but have since been removed).
+  //
+  // opts:
+  //   warehouse_id    — uuid, filter to a single warehouse
+  //   product_id      — uuid, filter to a single product
+  //   include_deleted — bool, default true
+  async getStockAtDate(asOf, opts = {}) {
+    const params = { as_of: asOf, ...opts };
+    Object.keys(params).forEach((k) => {
+      if (params[k] === undefined || params[k] === null || params[k] === '' || params[k] === 'all') {
+        delete params[k];
+      }
+    });
+    const response = await apiClient.get('/inventory/stock-at-date', { params });
+    return response.data.data;
+  },
+
+  // Per-(product, warehouse) turnover sheet for a date range. The backend
+  // replays inventory_transactions and returns, per row: opening balance
+  // (before date_from), kirim/chiqim during the period, closing balance,
+  // weighted-average cost and closing value. Powers the "Ombor holati"
+  // report sub-tab. Soft-deleted products are included by default.
+  //
+  // params:
+  //   date_from       — YYYY-MM-DD (required) period start, inclusive
+  //   date_to         — YYYY-MM-DD (required) period end, inclusive
+  //   warehouse_id    — uuid, filter to a single warehouse
+  //   product_id      — uuid, filter to a single product
+  //   include_deleted — bool, default true
+  async getInventoryTurnover(params = {}) {
+    const clean = { include_deleted: true, ...params };
+    Object.keys(clean).forEach((k) => {
+      if (clean[k] === undefined || clean[k] === null || clean[k] === '' || clean[k] === 'all') {
+        delete clean[k];
+      }
+    });
+    const response = await apiClient.get('/inventory/turnover', { params: clean });
+    return response.data.data;
+  },
+
   async getInventoryValuation() {
     const response = await apiClient.get('/inventory/valuation');
     return response.data.data;

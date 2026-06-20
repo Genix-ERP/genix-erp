@@ -1,5 +1,5 @@
 // Integration wrappers that use Go backend API
-// These provide a similar interface to the old base44 integrations
+// Expose helper functions (AI, file upload, email) over backend endpoints
 
 import { aiService } from './services/ai';
 import apiClient from './client';
@@ -127,7 +127,7 @@ export const Core = {
   },
 
   // Email functionality (placeholder - would need email backend)
-  SendEmail: async (options) => {
+  SendEmail: async () => {
     // Placeholder - would need email service implementation
     return { success: true, message: 'Email functionality not yet implemented' };
   },
@@ -148,13 +148,13 @@ export const Core = {
   },
 
   // Image generation (placeholder)
-  GenerateImage: async (options) => {
+  GenerateImage: async () => {
     // Placeholder - image generation not yet implemented
     return { success: false, message: 'Image generation not yet implemented' };
   },
 
   // Extract data from file (placeholder)
-  ExtractDataFromUploadedFile: async (options) => {
+  ExtractDataFromUploadedFile: async () => {
     // Placeholder - file extraction not yet implemented
     return { success: false, message: 'File extraction not yet implemented' };
   },

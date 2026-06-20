@@ -162,9 +162,11 @@ export default function GeneralLedgerView() {
   const accountTypeLabel = (type) => {
     const labels = {
       asset: t('asset') || 'Asset',
+      contra_asset: t('contra_asset') || 'Depreciation',
       liability: t('liability') || 'Liability',
       equity: t('equity') || 'Equity',
       income: t('income') || 'Income',
+      revenue: t('revenue') || 'Revenue',
       expense: t('expense') || 'Expense',
     };
     return labels[type] || type;
@@ -173,9 +175,11 @@ export default function GeneralLedgerView() {
   const accountTypeColor = (type) => {
     const colors = {
       asset: 'bg-blue-100 text-blue-800',
+      contra_asset: 'bg-slate-100 text-slate-800',
       liability: 'bg-red-100 text-red-800',
       equity: 'bg-purple-100 text-purple-800',
       income: 'bg-green-100 text-green-800',
+      revenue: 'bg-green-100 text-green-800',
       expense: 'bg-orange-100 text-orange-800',
     };
     return colors[type] || 'bg-gray-100 text-gray-800';

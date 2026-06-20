@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useModules } from '@/components/contexts/ModulesContext';
 import { usePermissions } from "@/hooks/usePermissions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Search, DollarSign, Users, Calculator, TrendingUp, Brain, Download, AlertTriangle, CheckCircle, Target, Lightbulb, Edit2, Trash2, CreditCard, UserCircle, Printer, Settings as SettingsIcon, History, FileDown, Loader2, X, RotateCcw, Percent, ChevronRight, ChevronDown, Wallet, FileMinus } from 'lucide-react';
+import { Plus, Search, DollarSign, Users, Calculator, TrendingUp, Download, AlertTriangle, Edit2, Trash2, CreditCard, UserCircle, Printer, Settings as SettingsIcon, History, FileDown, Loader2, X, RotateCcw, Percent, ChevronRight, ChevronDown, Wallet, FileMinus } from 'lucide-react';
 import { hrService } from '@/api/services/hr';
 import { employeeTaxesService } from '@/api/services/employeeTaxes';
 import { toast } from 'sonner';
@@ -18,7 +18,6 @@ import EmployeeLoans from '@/components/payroll/EmployeeLoans';
 import EmployeePortal from '@/components/payroll/EmployeePortal';
 import { format } from 'date-fns';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { analyzePayroll } from '@/api/services/aiAnalytics';
 import apiClient from '@/api/client';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -42,8 +41,6 @@ export default function Payroll() {
   const { getSetting } = useAdminSettings();
   const { activeCompany } = useCompany();
 
-  // AI Analysis
-  const payrollAnalysis = useMemo(() => analyzePayroll(payrolls, employees, language), [payrolls, employees, language]);
   const [filteredPayrolls, setFilteredPayrolls] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -545,40 +542,6 @@ export default function Payroll() {
       updatePayroll(payrollToDelete.id, { status: 'cancelled' });
       setShowDeleteDialog(false);
       setPayrollToDelete(null);
-    }
-  };
-
-  const handleRecommendationClick = (recommendation) => {
-    // Generate proper prompt based on recommendation type and language
-    let prompt = '';
-
-    if (recommendation.action.includes('Tax Compliance') || recommendation.action.includes('Soliq muvofiqligini') || recommendation.action.includes('налогового соответствия')) {
-      // Tax compliance review prompt
-      if (language === 'uz') {
-        prompt = 'Ish haqi soliqlarini tekshirishda menga yordam bering. Barcha soliq ushlab qolinmalari to\'g\'ri ekanligiga qanday ishonch hosil qilishim mumkin?';
-      } else if (language === 'ru') {
-        prompt = 'Помогите мне проверить налоги на зарплату. Как я могу убедиться, что все налоговые удержания правильные?';
-      } else {
-        prompt = 'Help me review payroll taxes. How can I ensure all tax withholdings are accurate?';
-      }
-    } else if (recommendation.action.includes('Process') || recommendation.action.includes('qayta ishlash') || recommendation.action.includes('Обработка')) {
-      // Process pending payroll prompt
-      const pending = payrolls.filter(p => p.status === 'approved').length;
-      if (language === 'uz') {
-        prompt = `Menda ${pending} ta kutilayotgan ish haqi yozuvi bor. Ularni qanday qayta ishlashim kerak?`;
-      } else if (language === 'ru') {
-        prompt = `У меня ${pending} записей о зарплате в ожидании. Как мне их обработать?`;
-      } else {
-        prompt = `I have ${pending} pending payroll records. How should I process them?`;
-      }
-    } else {
-      // Generic prompt
-      prompt = recommendation.action;
-    }
-
-    // Open AI chatbox with the prompt
-    if (window.openAIChat) {
-      window.openAIChat(prompt);
     }
   };
 
@@ -1289,72 +1252,13 @@ export default function Payroll() {
           </Card>
         </div>
 
-        {/* AI Insights + Monthly Payroll — side-by-side layout so the
-           insights panel and the trend chart share the same horizontal
-           band. Collapses to a single column on tablets/phones. */}
-        {((payrollAnalysis.insights.length > 0 || payrollAnalysis.recommendations.length > 0) || chartData.length > 0) && (
-          <div className={`grid grid-cols-1 ${
-            (payrollAnalysis.insights.length > 0 || payrollAnalysis.recommendations.length > 0) && chartData.length > 0
-              ? 'lg:grid-cols-2'
-              : ''
-          } gap-4`}>
-            {(payrollAnalysis.insights.length > 0 || payrollAnalysis.recommendations.length > 0) && (
-              <Card className="bg-gradient-to-r from-purple-50 to-indigo-50 border-purple-200/50">
-                <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center gap-2 text-lg">
-                    <Brain className="w-5 h-5 text-purple-600" />
-                    {t('ai_payroll_insights')}
-                    <Badge className="bg-purple-100 text-purple-700 text-xs">{t('live')}</Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {payrollAnalysis.insights.slice(0, 4).map((insight, index) => (
-                      <div key={index} className="bg-white rounded-lg p-3 shadow-sm border border-purple-100">
-                        <div className="flex items-start gap-2.5">
-                          {insight.type === 'positive' ? (
-                            <CheckCircle className="w-5 h-5 text-green-500 mt-0.5 shrink-0" />
-                          ) : insight.type === 'warning' ? (
-                            <AlertTriangle className="w-5 h-5 text-orange-500 mt-0.5 shrink-0" />
-                          ) : (
-                            <Target className="w-5 h-5 text-blue-500 mt-0.5 shrink-0" />
-                          )}
-                          <div className="min-w-0">
-                            <h4 className="font-medium text-slate-900 text-sm">{insight.title}</h4>
-                            <p className="text-xs text-slate-600 mt-0.5">{insight.description}</p>
-                            {insight.metric && (
-                              <p className="text-base font-bold text-purple-600 mt-1">{insight.metric}</p>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  {payrollAnalysis.recommendations.length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {payrollAnalysis.recommendations.map((rec, index) => (
-                        <button
-                          key={index}
-                          onClick={() => handleRecommendationClick(rec)}
-                          className="flex items-center gap-2 text-xs bg-white rounded-full px-3 py-1.5 border border-purple-100 hover:bg-purple-50 hover:border-purple-300 transition-colors cursor-pointer"
-                          title={t('ask_ai_about_this')}
-                        >
-                          <Lightbulb className="w-3 h-3 text-yellow-500" />
-                          <span className="text-slate-700">{rec.action}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Monthly Payroll — smooth gradient area chart matching the
-               main Dashboard's revenue chart. Full-month axis, soft
-               grid, and a custom tooltip card with the formatted
-               amount. Up to 12 trailing months for a proper
-               year-over-year read. */}
-            {chartData.length > 0 && (
+        {/* Monthly Payroll — smooth gradient area chart matching the
+            main Dashboard's revenue chart. Full-month axis, soft
+            grid, and a custom tooltip card with the formatted
+            amount. Up to 12 trailing months for a proper
+            year-over-year read. */}
+        {chartData.length > 0 && (
+          <div className="grid grid-cols-1 gap-4">
               <Card className="bg-white/80 backdrop-blur-sm">
                 <CardHeader className="pb-3">
                   <CardTitle className="flex items-center gap-2 text-lg">
@@ -1417,7 +1321,6 @@ export default function Payroll() {
                   </ResponsiveContainer>
                 </CardContent>
               </Card>
-            )}
           </div>
         )}
 

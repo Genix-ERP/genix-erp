@@ -246,10 +246,6 @@ export default function DirectorDashboard() {
       <div className="flex items-center justify-between p-3 px-5 bg-white border border-[#E8E8E8] rounded-xl mb-3">
         <div className="flex items-center gap-3">
           <div className="text-sm font-semibold text-[#1a1a1a]">{t('Direktor paneli', 'Панель директора', 'Director Dashboard')}</div>
-          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-[#E1F5EE] rounded-full">
-            <div className="w-1.5 h-1.5 rounded-full bg-[#1D9E75] animate-pulse" />
-            <span className="text-[11px] text-[#085041] font-semibold">Live</span>
-          </div>
         </div>
         <span className="text-[11px] text-[#999]">
           {clock.toLocaleString(language === 'ru' ? 'ru-RU' : language === 'uz' ? 'uz-UZ' : 'en-US', {
@@ -478,7 +474,6 @@ export default function DirectorDashboard() {
         <div className="lg:col-span-2 bg-white border border-[#E8E8E8] rounded-xl p-3.5">
           <div className="flex justify-between items-center mb-2">
             <div className="text-xs font-semibold text-[#1a1a1a]">{t('Oylar bo‘yicha tushum', 'Выручка по месяцам', 'Revenue by month')}</div>
-            <span className="text-[9px] px-2 py-0.5 rounded-full bg-[#E1F5EE] text-[#0F6E56] font-medium">Live</span>
           </div>
           <div className="h-[200px]">
             <ResponsiveContainer width="100%" height="100%">
@@ -544,7 +539,6 @@ export default function DirectorDashboard() {
           <div className="lg:col-span-2 bg-white border border-[#E8E8E8] rounded-xl p-3.5">
             <div className="flex justify-between items-center mb-2">
               <div className="text-xs font-semibold text-[#1a1a1a]">{t('Sklad qoldiqlari', 'Остатки склада', 'Warehouse stock')}</div>
-              <span className="text-[9px] px-2 py-0.5 rounded-full bg-[#E1F5EE] text-[#0F6E56] font-medium">Live</span>
             </div>
             <div className="h-[220px]">
               {(() => {
@@ -677,7 +671,6 @@ export default function DirectorDashboard() {
         <div className="bg-white border border-[#E8E8E8] rounded-xl p-3.5 mb-2.5">
           <div className="flex justify-between items-center mb-2">
             <div className="text-xs font-semibold text-[#1a1a1a]">{t('Faol obyektlar', 'Активные объекты', 'Active projects')}</div>
-            <span className="text-[9px] px-2 py-0.5 rounded-full bg-[#E6F1FB] text-[#0C447C] font-medium">Live</span>
           </div>
           {(() => {
             const all = [];

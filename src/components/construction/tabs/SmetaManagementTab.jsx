@@ -19,6 +19,8 @@ import MaterialConsolidationModal from '@/components/construction/MaterialConsol
 import ResourcesPanel from '@/components/construction/ResourcesPanel';
 import AddResourcePickerModal from '@/components/construction/AddResourcePickerModal';
 import AddSubWorkModal from '@/components/construction/AddSubWorkModal';
+import EstimateLineEditModal from '@/components/construction/EstimateLineEditModal';
+import { sortLinesManualFirst, sortLinesManualFirstInPlace } from '@/components/construction/utils/sortLines';
 
 // SmetaManagementTab — full match to files/Form2_Works_v2 (7).html.
 //
@@ -200,6 +202,19 @@ export default function SmetaManagementTab({ project }) {
   const [collapsedSections, setCollapsedSections] = useState({});
   const [openWorks, setOpenWorks] = useState(new Set());
 
+  // ── Infinite-scroll render window ─────────────────────────────────
+  // We keep the FULL lines array in memory (so the stat cards, "831"
+  // counts, search, "Hammasini yoqish/o'chirish", Forma 2 freeze and
+  // material hisobi all see every line). Only the RENDERED list is paged:
+  // we draw the first WORKS_PER_PAGE *works* and reveal more as the user
+  // scrolls a sentinel into view — no page button, no change to the data
+  // layer. The window counts WORKS, never resources: a work's resources
+  // are child rows that render inside its own card, so a work with 100
+  // resources is one item and is never split across pages.
+  const WORKS_PER_PAGE = 20;
+  const [visibleWorkCount, setVisibleWorkCount] = useState(WORKS_PER_PAGE);
+  const loadMoreRef = React.useRef(null);
+
   // Modal state — separate flags so the two adds are independently
   // controllable. `addTarget` carries the parent line context (could be a
   // work OR a sub-stage when adding resources to a sub-stage).
@@ -214,11 +229,33 @@ export default function SmetaManagementTab({ project }) {
   const [topupOpen, setTopupOpen] = useState(false);
   const [topupTarget, setTopupTarget] = useState(null);
 
+  // Inline-edit modal — drives the full EstimateLineEditModal for any
+  // estimate line (parent work OR resource sub-line). Carries the line
+  // being edited plus the parent for context. Set to null = closed.
+  const [editLineTarget, setEditLineTarget] = useState(null);
+
   const [form2Open, setForm2Open] = useState(false);
   // Material consolidation modal — toggled by the "Material yig'indisi"
   // button in the topbar next to "Forma 2 ni yaratish".
   const [matConsOpen, setMatConsOpen] = useState(false);
   const [qtyDraft, setQtyDraft] = useState({});
+
+  // Forma 2 iterations (migration 419). The same tab strip Bosqichlar
+  // shows — surfaced here so the foreman can also tell at a glance
+  // which iteration the smeta edits will land in, and so the iteration
+  // is read-only when the user is browsing a frozen one. Pressing
+  // "+ Forma 2 ni yaratish" anywhere on the page advances this strip.
+  const [iterations, setIterations] = useState([]);
+  const [activeIterationId, setActiveIterationId] = useState(null);
+  // Refresh tick bumped from handleSaveSnapshot success so the strip
+  // reloads after the foreman freezes via the Forma 2 button.
+  const [iterRefreshTick, setIterRefreshTick] = useState(0);
+  // Per-line period_fakt for the active iteration. The FAKT input on
+  // top-level work cards displays this (so a fresh iter shows 0)
+  // instead of line.quantity (which carries the cumulative). Mirrors
+  // the same plumbing in StagesTabV2 — the two pages stay in sync
+  // because both flow through updateWorkDoneQuantity on save.
+  const [periodFaktByLine, setPeriodFaktByLine] = useState(new Map());
 
   // "X o'zgarish" badge — count of resources whose price drifted from
   // original. Pulled separately from the main lines query because resource
@@ -233,7 +270,15 @@ export default function SmetaManagementTab({ project }) {
   const [snapshotPreview, setSnapshotPreview] = useState(null); // full payload from getForm2Snapshot
   const [auditEntries, setAuditEntries] = useState([]);
   const [loadingAudit, setLoadingAudit] = useState(false);
+  const [loadingMoreAudit, setLoadingMoreAudit] = useState(false);
   const [auditFilter, setAuditFilter] = useState('');
+  // Server-side pagination of the Jurnal (20/page). auditTotal drives the
+  // tab badge; auditPage/auditHasMore drive the scroll-to-load-more.
+  const AUDIT_PAGE_SIZE = 20;
+  const [auditPage, setAuditPage] = useState(1);
+  const [auditTotal, setAuditTotal] = useState(0);
+  const [auditHasMore, setAuditHasMore] = useState(false);
+  const auditMoreRef = React.useRef(null);
 
   // Generic confirmation modal — replaces window.confirm() calls for
   // destructive bulk actions (Hammasini yoqish / Hammasini o'chirish /
@@ -394,28 +439,108 @@ export default function SmetaManagementTab({ project }) {
   // The list endpoint is per-estimate, so we fan out and concat. Each
   // line carries its own .estimate_id which mutations key off, so we
   // don't lose track of where any individual row belongs.
-  const loadLines = useCallback(async (ids) => {
+  //
+  // Block-switch cache: a project with thousands of lines was timing out
+  // every time the user clicked between 1-Block / 2-Block / 3-Block /
+  // 4-Block because the lines were refetched in full each time. Keep
+  // an in-memory Map keyed by the sorted estimateId list — switching
+  // back to a previously-loaded block now hydrates from cache instantly
+  // and the network round-trip only happens on first visit or after the
+  // user presses "Yangilash" (which calls forceReloadLines below).
+  const linesCacheRef = React.useRef(new Map());
+  // Monotonic token so a block-switch can invalidate an in-flight load: any
+  // setLines from a stale invocation is dropped, preventing the "shaking"
+  // (block A's load writing over block B after you switch).
+  const loadTokenRef = React.useRef(0);
+  // After a mutation that forces a reload (add resource / sub-stage), remember
+  // which work to scroll back to once the fresh lines paint — otherwise the
+  // loader swap drops the user at the top of the page.
+  const pendingScrollWorkRef = React.useRef(null);
+  const cacheKeyFor = useCallback((ids) => {
     const idList = Array.isArray(ids) ? ids : (ids ? [ids] : []);
+    return idList.slice().sort((a, b) => Number(a) - Number(b)).join(',');
+  }, []);
+  const loadLines = useCallback(async (ids, { force = false } = {}) => {
+    const idList = Array.isArray(ids) ? ids : (ids ? [ids] : []);
+    // Invalidate any in-flight load — only the latest call may write state.
+    const token = ++loadTokenRef.current;
+    const isCurrent = () => token === loadTokenRef.current;
     if (idList.length === 0) { setLines([]); return; }
+    const key = cacheKeyFor(idList);
+    if (!force) {
+      const cached = linesCacheRef.current.get(key);
+      if (Array.isArray(cached)) {
+        setLines(cached);
+        setQtyDraft({});
+        return;
+      }
+    }
     setLoadingLines(true);
+    setQtyDraft({});
     try {
+      // The web app needs the full estimate in memory (stat cards, "831"
+      // count, search, "Hammasini yoqish/o'chirish", Forma 2 freeze,
+      // material hisobi), so we pull it in ONE request per estimate — fast
+      // and stable. (Mobile, which can't hold the whole estimate, uses the
+      // 20-paged endpoint + the /summary endpoint instead.) Render windowing
+      // keeps the painted DOM small regardless of how much is loaded.
       const all = [];
       for (const id of idList) {
         const rows = await constructionService.listEstimateLines(id, { page_size: 5000 });
+        if (!isCurrent()) return; // a newer block switch superseded us
         const arr = Array.isArray(rows) ? rows : (rows?.data || rows?.items || []);
         all.push(...arr);
       }
+      if (!isCurrent()) return;
+      linesCacheRef.current.set(key, all);
       setLines(all);
-      setQtyDraft({});
     } catch (e) {
+      if (!isCurrent()) return;
       toast.error(formatApiError(e, t, 'Xatolik'));
       setLines([]);
     } finally {
-      setLoadingLines(false);
+      if (isCurrent()) setLoadingLines(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  useEffect(() => { loadLines(activeEstimateIds); }, [activeEstimateIds, loadLines]);
+  }, [cacheKeyFor]);
+  // Forced reload — bound to the "Yangilash" button. Drops the cache for
+  // the current block before re-fetching so the user can still pull
+  // fresh state when they suspect another user just mutated the smeta.
+  const forceReloadLines = useCallback(() => {
+    const key = cacheKeyFor(activeEstimateIds);
+    linesCacheRef.current.delete(key);
+    loadLines(activeEstimateIds, { force: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeEstimateIds, loadLines, cacheKeyFor]);
+  // Block switch is the main caller; use the cache so coming back to a
+  // previously-loaded block hydrates instantly. Mutation reloads call
+  // loadLines with { force: true } so their fresh state replaces the
+  // cached copy.
+  useEffect(() => { loadLines(activeEstimateIds, { force: false }); }, [activeEstimateIds, loadLines]);
+
+  // Reload that remembers a work to return to. Used by the add-resource /
+  // add-sub-stage flows so the page doesn't jump to the top after saving.
+  const reloadKeepingWork = useCallback((workId) => {
+    if (workId != null) {
+      pendingScrollWorkRef.current = Number(workId);
+      // Keep the work expanded so its resource list is visible on return.
+      setOpenWorks((s) => { const n = new Set(s); n.add(Number(workId)); return n; });
+    }
+    loadLines(activeEstimateIds, { force: true });
+  }, [activeEstimateIds, loadLines]);
+
+  // Once the forced reload finishes painting, scroll the remembered work back
+  // into view. Two rAFs wait for the windowed list to re-render.
+  useEffect(() => {
+    if (loadingLines) return;
+    const id = pendingScrollWorkRef.current;
+    if (id == null) return;
+    pendingScrollWorkRef.current = null;
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const el = document.getElementById(`work-anchor-${id}`);
+      if (el) el.scrollIntoView({ behavior: 'auto', block: 'center' });
+    }));
+  }, [loadingLines, lines]);
 
   // ── Manually-added sections (construction_stages) ─────────────────
   // Fetched whenever the active block changes or "+ Yangi seksiya" was
@@ -464,14 +589,13 @@ export default function SmetaManagementTab({ project }) {
     // Resources are a project-level concept (one cement price across every
     // estimate), so the badge counts every drifted resource regardless of
     // which estimate is selected.
-    constructionService.listResourcePrices(project.id)
-      .then((rows) => {
+    // Use the server-computed project-wide modified count (summary.modified_count)
+    // — the endpoint is paginated now, so counting a single 20-row page client-side
+    // would undercount. page_size=1 keeps the payload tiny; we only need the summary.
+    constructionService.listResourcePrices(project.id, { pageSize: 1 })
+      .then((res) => {
         if (cancelled) return;
-        const n = (rows || []).filter((r) =>
-          Number(r.original_price || 0) > 0
-          && Math.abs(Number(r.price || 0) - Number(r.original_price || 0)) > 0.01,
-        ).length;
-        setChangedCount(n);
+        setChangedCount(Number(res?.summary?.modified_count || 0));
       })
       .catch(() => { if (!cancelled) setChangedCount(0); });
     return () => { cancelled = true; };
@@ -485,11 +609,17 @@ export default function SmetaManagementTab({ project }) {
   // would re-fire each render, triggering an infinite request loop
   // (one request per render × ~30 renders/s before the rate-limiter
   // returned 429s).
-  const loadSnapshots = useCallback(async (id) => {
-    if (!id) { setSnapshots([]); return; }
+  // Formalar tarixi is scoped to the whole PROJECT, not the selected block.
+  // Forma 2 iterations are project-level (one open per project), but each
+  // freeze pins its snapshot to whichever block's estimate was active — so a
+  // per-estimate query showed nothing whenever the user viewed a different
+  // block than the one they froze from. Listing by project mirrors the
+  // iteration strip; the "Blok" column shows which block each row came from.
+  const loadSnapshots = useCallback(async (projId) => {
+    if (!projId) { setSnapshots([]); return; }
     setLoadingSnapshots(true);
     try {
-      const rows = await constructionService.listForm2Snapshots(id);
+      const rows = await constructionService.listProjectForm2Snapshots(projId);
       setSnapshots(Array.isArray(rows) ? rows : []);
     } catch (e) {
       toast.error(formatApiError(e, t, 'Xatolik'));
@@ -500,51 +630,165 @@ export default function SmetaManagementTab({ project }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const loadAudit = useCallback(async (id, action) => {
-    if (!id) { setAuditEntries([]); return; }
+  // The Jurnal is PROJECT-scoped (like Formalar tarixi). Many changes —
+  // notably resource price edits — are logged project-wide (estimate_id
+  // NULL), and changes also happen across sibling blocks; an estimate-scoped
+  // query would miss all of those and the journal would look empty even
+  // though changes exist. `projId` is the project id.
+  const loadAudit = useCallback(async (projId, action) => {
+    if (!projId) { setAuditEntries([]); setAuditTotal(0); setAuditHasMore(false); return; }
     setLoadingAudit(true);
     try {
-      const rows = await constructionService.listSmetaAudit(id, { limit: 200, action: action || undefined });
-      setAuditEntries(Array.isArray(rows) ? rows : []);
+      const { data, meta } = await constructionService.listProjectSmetaAudit(projId, {
+        page: 1, page_size: AUDIT_PAGE_SIZE, action: action || undefined,
+      });
+      const rows = Array.isArray(data) ? data : [];
+      setAuditEntries(rows);
+      setAuditPage(1);
+      setAuditTotal(meta?.total ?? rows.length);
+      setAuditHasMore(meta?.has_next ?? (rows.length >= AUDIT_PAGE_SIZE));
     } catch (e) {
       toast.error(formatApiError(e, t, 'Xatolik'));
-      setAuditEntries([]);
+      setAuditEntries([]); setAuditTotal(0); setAuditHasMore(false);
     } finally {
       setLoadingAudit(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Fetch the next page and append — driven by the scroll sentinel.
+  const loadMoreAudit = useCallback(async () => {
+    if (loadingMoreAudit || !auditHasMore || !project?.id) return;
+    setLoadingMoreAudit(true);
+    const next = auditPage + 1;
+    try {
+      const { data, meta } = await constructionService.listProjectSmetaAudit(project.id, {
+        page: next, page_size: AUDIT_PAGE_SIZE, action: auditFilter || undefined,
+      });
+      const rows = Array.isArray(data) ? data : [];
+      setAuditEntries((prev) => [...prev, ...rows]);
+      setAuditPage(next);
+      setAuditHasMore(meta?.has_next ?? (rows.length >= AUDIT_PAGE_SIZE));
+    } catch {
+      /* keep what we have; the sentinel will retry on next scroll */
+    } finally {
+      setLoadingMoreAudit(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadingMoreAudit, auditHasMore, project?.id, auditPage, auditFilter]);
+
   // Lazily refresh whenever the user opens Tarix or Jurnal.
   // Deps must NOT include loadSnapshots/loadAudit — they're stable
   // (empty-dep useCallback), and listing them would put us right back
   // in the infinite loop if the empty-dep guarantee ever drifts.
   useEffect(() => {
-    if (page === 'history') loadSnapshots(estimateId);
-    if (page === 'audit')   loadAudit(estimateId, auditFilter);
+    if (page === 'history') loadSnapshots(project?.id);
+    if (page === 'audit')   loadAudit(project?.id, auditFilter);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, estimateId, auditFilter]);
+  }, [page, estimateId, auditFilter, project?.id]);
+
+  // Infinite scroll for the Jurnal — fetch the next 20 when the sentinel
+  // at the bottom of the list scrolls into view.
+  useEffect(() => {
+    if (page !== 'audit') return undefined;
+    const el = auditMoreRef.current;
+    if (!el || !auditHasMore) return undefined;
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) loadMoreAudit();
+    }, { rootMargin: '300px 0px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [page, auditHasMore, loadMoreAudit]);
 
   // Background prefetch of snapshot + audit counts so the inner-tab badges
   // ("Formalar tarixi 2", "O'zgarishlar jurnali 13" in v23) show real
   // numbers even before the user opens those tabs. One request each per
   // estimate change; cheap because both endpoints return small payloads.
   useEffect(() => {
-    if (!estimateId) return;
     let cancelled = false;
-    if (page !== 'history') {
-      constructionService.listForm2Snapshots(estimateId)
+    // Snapshot count badge is project-wide (see loadSnapshots note above).
+    if (page !== 'history' && project?.id) {
+      constructionService.listProjectForm2Snapshots(project.id)
         .then((rows) => { if (!cancelled) setSnapshots(Array.isArray(rows) ? rows : []); })
         .catch(() => {});
     }
-    if (page !== 'audit') {
-      constructionService.listSmetaAudit(estimateId, { limit: 200 })
-        .then((rows) => { if (!cancelled) setAuditEntries(Array.isArray(rows) ? rows : []); })
+    if (page !== 'audit' && project?.id) {
+      constructionService.listProjectSmetaAudit(project.id, { page: 1, page_size: AUDIT_PAGE_SIZE })
+        .then(({ data, meta }) => {
+          if (cancelled) return;
+          const rows = Array.isArray(data) ? data : [];
+          setAuditEntries(rows);
+          setAuditPage(1);
+          setAuditTotal(meta?.total ?? rows.length);
+          setAuditHasMore(meta?.has_next ?? (rows.length >= AUDIT_PAGE_SIZE));
+        })
         .catch(() => {});
     }
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [estimateId]);
+  }, [estimateId, project?.id]);
+
+  // ── Load Forma 2 iterations ──────────────────────────────────────
+  // Powers the iteration tab strip + the isFrozenView gate that puts
+  // every quantity input into read-only mode when the user is browsing
+  // a frozen iteration. Reloads on iterRefreshTick so a successful
+  // freeze (handleSaveSnapshot below) immediately surfaces the new
+  // open iter without a full page reload.
+  useEffect(() => {
+    if (!project?.id) return;
+    let cancelled = false;
+    constructionService.listForm2Iterations(project.id)
+      .then((rows) => {
+        if (cancelled) return;
+        const list = Array.isArray(rows) ? rows : [];
+        setIterations(list);
+        const openOne = list.find((it) => it.status === 'open');
+        const fallback = list[list.length - 1];
+        setActiveIterationId((cur) => {
+          if (cur && list.some((it) => it.id === cur)) return cur;
+          return (openOne || fallback)?.id ?? null;
+        });
+      })
+      .catch(() => { /* iterations are non-blocking — page still renders */ });
+    return () => { cancelled = true; };
+  }, [project?.id, iterRefreshTick]);
+
+  const activeIteration = useMemo(
+    () => iterations.find((it) => it.id === activeIterationId) || null,
+    [iterations, activeIterationId],
+  );
+  const isFrozenView = activeIteration ? activeIteration.status === 'frozen' : false;
+
+  // The deletable Forma 2 is the current OPEN (joriy) one — deleting it
+  // re-opens the frozen iteration before it (see handleDeleteIteration). That
+  // is only possible when there's a frozen predecessor to roll back into.
+  const hasFrozenIteration = useMemo(
+    () => iterations.some((it) => it.status === 'frozen'),
+    [iterations],
+  );
+
+  // ── Load per-line period_fakt for the active iteration ───────────
+  // Same fetch StagesTabV2 does — keeps the Smeta boshqaruvi FAKT
+  // input showing this iteration's contribution so a fresh iter
+  // reads 0 across the board.
+  useEffect(() => {
+    if (!project?.id || !activeIterationId) {
+      setPeriodFaktByLine(new Map());
+      return;
+    }
+    let cancelled = false;
+    constructionService.getForm2IterationLines(project.id, activeIterationId)
+      .then((rows) => {
+        if (cancelled) return;
+        const m = new Map();
+        for (const r of (Array.isArray(rows) ? rows : [])) {
+          m.set(Number(r.estimate_line_id), Number(r.period_fakt || 0));
+        }
+        setPeriodFaktByLine(m);
+      })
+      .catch(() => { /* default to zeros when the endpoint is unavailable */ });
+    return () => { cancelled = true; };
+  }, [project?.id, activeIterationId, iterRefreshTick]);
 
   // ── Snapshot save / delete ───────────────────────────────────────
   // Same loop hazard as loadSnapshots/loadAudit: depending on `t` (which
@@ -554,28 +798,78 @@ export default function SmetaManagementTab({ project }) {
   const handleSaveSnapshot = useCallback(async (payload) => {
     if (!estimateId) return;
     try {
-      await constructionService.createForm2Snapshot(estimateId, payload);
+      // Multi-iteration model (migration 419): "Forma 2 ni yaratish" now
+      // does the FULL freeze — write a construction_form2_snapshot row
+      // AND flip the open iteration to 'frozen' AND open the next
+      // iteration with period_fakt = 0 on every line. The snapshot side
+      // is still visible in Formalar tarixi exactly as before, but the
+      // iteration tab strip on Bosqichlar now also shows the new entry,
+      // and any period_fakt input the foreman fills in goes into the new
+      // open iter instead of compounding into the previous Forma 2.
+      // Falls back to project_id via estimate (the iteration endpoint
+      // resolves its own estimate when caller pins one).
+      await constructionService.createForm2Iteration(
+        project?.id,
+        { ...payload, estimate_id: estimateId },
+      );
       toast.success(t('snapshot_saved') || 'Forma 2 saqlandi');
       // If the user is currently viewing the History tab refresh the list.
-      if (page === 'history') loadSnapshots(estimateId);
+      if (page === 'history') loadSnapshots(project?.id);
+      // Bump the iteration strip so the new open iter shows up and the
+      // frozen one moves out of "joriy" without a full page reload.
+      setIterRefreshTick((n) => n + 1);
     } catch (e) {
       toast.error(formatApiError(e, t, 'Xatolik'));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [estimateId, page]);
+  }, [estimateId, page, project?.id]);
 
-  const handleDeleteSnapshot = useCallback(async (snap) => {
+  const handleDeleteSnapshot = useCallback((snap) => {
     if (!snap?.id) return;
-    if (!window.confirm(t('snapshot_delete_confirm') || 'Saqlangan Forma 2 ni o\'chirilsinmi?')) return;
-    try {
-      await constructionService.deleteForm2Snapshot(snap.id);
-      toast.success(t('deleted') || 'O\'chirildi');
-      loadSnapshots(estimateId);
-    } catch (e) {
-      toast.error(formatApiError(e, t, 'Xatolik'));
-    }
+    setConfirmModal({
+      tone: 'red',
+      title: t('delete_confirm_title') || "O'chirish",
+      body: t('snapshot_delete_confirm') || "Saqlangan Forma 2 ni o'chirilsinmi?",
+      confirmLabel: t('delete') || "O'chirish",
+      onConfirm: async () => {
+        try {
+          await constructionService.deleteForm2Snapshot(snap.id);
+          toast.success(t('deleted') || "O'chirildi");
+          loadSnapshots(project?.id);
+        } catch (e) {
+          toast.error(formatApiError(e, t, 'Xatolik'));
+        }
+      },
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [estimateId]);
+  }, [project?.id]);
+
+  // Delete the current OPEN (joriy) Forma 2. The backend removes it and
+  // re-opens the frozen iteration before it (dropping that one's snapshot),
+  // so the strip rolls back one step. Refreshes the iteration strip and the
+  // history list; the now-reopened predecessor becomes the active tab.
+  const handleDeleteIteration = useCallback((iter) => {
+    if (!iter?.id || !project?.id) return;
+    setConfirmModal({
+      tone: 'red',
+      title: t('forma2_delete_title') || "Joriy Forma 2 ni o'chirish",
+      body: t('forma2_delete_confirm')
+        || "Joriy Forma 2 o'chiriladi va oldingisi muzlatishdan chiqariladi (qayta tahrirlash mumkin bo'ladi). Davom etilsinmi?",
+      confirmLabel: t('delete') || "O'chirish",
+      onConfirm: async () => {
+        try {
+          const res = await constructionService.deleteForm2Iteration(project.id, iter.id);
+          toast.success(t('forma2_deleted') || "Forma 2 o'chirildi");
+          if (res?.reopened_iteration_id) setActiveIterationId(res.reopened_iteration_id);
+          setIterRefreshTick((n) => n + 1);
+          if (page === 'history') loadSnapshots(project?.id);
+        } catch (e) {
+          toast.error(formatApiError(e, t, 'Xatolik'));
+        }
+      },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project?.id, page]);
 
   const handleViewSnapshot = useCallback(async (snap) => {
     if (!snap?.id) return;
@@ -598,6 +892,63 @@ export default function SmetaManagementTab({ project }) {
         arr.push(ln);
         m.set(Number(pid), arr);
       }
+    }
+    // Two distinct sub-line populations live under the same parent and
+    // both render off this array — but in very different surfaces:
+    //
+    //   1. Sub-stages (isSubStageRow → resource_type='' AND norm_rate=0).
+    //      These render as their own WorkCard rows BELOW the parent. We
+    //      keep them in the unified "manuals at top → item_number ASC"
+    //      order so a freshly-added sub-stage floats to the top and the
+    //      imported ones follow file-page numbering.
+    //
+    //   2. Resource sub-lines (everything else). These render INSIDE the
+    //      parent WorkCard's resource table. The user wants them grouped
+    //      by category in a fixed display order — Material → Mashina →
+    //      Mehnat — regardless of creation time. The screenshot symptom
+    //      was that a newly added MASHINA line landed above the existing
+    //      MATERIAL ones because the manual-first sort prioritised
+    //      "newest" over "right bucket"; people read the resource table
+    //      top-to-bottom expecting all materials first, then equipment,
+    //      then labor.
+    //
+    // Sort order in the merged array:
+    //   sub-stages (manual-first / item_number) — first
+    //   resources, category bucket asc — Mehnat (labor) → Mashina →
+    //     Material. The user's previous request was material→mashina→
+    //     mehnat; they've since flipped the preference because resource
+    //     tables in their workflow read top-to-bottom as workers first
+    //     (labor hours decide the schedule), then equipment, then the
+    //     materials those workers will install.
+    //     Within each bucket: manuals first, then file order (id ASC).
+    const catRank = (rt) => {
+      const c = classifyResource(rt);
+      if (c === 'labor')    return 0;
+      if (c === 'machines') return 1;
+      return 2; // materials
+    };
+    const naturalKey = (s) => String(s || '').trim();
+    const isManualResource = (ln) =>
+      ln?.is_manual === true || !naturalKey(ln?.item_number);
+    for (const arr of m.values()) {
+      // Split, sort each bucket with its own rule, recombine in place.
+      const stages = arr.filter(isSubStageRow);
+      const resources = arr.filter((s) => !isSubStageRow(s));
+      sortLinesManualFirstInPlace(stages);
+      resources.sort((a, b) => {
+        const ra = catRank(a.resource_type);
+        const rb = catRank(b.resource_type);
+        if (ra !== rb) return ra - rb;
+        // Same category — manual-added first (so a freshly added
+        // resource lands at the top of its bucket where the user is
+        // looking), then file-order (lower id = imported earlier).
+        const aM = isManualResource(a);
+        const bM = isManualResource(b);
+        if (aM !== bM) return aM ? -1 : 1;
+        return Number(a.id || 0) - Number(b.id || 0);
+      });
+      arr.length = 0;
+      arr.push(...stages, ...resources);
     }
     return m;
   }, [lines]);
@@ -679,6 +1030,40 @@ export default function SmetaManagementTab({ project }) {
     return buckets.size;
   }, [lines]);
 
+  // Server-computed stat-card aggregates — the same numbers as `kpis` /
+  // `resourceCount` but produced in SQL (see GetEstimateSummary), so a
+  // client doesn't have to hold the whole estimate in memory. Summed across
+  // the block's estimate ids. Falls back to the local kpis until it arrives
+  // (or if the endpoint is unavailable), so the web app is never blocked.
+  const [serverKpis, setServerKpis] = useState(null);
+  useEffect(() => {
+    if (activeEstimateIds.length === 0) { setServerKpis(null); return undefined; }
+    let cancelled = false;
+    Promise.all(activeEstimateIds.map((id) =>
+      constructionService.getEstimateSummary(id).catch(() => null)))
+      .then((rows) => {
+        if (cancelled) return;
+        const ok = rows.filter(Boolean);
+        if (ok.length === 0) { setServerKpis(null); return; }
+        setServerKpis(ok.reduce((a, r) => ({
+          labor: a.labor + (Number(r.labor) || 0),
+          machines: a.machines + (Number(r.machines) || 0),
+          materials: a.materials + (Number(r.materials) || 0),
+          grand: a.grand + (Number(r.grand) || 0),
+          filled: a.filled + (Number(r.filled_count) || 0),
+          total: a.total + (Number(r.work_count) || 0),
+          resourceCount: a.resourceCount + (Number(r.resource_count) || 0),
+        }), { labor: 0, machines: 0, materials: 0, grand: 0, filled: 0, total: 0, resourceCount: 0 }));
+      });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeEstimateIds]);
+
+  // Stat cards prefer the server summary; everything falls back to the local
+  // computation so behaviour is unchanged when the endpoint hasn't loaded.
+  const displayKpis = serverKpis || kpis;
+  const displayResourceCount = serverKpis ? serverKpis.resourceCount : resourceCount;
+
   const sections = useMemo(() => {
     // Per-parent effective cost = Σ resource cost across its sub-lines,
     // where each sub-line follows the same plan-vs-topup rule used in
@@ -723,6 +1108,11 @@ export default function SmetaManagementTab({ project }) {
     }
 
     const sectionMap = new Map();
+    // Names of the manually-added sections we pin at the top. Captured
+    // here so the post-loop sort can leave them alone (newest-first
+    // manual at the top) and only sort the IMPORTED sections by their
+    // lines' item_number.
+    const manualPinnedNames = new Set();
 
     // Pre-seed with TOP-LEVEL sections the user explicitly added via
     // "+ Bo'lim qo'shish" (tracked by id in localStorage). Sorted by id
@@ -754,18 +1144,57 @@ export default function SmetaManagementTab({ project }) {
         if (!name.toLowerCase().includes(search.toLowerCase())) continue;
       }
       sectionMap.set(name, { name, lines: [], total: 0, is_empty_manual: true });
+      manualPinnedNames.add(name);
     }
 
     for (const ln of lines) {
       const isSub = ln.parent_line_id != null && Number(ln.parent_line_id) > 0;
       if (isSub) continue;
       const secKey = ln.parent_item_number || (t('uncategorized') || 'Boshqalar');
-      if (sectionFilter && secKey !== sectionFilter) continue;
+      if (sectionFilter && secKey !== sectionFilter && !secKey.startsWith(`${sectionFilter} › `)) continue;
       if (search) {
         const q = search.toLowerCase();
         const hay = `${ln.code || ''} ${ln.item_number || ''} ${ln.name || ''}`.toLowerCase();
         if (!hay.includes(q)) continue;
       }
+
+      // Nested section paths ("PARENT › CHILD" or deeper) — park the
+      // line on its parent's subSection bucket so it renders nested
+      // inside the parent card instead of materialising as a sibling
+      // top-level section. Previously the secKey was used verbatim,
+      // which caused e.g. "Topshirish › topshirish 1-bosqich" to show
+      // up as its own section header right next to "Topshirish".
+      //
+      // Split at the FIRST delimiter so the top-level is always the
+      // leading segment. For deeper paths like "СЕКЦИЯ №1 › РАБОТЫ › 123"
+      // the sub-section keeps the remaining segments as its display
+      // name ("РАБОТЫ › 123") — flat one-level nesting but the parent
+      // hierarchy still reads correctly.
+      if (secKey.includes(' › ')) {
+        const firstIdx = secKey.indexOf(' › ');
+        const parentName = secKey.slice(0, firstIdx);
+        const childName  = secKey.slice(firstIdx + 3);
+        const par = sectionMap.get(parentName) || { name: parentName, lines: [], total: 0 };
+        if (!par.subSections) par.subSections = [];
+        let sub = par.subSections.find((s) => s.fullName === secKey);
+        if (!sub) {
+          sub = { name: childName, fullName: secKey, lines: [], total: 0 };
+          par.subSections.push(sub);
+        } else {
+          // A previously-seeded empty manual sub-section gets repurposed
+          // here — drop the "I'm an empty placeholder" flag now that real
+          // lines are attached.
+          delete sub.is_empty_manual;
+        }
+        sub.lines.push(ln);
+        const eff = effByParent.get(Number(ln.id));
+        const amt = eff != null ? eff : (Number(ln.total_amount) || 0);
+        sub.total += amt;
+        par.total += amt; // roll the sub-section's spend up into the parent header
+        sectionMap.set(parentName, par);
+        continue;
+      }
+
       const cur = sectionMap.get(secKey) || { name: secKey, lines: [], total: 0 };
       cur.lines.push(ln);
       const eff = effByParent.get(Number(ln.id));
@@ -777,12 +1206,12 @@ export default function SmetaManagementTab({ project }) {
     // parents as subSections[]. Top-level manual sections were already
     // pre-seeded into sectionMap above (before the imported-lines pass)
     // so they sort first in the rendered list. Here we only handle the
-    // hierarchical ones — those whose name contains " › " and whose
-    // prefix matches an existing section. We look for the LAST " › "
-    // so paths like "A › B › C" attach to the most-specific parent
-    // ("A › B"), falling back to shorter prefixes if no exact match
-    // exists. Filter targeting matches the parent OR the full nested
-    // name so the section dropdown still surfaces children correctly.
+    // hierarchical ones — those whose name contains " › ". We split at
+    // the FIRST delimiter so the parent is always the leading segment
+    // (matches the lines-iteration rule above). Deeper paths keep their
+    // remaining segments as the sub-section display name. Filter
+    // targeting matches the parent OR the full nested name so the
+    // section dropdown still surfaces children correctly.
     const DELIM = ' › ';
     const sortedManual = [...manualSectionNames].sort((a, b) =>
       String(a).length - String(b).length,
@@ -791,9 +1220,9 @@ export default function SmetaManagementTab({ project }) {
       if (!name) continue;
       if (!name.includes(DELIM)) continue; // top-level handled above
       if (sectionMap.has(name)) continue;
-      const lastIdx = name.lastIndexOf(DELIM);
-      const parent = name.slice(0, lastIdx);
-      const child  = name.slice(lastIdx + DELIM.length);
+      const firstIdx = name.indexOf(DELIM);
+      const parent = name.slice(0, firstIdx);
+      const child  = name.slice(firstIdx + DELIM.length);
       if (!sectionMap.has(parent)) continue;
       if (sectionFilter && sectionFilter !== parent && sectionFilter !== name) continue;
       if (search) {
@@ -802,6 +1231,10 @@ export default function SmetaManagementTab({ project }) {
       }
       const par = sectionMap.get(parent);
       if (!par.subSections) par.subSections = [];
+      // Skip if the work-line iteration above already created this sub-section
+      // bucket (i.e. real lines live under "PARENT › CHILD") — pushing again
+      // would render a duplicate empty placeholder card right next to it.
+      if (par.subSections.some((s) => s.fullName === name)) continue;
       par.subSections.push({
         name: child,
         fullName: name,
@@ -810,8 +1243,303 @@ export default function SmetaManagementTab({ project }) {
         is_empty_manual: true,
       });
     }
-    return Array.from(sectionMap.values());
+    // Final ordering: manually-added (pinned) sections in insertion
+    // order (newest first, as pre-seeded above) followed by imported
+    // sections sorted by their min numeric item_number. Imported
+    // sections without a numeric leading row land at the end, in
+    // alphabetical order of section name to stay stable.
+    //
+    // Without this sort the imported sections came out in backend
+    // sort_order order — which left ФУНДАМЕНТЫ (rows 8–48) ahead of
+    // ЗЕМЛЯННЫЕ РАБОТЫ (rows 1–7) because that's how they landed in
+    // the file. Sorting by item_number makes the section order follow
+    // the printed smeta page numbering the user expects.
+    const allSections = Array.from(sectionMap.values());
+    const pinned = [];
+    const imported = [];
+    // Top-level "manual" detection — mirrors isManualSubData below so the
+    // same rule applies to whole sections, not just sub-sections.
+    //
+    //   1. Explicitly pre-seeded via localStorage (manualPinnedNames) —
+    //      this is the strongest signal and covers the "I just clicked
+    //      + Bo'lim qo'shish" case on the active device.
+    //   2. EVERY line under the section (direct + sub-section lines) is
+    //      flagged is_manual = TRUE (migration 417). This catches sections
+    //      the user built up entirely through "+ Ish" / clone-by-code /
+    //      "+ Qo'shimcha resurs" — even on a different device where the
+    //      localStorage marker was never recorded. ЗЕМЛЯННЫЕ РАБОТЫ on
+    //      project 21 is the motivating case: the section header and all
+    //      its works were added manually, but the manual-id marker only
+    //      lives in the original device's localStorage so the localStorage
+    //      check missed it and it slid to the bottom of the imported
+    //      bucket.
+    //
+    // Strict "every line" — one imported line anchors the section to the
+    // file and it stays in the imported bucket. Empty sections (no lines
+    // at all) are treated as manual too: the only way they exist in
+    // sectionMap is via the user-added pre-seed step above, which already
+    // covers the manualPinnedNames path.
+    const isManualTopSection = (sec) => {
+      if (manualPinnedNames.has(sec.name)) return true;
+      const direct = sec.lines || [];
+      const subLines = (sec.subSections || []).flatMap((s) => s.lines || []);
+      const all = [...direct, ...subLines];
+      if (all.length === 0) return true;
+      return all.every((ln) => ln.is_manual === true);
+    };
+    for (const sec of allSections) {
+      if (isManualTopSection(sec)) pinned.push(sec);
+      else imported.push(sec);
+    }
+    // Stable order within the pinned bucket: explicitly user-added sections
+    // (manualPinnedNames) keep their newest-first order from the pre-seed
+    // pass above; sections promoted to pinned by the all-lines-manual
+    // heuristic fall in after them, also newest-first using the lowest
+    // line id as a proxy (the section that contains the most recently
+    // created lines lands at the top).
+    if (pinned.length > 1) {
+      const lowestLineId = (sec) => {
+        let min = Infinity;
+        for (const ln of (sec.lines || [])) {
+          const id = Number(ln.id);
+          if (Number.isFinite(id) && id < min) min = id;
+        }
+        for (const sub of (sec.subSections || [])) {
+          for (const ln of (sub.lines || [])) {
+            const id = Number(ln.id);
+            if (Number.isFinite(id) && id < min) min = id;
+          }
+        }
+        return min;
+      };
+      pinned.sort((a, b) => {
+        const aPre = manualPinnedNames.has(a.name);
+        const bPre = manualPinnedNames.has(b.name);
+        if (aPre !== bPre) return aPre ? -1 : 1;
+        // Within each pinning source, newest first — higher ids = more
+        // recently created.
+        return lowestLineId(b) - lowestLineId(a);
+      });
+    }
+    // No re-sort for imported top-level sections — they stay in
+    // the order the import wrote them, which mirrors the printed
+    // page numbering by construction (lines are pushed in
+    // file-row order). Re-sorting was misclassifying mixed
+    // structures; the user's requirement is "manuals at top,
+    // imports unchanged".
+    const minItemNum = (sec) => {
+      let min = Infinity;
+      for (const ln of (sec.lines || [])) {
+        const raw = String(ln.item_number || '').trim();
+        const m = raw.match(/^\d+(?:\.\d+)?/);
+        if (m) {
+          const n = Number(m[0]);
+          if (Number.isFinite(n) && n < min) min = n;
+        }
+      }
+      return min;
+    };
+
+    // Insertion-order fallback. Some imported sections (notably ones that
+    // pre-date row-numbered exports — e.g. ЗЕМЛЯННЫЕ РАБОТЫ in older Yuksalish
+    // projects) come in with NULL/empty item_numbers on every line, so
+    // minItemNum returns Infinity and they slide to the very bottom of the
+    // imported bucket — past sections numbered 800+. The lines' DB ids still
+    // reflect the order rows were inserted during import, so the lowest id
+    // among a section's lines is a reliable proxy for "this section's first
+    // row in the file." Used only when no numeric item_number exists, so it
+    // never overrides the proper file-page sort when one is present.
+    const minLineId = (sec) => {
+      let min = Infinity;
+      for (const ln of (sec.lines || [])) {
+        const id = Number(ln.id);
+        if (Number.isFinite(id) && id < min) min = id;
+      }
+      for (const sub of (sec.subSections || [])) {
+        for (const ln of (sub.lines || [])) {
+          const id = Number(ln.id);
+          if (Number.isFinite(id) && id < min) min = id;
+        }
+      }
+      return min;
+    };
+    // Also sort each section's sub-sections so manually-added ones
+    // pin to the top (newest first) and imported sub-sections sort by
+    // their min item_number. Without the manual-pin step, an empty
+    // user-added sub-section (no item_number → Infinity sort key)
+    // landed at the end of its parent's content — past every imported
+    // row — which is the opposite of what the user expects when they
+    // create a sub-stage and want to see it right away.
+    // Strict manual-detection — see render-side isManualSub for the
+    // reasoning. We never resort imported sub-sections by item_number
+    // any more: the user wants imported order preserved exactly as
+    // the file dictates, and the heuristic was misclassifying
+    // imported єдинич works as manual when they lacked numeric
+    // item_numbers.
+    const recentlyAddedSet = new Set(
+      (recentlyAddedSectionIds || []).map(Number),
+    );
+    const nameToManualId = new Map();
+    for (const ms of (manualSectionRows || [])) {
+      const name = String(ms?.name || '').trim();
+      if (name && ms?.id != null) {
+        nameToManualId.set(name, Number(ms.id));
+      }
+    }
+    const isManualSubData = (sub) => {
+      const full = String(sub.fullName || '').trim();
+      const mid = nameToManualId.get(full);
+      if (mid != null && recentlyAddedSet.has(mid)) return true;
+      if (sub.is_empty_manual) return true;
+      const lines = sub.lines || [];
+      if (lines.length === 0) return true;
+      return lines.every((ln) => ln.is_manual === true);
+    };
+    // Top-level work ordering uses the shared helper — manuals at top,
+    // imports by natural item_number ASC. Same rule subByParent now uses
+    // for sub-lines, so the two never disagree.
+    const sortTopLines = (arr) => { sortLinesManualFirstInPlace(arr); };
+    for (const sec of [...pinned, ...imported]) {
+      sortTopLines(sec.lines);
+      if (Array.isArray(sec.subSections) && sec.subSections.length > 0) {
+        for (const sub of sec.subSections) sortTopLines(sub.lines);
+      }
+      if (Array.isArray(sec.subSections) && sec.subSections.length > 1) {
+        // Two-bucket sort:
+        //   1) Manual sub-sections (user-added) pin to the top.
+        //   2) Imported sub-sections sort by their MIN item_number
+        //      so the printed-page numbering is respected. The user
+        //      reported "ZRP rows 1-7 are showing AFTER ФУНДАМЕНТЫ
+        //      rows 8-47, fix this" — root cause was that sub-section
+        //      order was driven by the lines-array iteration (which
+        //      follows backend sort_order), but the original smeta
+        //      file had ZRP's items numbered before ФУНДАМЕНТЫ's, so
+        //      ZRP needs to come first. Sorting on min(item_number)
+        //      matches the printed file order regardless of how the
+        //      import wrote sort_order.
+        const manualOnes = [];
+        const importedOnes = [];
+        for (const sub of sec.subSections) {
+          if (isManualSubData(sub)) manualOnes.push(sub);
+          else importedOnes.push(sub);
+        }
+        importedOnes.sort((a, b) => {
+          const ka = minItemNum(a);
+          const kb = minItemNum(b);
+          if (ka !== kb) return ka - kb;
+          return 0;
+        });
+        sec.subSections = [...manualOnes, ...importedOnes];
+      }
+    }
+    // Sort TOP-LEVEL imported sections by the order their first row was
+    // inserted during import (min line id). This is the most reliable
+    // "import file order" signal:
+    //
+    //   • Bulk imports INSERT row-by-row in file order, so within a single
+    //     import batch the lowest id in a section = the file row where
+    //     that section started. Two sections from the same import sort
+    //     in printed-page order automatically.
+    //   • Sections whose lines have NULL/empty item_numbers (older Yuksalish
+    //     exports — notably ЗЕМЛЯННЫЕ РАБОТЫ on project 21) used to fall to
+    //     the very bottom because the item_number-based comparator returned
+    //     Infinity. They now sort by id like everything else and end up at
+    //     the position they actually occupy in the source file.
+    //
+    // item_number stays as a tiebreaker for the rare case where two
+    // sections share the same min id (effectively never, but it costs
+    // nothing and keeps the printed-page heuristic from earlier patches
+    // intact for any future format that posts item_numbers without
+    // monotonic ids).
+    if (imported.length > 1) {
+      imported.sort((a, b) => {
+        const ida = minLineId(a);
+        const idb = minLineId(b);
+        if (ida !== idb) return ida - idb;
+        const ka = (() => {
+          let m = minItemNum(a);
+          for (const sub of (a.subSections || [])) {
+            const s = minItemNum(sub);
+            if (s < m) m = s;
+          }
+          return m;
+        })();
+        const kb = (() => {
+          let m = minItemNum(b);
+          for (const sub of (b.subSections || [])) {
+            const s = minItemNum(sub);
+            if (s < m) m = s;
+          }
+          return m;
+        })();
+        if (ka !== kb) return ka - kb;
+        return 0;
+      });
+    }
+    return [...pinned, ...imported];
   }, [lines, search, sectionFilter, t, manualSectionNames, manualSectionRows, recentlyAddedSectionIds]);
+
+  // Flatten every work (parent line) into render order so the window can
+  // count works across sections. Mirrors the per-section interleave the
+  // render uses (top-level lines + sub-section lines, ordered by the lead
+  // number of item_number). Resources/sub-stage child rows are NOT counted
+  // here — they belong to a work and render inside its card.
+  const orderedWorkIds = useMemo(() => {
+    const lead = (raw) => {
+      const m = String(raw || '').trim().match(/^\d+(?:\.\d+)?/);
+      return m ? Number(m[0]) : Infinity;
+    };
+    const ids = [];
+    for (const sec of sections) {
+      const entries = [];
+      for (const ln of (sec.lines || [])) entries.push({ k: lead(ln.item_number), kind: 'line', ln });
+      for (const sub of (sec.subSections || [])) {
+        let min = Infinity;
+        for (const s of (sub.lines || [])) { const n = lead(s.item_number); if (n < min) min = n; }
+        entries.push({ k: min, kind: 'sub', sub });
+      }
+      entries.sort((a, b) => a.k - b.k);
+      for (const e of entries) {
+        if (e.kind === 'line') ids.push(Number(e.ln.id));
+        else for (const s of (e.sub.lines || [])) ids.push(Number(s.id));
+      }
+    }
+    return ids;
+  }, [sections]);
+
+  const totalWorks = orderedWorkIds.length;
+  // The set of work ids currently allowed to paint. Everything outside it
+  // is withheld until the user scrolls. Resources of a visible work always
+  // render with it (they aren't in this set — they're WorkCard children).
+  const visibleWorkIds = useMemo(
+    () => new Set(orderedWorkIds.slice(0, visibleWorkCount)),
+    [orderedWorkIds, visibleWorkCount],
+  );
+
+  // Reset the window whenever the view's context changes (block switch,
+  // search, or section filter) so we don't keep a huge window afterwards.
+  useEffect(() => {
+    setVisibleWorkCount(WORKS_PER_PAGE);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buildingId, search, sectionFilter]);
+
+  // Grow the window as the bottom sentinel scrolls into view. Observing a
+  // ref (vs. a scroll listener) keeps it cheap and works inside whatever
+  // scroll container the page sits in.
+  useEffect(() => {
+    if (page !== 'works') return undefined;
+    const el = loadMoreRef.current;
+    if (!el) return undefined;
+    if (visibleWorkCount >= totalWorks) return undefined;
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) {
+        setVisibleWorkCount((n) => Math.min(n + WORKS_PER_PAGE, totalWorks));
+      }
+    }, { rootMargin: '400px 0px' });
+    io.observe(el);
+    return () => io.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, totalWorks, visibleWorkCount]);
 
   // ── Mutations ─────────────────────────────────────────────────────
   // Each line carries its own line.estimate_id, so we route mutations
@@ -822,7 +1550,70 @@ export default function SmetaManagementTab({ project }) {
   const lineEst = (line) => Number(line.estimate_id || estimateId || 0);
 
   const commitQty = useCallback(async (line, raw) => {
+    if (isFrozenView) {
+      // Frozen iteration (migration 419) — quantity edits are blocked
+      // server-side too (UpdateEstimateLine on a non-draft estimate, plus
+      // the period_fakt write path only targets the open iter), but
+      // short-circuiting here avoids a confusing toast cascade.
+      toast.error(t('forma2_frozen_readonly') || 'Bu Forma 2 muzlatilgan');
+      return;
+    }
     const newQty = parseNum(raw);
+    // For TOP-LEVEL work rows (no parent) the FAKT input now represents
+    // this iteration's period contribution — same semantics as the
+    // BAJARILDI input on Bosqichlar. Route the write through
+    // updateWorkDoneQuantity so:
+    //   • the server writes period_fakt for the open iter and
+    //     recomputes done_quantity = Σ period_fakt
+    //   • the parent-row mirror updates `quantity` (so other readers
+    //     that still look at quantity stay consistent)
+    //   • Bosqichlar's BAJARILDI input picks up the same number — the
+    //     user's bidirectional sync question is answered "yes" because
+    //     both pages now flow through the same write path.
+    // Sub-line rows (resources / sub-stages with parent_line_id > 0)
+    // keep using updateEstimateLine because their FAKT is the plan
+    // override (quantity_override), not period contribution.
+    const isParent = !line.parent_line_id || Number(line.parent_line_id) === 0;
+    if (isParent) {
+      const prevPeriod = Number(periodFaktByLine.get(Number(line.id)) || 0);
+      if (Math.abs(newQty - prevPeriod) < 0.0001) return;
+      try {
+        await constructionService.updateWorkDoneQuantity(line.id, newQty);
+        const prevCumulative = Number(line.quantity || 0);
+        const newCumulative = prevCumulative - prevPeriod + newQty;
+        setLines((rows) => rows.map((r) => {
+          if (r.id === line.id) {
+            return {
+              ...r,
+              quantity: newCumulative,
+              done_quantity: newCumulative,
+              total_amount: Number(r.unit_rate || 0) * newCumulative,
+            };
+          }
+          if (Number(r.parent_line_id) === Number(line.id) && !r.quantity_override) {
+            const norm = Number(r.norm_rate || 0);
+            const childQty = newCumulative * norm;
+            return {
+              ...r,
+              quantity: childQty,
+              total_amount: childQty * Number(r.unit_rate || 0),
+            };
+          }
+          return r;
+        }));
+        setPeriodFaktByLine((m) => {
+          const n = new Map(m);
+          n.set(Number(line.id), newQty);
+          return n;
+        });
+        toast.success(t('saved') || 'Saqlandi');
+        loadLines(activeEstimateIds, { force: true });
+      } catch (e) {
+        toast.error(formatApiError(e, t, 'Xatolik'));
+        loadLines(activeEstimateIds, { force: true });
+      }
+      return;
+    }
     if (Math.abs(newQty - Number(line.quantity || 0)) < 0.0001) return;
     try {
       await constructionService.updateEstimateLine(lineEst(line), line.id, { quantity: newQty });
@@ -862,34 +1653,46 @@ export default function SmetaManagementTab({ project }) {
       }));
       toast.success(t('saved') || 'Saqlandi');
       // Pull authoritative state for cascading qty changes.
-      loadLines(activeEstimateIds);
+      loadLines(activeEstimateIds, { force: true });
     } catch (e) {
       toast.error(formatApiError(e, t, 'Xatolik'));
-      loadLines(activeEstimateIds);
+      loadLines(activeEstimateIds, { force: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [estimateId, activeEstimateIds, loadLines, t]);
+  }, [estimateId, activeEstimateIds, loadLines, t, isFrozenView, periodFaktByLine]);
 
   const resetQty = useCallback(async (line) => {
     try {
       await constructionService.resetLineQuantity(lineEst(line), line.id);
       toast.success(t('reset_qty_done') || "Hajm asl qiymatga qaytarildi");
-      loadLines(activeEstimateIds);
+      loadLines(activeEstimateIds, { force: true });
     } catch (e) {
       toast.error(formatApiError(e, t, 'Xatolik'));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [estimateId, activeEstimateIds, loadLines, t]);
 
-  const removeLine = useCallback(async (line) => {
-    if (!window.confirm(t('confirm_delete_subline') || "O'chirishni tasdiqlaysizmi?")) return;
-    try {
-      await constructionService.deleteEstimateLine(lineEst(line), line.id);
-      setLines((rows) => rows.filter((r) => r.id !== line.id && Number(r.parent_line_id) !== Number(line.id)));
-      toast.success(t('deleted') || "O'chirildi");
-    } catch (e) {
-      toast.error(formatApiError(e, t, 'Xatolik'));
-    }
+  const removeLine = useCallback((line) => {
+    // Replaces window.confirm with the in-app SmetaConfirmModal so the
+    // dialog uses our translation keys and matches the rest of the UI.
+    setConfirmModal({
+      tone: 'red',
+      title: t('delete_confirm_title') || "O'chirish",
+      body: t('confirm_delete_subline')
+        || "Ushbu resurs / etapni o'chirishni tasdiqlaysizmi?",
+      confirmLabel: t('delete') || "O'chirish",
+      onConfirm: async () => {
+        try {
+          await constructionService.deleteEstimateLine(lineEst(line), line.id);
+          setLines((rows) => rows.filter(
+            (r) => r.id !== line.id && Number(r.parent_line_id) !== Number(line.id),
+          ));
+          toast.success(t('deleted') || "O'chirildi");
+        } catch (e) {
+          toast.error(formatApiError(e, t, 'Xatolik'));
+        }
+      },
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [estimateId, t]);
 
@@ -956,7 +1759,7 @@ export default function SmetaManagementTab({ project }) {
               return next;
             });
           }
-          loadLines(activeEstimateIds);
+          loadLines(activeEstimateIds, { force: true });
           setSectionRefreshTick((n) => n + 1);
           toast.success(t('deleted') || "O'chirildi");
         } catch (e) {
@@ -986,7 +1789,7 @@ export default function SmetaManagementTab({ project }) {
             totalZeroed += Number(result?.works_zeroed || 0);
           }
           toast.success(`${t('reset_all_qty_done') || 'Hajmlar tushirildi'} · ${totalZeroed}`);
-          loadLines(activeEstimateIds);
+          loadLines(activeEstimateIds, { force: true });
         } catch (e) {
           toast.error(formatApiError(e, t, 'Xatolik'));
         }
@@ -1031,7 +1834,7 @@ export default function SmetaManagementTab({ project }) {
       toast.success(t('saved') || 'Saqlandi');
       // Refresh totals so the section subtotal + estimate amount_total
       // reflect the new top-up immediately.
-      loadLines(activeEstimateIds);
+      loadLines(activeEstimateIds, { force: true });
     } catch (e) {
       toast.error(formatApiError(e, t, 'Xatolik'));
     }
@@ -1048,7 +1851,7 @@ export default function SmetaManagementTab({ project }) {
         return { ...r, topups: list };
       }));
       toast.success(t('deleted') || "O'chirildi");
-      loadLines(activeEstimateIds);
+      loadLines(activeEstimateIds, { force: true });
     } catch (e) {
       toast.error(formatApiError(e, t, 'Xatolik'));
     }
@@ -1150,7 +1953,7 @@ export default function SmetaManagementTab({ project }) {
         }}
       >
         <div>
-          <div className="text-[11px] uppercase tracking-[0.1em]" style={{ color: C.muted }}>
+          <div className="text-[13px] uppercase tracking-[0.1em]" style={{ color: C.muted }}>
             {t('production') || 'Ishlab chiqarish'} · {t('form2_breadcrumb') || 'Форма 2'} · {t('source_type_vor') || 'ВОР'}
           </div>
           <h1 className="text-[22px] font-semibold mt-1" style={{ color: C.text }}>
@@ -1167,7 +1970,7 @@ export default function SmetaManagementTab({ project }) {
           {/* Changed-count badge — only renders when something drifted. */}
           {changedCount > 0 && (
             <div
-              className="px-2.5 py-1 rounded text-[11px] font-medium flex items-center gap-1.5"
+              className="px-2.5 py-1 rounded text-[13px] font-medium flex items-center gap-1.5"
               style={{
                 background: C.tealSoft,
                 color: C.teal,
@@ -1187,7 +1990,7 @@ export default function SmetaManagementTab({ project }) {
              which account is leaving an audit trail. Falls back to
              "— kiriting —" when not signed in (matches mockup copy). */}
           <div
-            className="px-2.5 py-1.5 rounded-md text-[11px] flex items-center gap-1.5"
+            className="px-2.5 py-1.5 rounded-md text-[13px] flex items-center gap-1.5"
             style={{
               background: C.inset,
               color: userDisplay ? C.text : C.muted,
@@ -1225,7 +2028,7 @@ export default function SmetaManagementTab({ project }) {
             ))}
           </select>
           <button
-            onClick={() => loadLines(activeEstimateIds)}
+            onClick={() => loadLines(activeEstimateIds, { force: true })}
             disabled={activeEstimateIds.length === 0 || loadingLines}
             className="px-3 py-2 rounded-md text-xs flex items-center gap-1.5 transition disabled:opacity-50"
             style={{ background: 'transparent', color: C.dim, border: `1px solid ${C.border2}` }}
@@ -1248,7 +2051,7 @@ export default function SmetaManagementTab({ project }) {
             style={{ background: C.sec, color: C.teal, border: '1px solid rgba(13,148,136,0.3)' }}
             title={t('add_section_hint') || "Yangi bo'lim qo'shish"}
           >
-            <span className="text-[14px] leading-none font-bold">+</span>
+            <span className="text-[15px] leading-none font-bold">+</span>
             {t('add_section') || "Bo'lim qo'shish"}
           </button>
           {selectedEstimate && (
@@ -1297,9 +2100,9 @@ export default function SmetaManagementTab({ project }) {
       >
         {[
           { key: 'works',     icon: ListChecks,  label: t('inner_tab_works')     || 'Ishlar',              count: kpis.total },
-          { key: 'resources', icon: Boxes,       label: t('inner_tab_resources') || 'Resurslar',           count: resourceCount },
+          { key: 'resources', icon: Boxes,       label: t('inner_tab_resources') || 'Resurslar',           count: displayResourceCount },
           { key: 'history',   icon: HistoryIcon, label: t('inner_tab_history')   || 'Formalar tarixi',     count: snapshots.length },
-          { key: 'audit',     icon: Activity,    label: t('inner_tab_audit')     || "O'zgarishlar jurnali", count: auditEntries.length },
+          { key: 'audit',     icon: Activity,    label: t('inner_tab_audit')     || "O'zgarishlar jurnali", count: auditTotal },
         ].map((tab) => {
           const active = page === tab.key;
           const Icon = tab.icon;
@@ -1307,7 +2110,7 @@ export default function SmetaManagementTab({ project }) {
             <button
               key={tab.key}
               onClick={() => setPage(tab.key)}
-              className="px-5 py-3 text-[13px] font-medium flex items-center gap-2 transition"
+              className="px-5 py-3 text-[15px] font-medium flex items-center gap-2 transition"
               style={{
                 color: active ? C.teal : C.dim,
                 borderBottom: active ? `2px solid ${C.teal}` : '2px solid transparent',
@@ -1318,7 +2121,7 @@ export default function SmetaManagementTab({ project }) {
               <span>{tab.label}</span>
               {(tab.count !== null && tab.count !== undefined) && (
                 <span
-                  className="text-[10px] font-mono px-1.5 py-0.5 rounded"
+                  className="text-[12px] font-mono px-1.5 py-0.5 rounded"
                   style={{
                     background: active ? C.tealSoft : C.hover,
                     color: active ? C.teal : C.muted,
@@ -1335,16 +2138,97 @@ export default function SmetaManagementTab({ project }) {
       {/* WORKS PAGE */}
       {page === 'works' && (
         <div>
+          {/* FORMA 2 ITERATION STRIP (migration 419) — same data the
+              Bosqichlar tab shows. Selecting a frozen tab disables
+              quantity edits (via isFrozenView in commitQty). "+ Forma 2
+              ni yaratish" still lives in the topbar above and advances
+              this strip on Save. */}
+          {iterations.length > 0 && (
+            <div className="px-8 pt-6">
+              <div
+                className="rounded-xl p-4"
+                style={{ background: C.card, border: `1px solid ${C.border}` }}
+              >
+                <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                  <h2 className="text-base font-bold text-slate-900">
+                    📄 {t('forma2_series') || 'Forma 2 iteratsiyalari'}
+                  </h2>
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                  {iterations.map((it) => {
+                    const active = activeIterationId === it.id;
+                    const isOpen = it.status === 'open';
+                    // Only the current (joriy) Forma 2 is deletable — and only
+                    // when there's a frozen iteration before it to unfreeze,
+                    // and the user has construction delete permission.
+                    const canDeleteThis = canDeleteConstruction && isOpen && hasFrozenIteration;
+                    return (
+                      <div
+                        key={it.id}
+                        className="flex items-center rounded-lg overflow-hidden"
+                        style={{ border: `1.5px solid ${active ? '#0F172A' : '#E5E7EB'}` }}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setActiveIterationId(it.id)}
+                          className="px-4 py-2 text-[15px] font-semibold flex items-center gap-2 transition"
+                          style={{
+                            background: active ? '#0F172A' : '#FFFFFF',
+                            color: active ? '#FFFFFF' : '#64748B',
+                          }}
+                          title={isOpen
+                            ? (t('forma2_open_editable') || 'Joriy iteratsiya — tahrirlash mumkin')
+                            : (t('forma2_frozen_readonly') || 'Muzlatilgan — faqat ko\'rish')}
+                        >
+                          <span>📄 Forma 2 #{it.iteration_seq}</span>
+                          <span
+                            className="text-[12px] px-2 py-0.5 rounded-full font-bold"
+                            style={{
+                              background: active ? (isOpen ? '#047857' : '#64748B') : (isOpen ? '#D1FAE5' : '#E5E7EB'),
+                              color:      active ? '#FFFFFF' : (isOpen ? '#047857' : '#64748B'),
+                            }}
+                          >
+                            {isOpen ? (t('current_label') || 'joriy') : (t('frozen_label') || 'muzlatilgan')}
+                          </span>
+                        </button>
+                        {canDeleteThis && (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); handleDeleteIteration(it); }}
+                            className="h-full px-2 py-2 flex items-center justify-center transition hover:bg-red-50"
+                            style={{
+                              background: active ? '#1E293B' : '#FFFFFF',
+                              color: '#EF4444',
+                              borderLeft: `1px solid ${active ? '#334155' : '#E5E7EB'}`,
+                            }}
+                            title={t('forma2_delete_title') || "Forma 2 ni o'chirish"}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                {isFrozenView && (
+                  <div className="mt-3 px-3 py-2 rounded-md text-[14px] bg-amber-50 border border-amber-200 text-amber-800">
+                    {t('forma2_frozen_notice') || "Bu Forma 2 muzlatilgan. Yangi fakt kiritish uchun joriy iteratsiyani tanlang."}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Stats */}
           <div className="px-8 py-6 grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
-            <StatCard icon={Users} variant="labor"     label={t('labor_resources')       || 'Mehnat resurslari'}     value={kpis.labor} />
-            <StatCard icon={Wrench} variant="mach"     label={t('construction_machines') || 'Qurilish mashinalari'}  value={kpis.machines} />
-            <StatCard icon={Package} variant="mat"     label={t('material_resources')    || 'Material resurslar'}    value={kpis.materials} />
+            <StatCard icon={Users} variant="labor"     label={t('labor_resources')       || 'Mehnat resurslari'}     value={displayKpis.labor} />
+            <StatCard icon={Wrench} variant="mach"     label={t('construction_machines') || 'Qurilish mashinalari'}  value={displayKpis.machines} />
+            <StatCard icon={Package} variant="mat"     label={t('material_resources')    || 'Material resurslar'}    value={displayKpis.materials} />
             <StatCard
-              icon={Grid3x3} variant="grand" label={t('total') || 'JAMI'} value={kpis.grand}
+              icon={Grid3x3} variant="grand" label={t('total') || 'JAMI'} value={displayKpis.grand}
               meta={
                 <>
-                  Hajm kiritilgan: <span style={{ color: C.teal, fontWeight: 600 }}>{kpis.filled}</span> / {kpis.total}
+                  Hajm kiritilgan: <span style={{ color: C.teal, fontWeight: 600 }}>{displayKpis.filled}</span> / {displayKpis.total}
                 </>
               }
             />
@@ -1363,14 +2247,14 @@ export default function SmetaManagementTab({ project }) {
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder={t('search_work_or_code') || "Ish nomi yoki shifr bo'yicha qidirish..."}
-                  className="w-full pl-9 pr-3 py-2.5 rounded-md text-[13px] outline-none"
+                  className="w-full pl-9 pr-3 py-2.5 rounded-md text-[15px] outline-none"
                   style={{ background: C.inset, color: C.text, border: `1px solid ${C.border2}`, fontFamily: 'inherit' }}
                 />
               </div>
               <select
                 value={sectionFilter}
                 onChange={(e) => setSectionFilter(e.target.value)}
-                className="px-3 py-2.5 rounded-md text-[13px] outline-none cursor-pointer"
+                className="px-3 py-2.5 rounded-md text-[15px] outline-none cursor-pointer"
                 style={{ background: C.inset, color: C.text, border: `1px solid ${C.border2}`, minWidth: 200 }}
               >
                 <option value="">{t('section_all') || "Barcha bo'limlar"}</option>
@@ -1464,6 +2348,14 @@ export default function SmetaManagementTab({ project }) {
               </div>
             ) : (
               sections.map((sec) => {
+                // Skip painting a section until at least one of its works
+                // is inside the scroll window. Full data still computes the
+                // counts/totals above — this only defers DOM.
+                const secHasVisible =
+                  (sec.lines || []).some((l) => visibleWorkIds.has(Number(l.id)))
+                  || (sec.subSections || []).some((sub) =>
+                    (sub.lines || []).some((l) => visibleWorkIds.has(Number(l.id))));
+                if (!secHasVisible) return null;
                 const collapsed = !!collapsedSections[sec.name];
                 return (
                   <div key={sec.name} className="mb-6">
@@ -1489,14 +2381,14 @@ export default function SmetaManagementTab({ project }) {
                             transform: collapsed ? 'rotate(-90deg)' : 'rotate(0)',
                           }}
                         />
-                        <span className="flex-1 text-left font-semibold text-[13px] tracking-[0.02em]">{sec.name}</span>
+                        <span className="flex-1 text-left font-semibold text-[15px] tracking-[0.02em]">{sec.name}</span>
                         <span
-                          className="text-[11px] font-mono px-2 py-0.5 rounded"
+                          className="text-[13px] font-mono px-2 py-0.5 rounded"
                           style={{ background: C.inset, color: C.muted }}
                         >
                           {sec.lines.length} {t('works_count_suffix') || 'ish'}
                         </span>
-                        <span className="text-[13px] font-mono font-semibold" style={{ color: C.amber }}>
+                        <span className="text-[15px] font-mono font-semibold" style={{ color: C.amber }}>
                           {fmt(sec.total)} {t('currency_som') || "so'm"}
                         </span>
                       </button>
@@ -1513,14 +2405,14 @@ export default function SmetaManagementTab({ project }) {
                           e.stopPropagation();
                           setAddWorkModal({ sectionName: sec.name, name: '', uom: '', code: '' });
                         }}
-                        className="ml-1 px-2.5 py-1.5 rounded-md text-[11px] font-medium flex items-center gap-1 transition"
+                        className="ml-1 px-2.5 py-1.5 rounded-md text-[13px] font-medium flex items-center gap-1 transition"
                         style={{
                           background: 'rgba(13,148,136,0.1)', color: C.teal,
                           border: '1px solid rgba(13,148,136,0.3)',
                         }}
                         title={t('add_work') || "Ish qo'shish"}
                       >
-                        <span className="text-[13px] leading-none font-bold">+</span>
+                        <span className="text-[15px] leading-none font-bold">+</span>
                         {t('add_work_short') || "Ish"}
                       </button>
                       <button
@@ -1534,14 +2426,14 @@ export default function SmetaManagementTab({ project }) {
                           }
                           setAddSubBosqichSection(sec.name);
                         }}
-                        className="ml-1 px-2.5 py-1.5 rounded-md text-[11px] font-medium flex items-center gap-1 transition"
+                        className="ml-1 px-2.5 py-1.5 rounded-md text-[13px] font-medium flex items-center gap-1 transition"
                         style={{
                           background: C.inset, color: C.muted,
                           border: `1px solid ${C.border2}`,
                         }}
                         title={t('add_substage') || "Sub-bosqich qo'shish"}
                       >
-                        <span className="text-[13px] leading-none font-bold">+</span>
+                        <span className="text-[15px] leading-none font-bold">+</span>
                         {t('substage_short') || "Sub-bosqich"}
                       </button>
                       {/* Section delete — cascades through every estimate
@@ -1570,43 +2462,54 @@ export default function SmetaManagementTab({ project }) {
                       )}
                     </div>
 
-                    {!collapsed && sec.lines.map((ln) => {
-                      const subs = subByParent.get(Number(ln.id)) || [];
-                      const subStages = subs.filter(isSubStageRow);
-                      return (
-                        <React.Fragment key={ln.id}>
-                          <WorkCard
-                            line={ln}
-                            subs={subs}
-                            isOpen={openWorks.has(ln.id)}
-                            onToggle={() => toggleWork(ln.id)}
-                            qtyDraft={qtyDraft[ln.id]}
-                            setQtyDraft={(v) => setQtyDraft((d) => ({ ...d, [ln.id]: v }))}
-                            clearQtyDraft={() => setQtyDraft((d) => { const n = { ...d }; delete n[ln.id]; return n; })}
-                            commitQty={commitQty}
-                            resetQty={resetQty}
-                            removeLine={removeLine}
-                            openAddResource={openAddResource}
-                            openAddStage={openAddStage}
-                            openTopup={openTopup}
-                            removeTopup={removeTopup}
-                            t={t}
-                            isSubStage={false}
-                          />
-                          {/* Sub-stage cards — rendered as their own cards
-                             RIGHT AFTER their parent in the section list.
-                             Each gets its own expand/collapse, qty input,
-                             and resource breakdown. */}
-                          {subStages.map((ss) => (
+                    {/* Interleaved render — top-level lines and
+                       sub-sections are sorted into a SINGLE stream by
+                       their first row's item_number. So a sub-section
+                       whose work numbers start at 1 renders BEFORE a
+                       top-level work numbered 8, matching the printed
+                       smeta page order. Without this they'd be split
+                       into "all lines first, then all sub-sections"
+                       which buried row-1 sub-sections under row-47
+                       top-level lines.
+
+                       Each entry carries its sort key (leading numeric
+                       run of item_number — same parser the section
+                       useMemo uses) plus a render() function. After
+                       sort, we just call render() for each. */}
+                    {/* Interleaved render — top-level lines and
+                       sub-sections are sorted into a SINGLE stream by
+                       their first row's item_number. So a sub-section
+                       whose work numbers start at 1 renders BEFORE a
+                       top-level work numbered 8, matching the printed
+                       smeta page order. */}
+                    {!collapsed && (() => {
+                      const leadNum = (raw) => {
+                        const m = String(raw || '').trim().match(/^\d+(?:\.\d+)?/);
+                        return m ? Number(m[0]) : Infinity;
+                      };
+                      const subMinItem = (sub) => {
+                        let min = Infinity;
+                        for (const sln of (sub.lines || [])) {
+                          const n = leadNum(sln.item_number);
+                          if (n < min) min = n;
+                        }
+                        return min;
+                      };
+                      const renderLineEntry = (ln) => {
+                        // Outside the scroll window — withhold until scrolled to.
+                        if (!visibleWorkIds.has(Number(ln.id))) return null;
+                        const subs = subByParent.get(Number(ln.id)) || [];
+                        const subStages = subs.filter(isSubStageRow);
+                        return (
+                          <React.Fragment key={`ln-${ln.id}`}>
                             <WorkCard
-                              key={ss.id}
-                              line={ss}
-                              subs={subByParent.get(Number(ss.id)) || []}
-                              isOpen={openWorks.has(ss.id)}
-                              onToggle={() => toggleWork(ss.id)}
-                              qtyDraft={qtyDraft[ss.id]}
-                              setQtyDraft={(v) => setQtyDraft((d) => ({ ...d, [ss.id]: v }))}
-                              clearQtyDraft={() => setQtyDraft((d) => { const n = { ...d }; delete n[ss.id]; return n; })}
+                              line={ln}
+                              subs={subs}
+                              isOpen={openWorks.has(ln.id)}
+                              onToggle={() => toggleWork(ln.id)}
+                              qtyDraft={qtyDraft[ln.id]}
+                              setQtyDraft={(v) => setQtyDraft((d) => ({ ...d, [ln.id]: v }))}
+                              clearQtyDraft={() => setQtyDraft((d) => { const n = { ...d }; delete n[ln.id]; return n; })}
                               commitQty={commitQty}
                               resetQty={resetQty}
                               removeLine={removeLine}
@@ -1614,94 +2517,435 @@ export default function SmetaManagementTab({ project }) {
                               openAddStage={openAddStage}
                               openTopup={openTopup}
                               removeTopup={removeTopup}
+                              editLine={setEditLineTarget}
                               t={t}
-                              isSubStage
+                              isSubStage={false}
+                              periodFakt={periodFaktByLine.get(Number(ln.id))}
                             />
-                          ))}
+                            {subStages.map((ss) => (
+                              <WorkCard
+                                key={ss.id}
+                                line={ss}
+                                subs={subByParent.get(Number(ss.id)) || []}
+                                isOpen={openWorks.has(ss.id)}
+                                onToggle={() => toggleWork(ss.id)}
+                                qtyDraft={qtyDraft[ss.id]}
+                                setQtyDraft={(v) => setQtyDraft((d) => ({ ...d, [ss.id]: v }))}
+                                clearQtyDraft={() => setQtyDraft((d) => { const n = { ...d }; delete n[ss.id]; return n; })}
+                                commitQty={commitQty}
+                                resetQty={resetQty}
+                                removeLine={removeLine}
+                                openAddResource={openAddResource}
+                                openAddStage={openAddStage}
+                                openTopup={openTopup}
+                                removeTopup={removeTopup}
+                                editLine={setEditLineTarget}
+                                t={t}
+                                isSubStage
+                              />
+                            ))}
+                          </React.Fragment>
+                        );
+                      };
+                      const renderSubEntry = (sub) => (
+                        <React.Fragment key={`sub-${sub.fullName}`}>
+                          <div
+                            className="ml-6 mb-2 rounded-lg px-4 py-3 flex items-center gap-2.5 border-l-2"
+                            style={{
+                              background: C.inset,
+                              border: `1px dashed ${C.border2}`,
+                              borderLeftColor: C.teal,
+                              borderLeftWidth: 3,
+                            }}
+                          >
+                            <span className="text-[14px] text-slate-400">└</span>
+                            <span className="flex-1 text-left font-medium text-[14px] text-slate-700">{sub.name}</span>
+                            <span
+                              className="text-[12px] font-mono px-2 py-0.5 rounded"
+                              style={{ background: C.card, color: C.muted }}
+                            >
+                              {sub.lines.length} {t('works_count_suffix') || 'ish'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setAddWorkModal({
+                                sectionName: sub.fullName, name: '', uom: '', code: '',
+                              })}
+                              className="px-2 py-1 rounded text-[12px] font-medium flex items-center gap-1"
+                              style={{
+                                background: 'rgba(13,148,136,0.08)', color: C.teal,
+                                border: '1px solid rgba(13,148,136,0.25)',
+                              }}
+                              title={t('add_work') || "Ish qo'shish"}
+                            >
+                              <span className="text-[14px] leading-none font-bold">+</span>
+                              {t('add_work_short') || "Ish"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!estimateId) {
+                                  toast.error(t('no_estimate_for_work')
+                                    || "Bu blok uchun єдинич smeta topilmadi");
+                                  return;
+                                }
+                                setAddSubBosqichSection(sub.fullName);
+                              }}
+                              className="px-2 py-1 rounded text-[12px] font-medium flex items-center gap-1"
+                              style={{
+                                background: C.card, color: C.muted,
+                                border: `1px solid ${C.border2}`,
+                              }}
+                              title={t('add_substage') || "Sub-bosqich qo'shish"}
+                            >
+                              <span className="text-[14px] leading-none font-bold">+</span>
+                              {t('substage_short') || "Sub-bosqich"}
+                            </button>
+                            {canDeleteConstruction && (
+                              <button
+                                type="button"
+                                onClick={() => removeSection(sub.fullName)}
+                                className="p-1 rounded flex items-center justify-center"
+                                style={{
+                                  background: 'rgba(220,38,38,0.06)', color: C.red,
+                                  border: '1px solid rgba(220,38,38,0.25)',
+                                }}
+                                title={t('delete_substage') || "Sub-bosqichni o'chirish"}
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+                          {/* Hide ONE "bucket marker" line that
+                             AddSubWorkModal creates with the same name as
+                             the sub-section — but only the first such
+                             line, so subsequent works the user adds with
+                             the same name still show. A bucket marker is
+                             a line whose name matches the sub-section's
+                             child name AND has no resources of its own.
+                             Keeping all real works visible (with their
+                             resources, qty, etc.) is what was missing
+                             when both "yangi" works got hidden together. */}
+                          {(() => {
+                            const normTxt = (s) => String(s || '').trim().toLowerCase();
+                            const subName = normTxt(sub.name);
+                            let bucketSkipped = false;
+                            const visibleLines = (sub.lines || []).filter((ln) => {
+                              // Outside the scroll window — withhold for now.
+                              if (!visibleWorkIds.has(Number(ln.id))) return false;
+                              if (bucketSkipped) return true;
+                              if (normTxt(ln.name) !== subName) return true;
+                              const lnSubs = subByParent.get(Number(ln.id)) || [];
+                              const hasResources = lnSubs.some((s) => !isSubStageRow(s));
+                              if (hasResources) return true;
+                              // First name-match line with no resources is
+                              // the bucket marker — skip it once.
+                              bucketSkipped = true;
+                              return false;
+                            });
+                            if (visibleLines.length === 0) return null;
+                            return (
+                            <div className="ml-6 mb-2">
+                              {visibleLines.map((ln) => {
+                                const subs = subByParent.get(Number(ln.id)) || [];
+                                const subStages = subs.filter(isSubStageRow);
+                                return (
+                                  <React.Fragment key={ln.id}>
+                                    <WorkCard
+                                      line={ln}
+                                      subs={subs}
+                                      isOpen={openWorks.has(ln.id)}
+                                      onToggle={() => toggleWork(ln.id)}
+                                      qtyDraft={qtyDraft[ln.id]}
+                                      setQtyDraft={(v) => setQtyDraft((d) => ({ ...d, [ln.id]: v }))}
+                                      clearQtyDraft={() => setQtyDraft((d) => { const n = { ...d }; delete n[ln.id]; return n; })}
+                                      commitQty={commitQty}
+                                      resetQty={resetQty}
+                                      removeLine={removeLine}
+                                      openAddResource={openAddResource}
+                                      openAddStage={openAddStage}
+                                      openTopup={openTopup}
+                                      removeTopup={removeTopup}
+                                      editLine={setEditLineTarget}
+                                      t={t}
+                                      isSubStage={false}
+                                      periodFakt={periodFaktByLine.get(Number(ln.id))}
+                                    />
+                                    {subStages.map((ss) => (
+                                      <WorkCard
+                                        key={ss.id}
+                                        line={ss}
+                                        subs={subByParent.get(Number(ss.id)) || []}
+                                        isOpen={openWorks.has(ss.id)}
+                                        onToggle={() => toggleWork(ss.id)}
+                                        qtyDraft={qtyDraft[ss.id]}
+                                        setQtyDraft={(v) => setQtyDraft((d) => ({ ...d, [ss.id]: v }))}
+                                        clearQtyDraft={() => setQtyDraft((d) => { const n = { ...d }; delete n[ss.id]; return n; })}
+                                        commitQty={commitQty}
+                                        resetQty={resetQty}
+                                        removeLine={removeLine}
+                                        openAddResource={openAddResource}
+                                        openAddStage={openAddStage}
+                                        openTopup={openTopup}
+                                        removeTopup={removeTopup}
+                                        editLine={setEditLineTarget}
+                                        t={t}
+                                        isSubStage
+                                      />
+                                    ))}
+                                  </React.Fragment>
+                                );
+                              })}
+                            </div>
+                            );
+                          })()}
                         </React.Fragment>
                       );
-                    })}
+                      // Manual sub-sections pin to the top. Detection
+                      // chain — every signal here is a STRICT marker
+                      // that the sub-section came from the UI, not the
+                      // import path:
+                      //
+                      //   1. Construction_stages row id in
+                      //      recentlyAddedSectionIds (localStorage of
+                      //      explicit "+ Bo'lim qo'shish" additions).
+                      //   2. is_empty_manual placeholder (pre-seeded).
+                      //   3. Empty bucket (zero lines).
+                      //   4. EVERY line carries is_manual = TRUE
+                      //      (migration 417 + backend writes).
+                      //
+                      // The earlier item_number-based heuristic was
+                      // removed — it false-positived for imported єдинич
+                      // works that happen to lack a numeric item_number
+                      // (common when the source file uses SHRNK codes
+                      // as identifiers). Users on production who haven't
+                      // run migration 417 + rebuilt the backend will
+                      // need to do so for UI-added sub-sections to pin
+                      // correctly; new adds in the current session still
+                      // pin via recentlyAddedSectionIds.
+                      const recentlyAdded = new Set(
+                        (recentlyAddedSectionIds || []).map(Number),
+                      );
+                      const fullNameToManualId = new Map();
+                      for (const ms of (manualSectionRows || [])) {
+                        const name = String(ms?.name || '').trim();
+                        if (name && ms?.id != null) {
+                          fullNameToManualId.set(name, Number(ms.id));
+                        }
+                      }
+                      const isManualSub = (sub) => {
+                        const full = String(sub.fullName || '').trim();
+                        const mid = fullNameToManualId.get(full);
+                        if (mid != null && recentlyAdded.has(mid)) return true;
+                        if (sub.is_empty_manual) return true;
+                        const lines = sub.lines || [];
+                        if (lines.length === 0) return true;
+                        return lines.every((ln) => ln.is_manual === true);
+                      };
+                      // A sub-section that's just a one-work wrapper
+                      // (created via "+ Sub-bosqich" with a SHRNK code,
+                      // where AddSubWorkModal creates both a wrapper
+                      // line and an inner work line of the same name)
+                      // collapses to JUST the inner work — no wrapper
+                      // card. The user explicitly asked for this:
+                      // "tashqaridagini olib tashlab, ichidagisi
+                      // koʻrinishi kerak" (drop the outer, show the
+                      // inner). The inner work keeps its WorkCard with
+                      // qty input + cloned resources + sub-stage
+                      // affordances; the wrapper's "+ Ish" / "+ Sub-
+                      // bosqich" controls would have been redundant.
+                      const normTxt = (s) => String(s || '').trim().toLowerCase();
+                      const collapseToInnerWork = (sub) => {
+                        const lines = sub.lines || [];
+                        if (lines.length !== 1) return null;
+                        const ln = lines[0];
+                        if (normTxt(ln.name) !== normTxt(sub.name)) return null;
+                        return ln;
+                      };
 
-                    {/* Manually-created sub-sections — empty cards nested
-                       inside the parent. Each is a placeholder for a
-                       hierarchy the user defined via the "+ Sub-bosqich"
-                       button. Indented with a left border accent so it
-                       reads as nested instead of as a sibling section.
-                       Carries its own "+ Sub-bosqich" so the user can
-                       add a deeper level (PARENT › CHILD › GRANDCHILD). */}
-                    {!collapsed && Array.isArray(sec.subSections) && sec.subSections.map((sub) => (
-                      <div
-                        key={sub.fullName}
-                        className="ml-6 mb-2 rounded-lg px-4 py-3 flex items-center gap-2.5 border-l-2"
-                        style={{
-                          background: C.inset,
-                          border: `1px dashed ${C.border2}`,
-                          borderLeftColor: C.teal,
-                          borderLeftWidth: 3,
-                        }}
-                      >
-                        <span className="text-[12px] text-slate-400">└</span>
-                        <span className="flex-1 text-left font-medium text-[12.5px] text-slate-700">{sub.name}</span>
-                        <span
-                          className="text-[10.5px] font-mono px-2 py-0.5 rounded"
-                          style={{ background: C.card, color: C.muted }}
-                        >
-                          {sub.lines.length} {t('works_count_suffix') || 'ish'}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setAddWorkModal({
-                            sectionName: sub.fullName, name: '', uom: '', code: '',
-                          })}
-                          className="px-2 py-1 rounded text-[10.5px] font-medium flex items-center gap-1"
+                      // Manual sub-sections render first (preserved in
+                      // their existing order). Imported sub-sections and
+                      // top-level lines render in their file order — no
+                      // re-sorting. The user wants imported rows kept
+                      // exactly where the import put them.
+                      const manualSubs = [];
+                      const importedEntries = [];
+                      for (const ln of (sec.lines || [])) {
+                        importedEntries.push({ kind: 'line', data: ln });
+                      }
+                      for (const sub of (sec.subSections || [])) {
+                        const inner = collapseToInnerWork(sub);
+                        const target = isManualSub(sub) ? manualSubs : importedEntries;
+                        if (inner) {
+                          // Collapse to inner work card — caller of
+                          // renderLineEntry below will handle WorkCard +
+                          // sub-stages + cloned resources naturally.
+                          if (target === manualSubs) {
+                            manualSubs.push({ kind: 'line', data: inner });
+                          } else {
+                            importedEntries.push({ kind: 'line', data: inner });
+                          }
+                        } else if (target === manualSubs) {
+                          manualSubs.push({ kind: 'sub', data: sub });
+                        } else {
+                          importedEntries.push({ kind: 'sub', data: sub });
+                        }
+                      }
+
+                      const renderEntry = (entry) =>
+                        entry.kind === 'line' ? renderLineEntry(entry.data) : renderSubEntry(entry.data);
+
+                      return [
+                        ...manualSubs.map(renderEntry),
+                        ...importedEntries.map(renderEntry),
+                      ];
+                    })()}
+
+                    {/* Legacy sub-section render — left in place but
+                       disabled because the interleaved render above
+                       handles sub-sections inline. Kept as a fallback
+                       reference; safe to delete in a future cleanup. */}
+                    {false && !collapsed && Array.isArray(sec.subSections) && sec.subSections.map((sub) => (
+                      <React.Fragment key={sub.fullName}>
+                        <div
+                          className="ml-6 mb-2 rounded-lg px-4 py-3 flex items-center gap-2.5 border-l-2"
                           style={{
-                            background: 'rgba(13,148,136,0.08)', color: C.teal,
-                            border: '1px solid rgba(13,148,136,0.25)',
+                            background: C.inset,
+                            border: `1px dashed ${C.border2}`,
+                            borderLeftColor: C.teal,
+                            borderLeftWidth: 3,
                           }}
-                          title={t('add_work') || "Ish qo'shish"}
                         >
-                          <span className="text-[12px] leading-none font-bold">+</span>
-                          {t('add_work_short') || "Ish"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (!estimateId) {
-                              toast.error(t('no_estimate_for_work')
-                                || "Bu blok uchun єдинич smeta topilmadi");
-                              return;
-                            }
-                            setAddSubBosqichSection(sub.fullName);
-                          }}
-                          className="px-2 py-1 rounded text-[10.5px] font-medium flex items-center gap-1"
-                          style={{
-                            background: C.card, color: C.muted,
-                            border: `1px solid ${C.border2}`,
-                          }}
-                          title={t('add_substage') || "Sub-bosqich qo'shish"}
-                        >
-                          <span className="text-[12px] leading-none font-bold">+</span>
-                          {t('substage_short') || "Sub-bosqich"}
-                        </button>
-                        {canDeleteConstruction && (
+                          <span className="text-[14px] text-slate-400">└</span>
+                          <span className="flex-1 text-left font-medium text-[14px] text-slate-700">{sub.name}</span>
+                          <span
+                            className="text-[12px] font-mono px-2 py-0.5 rounded"
+                            style={{ background: C.card, color: C.muted }}
+                          >
+                            {sub.lines.length} {t('works_count_suffix') || 'ish'}
+                          </span>
                           <button
                             type="button"
-                            onClick={() => removeSection(sub.fullName)}
-                            className="p-1 rounded flex items-center justify-center"
+                            onClick={() => setAddWorkModal({
+                              sectionName: sub.fullName, name: '', uom: '', code: '',
+                            })}
+                            className="px-2 py-1 rounded text-[12px] font-medium flex items-center gap-1"
                             style={{
-                              background: 'rgba(220,38,38,0.06)', color: C.red,
-                              border: '1px solid rgba(220,38,38,0.25)',
+                              background: 'rgba(13,148,136,0.08)', color: C.teal,
+                              border: '1px solid rgba(13,148,136,0.25)',
                             }}
-                            title={t('delete_substage') || "Sub-bosqichni o'chirish"}
+                            title={t('add_work') || "Ish qo'shish"}
                           >
-                            <Trash2 className="w-3 h-3" />
+                            <span className="text-[14px] leading-none font-bold">+</span>
+                            {t('add_work_short') || "Ish"}
                           </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!estimateId) {
+                                toast.error(t('no_estimate_for_work')
+                                  || "Bu blok uchun єдинич smeta topilmadi");
+                                return;
+                              }
+                              setAddSubBosqichSection(sub.fullName);
+                            }}
+                            className="px-2 py-1 rounded text-[12px] font-medium flex items-center gap-1"
+                            style={{
+                              background: C.card, color: C.muted,
+                              border: `1px solid ${C.border2}`,
+                            }}
+                            title={t('add_substage') || "Sub-bosqich qo'shish"}
+                          >
+                            <span className="text-[14px] leading-none font-bold">+</span>
+                            {t('substage_short') || "Sub-bosqich"}
+                          </button>
+                          {canDeleteConstruction && (
+                            <button
+                              type="button"
+                              onClick={() => removeSection(sub.fullName)}
+                              className="p-1 rounded flex items-center justify-center"
+                              style={{
+                                background: 'rgba(220,38,38,0.06)', color: C.red,
+                                border: '1px solid rgba(220,38,38,0.25)',
+                              }}
+                              title={t('delete_substage') || "Sub-bosqichni o'chirish"}
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Work cards belonging to this sub-section. Indented
+                           so the nesting reads visually. Each card carries
+                           the same controls as a top-level work (qty edit,
+                           resources, sub-stages). */}
+                        {Array.isArray(sub.lines) && sub.lines.length > 0 && (
+                          <div className="ml-6 mb-2">
+                            {sub.lines.map((ln) => {
+                              const subs = subByParent.get(Number(ln.id)) || [];
+                              const subStages = subs.filter(isSubStageRow);
+                              return (
+                                <React.Fragment key={ln.id}>
+                                  <WorkCard
+                                    line={ln}
+                                    subs={subs}
+                                    isOpen={openWorks.has(ln.id)}
+                                    onToggle={() => toggleWork(ln.id)}
+                                    qtyDraft={qtyDraft[ln.id]}
+                                    setQtyDraft={(v) => setQtyDraft((d) => ({ ...d, [ln.id]: v }))}
+                                    clearQtyDraft={() => setQtyDraft((d) => { const n = { ...d }; delete n[ln.id]; return n; })}
+                                    commitQty={commitQty}
+                                    resetQty={resetQty}
+                                    removeLine={removeLine}
+                                    openAddResource={openAddResource}
+                                    openAddStage={openAddStage}
+                                    openTopup={openTopup}
+                                    removeTopup={removeTopup}
+                                    editLine={setEditLineTarget}
+                                    t={t}
+                                    isSubStage={false}
+                                    periodFakt={periodFaktByLine.get(Number(ln.id))}
+                                  />
+                                  {subStages.map((ss) => (
+                                    <WorkCard
+                                      key={ss.id}
+                                      line={ss}
+                                      subs={subByParent.get(Number(ss.id)) || []}
+                                      isOpen={openWorks.has(ss.id)}
+                                      onToggle={() => toggleWork(ss.id)}
+                                      qtyDraft={qtyDraft[ss.id]}
+                                      setQtyDraft={(v) => setQtyDraft((d) => ({ ...d, [ss.id]: v }))}
+                                      clearQtyDraft={() => setQtyDraft((d) => { const n = { ...d }; delete n[ss.id]; return n; })}
+                                      commitQty={commitQty}
+                                      resetQty={resetQty}
+                                      removeLine={removeLine}
+                                      openAddResource={openAddResource}
+                                      openAddStage={openAddStage}
+                                      openTopup={openTopup}
+                                      removeTopup={removeTopup}
+                                      editLine={setEditLineTarget}
+                                      t={t}
+                                      isSubStage
+                                    />
+                                  ))}
+                                </React.Fragment>
+                              );
+                            })}
+                          </div>
                         )}
-                      </div>
+                      </React.Fragment>
                     ))}
                   </div>
                 );
               })
+            )}
+            {/* Infinite-scroll sentinel — when it scrolls into view the
+                window grows by another page of works. Rendered only while
+                there are still works outside the window. */}
+            {!loadingLines && visibleWorkCount < totalWorks && (
+              <div ref={loadMoreRef} className="py-6 flex items-center justify-center">
+                <Loader className="py-0" size="w-5 h-5" />
+              </div>
             )}
           </div>
         </div>
@@ -1732,7 +2976,7 @@ export default function SmetaManagementTab({ project }) {
             snapshots={snapshots}
             onView={handleViewSnapshot}
             onDelete={handleDeleteSnapshot}
-            onRefresh={() => loadSnapshots(estimateId)}
+            onRefresh={() => loadSnapshots(project?.id)}
             onSaveCurrent={() => setForm2Open(true)}
           />
         </div>
@@ -1748,7 +2992,10 @@ export default function SmetaManagementTab({ project }) {
             entries={auditEntries}
             filter={auditFilter}
             onFilterChange={(v) => setAuditFilter(v)}
-            onRefresh={() => loadAudit(estimateId, auditFilter)}
+            onRefresh={() => loadAudit(project?.id, auditFilter)}
+            hasMore={auditHasMore}
+            loadingMore={loadingMoreAudit}
+            loadMoreRef={auditMoreRef}
           />
         </div>
       )}
@@ -1761,7 +3008,7 @@ export default function SmetaManagementTab({ project }) {
         estimateId={Number(estimateId)}
         parent={addTarget}
         nextSeq={addTarget ? nextSeqFor(addTarget.id) : 1}
-        onSaved={() => loadLines(activeEstimateIds)}
+        onSaved={() => reloadKeepingWork(addTarget?.id)}
       />
       <AddSubWorkModal
         open={addStageOpen}
@@ -1770,7 +3017,7 @@ export default function SmetaManagementTab({ project }) {
         estimateId={Number(estimateId)}
         parent={addTarget}
         nextSeq={addTarget ? nextSeqFor(addTarget.id) : 1}
-        onSaved={() => loadLines(activeEstimateIds)}
+        onSaved={() => reloadKeepingWork(addTarget?.id)}
       />
 
       {/* Second mount of the same modal in parentSection mode — handles
@@ -1787,7 +3034,7 @@ export default function SmetaManagementTab({ project }) {
         parentSection={addSubBosqichSection || ''}
         onSaved={() => {
           setAddSubBosqichSection(null);
-          loadLines(activeEstimateIds);
+          loadLines(activeEstimateIds, { force: true });
         }}
       />
 
@@ -1797,6 +3044,22 @@ export default function SmetaManagementTab({ project }) {
         onClose={() => setMatConsOpen(false)}
         projectId={project?.id}
         projectName={project?.name}
+      />
+
+      {/* Generic estimate-line edit modal — opened from the pencil icon
+         on any work card or any resource sub-line. Routes the save to the
+         line's own estimate_id so multi-єдинич blocks edit the right row.
+         On save we re-load the active estimate's lines so totals/badges
+         update without a manual refresh. */}
+      <EstimateLineEditModal
+        open={!!editLineTarget}
+        onClose={() => setEditLineTarget(null)}
+        line={editLineTarget}
+        estimateId={editLineTarget ? lineEst(editLineTarget) : (estimateId ? Number(estimateId) : undefined)}
+        onSaved={() => {
+          setEditLineTarget(null);
+          loadLines(activeEstimateIds, { force: true });
+        }}
       />
 
       <Dialog open={form2Open} onOpenChange={setForm2Open}>
@@ -1920,33 +3183,67 @@ export default function SmetaManagementTab({ project }) {
               toast.error(t('no_estimate_for_work') || "Smeta yo'q — avval єдинич smeta yarating");
               return;
             }
+            const code = (addWorkModal.code || '').trim();
             setAddWorkBusy(true);
             try {
-              await constructionService.createEstimateLine(Number(estimateId), {
-                // No parent line — this is a top-level work (a "ish"),
-                // not a sub-line. parent_item_number carries the section
-                // grouping (= section's name).
-                parent_line_id: 0,
-                parent_item_number: addWorkModal.sectionName,
-                name,
-                uom,
-                code: (addWorkModal.code || '').trim() || undefined,
-                // Template-mode defaults: quantity starts at 0 so the
-                // foreman fills BAJARILDI. quantity_override=true so the
-                // value the foreman types isn't re-derived from a
-                // (non-existent) parent's cascade.
-                quantity: 0,
-                quantity_override: true,
-                resource_type: '',
-                material_rate: 0,
-                labor_rate: 0,
-                equipment_rate: 0,
-                norm_rate: 0,
-                unit_price: 0,
-              });
+              if (code) {
+                // Code-match clone path — let the backend look for an
+                // existing parent line with this code anywhere in the
+                // project and copy its resources onto the new work. Falls
+                // back to a plain insert when no match is found, so it's
+                // safe to call this unconditionally when a code is set.
+                const res = await constructionService.cloneEstimateLineByCode(Number(estimateId), {
+                  source_code: code,
+                  parent_item_number: addWorkModal.sectionName,
+                  name,
+                  uom,
+                  code,
+                  quantity: 0,
+                });
+                const cloned = Number(res?.cloned_resources || 0);
+                if (cloned > 0) {
+                  toast.success(
+                    (t('cloned_with_resources') || "Ish qo'shildi va {n} ta resurs ko'chirildi")
+                      .replace('{n}', String(cloned)),
+                  );
+                } else if (res?.source_id) {
+                  toast.success(
+                    t('cloned_source_empty')
+                      || "Ish qo'shildi (mos kod topildi, lekin resurslari yo'q edi)",
+                  );
+                } else {
+                  toast.success(
+                    t('cloned_no_match')
+                      || "Ish qo'shildi (kod loyihada topilmadi — resurslar ko'chirilmadi)",
+                  );
+                }
+              } else {
+                await constructionService.createEstimateLine(Number(estimateId), {
+                  // No parent line — this is a top-level work (a "ish"),
+                  // not a sub-line. parent_item_number carries the section
+                  // grouping (= section's name).
+                  parent_line_id: 0,
+                  parent_item_number: addWorkModal.sectionName,
+                  name,
+                  uom,
+                  code: undefined,
+                  // Template-mode defaults: quantity starts at 0 so the
+                  // foreman fills BAJARILDI. quantity_override=true so the
+                  // value the foreman types isn't re-derived from a
+                  // (non-existent) parent's cascade.
+                  quantity: 0,
+                  quantity_override: true,
+                  resource_type: '',
+                  material_rate: 0,
+                  labor_rate: 0,
+                  equipment_rate: 0,
+                  norm_rate: 0,
+                  unit_price: 0,
+                });
+                toast.success(t('work_added') || "Ish qo'shildi");
+              }
               setAddWorkModal(null);
-              loadLines(activeEstimateIds);
-              toast.success(t('work_added') || "Ish qo'shildi");
+              loadLines(activeEstimateIds, { force: true });
             } catch (e) {
               toast.error(formatApiError(e, t, 'Xatolik'));
             } finally {
@@ -2037,7 +3334,7 @@ function SmetaAddSectionModal({
             ? (t('add_substage') || "Sub-bosqich qo'shish")
             : (t('add_section') || "Bo'lim qo'shish")}
         </h3>
-        <p className="text-[12px] text-slate-500 mb-4">
+        <p className="text-[14px] text-slate-500 mb-4">
           {isSub
             ? (t('add_substage_hint') || "Yangi sub-bosqich nomi")
             : (t('add_section_hint_long') || "Yangi bo'lim nomi (masalan: \"Pardozlash\", \"Poydevorlar\")")}
@@ -2047,13 +3344,13 @@ function SmetaAddSectionModal({
            user sees exactly which section they're adding under. No
            dropdown: the parent is fixed by the entry point. */}
         {isSub && (
-          <div className="mb-4 px-3 py-2 rounded-lg bg-teal-50 border border-teal-200 text-[12px] text-teal-700">
+          <div className="mb-4 px-3 py-2 rounded-lg bg-teal-50 border border-teal-200 text-[14px] text-teal-700">
             <span className="text-teal-500 mr-1">{t('parent_section_label') || "Asosiy:"}</span>
             <span className="font-medium">{parent}</span>
           </div>
         )}
 
-        <label className="block text-[11px] uppercase tracking-wider font-semibold text-slate-500 mb-1.5">
+        <label className="block text-[13px] uppercase tracking-wider font-semibold text-slate-500 mb-1.5">
           {isSub
             ? (t('substage_name') || "Sub-bosqich nomi")
             : (t('section_name') || "Bo'lim nomi")}
@@ -2161,7 +3458,7 @@ function ResourceTopupModal({ resource, onSubmit, onCancel, t }) {
             <h3 className="text-base font-bold text-slate-900">
               {t('topup_modal_title') || "Qo'shimcha buyurtma qo'shish"}
             </h3>
-            <p className="text-[12px] text-slate-500 mt-1">
+            <p className="text-[14px] text-slate-500 mt-1">
               {t('topup_modal_subtitle')
                 || "Asl smeta saqlanib qoladi — qo'shimcha buyurtma alohida yoziladi."}
             </p>
@@ -2169,12 +3466,12 @@ function ResourceTopupModal({ resource, onSubmit, onCancel, t }) {
         </div>
 
         {/* Resource being topped up */}
-        <div className="rounded-lg p-3 mb-4 text-[12px]" style={{ background: '#F8FAFC', border: '1px solid #E2E8F0' }}>
-          <div className="text-[11px] uppercase font-semibold tracking-[0.06em] text-slate-500 mb-1">
+        <div className="rounded-lg p-3 mb-4 text-[14px]" style={{ background: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+          <div className="text-[13px] uppercase font-semibold tracking-[0.06em] text-slate-500 mb-1">
             {t('resource') || 'Resurs'}
           </div>
           <div className="font-medium text-slate-800">{resource?.name || '—'}</div>
-          <div className="flex flex-wrap gap-3 mt-1 text-[11px] text-slate-500">
+          <div className="flex flex-wrap gap-3 mt-1 text-[13px] text-slate-500">
             <span>
               {t('uom') || "O'lchov"}: <span className="text-slate-700">{resource?.uom || '—'}</span>
             </span>
@@ -2191,7 +3488,7 @@ function ResourceTopupModal({ resource, onSubmit, onCancel, t }) {
 
         <div className="grid grid-cols-2 gap-3 mb-3">
           <div>
-            <label className="block text-[11px] uppercase font-semibold tracking-[0.06em] text-slate-500 mb-1">
+            <label className="block text-[13px] uppercase font-semibold tracking-[0.06em] text-slate-500 mb-1">
               {t('topup_extra_qty') || "Qo'shimcha miqdor"} *
             </label>
             <input
@@ -2206,7 +3503,7 @@ function ResourceTopupModal({ resource, onSubmit, onCancel, t }) {
             />
           </div>
           <div>
-            <label className="block text-[11px] uppercase font-semibold tracking-[0.06em] text-slate-500 mb-1">
+            <label className="block text-[13px] uppercase font-semibold tracking-[0.06em] text-slate-500 mb-1">
               {t('topup_new_price') || 'Yangi narx'} *
             </label>
             <input
@@ -2223,7 +3520,7 @@ function ResourceTopupModal({ resource, onSubmit, onCancel, t }) {
 
         <div className="grid grid-cols-2 gap-3 mb-3">
           <div>
-            <label className="block text-[11px] uppercase font-semibold tracking-[0.06em] text-slate-500 mb-1">
+            <label className="block text-[13px] uppercase font-semibold tracking-[0.06em] text-slate-500 mb-1">
               {t('topup_ordered_at') || 'Buyurtma sanasi'}
             </label>
             <input
@@ -2235,7 +3532,7 @@ function ResourceTopupModal({ resource, onSubmit, onCancel, t }) {
             />
           </div>
           <div>
-            <label className="block text-[11px] uppercase font-semibold tracking-[0.06em] text-slate-500 mb-1">
+            <label className="block text-[13px] uppercase font-semibold tracking-[0.06em] text-slate-500 mb-1">
               {t('topup_subtotal') || 'Summa'}
             </label>
             <div
@@ -2248,7 +3545,7 @@ function ResourceTopupModal({ resource, onSubmit, onCancel, t }) {
         </div>
 
         <div className="mb-4">
-          <label className="block text-[11px] uppercase font-semibold tracking-[0.06em] text-slate-500 mb-1">
+          <label className="block text-[13px] uppercase font-semibold tracking-[0.06em] text-slate-500 mb-1">
             {t('topup_note') || 'Izoh (ixtiyoriy)'}
           </label>
           <textarea
@@ -2321,24 +3618,24 @@ function SmetaAddWorkModal({
         <h3 className="text-base font-bold text-slate-900 mb-1">
           {t('add_work') || "Ish qo'shish"}
         </h3>
-        <p className="text-[12px] text-slate-500 mb-4">
+        <p className="text-[14px] text-slate-500 mb-4">
           {t('add_work_hint') || "Bo'limga yangi ish qo'shing — keyin u uchun resurslar, FAKT, va Forma 2 ishlatish mumkin."}
         </p>
 
         {/* Section breadcrumb pill — fixed by the caller, so read-only. */}
-        <div className="mb-4 px-3 py-2 rounded-lg bg-teal-50 border border-teal-200 text-[12px] text-teal-700">
+        <div className="mb-4 px-3 py-2 rounded-lg bg-teal-50 border border-teal-200 text-[14px] text-teal-700">
           <span className="text-teal-500 mr-1">{t('parent_section_label') || "Asosiy:"}</span>
           <span className="font-medium">{sectionName}</span>
         </div>
 
         {!hasEstimate && (
-          <div className="mb-4 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-[11.5px] text-amber-700">
+          <div className="mb-4 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-[13px] text-amber-700">
             {t('no_estimate_for_work_warn')
               || "Bu blok uchun єдинич smeta topilmadi. Avval Smeta boshqaruvi → smeta yarating yoki import qiling."}
           </div>
         )}
 
-        <label className="block text-[11px] uppercase tracking-wider font-semibold text-slate-500 mb-1.5">
+        <label className="block text-[13px] uppercase tracking-wider font-semibold text-slate-500 mb-1.5">
           {t('work_name') || "Ish nomi"} <span className="text-red-500">*</span>
         </label>
         <input
@@ -2354,7 +3651,7 @@ function SmetaAddWorkModal({
 
         <div className="grid grid-cols-[1fr_1fr] gap-3 mb-5">
           <div>
-            <label className="block text-[11px] uppercase tracking-wider font-semibold text-slate-500 mb-1.5">
+            <label className="block text-[13px] uppercase tracking-wider font-semibold text-slate-500 mb-1.5">
               {t('unit') || "O'lchov"} <span className="text-red-500">*</span>
             </label>
             <input
@@ -2368,7 +3665,7 @@ function SmetaAddWorkModal({
             />
           </div>
           <div>
-            <label className="block text-[11px] uppercase tracking-wider font-semibold text-slate-500 mb-1.5">
+            <label className="block text-[13px] uppercase tracking-wider font-semibold text-slate-500 mb-1.5">
               {t('code') || "Shifr"}
               <span className="ml-1 text-slate-400 normal-case font-normal">({t('optional_short') || 'ixtiyoriy'})</span>
             </label>
@@ -2444,7 +3741,7 @@ function SmetaConfirmModal({ tone = 'amber', title, body, confirmLabel, onConfir
             onClick={onConfirm}
             className={`px-4 py-2 rounded-lg text-xs font-semibold text-white inline-flex items-center gap-1.5 ${palette.bg}`}
           >
-            <span className="text-[14px] leading-none">✓</span>
+            <span className="text-[15px] leading-none">✓</span>
             {confirmLabel || (t('confirm') || 'Tasdiqlash')}
           </button>
         </div>
@@ -2490,7 +3787,7 @@ function StatCard({ icon: Icon, variant, label, value, meta }) {
         </div>
       </div>
       <div
-        className="text-[11px] mb-1.5 relative"
+        className="text-[13px] mb-1.5 relative"
         style={{
           color: isGrand ? C.teal : C.muted,
           letterSpacing: isGrand ? '0.1em' : 'normal',
@@ -2503,7 +3800,7 @@ function StatCard({ icon: Icon, variant, label, value, meta }) {
       <div className="text-[20px] font-semibold mb-1 font-mono tabular-nums relative" style={{ color: C.text }}>
         {fmtShort(value)}
       </div>
-      <div className="text-[10px] relative" style={{ color: C.fade }}>
+      <div className="text-[12px] relative" style={{ color: C.fade }}>
         {meta || "so'm"}
       </div>
     </div>
@@ -2519,7 +3816,8 @@ function StatCard({ icon: Icon, variant, label, value, meta }) {
 function WorkCard({
   line, subs, isOpen, onToggle,
   qtyDraft, setQtyDraft, clearQtyDraft, commitQty, resetQty, removeLine,
-  openAddResource, openAddStage, openTopup, removeTopup, t, isSubStage,
+  openAddResource, openAddStage, openTopup, removeTopup, editLine, t, isSubStage,
+  periodFakt, // optional: when defined, FAKT input uses period_fakt (top-level works only)
 }) {
   // Resource-level top-up expansion. Collapsed by default so a row
   // with several top-ups doesn't blow up the card height; the user
@@ -2535,8 +3833,15 @@ function WorkCard({
   const qty = Number(line.quantity) || 0;
   const isEmpty = qty <= 0;
   const draft = qtyDraft;
-  const qtyValue = draft !== undefined ? draft : qty;
-  const qtyChanged = draft !== undefined && Number(parseNum(draft)) !== qty;
+  // When the parent passes a `periodFakt` (top-level work in the new
+  // iteration model — migration 419), the FAKT input shows THIS
+  // iteration's contribution starting at 0 on a fresh iter. The
+  // NORMA badge below still reads original_quantity (smeta reja) and
+  // the resource subtable below still computes off line.quantity
+  // (cumulative), so nothing else flips semantics.
+  const inputBase = periodFakt !== undefined ? Number(periodFakt) : qty;
+  const qtyValue = draft !== undefined ? draft : inputBase;
+  const qtyChanged = draft !== undefined && Number(parseNum(draft)) !== inputBase;
   const origQty = Number(line.original_quantity || 0);
   const qtyModified = origQty > 0 && Math.abs(qty - origQty) > 0.0001;
 
@@ -2596,6 +3901,10 @@ function WorkCard({
 
   return (
     <div
+      // Stable anchor so the page can scroll this work back into view after a
+      // mutation reload (add resource / sub-stage). scrollMarginTop keeps it
+      // clear of the sticky header when scrolled to.
+      id={`work-anchor-${line.id}`}
       className="rounded-lg mb-1.5 overflow-hidden transition"
       style={{
         background: isSubStage
@@ -2609,6 +3918,7 @@ function WorkCard({
           : `1px solid ${C.border}`,
         marginLeft: isSubStage ? 32 : 0,
         opacity: isEmpty && !isOpen ? 0.7 : 1,
+        scrollMarginTop: 90,
       }}
     >
       {/* Head row */}
@@ -2621,13 +3931,13 @@ function WorkCard({
         }}
       >
         <div
-          className="font-mono text-[11px]"
+          className="font-mono text-[13px]"
           style={{ color: isSubStage ? C.teal : C.fade, fontWeight: isSubStage ? 600 : 400 }}
         >
           {line.item_number || ''}
         </div>
         <div
-          className="font-mono text-[11px] font-medium truncate"
+          className="font-mono text-[13px] font-medium truncate"
           style={{ color: C.teal }}
           title={line.code || ''}
         >
@@ -2640,7 +3950,7 @@ function WorkCard({
           {isSubStage ? (line.code || "QO'SH.") : (line.code || '')}
         </div>
         <div
-          className="text-[13px] font-medium leading-snug"
+          className="text-[15px] font-medium leading-snug"
           style={{
             display: '-webkit-box',
             WebkitLineClamp: 2,
@@ -2653,16 +3963,16 @@ function WorkCard({
           {line.name}
           {isSubStage && (
             <span
-              className="ml-2 px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-[0.05em]"
+              className="ml-2 px-1.5 py-0.5 rounded text-[11px] font-semibold uppercase tracking-[0.05em]"
               style={{ background: 'rgba(13,148,136,0.15)', color: C.teal }}
             >
               {t('extra_short') || "Qo'shimcha"}
             </span>
           )}
         </div>
-        <div className="text-[11px] text-center" style={{ color: C.dim }}>{line.uom || ''}</div>
+        <div className="text-[13px] text-center" style={{ color: C.dim }}>{line.uom || ''}</div>
         <div
-          className="text-[12px] font-mono text-right tabular-nums"
+          className="text-[14px] font-mono text-right tabular-nums"
           style={{
             color: isEmpty ? C.amber : (qtyModified ? C.teal : (isSubStage ? C.teal : C.text)),
             fontWeight: isEmpty || qtyModified || isSubStage ? 600 : 400,
@@ -2670,14 +3980,14 @@ function WorkCard({
         >
           {isEmpty ? '⚠ 0' : fmt(qty)}
         </div>
-        <div className="text-[12px] font-mono text-right tabular-nums" style={{ color: C.dim }}>
+        <div className="text-[14px] font-mono text-right tabular-nums" style={{ color: C.dim }}>
           {subResources.length} {t('resources_count_suffix') || 'resurs'}
           {!isSubStage && (subs || []).filter(isSubStageRow).length > 0 && (
             <span style={{ color: C.amber }}> +{(subs || []).filter(isSubStageRow).length} etap</span>
           )}
         </div>
         <div
-          className="text-[13px] font-mono font-bold text-right tabular-nums"
+          className="text-[15px] font-mono font-bold text-right tabular-nums"
           style={{ color: isEmpty ? C.fade : C.amber }}
         >
           {fmt(workTotal)}
@@ -2714,17 +4024,17 @@ function WorkCard({
                 padding / font / height) so the two read as a matched pair
                 in the row. */}
             <div className="flex items-center gap-1.5">
-              <span className="text-[10px] uppercase tracking-[0.08em]" style={{ color: C.fade }}>
+              <span className="text-[12px] uppercase tracking-[0.08em]" style={{ color: C.fade }}>
                 {t('label_norma_short') || 'Norma'}
               </span>
               <span
-                className="px-3 py-2 rounded-[5px] text-[13px] font-mono text-right tabular-nums inline-flex items-center justify-end"
+                className="px-3 py-2 rounded-[5px] text-[15px] font-mono text-right tabular-nums inline-flex items-center justify-end"
                 style={{
                   background: C.hover,
                   color: origQty > 0 ? C.text : C.muted,
                   border: `1px solid ${C.border2}`,
                   width: 120,
-                  height: 38, // matches the input's computed height (text-[13px] + py-2 + 1px borders)
+                  height: 38, // matches the input's computed height (text-[15px] + py-2 + 1px borders)
                   boxSizing: 'border-box',
                 }}
                 title={t('reja_smeta_hint') || "Smeta bo'yicha reja miqdor"}
@@ -2738,12 +4048,12 @@ function WorkCard({
                 no role accidentally types into a locked row even if a
                 browser plugin re-enables disabled inputs. */}
             <div className="flex items-center gap-1.5">
-              <span className="text-[10px] uppercase tracking-[0.08em]" style={{ color: C.fade }}>
+              <span className="text-[12px] uppercase tracking-[0.08em]" style={{ color: C.fade }}>
                 {t('label_fakt_qilingan_hajm_short') || 'Fakt'}
               </span>
               {isLocked ? (
                 <span
-                  className="px-3 py-2 rounded-[5px] text-[13px] font-mono text-right tabular-nums inline-flex items-center justify-end"
+                  className="px-3 py-2 rounded-[5px] text-[15px] font-mono text-right tabular-nums inline-flex items-center justify-end"
                   style={{
                     background: C.hover,
                     color: C.muted,
@@ -2768,7 +4078,7 @@ function WorkCard({
                     if (qtyChanged) commitQty(line, e.target.value);
                     clearQtyDraft();
                   }}
-                  className={`px-3 py-2 rounded-[5px] text-[13px] font-mono text-right outline-none transition ${isEmpty ? 'smeta-empty-pulse' : ''}`}
+                  className={`px-3 py-2 rounded-[5px] text-[15px] font-mono text-right outline-none transition ${isEmpty ? 'smeta-empty-pulse' : ''}`}
                   style={{
                     background: isEmpty ? 'rgba(217,119,6,0.05)' : C.inset,
                     color: isEmpty ? C.amber : (qtyChanged ? C.teal : C.text),
@@ -2799,7 +4109,7 @@ function WorkCard({
                 whose role can change that. */}
             {isLocked && (
               <span
-                className="px-2.5 py-1 rounded-md text-[11px] inline-flex items-center gap-1.5"
+                className="px-2.5 py-1 rounded-md text-[13px] inline-flex items-center gap-1.5"
                 style={{
                   background: 'rgba(16,185,129,0.08)',
                   color: '#065F46',
@@ -2845,13 +4155,33 @@ function WorkCard({
                 {isSubStage ? (t('add_resource') || "Resurs qo'shish") : (t('extra_resource_btn') || "Qo'shimcha resurs")}
               </button>
             )}
-            {/* Sub-stages can be deleted from their own header — except
-                when locked. */}
-            {isSubStage && !isLocked && (
+            {/* Edit pencil — opens the EstimateLineEditModal so the user
+                can change name, code, uom, quantity, and rates without
+                deleting and recreating the row. Hidden when locked. */}
+            {!isLocked && editLine && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); editLine(line); }}
+                title={t('edit') || 'Tahrirlash'}
+                className="w-7 h-7 rounded-[5px] flex items-center justify-center transition"
+                style={{ background: C.hover, border: `1px solid ${C.border2}`, color: C.dim }}
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {/* Delete affordance — available for BOTH sub-stages and
+                top-level works (and Yangi bosqich rows). The trash icon
+                triggers removeLine, which routes through the
+                SmetaConfirmModal so the user sees a translated
+                confirm prompt before the row is wiped. Hidden when
+                the line is YAKUNIY-locked. */}
+            {!isLocked && (
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); removeLine(line); }}
-                title={t('delete_stage') || "Etapni o'chirish"}
+                title={isSubStage
+                  ? (t('delete_stage') || "Etapni o'chirish")
+                  : (t('delete_work') || "Ishni o'chirish")}
                 className="w-7 h-7 rounded-[5px] flex items-center justify-center transition"
                 style={{ background: C.hover, border: `1px solid ${C.border2}`, color: C.red }}
               >
@@ -2867,7 +4197,7 @@ function WorkCard({
             </div>
           ) : (
             <>
-              <table className="w-full border-collapse text-[12px] mt-3">
+              <table className="w-full border-collapse text-[14px] mt-3">
                 <thead>
                   <tr>
                     {[
@@ -2882,7 +4212,7 @@ function WorkCard({
                     ].map((h, i) => (
                       <th
                         key={i}
-                        className="text-[10px] uppercase tracking-[0.1em] font-semibold py-2 px-2.5"
+                        className="text-[12px] uppercase tracking-[0.1em] font-semibold py-2 px-2.5"
                         style={{
                           background: C.hover,
                           color: C.muted,
@@ -2892,7 +4222,7 @@ function WorkCard({
                         title={h.lock ? "Narxni o'zgartirish uchun Resurslar tabiga o'ting" : undefined}
                       >
                         {h.l}
-                        {h.lock && <span className="ml-1 text-[9px]" style={{ color: C.fade }}>🔒</span>}
+                        {h.lock && <span className="ml-1 text-[11px]" style={{ color: C.fade }}>🔒</span>}
                       </th>
                     ))}
                   </tr>
@@ -2939,7 +4269,7 @@ function WorkCard({
                         >
                           <td className="px-2.5 py-2">
                             <span
-                              className="px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-[0.05em]"
+                              className="px-1.5 py-0.5 rounded text-[11px] font-semibold uppercase tracking-[0.05em]"
                               style={{ background: tag.tagBg, color: tag.tagText }}
                             >
                               {CAT_LABEL[cat]}
@@ -2974,7 +4304,7 @@ function WorkCard({
                               <span>{sub.name}</span>
                               {hasTopups && (
                                 <span
-                                  className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-[0.06em] flex-shrink-0 inline-flex items-center gap-1"
+                                  className="px-2 py-0.5 rounded-full text-[12px] font-bold uppercase tracking-[0.06em] flex-shrink-0 inline-flex items-center gap-1"
                                   style={{
                                     background: C.teal,
                                     color: '#FFFFFF',
@@ -3025,6 +4355,21 @@ function WorkCard({
                                   <Plus className="w-3 h-3" />
                                 </button>
                               )}
+                              {/* Edit pencil — opens the EstimateLineEditModal
+                                 on this resource sub-line so the user can fix
+                                 name / uom / norm / price without deleting
+                                 and re-adding. */}
+                              {editLine && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); editLine(sub); }}
+                                  title={t('edit') || 'Tahrirlash'}
+                                  className="w-7 h-7 rounded-[5px] flex items-center justify-center transition"
+                                  style={{ background: C.hover, border: `1px solid ${C.border2}`, color: C.dim }}
+                                >
+                                  <Edit3 className="w-3 h-3" />
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); removeLine(sub); }}
@@ -3056,40 +4401,40 @@ function WorkCard({
                             }}>
                               <td className="px-2.5 py-1.5">
                                 <span
-                                  className="px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-[0.05em]"
+                                  className="px-1.5 py-0.5 rounded text-[11px] font-semibold uppercase tracking-[0.05em]"
                                   style={{ background: 'rgba(13,148,136,0.15)', color: C.teal }}
                                   title={tp.note || ''}
                                 >
                                   +ДОП
                                 </span>
                               </td>
-                              <td className="px-2.5 py-1.5 pl-7 text-[11px]" style={{ color: C.dim }}>
+                              <td className="px-2.5 py-1.5 pl-7 text-[13px]" style={{ color: C.dim }}>
                                 <span style={{ color: C.muted }}>↳ </span>
                                 {t('topup_label') || "Qo'shimcha buyurtma"}
                                 {tp.ordered_at ? (
-                                  <span className="ml-2 text-[10px]" style={{ color: C.fade }}>
+                                  <span className="ml-2 text-[12px]" style={{ color: C.fade }}>
                                     {tp.ordered_at}
                                   </span>
                                 ) : null}
                                 {tp.note ? (
-                                  <span className="ml-2 text-[10px] italic" style={{ color: C.fade }}>
+                                  <span className="ml-2 text-[12px] italic" style={{ color: C.fade }}>
                                     — {tp.note}
                                   </span>
                                 ) : null}
                               </td>
-                              <td className="px-2.5 py-1.5 text-center text-[11px]" style={{ color: C.fade }}>
+                              <td className="px-2.5 py-1.5 text-center text-[13px]" style={{ color: C.fade }}>
                                 {sub.uom || ''}
                               </td>
                               <td className="px-2.5 py-1.5"></td>
-                              <td className="px-2.5 py-1.5 text-right font-mono tabular-nums text-[11px]"
+                              <td className="px-2.5 py-1.5 text-right font-mono tabular-nums text-[13px]"
                                   style={{ color: C.dim }}>
                                 {fmt(tpQty)}
                               </td>
-                              <td className="px-2.5 py-1.5 text-right font-mono tabular-nums text-[11px]"
+                              <td className="px-2.5 py-1.5 text-right font-mono tabular-nums text-[13px]"
                                   style={{ color: C.text }}>
                                 {fmt(tpPrice)}
                               </td>
-                              <td className="px-2.5 py-1.5 text-right font-mono tabular-nums text-[11px]"
+                              <td className="px-2.5 py-1.5 text-right font-mono tabular-nums text-[13px]"
                                   style={{ color: C.teal, fontWeight: 600 }}>
                                 {fmt(tpCost)}
                               </td>
@@ -3116,14 +4461,14 @@ function WorkCard({
               </table>
 
               {/* Footer */}
-              <div className="flex justify-between items-center gap-5 pt-3 mt-1 text-[12px] flex-wrap">
+              <div className="flex justify-between items-center gap-5 pt-3 mt-1 text-[14px] flex-wrap">
                 <div className="flex gap-5 flex-wrap">
                   <FooterItem label={t('footer_labor')   || 'Mehnat'}   value={breakdown.labor}    color={C.amber} />
                   <FooterItem label={t('footer_machine') || 'Mashina'}  value={breakdown.machines} color={C.purple} />
                   <FooterItem label={t('footer_material')|| 'Material'} value={breakdown.materials}color={C.teal} />
                 </div>
                 <div className="pl-5 flex items-center gap-2" style={{ borderLeft: `1px solid ${C.border2}` }}>
-                  <span className="text-[11px]" style={{ color: C.muted }}>{t('label_total_caps') || 'JAMI'}:</span>
+                  <span className="text-[13px]" style={{ color: C.muted }}>{t('label_total_caps') || 'JAMI'}:</span>
                   <span className="font-mono font-semibold text-[15px]" style={{ color: C.amber }}>
                     {fmt(workTotal)} {t('currency_som') || "so'm"}
                   </span>
@@ -3140,7 +4485,7 @@ function WorkCard({
 function FooterItem({ label, value, color }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="text-[11px]" style={{ color: C.muted }}>{label}:</span>
+      <span className="text-[13px]" style={{ color: C.muted }}>{label}:</span>
       <span className="font-mono font-semibold" style={{ color }}>{fmt(value)}</span>
     </div>
   );
@@ -3171,12 +4516,12 @@ function HistoryPage({ t, loading, snapshots, onView, onDelete, onRefresh, onSav
     <div>
       <div className="rounded-[10px] p-3 flex items-center gap-2 mb-3"
            style={{ background: C.card, border: `1px solid ${C.border}` }}>
-        <h3 className="text-[13px] font-semibold flex-1" style={{ color: C.text }}>
+        <h3 className="text-[15px] font-semibold flex-1" style={{ color: C.text }}>
           {t('history_saved_form2') || "Saqlangan Forma 2 hujjatlari"}
         </h3>
         <button
           onClick={onRefresh}
-          className="text-[12px] px-3 py-1.5 rounded-[6px] flex items-center gap-1.5"
+          className="text-[14px] px-3 py-1.5 rounded-[6px] flex items-center gap-1.5"
           style={{ background: C.inset, border: `1px solid ${C.border2}`, color: C.dim }}
         >
           <RefreshCw className="w-3 h-3" />
@@ -3184,7 +4529,7 @@ function HistoryPage({ t, loading, snapshots, onView, onDelete, onRefresh, onSav
         </button>
         <button
           onClick={onSaveCurrent}
-          className="text-[12px] px-3 py-1.5 rounded-[6px] flex items-center gap-1.5"
+          className="text-[14px] px-3 py-1.5 rounded-[6px] flex items-center gap-1.5"
           style={{ background: C.teal, color: '#fff' }}
         >
           <SaveIcon className="w-3 h-3" />
@@ -3197,12 +4542,12 @@ function HistoryPage({ t, loading, snapshots, onView, onDelete, onRefresh, onSav
       ) : snapshots.length === 0 ? (
         <div className="rounded-[10px] py-12 text-center" style={{ background: C.card, border: `1px dashed ${C.border2}`, color: C.muted }}>
           <HistoryIcon className="w-6 h-6 mx-auto mb-2" />
-          <div className="text-[13px]">{t('history_empty') || "Hali bironta saqlangan Forma 2 yo'q"}</div>
-          <div className="text-[11px] mt-1">{t('history_empty_hint') || "Forma 2 ni oching va o'ng yuqoridagi 'Saqlash' tugmasini bosing"}</div>
+          <div className="text-[15px]">{t('history_empty') || "Hali bironta saqlangan Forma 2 yo'q"}</div>
+          <div className="text-[13px] mt-1">{t('history_empty_hint') || "Forma 2 ni oching va o'ng yuqoridagi 'Saqlash' tugmasini bosing"}</div>
         </div>
       ) : (
         <div className="rounded-[10px] overflow-hidden" style={{ background: C.card, border: `1px solid ${C.border}` }}>
-          <table className="w-full text-[12px]" style={{ borderCollapse: 'collapse' }}>
+          <table className="w-full text-[14px]" style={{ borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: C.sec, borderBottom: `1px solid ${C.border}` }}>
                 <th className="px-3 py-2 text-left font-medium" style={{ color: C.muted }}>{t('history_col_saved') || 'Sana'}</th>
@@ -3223,7 +4568,7 @@ function HistoryPage({ t, loading, snapshots, onView, onDelete, onRefresh, onSav
                   <td className="px-3 py-2">
                     {s.building_name ? (
                       <span
-                        className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium"
+                        className="inline-flex items-center px-2 py-0.5 rounded-full text-[13px] font-medium"
                         style={{ background: C.inset, color: C.teal, border: `1px solid ${C.border2}` }}
                       >
                         {s.building_name}
@@ -3335,7 +4680,7 @@ function localizeAuditValue(t, raw) {
   return t(`work_status_${s}_long`) || raw;
 }
 
-function AuditPage({ t, language, loading, entries, filter, onFilterChange, onRefresh }) {
+function AuditPage({ t, language, loading, entries, filter, onFilterChange, onRefresh, hasMore, loadingMore, loadMoreRef }) {
   const fmtDate = (s) => {
     if (!s) return '—';
     try {
@@ -3347,13 +4692,13 @@ function AuditPage({ t, language, loading, entries, filter, onFilterChange, onRe
     <div>
       <div className="rounded-[10px] p-3 flex items-center gap-2 mb-3"
            style={{ background: C.card, border: `1px solid ${C.border}` }}>
-        <h3 className="text-[13px] font-semibold flex-1" style={{ color: C.text }}>
+        <h3 className="text-[15px] font-semibold flex-1" style={{ color: C.text }}>
           {t('audit_log_title') || "O'zgarishlar jurnali"}
         </h3>
         <select
           value={filter}
           onChange={(e) => onFilterChange(e.target.value)}
-          className="text-[12px] px-2.5 py-1.5 rounded-[6px]"
+          className="text-[14px] px-2.5 py-1.5 rounded-[6px]"
           style={{ background: C.inset, border: `1px solid ${C.border2}`, color: C.text, minWidth: 180 }}
         >
           <option value="">{t('audit_filter_all') || 'Barchasi'}</option>
@@ -3363,7 +4708,7 @@ function AuditPage({ t, language, loading, entries, filter, onFilterChange, onRe
         </select>
         <button
           onClick={onRefresh}
-          className="text-[12px] px-3 py-1.5 rounded-[6px] flex items-center gap-1.5"
+          className="text-[14px] px-3 py-1.5 rounded-[6px] flex items-center gap-1.5"
           style={{ background: C.inset, border: `1px solid ${C.border2}`, color: C.dim }}
         >
           <RefreshCw className="w-3 h-3" />
@@ -3376,11 +4721,11 @@ function AuditPage({ t, language, loading, entries, filter, onFilterChange, onRe
       ) : entries.length === 0 ? (
         <div className="rounded-[10px] py-12 text-center" style={{ background: C.card, border: `1px dashed ${C.border2}`, color: C.muted }}>
           <Activity className="w-6 h-6 mx-auto mb-2" />
-          <div className="text-[13px]">{t('audit_empty') || "Hech qanday o'zgarish yozib olinmagan"}</div>
+          <div className="text-[15px]">{t('audit_empty') || "Hech qanday o'zgarish yozib olinmagan"}</div>
         </div>
       ) : (
         <div className="rounded-[10px] overflow-hidden" style={{ background: C.card, border: `1px solid ${C.border}` }}>
-          <table className="w-full text-[12px]" style={{ borderCollapse: 'collapse' }}>
+          <table className="w-full text-[14px]" style={{ borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: C.sec, borderBottom: `1px solid ${C.border}` }}>
                 <th className="px-3 py-2 text-left font-medium" style={{ color: C.muted, width: 150 }}>{t('audit_col_when') || 'Vaqt'}</th>
@@ -3410,7 +4755,7 @@ function AuditPage({ t, language, loading, entries, filter, onFilterChange, onRe
                         >
                           <Icon className="w-3 h-3" />
                         </span>
-                        <span className="text-[12px]" style={{ color: meta.color, fontWeight: 500 }}>{actionLabel}</span>
+                        <span className="text-[14px]" style={{ color: meta.color, fontWeight: 500 }}>{actionLabel}</span>
                       </div>
                     </td>
                     <td className="px-3 py-2" style={{ color: C.text }}>
@@ -3425,7 +4770,7 @@ function AuditPage({ t, language, loading, entries, filter, onFilterChange, onRe
                       {e.target && e.target !== 'topup' ? e.target : null}
                       {!e.target || e.target === 'topup' ? (e.description ? null : '—') : null}
                       {e.description && (
-                        <div className="text-[11px]" style={{ color: C.muted }}>{e.description}</div>
+                        <div className="text-[13px]" style={{ color: C.muted }}>{e.description}</div>
                       )}
                     </td>
                     <td className="px-3 py-2 font-mono" style={{ color: C.dim }}>
@@ -3443,6 +4788,16 @@ function AuditPage({ t, language, loading, entries, filter, onFilterChange, onRe
               })}
             </tbody>
           </table>
+          {/* Infinite-scroll sentinel — pulls the next 20 entries when it
+              scrolls into view. */}
+          {hasMore && (
+            <div ref={loadMoreRef} className="py-4 flex items-center justify-center">
+              <Loader className="py-0" size="w-4 h-4" />
+            </div>
+          )}
+          {loadingMore && !hasMore && (
+            <div className="py-3 text-center text-[14px]" style={{ color: C.muted }}>…</div>
+          )}
         </div>
       )}
     </div>

@@ -4,7 +4,7 @@ const ADMIN = { email: 'admin@genixerp.com', password: 'admin123' };
 
 async function login(page, { email, password } = ADMIN) {
   await page.goto('/login');
-  await page.fill('#email', email);
+  await page.fill('#identifier', email);
   await page.fill('#password', password);
   await page.click('.login-form__submit');
   // Wait for dashboard or any authenticated page to load
@@ -16,7 +16,7 @@ async function login(page, { email, password } = ADMIN) {
 test.describe('Authentication', () => {
   test('login page loads', async ({ page }) => {
     await page.goto('/login');
-    await expect(page.locator('#email')).toBeVisible();
+    await expect(page.locator('#identifier')).toBeVisible();
     await expect(page.locator('#password')).toBeVisible();
     await expect(page.locator('.login-form__submit')).toBeVisible();
   });
