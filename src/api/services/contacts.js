@@ -41,6 +41,18 @@ export const contactsService = {
     const response = await apiClient.post(`/contacts/${contactId}/persons`, data);
     return response.data.data;
   },
+
+  // Create a customer + sales order + manufacture order (+ upfront payment) in one save.
+  async createFullOrder(data) {
+    const response = await apiClient.post('/contacts/full-order', data);
+    return response.data.data ?? response.data;
+  },
+
+  // A customer's sales history (sales orders).
+  async getSales(contactId) {
+    const response = await apiClient.get(`/contacts/${contactId}/sales`);
+    return response.data.data ?? response.data;
+  },
 };
 
 export default contactsService;

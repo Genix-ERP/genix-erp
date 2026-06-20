@@ -41,12 +41,21 @@ export default function EstimateLineEditModal({ open, onClose, line, parent, est
     name: '',
     uom: '',
     quantity: '',
+    // `norma` doubles up: for parent works it maps to original_quantity
+    // (the smeta-anchored NORMA pill); for resources it's already covered
+    // by norm_rate below. Keeping a single field name on the form keeps
+    // the JSX simple and the save handler routes it to the right column
+    // based on isSubline.
+    norma: '',
     resource_type: '',
     material_rate: '',
     labor_rate: '',
     equipment_rate: '',
     norm_rate: '',
     unit_price: '',
+    // quantity_override (migration 342) — for sub-lines, when true the Hajm
+    // is entered manually instead of being derived from parent.qty × norma.
+    quantity_override: false,
   });
   const [saving, setSaving] = useState(false);
 
@@ -64,12 +73,16 @@ export default function EstimateLineEditModal({ open, onClose, line, parent, est
       name: line.name || '',
       uom: line.uom || '',
       quantity: String(line.quantity ?? ''),
+      // Norma seed — parent works use original_quantity (Russian
+      // smeta NORMA), resources fall through to norm_rate later.
+      norma: String(line.original_quantity ?? '').replace('.', ','),
       resource_type: line.resource_type || '',
       material_rate: formatPriceInput(String(line.material_rate ?? 0)),
       labor_rate: formatPriceInput(String(line.labor_rate ?? 0)),
       equipment_rate: formatPriceInput(String(line.equipment_rate ?? 0)),
       norm_rate: String(line.norm_rate ?? '').replace('.', ','),
       unit_price: formatPriceInput(String(rateFromType || 0)),
+      quantity_override: !!line.quantity_override,
     });
   }, [open, line]);
 
@@ -86,7 +99,10 @@ export default function EstimateLineEditModal({ open, onClose, line, parent, est
       const norm = parseFloat(String(form.norm_rate).replace(',', '.')) || 0;
       const unitPrice = parseFloat(parsePriceInput(form.unit_price)) || 0;
       const parentQty = Number(parent?.quantity) || 0;
-      const effectiveQty = parentQty * norm;
+      // Manual override: the user-entered Hajm wins. Otherwise derive it
+      // from parent.qty × norma (the default cascade).
+      const manualQty = parseFloat(String(form.quantity).replace(',', '.')) || 0;
+      const effectiveQty = form.quantity_override ? manualQty : parentQty * norm;
       return { quantity: effectiveQty, unitRate: unitPrice, total: effectiveQty * unitPrice };
     }
     const qty = parseFloat(String(form.quantity).replace(',', '.')) || 0;
@@ -95,7 +111,7 @@ export default function EstimateLineEditModal({ open, onClose, line, parent, est
     const eq = parseFloat(parsePriceInput(form.equipment_rate)) || 0;
     const unitRate = mat + lab + eq;
     return { quantity: qty, unitRate, total: qty * unitRate };
-  }, [isSubline, parent, form.norm_rate, form.unit_price, form.quantity, form.material_rate, form.labor_rate, form.equipment_rate]);
+  }, [isSubline, parent, form.norm_rate, form.unit_price, form.quantity, form.quantity_override, form.material_rate, form.labor_rate, form.equipment_rate]);
 
   const handleSave = async () => {
     if (!form.name.trim()) {
@@ -115,11 +131,24 @@ export default function EstimateLineEditModal({ open, onClose, line, parent, est
       if (isSubline) {
         payload.norm_rate = parseFloat(String(form.norm_rate).replace(',', '.')) || 0;
         payload.unit_price = parseFloat(parsePriceInput(form.unit_price)) || 0;
+        // quantity_override decides whether the backend re-derives the Hajm
+        // from parent.qty × norma (false) or persists the user value (true).
+        payload.quantity_override = !!form.quantity_override;
+        if (form.quantity_override) {
+          payload.quantity = parseFloat(String(form.quantity).replace(',', '.')) || 0;
+        }
       } else {
         payload.quantity = parseFloat(String(form.quantity).replace(',', '.')) || 0;
         payload.material_rate = parseFloat(parsePriceInput(form.material_rate)) || 0;
         payload.labor_rate = parseFloat(parsePriceInput(form.labor_rate)) || 0;
         payload.equipment_rate = parseFloat(parsePriceInput(form.equipment_rate)) || 0;
+        // NORMA edit for parent works — wired to original_quantity. Only
+        // send when the user typed something so we don't clobber the
+        // anchor with 0 on an otherwise unrelated save.
+        const normaStr = String(form.norma || '').trim();
+        if (normaStr !== '') {
+          payload.original_quantity = parseFloat(normaStr.replace(',', '.')) || 0;
+        }
       }
 
       await constructionService.updateEstimateLine(estimateId, line.id, payload);
@@ -214,33 +243,91 @@ export default function EstimateLineEditModal({ open, onClose, line, parent, est
           </div>
 
           {isSubline ? (
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs text-muted-foreground">{t('shrnk_norm') || "ShRNK normasi"}</label>
-                <Input
-                  value={form.norm_rate}
-                  onChange={(e) => setForm({ ...form, norm_rate: e.target.value })}
-                  inputMode="decimal"
-                />
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-muted-foreground">{t('norma') || 'Norma'}</label>
+                  <Input
+                    value={form.norm_rate}
+                    onChange={(e) => setForm({ ...form, norm_rate: e.target.value })}
+                    inputMode="decimal"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">{t('unit_price_som') || "Birlik narxi (so'm)"}</label>
+                  <Input
+                    value={form.unit_price}
+                    onChange={(e) => setForm({ ...form, unit_price: e.target.value })}
+                    inputMode="decimal"
+                  />
+                </div>
               </div>
+              {/* Hajm (quantity). By default it's derived from parent.qty × norma.
+                 Tick "Qo'lda" to enter it manually (quantity_override). */}
               <div>
-                <label className="text-xs text-muted-foreground">{t('unit_price_som') || "Birlik narxi (so'm)"}</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs text-muted-foreground">{t('quantity') || 'Hajm'}</label>
+                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      className="h-3.5 w-3.5 cursor-pointer"
+                      checked={form.quantity_override}
+                      onChange={(e) => {
+                        const on = e.target.checked;
+                        setForm((f) => {
+                          const norm = parseFloat(String(f.norm_rate).replace(',', '.')) || 0;
+                          const parentQty = Number(parent?.quantity) || 0;
+                          return {
+                            ...f,
+                            quantity_override: on,
+                            // Seed the manual field with the current auto value
+                            // so the user starts from the derived number.
+                            quantity: on ? String(parentQty * norm) : f.quantity,
+                          };
+                        });
+                      }}
+                    />
+                    {t('manual_quantity') || "Qo'lda kiritish"}
+                  </label>
+                </div>
                 <Input
-                  value={form.unit_price}
-                  onChange={(e) => setForm({ ...form, unit_price: e.target.value })}
+                  value={form.quantity_override
+                    ? form.quantity
+                    : (Number.isFinite(derived.quantity) ? String(derived.quantity) : '')}
+                  onChange={(e) => setForm({ ...form, quantity: e.target.value })}
+                  disabled={!form.quantity_override}
                   inputMode="decimal"
+                  className={form.quantity_override ? '' : 'opacity-60'}
                 />
+                {!form.quantity_override && (
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    {t('auto_quantity_hint') || 'Norma × ota qator hajmi asosida hisoblanadi'}
+                  </p>
+                )}
               </div>
-            </div>
+            </>
           ) : (
             <>
-              <div>
-                <label className="text-xs text-muted-foreground">{t('quantity') || "Hajm"}</label>
-                <Input
-                  value={form.quantity}
-                  onChange={(e) => setForm({ ...form, quantity: e.target.value })}
-                  inputMode="decimal"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  {/* Norma — the imported smeta reja (original_quantity).
+                     Editable so the user can correct an import error
+                     without re-uploading the whole estimate. */}
+                  <label className="text-xs text-muted-foreground">{t('norma') || 'Norma'}</label>
+                  <Input
+                    value={form.norma}
+                    onChange={(e) => setForm({ ...form, norma: e.target.value })}
+                    inputMode="decimal"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">{t('quantity') || "Hajm"}</label>
+                  <Input
+                    value={form.quantity}
+                    onChange={(e) => setForm({ ...form, quantity: e.target.value })}
+                    inputMode="decimal"
+                  />
+                </div>
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div>

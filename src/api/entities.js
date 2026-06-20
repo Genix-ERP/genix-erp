@@ -1,5 +1,5 @@
 // Entity wrappers that use Go backend API services
-// These provide a similar interface to the old base44 entities
+// Expose a generic list/create/update/delete interface over REST endpoints
 
 import { hrService } from './services/hr';
 import apiClient from './client';

@@ -53,7 +53,9 @@ const CAT_TAG = {
 function classify(rt) {
   rt = String(rt || '').toLowerCase();
   if (['labor', 'ish', 'ishchi', 'worker'].includes(rt)) return 'labor';
-  if (['equipment', 'machine', 'mashina', 'masina'].includes(rt)) return 'equipment';
+  // 'machinery' (Mashina mexanizm) buckets with 'equipment' so it shows
+  // under the same MASHINA tag in the resource picker chip list.
+  if (['equipment', 'machine', 'mashina', 'masina', 'machinery'].includes(rt)) return 'equipment';
   return 'material';
 }
 
@@ -92,6 +94,12 @@ export default function AddResourcePickerModal({ open, onClose, projectId, estim
     }
   }, [open]);
 
+  // Initial fetch (no search term) on open — populates the list so the
+  // user can scroll through the first 5000 (name, uom, type) tuples.
+  // When they type a search term, the second effect below refetches
+  // with `q=` so resources that landed past the alphabetical cap still
+  // surface. The list is debounced to avoid one-request-per-keystroke
+  // on slow keyboards.
   useEffect(() => {
     if (!open || !projectId) return;
     let cancelled = false;
@@ -102,6 +110,24 @@ export default function AddResourcePickerModal({ open, onClose, projectId, estim
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [open, projectId]);
+
+  // Server-side search refetch. Fires when the user types in the
+  // search box; debounced 250ms so each keystroke doesn't slam the
+  // backend. When the box is empty we re-load the unfiltered set so
+  // the user can clear their search and see everything again.
+  useEffect(() => {
+    if (!open || !projectId) return;
+    const q = String(search || '').trim();
+    let cancelled = false;
+    const tick = setTimeout(() => {
+      setLoading(true);
+      constructionService.listEstimateResources(projectId, q ? { q } : undefined)
+        .then((rows) => { if (!cancelled) setResources(Array.isArray(rows) ? rows : []); })
+        .catch(() => { if (!cancelled) setResources([]); })
+        .finally(() => { if (!cancelled) setLoading(false); });
+    }, 250);
+    return () => { cancelled = true; clearTimeout(tick); };
+  }, [open, projectId, search]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -380,7 +406,17 @@ export default function AddResourcePickerModal({ open, onClose, projectId, estim
                       style={{ background: '#FFFFFF', color: '#0F172A', border: '1px solid #CBD5E1', fontFamily: 'inherit' }}
                     >
                       <option value="material">{t('mat_type_material') || 'Material'}</option>
-                      <option value="equipment">{t('mat_type_equipment') || 'Mashina'}</option>
+                      <option value="equipment">{t('mat_type_equipment') || 'Uskuna'}</option>
+                      {/* "Mashina mexanizm" — Russian construction
+                         convention separates стационарное оборудование
+                         (equipment installed in the building, MAТЕРИАЛЫ
+                         section in СН-РФ) from строительные машины и
+                         механизмы (construction machinery used to BUILD,
+                         MAШ.-Ч hours). This option captures the latter.
+                         Stored as resource_type='machinery' — a new
+                         bucket the backend accepts as free text. Existing
+                         resource_type='equipment' rows are untouched. */}
+                      <option value="machinery">{t('mat_type_machinery') || 'Mashina mexanizm'}</option>
                       <option value="labor">{t('mat_type_labor') || 'Mehnat'}</option>
                     </select>
                   </div>

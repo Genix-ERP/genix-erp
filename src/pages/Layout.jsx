@@ -88,7 +88,10 @@ import apiClient from "@/api/client";
 
 // Navigation link that closes mobile sidebar on click
 function NavLink({ item, isActive }) {
-  const { setOpenMobile, isMobile } = useSidebar();
+  const { setOpenMobile, isMobile, state } = useSidebar();
+  // When the desktop sidebar is collapsed to the icon rail, drop the label,
+  // badge and side padding so only the centred icon shows.
+  const collapsed = state === 'collapsed' && !isMobile;
 
   const handleClick = () => {
     if (isMobile) {
@@ -99,16 +102,19 @@ function NavLink({ item, isActive }) {
   return (
     <Link
       to={item.url}
-      className={`flex items-center justify-between px-3 py-3 w-full cursor-pointer ${
+      title={collapsed ? item.title : undefined}
+      className={`flex items-center w-full cursor-pointer py-3 ${
+        collapsed ? 'justify-center px-0' : 'justify-between px-3'
+      } ${
         isActive ? '!bg-gradient-to-r !from-[var(--genix-blue)]/20 !to-[var(--genix-purple)]/20 !text-[var(--genix-blue)] !font-semibold !shadow-md !border-l-4 !border-[var(--genix-blue)]' : ''
       }`}
       onClick={handleClick}
     >
-      <div className="flex items-center gap-3">
-        <item.icon className="w-5 h-5" />
-        <span className="font-medium text-sm">{item.title}</span>
+      <div className={`flex items-center ${collapsed ? 'gap-0' : 'gap-3'}`}>
+        <item.icon className="w-5 h-5 shrink-0" />
+        {!collapsed && <span className="font-medium text-sm">{item.title}</span>}
       </div>
-      {item.badge && (
+      {!collapsed && item.badge && (
         <Badge
           variant="secondary"
           className={`text-[10px] px-2 py-0 h-5 border ${
@@ -482,20 +488,20 @@ function LayoutContent({ children, currentPageName }) {
           `}
         </style>
         
-        <Sidebar className="border-r border-slate-200/60 bg-white/80 backdrop-blur-xl" role="navigation" aria-label="Main navigation">
-          <SidebarHeader className="border-b border-slate-100 px-4 py-3">
+        <Sidebar collapsible="icon" className="border-r border-slate-200/60 bg-white/80 backdrop-blur-xl" role="navigation" aria-label="Main navigation">
+          <SidebarHeader className="border-b border-slate-100 px-4 py-3 group-data-[collapsible=icon]:px-2">
             <div className="flex items-center justify-center w-full overflow-hidden">
               <img
                 src={brandLogoUrl}
                 alt="Logo"
-                className="w-full max-w-[96px] h-auto object-contain brand-logo-transparent"
+                className="w-full max-w-[96px] h-auto object-contain brand-logo-transparent group-data-[collapsible=icon]:max-w-[32px]"
               />
             </div>
           </SidebarHeader>
           
-          <SidebarContent className="p-4">
+          <SidebarContent className="p-4 group-data-[collapsible=icon]:p-2">
             <SidebarGroup>
-              <SidebarGroupLabel className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-3 py-2 mb-1">
+              <SidebarGroupLabel className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-3 py-2 mb-1 group-data-[collapsible=icon]:hidden">
                 {t("core_modules") || "Core Modules"}
               </SidebarGroupLabel>
               <SidebarGroupContent>
@@ -506,6 +512,7 @@ function LayoutContent({ children, currentPageName }) {
                       <SidebarMenuItem key={item.url}>
                         <SidebarMenuButton
                           asChild
+                          tooltip={item.title}
                           className={`relative group hover:bg-[var(--genix-light-blue)]/50 hover:text-[var(--genix-blue)] transition-all duration-200 rounded-xl mb-1 h-11 ${
                             isActive ? 'bg-gradient-to-r from-[var(--genix-blue)]/20 to-[var(--genix-purple)]/20 text-[var(--genix-blue)] font-semibold shadow-md border-l-4 border-[var(--genix-blue)]' : 'text-slate-600'
                           }`}
@@ -529,7 +536,7 @@ function LayoutContent({ children, currentPageName }) {
           <header className="bg-white/80 backdrop-blur-xl border-b border-slate-200/60 px-4 md:px-6 py-4 shadow-sm" role="banner">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <SidebarTrigger className="md:hidden hover:bg-slate-100 p-2 rounded-lg transition-colors duration-200" />
+                <SidebarTrigger className="hover:bg-slate-100 p-2 rounded-lg transition-colors duration-200" />
                 <div className="hidden md:block">
                   <h1 className="text-xl md:text-2xl font-bold text-[var(--genix-navy)]">
                     {currentPageName === 'AdminPanel' ? t('admin_panel') :

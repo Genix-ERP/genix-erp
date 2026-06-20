@@ -71,7 +71,16 @@ export default function CRMLinkPanel({ mode = 'project', value, onChange, crmPro
           setBlocks(data?.blocks || []);
         }
       } catch (e) {
-        if (!cancelled) setError(e?.response?.data?.error || e.message || 'CRM fetch failed');
+        if (!cancelled) {
+          // Genix backend errors are {error: {code, message}}; some endpoints
+          // return {error: "string"}. Extract a string either way so React
+          // doesn't choke on rendering an object.
+          const err = e?.response?.data?.error;
+          const msg = typeof err === 'string'
+            ? err
+            : (err?.message || e?.response?.data?.message || e?.message || 'CRM fetch failed');
+          setError(msg);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }

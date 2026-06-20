@@ -121,12 +121,16 @@ const PhotoReportsTab = ({ project }) => {
         const uploadResult = await UploadFile(file);
         const fileUrl = uploadResult?.url || uploadResult?.file_url || uploadResult;
 
-        // Create photo report entry
+        // Create photo report entry.
+        // Send the dropdown selection as building_id (not section_id —
+        // those are separate FKs; section_id points to smeta_sections
+        // and would FK-violate on an unrelated building id). building_id
+        // is also what the CRM syncer reads to find the linked CRM block.
         await constructionService.createPhotoReport(project.id, {
           photos: [{ url: fileUrl, filename: file.name }],
           description: description || '',
           report_date: new Date().toISOString().split('T')[0],
-          ...(selectedBuildingId ? { section_id: parseInt(selectedBuildingId) } : {}),
+          ...(selectedBuildingId ? { building_id: parseInt(selectedBuildingId) } : {}),
         });
       }
       setShowModal(false);

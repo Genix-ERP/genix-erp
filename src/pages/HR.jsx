@@ -21,7 +21,6 @@ import {
   Briefcase,
   UserCheck,
   UserX,
-  Brain,
   Eye,
   Pencil,
   Trash2,
@@ -101,7 +100,6 @@ export default function HR() {
   const [totalEmployees, setTotalEmployees] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const pageSize = 20;
-  const [insights, setInsights] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -365,42 +363,6 @@ Only return the JSON, no other text.`;
       console.error("Error loading employees:", error);
     }
   }, [assessTurnoverRisk, currentPage, searchQuery, statusFilter, departmentFilter]);
-
-  const generateInsights = useCallback(async () => {
-    try {
-      // Use current employees state for insights
-      if (employees.length === 0) return;
-
-      const highTurnoverRiskCount = employees.filter(e => e.turnover_risk === 'high').length;
-      const avgPerformance = employees.length > 0 ? employees.reduce((sum, e) => sum + (e.performance_score || 0), 0) / employees.length : 0;
-
-      const prompt = `You are the HR AI of Genix. Analyze this workforce data and provide insights on retention, performance, and cost efficiency:
-        - Total Employees: ${employees.length}
-        - High Turnover Risks: ${highTurnoverRiskCount}
-        - Average Performance Score: ${avgPerformance.toFixed(2)}/5
-        - Department breakdown: ${JSON.stringify(employees.reduce((acc, e) => { acc[e.department] = (acc[e.department] || 0) + 1; return acc; }, {}))}
-
-        Provide 3 actionable insights with clear recommendations. Return as JSON with format: { "insights": [{ "title": "", "description": "", "recommendation": "", "priority": "high|medium|low" }] }`;
-
-      const insightsResult = await aiService.chat(prompt, null, { type: 'hr_analysis' });
-
-      // Parse the response - it may be a string or already parsed
-      if (insightsResult?.insights) {
-        setInsights(insightsResult.insights);
-      } else if (typeof insightsResult?.message === 'string') {
-        try {
-          const parsed = JSON.parse(insightsResult.message);
-          if (parsed.insights) {
-            setInsights(parsed.insights);
-          }
-        } catch {
-          // Could not parse AI response as JSON
-        }
-      }
-    } catch (error) {
-      console.error("Error generating AI insights:", error);
-    }
-  }, [employees]);
 
   const handleAddEmployee = async () => {
     if (submittingRef.current) return;
@@ -864,13 +826,6 @@ Only return the JSON, no other text.`;
     refreshJobPositions();
   }, [loadEmployees]);
 
-  // Generate insights when employees data changes
-  useEffect(() => {
-    if (employees.length > 0) {
-      generateInsights();
-    }
-  }, [employees.length]);
-
   // Server handles search/status/department filtering; just sync filteredEmployees
   useEffect(() => {
     setFilteredEmployees(employees);
@@ -1105,34 +1060,6 @@ Only return the JSON, no other text.`;
             )}
           </CardContent>
         </Card>
-
-        {/* AI HR Insights - Moved to bottom */}
-        {insights && insights.length > 0 && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <Brain className="w-5 h-5 text-[var(--genix-purple)]" />
-              <h3 className="text-xl font-bold text-[var(--genix-navy)]">{t('ai_hr_insights')}</h3>
-              <Badge className="bg-[var(--genix-purple)]/10 text-[var(--genix-purple)]">{t('ai_powered')}</Badge>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {insights.map((insight, index) => (
-                <Card key={index} className="bg-gradient-to-br from-white to-slate-50/50 border-slate-200/60 shadow-lg">
-                  <CardHeader>
-                    <CardTitle className="text-base">{insight.title}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <p className="text-sm text-slate-600">{insight.description}</p>
-                    <div className="p-3 bg-[var(--genix-light-blue)]/30 rounded-lg">
-                      <p className="text-sm font-medium text-[var(--genix-blue)]">
-                        💡 {insight.recommendation}
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Add Employee Modal */}
         <Dialog open={showAddModal} onOpenChange={setShowAddModal}>

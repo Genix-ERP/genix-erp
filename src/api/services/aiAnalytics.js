@@ -563,7 +563,6 @@ export const analyzeSales = (salesOrders, customers = [], language = 'en', forma
   const t = getT(language);
   if (!salesOrders || salesOrders.length === 0) {
     return {
-      summary: t.noSalesData,
       insights: [],
       recommendations: [],
       topCustomers: [],
@@ -708,7 +707,6 @@ export const analyzeSales = (salesOrders, customers = [], language = 'en', forma
   }
 
   return {
-    summary: `Total Revenue: ${formatCurrency(totalRevenue)} | ${salesOrders.length} Orders | Avg: ${formatCurrency(avgOrderValue)}`,
     metrics: {
       totalRevenue,
       orderCount: salesOrders.length,
@@ -731,7 +729,6 @@ export const analyzeInventory = (items, movements = [], language = 'en', formatC
   const t = getT(language);
   if (!items || items.length === 0) {
     return {
-      summary: t.noInventoryData,
       insights: [],
       recommendations: []
     };
@@ -846,7 +843,6 @@ export const analyzeInventory = (items, movements = [], language = 'en', formatC
   }
 
   return {
-    summary: `Total Value: ${formatCurrency(totalValue)} | ${items.length} SKUs | ${totalUnits} Units`,
     metrics: {
       totalValue,
       totalSKUs: items.length,
@@ -870,7 +866,6 @@ export const analyzeFinancials = (transactions, invoices = [], expenses = [], la
   const t = getT(language);
   if (!transactions || transactions.length === 0) {
     return {
-      summary: t.noFinancialData,
       insights: [],
       recommendations: []
     };
@@ -964,7 +959,6 @@ export const analyzeFinancials = (transactions, invoices = [], expenses = [], la
   });
 
   return {
-    summary: `Income: ${formatCurrency(totalIncome)} | Expenses: ${formatCurrency(totalExpenses)} | Net: ${formatCurrency(netProfit)}`,
     metrics: {
       totalIncome,
       totalExpenses,
@@ -983,74 +977,14 @@ export const analyzeFinancials = (transactions, invoices = [], expenses = [], la
  * Analyzes financial data using pre-computed metrics (from Income Statement API)
  */
 export const analyzeFinancialsFromMetrics = ({ totalIncome, totalExpenses, netProfit, profitMargin, expensesByCategory = [] }, language = 'en', formatCurrency = defaultFormatter) => {
-  const t = getT(language);
-
   if (totalIncome === 0 && totalExpenses === 0) {
-    return { summary: t.noFinancialData, insights: [], recommendations: [] };
+    return { insights: [], recommendations: [] };
   }
-
-  const insights = [];
-
-  if (profitMargin > 20) {
-    insights.push({
-      type: 'positive',
-      title: t.healthyProfitMargin,
-      description: t.profitMarginAbove(profitMargin.toFixed(1)),
-      metric: `${profitMargin.toFixed(1)}%`,
-      priority: 'high'
-    });
-  } else if (profitMargin < 10 && profitMargin > 0) {
-    insights.push({
-      type: 'warning',
-      title: t.lowProfitMargin,
-      description: t.profitMarginBelow(profitMargin.toFixed(1)),
-      metric: `${profitMargin.toFixed(1)}%`,
-      priority: 'high'
-    });
-  } else if (profitMargin <= 0) {
-    insights.push({
-      type: 'negative',
-      title: t.operatingAtLoss,
-      description: t.expensesExceedIncome,
-      metric: `${formatCurrency(Math.abs(netProfit))} loss`,
-      priority: 'critical'
-    });
-  }
-
-  // Find largest expense category
-  if (expensesByCategory.length > 0 && totalExpenses > 0) {
-    const largest = expensesByCategory[0]; // already sorted desc
-    const pct = (largest.amount / totalExpenses) * 100;
-    if (pct > 40) {
-      insights.push({
-        type: 'info',
-        title: t.expenseConcentration,
-        description: t.categoryAccountsFor(largest.category, pct.toFixed(0)),
-        metric: formatCurrency(largest.amount),
-        priority: 'medium'
-      });
-    }
-  }
-
-  const recommendations = [];
-  if (profitMargin < 15) {
-    recommendations.push({
-      action: t.reviewExpenseCategories,
-      description: t.analyzeTopExpense,
-      impact: 'high'
-    });
-  }
-  recommendations.push({
-    action: t.cashFlowForecast,
-    description: t.projectNextMonth,
-    impact: 'medium'
-  });
 
   return {
-    summary: `Income: ${formatCurrency(totalIncome)} | Expenses: ${formatCurrency(totalExpenses)} | Net: ${formatCurrency(netProfit)}`,
     metrics: { totalIncome, totalExpenses, netProfit, profitMargin },
-    insights,
-    recommendations
+    insights: [],
+    recommendations: []
   };
 };
 
@@ -1061,7 +995,6 @@ export const analyzeHR = (employees, payrolls = [], language = 'en') => {
   const t = getT(language);
   if (!employees || employees.length === 0) {
     return {
-      summary: t.noEmployeeData,
       insights: [],
       recommendations: []
     };
@@ -1162,7 +1095,6 @@ export const analyzeHR = (employees, payrolls = [], language = 'en') => {
   }
 
   return {
-    summary: `${activeEmployees.length} Active | ${onLeave.length} On Leave | Avg Performance: ${avgPerformance.toFixed(1)}`,
     metrics: {
       totalEmployees: employees.length,
       activeCount: activeEmployees.length,
@@ -1183,10 +1115,8 @@ export const analyzeHR = (employees, payrolls = [], language = 'en') => {
  * Analyzes projects data and provides insights
  */
 export const analyzeProjects = (projects, language = 'en', formatCurrency = defaultFormatter) => {
-  const t = getT(language);
   if (!projects || projects.length === 0) {
     return {
-      summary: t.noProjectData,
       insights: [],
       recommendations: []
     };
@@ -1209,69 +1139,7 @@ export const analyzeProjects = (projects, language = 'en', formatCurrency = defa
     return budgetUsed > progressPct + 0.2; // More than 20% over pace
   });
 
-  // Generate insights
-  const insights = [];
-
-  if (overBudgetProjects.length > 0) {
-    insights.push({
-      type: 'negative',
-      title: t.budgetOverrun,
-      description: t.projectsOverBudget(overBudgetProjects.length),
-      metric: overBudgetProjects.length,
-      projects: overBudgetProjects.map(p => p.project_name),
-      priority: 'high'
-    });
-  }
-
-  if (atRiskProjects.length > 0) {
-    insights.push({
-      type: 'warning',
-      title: t.atRiskProjects,
-      description: t.projectsBehind(atRiskProjects.length),
-      metric: atRiskProjects.length,
-      priority: 'medium'
-    });
-  }
-
-  if (completedProjects.length > 0) {
-    const onTimeProjects = completedProjects.filter(p => {
-      if (!p.end_date || !p.actual_end_date) return true;
-      return new Date(p.actual_end_date) <= new Date(p.end_date);
-    });
-    const onTimeRate = (onTimeProjects.length / completedProjects.length) * 100;
-
-    if (onTimeRate >= 80) {
-      insights.push({
-        type: 'positive',
-        title: t.onTimeDelivery,
-        description: t.projectsOnTrack(onTimeProjects.length),
-        metric: `${onTimeRate.toFixed(0)}%`,
-        priority: 'medium'
-      });
-    }
-  }
-
-  // Recommendations
-  const recommendations = [];
-
-  if (overBudgetProjects.length > 0) {
-    recommendations.push({
-      action: t.reviewProjectTimelines,
-      description: t.addressDelays,
-      impact: 'high'
-    });
-  }
-
-  if (activeProjects.length > 3) {
-    recommendations.push({
-      action: t.resourceAllocation,
-      description: t.redistributeResources,
-      impact: 'medium'
-    });
-  }
-
   return {
-    summary: `${activeProjects.length} Active | ${completedProjects.length} Completed | Budget: ${formatCurrency(totalBudget)}`,
     metrics: {
       totalProjects: projects.length,
       activeCount: activeProjects.length,
@@ -1284,97 +1152,60 @@ export const analyzeProjects = (projects, language = 'en', formatCurrency = defa
     },
     overBudgetProjects,
     atRiskProjects,
-    insights,
-    recommendations
+    insights: [],
+    recommendations: []
   };
 };
 
 /**
- * Generates overall business health score and insights
+ * Surfaces concrete, data-derived issues across modules.
+ *
+ * NOTE: This intentionally does NOT return a fabricated overall "health score"
+ * or verdict (excellent/good/fair). The previous implementation started from a
+ * hardcoded base of 70 and applied arbitrary +/-5..15 adjustments based on
+ * trivial binary checks, then presented the result as a computed business
+ * health grade. That was fabricated analysis, not real computation, so it has
+ * been removed. Only genuinely data-derived critical issues are returned.
  */
-export const analyzeBusinessHealth = (data) => {
-  const { salesOrders, inventory, transactions, employees, projects, language = 'en' } = data;
+export const analyzeBusinessHealth = (data = {}) => {
+  const { salesOrders, inventory, transactions, employees, language = 'en' } = data;
 
-  let healthScore = 70; // Base score
-  const factors = [];
   const criticalIssues = [];
 
-  // Sales health
+  // Sales: revenue actually declining
   if (salesOrders && salesOrders.length > 0) {
     const salesAnalysis = analyzeSales(salesOrders, [], language);
-    if (salesAnalysis.metrics.growthRate > 5) {
-      healthScore += 10;
-      factors.push({ name: 'Sales Growth', impact: '+10', status: 'positive' });
-    } else if (salesAnalysis.metrics.growthRate < -5) {
-      healthScore -= 10;
-      factors.push({ name: 'Sales Decline', impact: '-10', status: 'negative' });
+    if (salesAnalysis.metrics.growthRate < -5) {
       criticalIssues.push('Revenue declining - review sales strategy');
     }
   }
 
-  // Inventory health
+  // Inventory: real low-stock count
   if (inventory && inventory.length > 0) {
     const invAnalysis = analyzeInventory(inventory, [], language);
     if (invAnalysis.metrics.lowStockCount > 3) {
-      healthScore -= 5;
-      factors.push({ name: 'Low Stock Issues', impact: '-5', status: 'warning' });
       criticalIssues.push(`${invAnalysis.metrics.lowStockCount} items need restocking`);
-    }
-    if (invAnalysis.metrics.deadStockCount > 0) {
-      healthScore -= 5;
-      factors.push({ name: 'Dead Stock', impact: '-5', status: 'warning' });
     }
   }
 
-  // Financial health
+  // Financial: actual operating loss
   if (transactions && transactions.length > 0) {
     const finAnalysis = analyzeFinancials(transactions, [], [], language);
-    if (finAnalysis.metrics.profitMargin > 15) {
-      healthScore += 10;
-      factors.push({ name: 'Healthy Margins', impact: '+10', status: 'positive' });
-    } else if (finAnalysis.metrics.profitMargin < 0) {
-      healthScore -= 15;
-      factors.push({ name: 'Operating Loss', impact: '-15', status: 'negative' });
+    if (finAnalysis.metrics.profitMargin < 0) {
       criticalIssues.push('Business is operating at a loss');
     }
   }
 
-  // HR health
+  // HR: real turnover risk count
   if (employees && employees.length > 0) {
     const hrAnalysis = analyzeHR(employees, [], language);
     if (hrAnalysis.metrics.highRiskCount > 0) {
-      healthScore -= 5;
-      factors.push({ name: 'Turnover Risk', impact: '-5', status: 'warning' });
       criticalIssues.push(`${hrAnalysis.metrics.highRiskCount} employees at risk of leaving`);
     }
-    if (hrAnalysis.metrics.avgPerformance >= 4) {
-      healthScore += 5;
-      factors.push({ name: 'Team Performance', impact: '+5', status: 'positive' });
-    }
   }
-
-  // Project health
-  if (projects && projects.length > 0) {
-    const projAnalysis = analyzeProjects(projects, language);
-    if (projAnalysis.overBudgetProjects.length > 0) {
-      healthScore -= 5;
-      factors.push({ name: 'Project Overruns', impact: '-5', status: 'warning' });
-    }
-  }
-
-  // Normalize score
-  healthScore = Math.max(0, Math.min(100, healthScore));
 
   return {
-    score: healthScore,
-    status: healthScore >= 80 ? 'excellent' : healthScore >= 60 ? 'good' : healthScore >= 40 ? 'fair' : 'needs_attention',
-    factors,
-    criticalIssues,
-    summary: healthScore >= 80
-      ? 'Your business is performing well across all areas'
-      : healthScore >= 60
-        ? 'Business is healthy but there are areas for improvement'
-        : 'Several areas need immediate attention'
+    criticalIssues
   };
 };
 
@@ -1384,7 +1215,6 @@ export const analyzeBusinessHealth = (data) => {
 export const analyzeCRM = (customers, leads = [], opportunities = [], formatCurrency = defaultFormatter) => {
   if (!customers || customers.length === 0) {
     return {
-      summary: "No CRM data available.",
       insights: [],
       recommendations: []
     };
@@ -1487,7 +1317,6 @@ export const analyzeCRM = (customers, leads = [], opportunities = [], formatCurr
   }
 
   return {
-    summary: `${activeCustomers.length} Active | ${prospects.length} Prospects | MRR: ${formatCurrency(totalMRR)}`,
     metrics: {
       totalCustomers: customers.length,
       activeCount: activeCustomers.length,
@@ -1511,7 +1340,6 @@ export const analyzeManufacturing = (workOrders = [], boms = [], language = 'en'
   const t = getT(language);
   if (!workOrders || workOrders.length === 0) {
     return {
-      summary: t.noManufacturingData,
       insights: [],
       recommendations: [],
       metrics: {}
@@ -1586,7 +1414,6 @@ export const analyzeManufacturing = (workOrders = [], boms = [], language = 'en'
   });
 
   return {
-    summary: `${activeOrders.length} Active | ${completedOrders.length} Completed | ${efficiencyRate.toFixed(0)}% Efficiency`,
     metrics: {
       totalOrders: workOrders.length,
       activeCount: activeOrders.length,
@@ -1604,10 +1431,8 @@ export const analyzeManufacturing = (workOrders = [], boms = [], language = 'en'
  * Analyzes procurement data and provides insights
  */
 export const analyzeProcurement = (purchaseOrders = [], vendors = [], language = 'en', formatCurrency = defaultFormatter) => {
-  const t = getT(language);
   if (!purchaseOrders || purchaseOrders.length === 0) {
     return {
-      summary: t.noProcurementData,
       insights: [],
       recommendations: [],
       metrics: {}
@@ -1631,46 +1456,7 @@ export const analyzeProcurement = (purchaseOrders = [], vendors = [], language =
     .slice(0, 3)
     .map(([name, spend]) => ({ name, spend }));
 
-  const insights = [];
-
-  if (pendingOrders.length > 5) {
-    insights.push({
-      type: 'warning',
-      title: t.pendingOrders,
-      description: t.ordersAwaiting(pendingOrders.length),
-      metric: pendingOrders.length,
-      priority: 'medium'
-    });
-  }
-
-  if (topVendors.length > 0 && topVendors[0].spend > totalSpend * 0.5) {
-    insights.push({
-      type: 'info',
-      title: t.vendorConcentration,
-      description: t.vendorRepresents(topVendors[0].name, ((topVendors[0].spend / totalSpend) * 100).toFixed(0)),
-      metric: formatCurrency(topVendors[0].spend),
-      priority: 'medium'
-    });
-  }
-
-  const recommendations = [];
-
-  if (Object.keys(vendorSpend).length < 3) {
-    recommendations.push({
-      action: t.diversifySuppliers,
-      description: t.addBackupVendors,
-      impact: 'medium'
-    });
-  }
-
-  recommendations.push({
-    action: t.negotiateBulkPricing,
-    description: t.leverageVolume,
-    impact: 'high'
-  });
-
   return {
-    summary: `${pendingOrders.length} Pending | ${formatCurrency(totalSpend)} Total Spend`,
     metrics: {
       totalOrders: purchaseOrders.length,
       pendingCount: pendingOrders.length,
@@ -1680,8 +1466,8 @@ export const analyzeProcurement = (purchaseOrders = [], vendors = [], language =
       vendorCount: Object.keys(vendorSpend).length
     },
     topVendors,
-    insights,
-    recommendations
+    insights: [],
+    recommendations: []
   };
 };
 
@@ -1689,10 +1475,8 @@ export const analyzeProcurement = (purchaseOrders = [], vendors = [], language =
  * Analyzes fixed assets data and provides insights
  */
 export const analyzeAssets = (assets = [], language = 'en', formatCurrency = defaultFormatter) => {
-  const t = getT(language);
   if (!assets || assets.length === 0) {
     return {
-      summary: t.noAssetData,
       insights: [],
       recommendations: [],
       metrics: {}
@@ -1713,56 +1497,7 @@ export const analyzeAssets = (assets = [], language = 'en', formatCurrency = def
     (a.accumulated_depreciation || 0) >= (a.purchase_cost || 0)
   );
 
-  const insights = [];
-
-  if (maintenanceDue.length > 0) {
-    insights.push({
-      type: 'warning',
-      title: t.maintenanceDue,
-      description: t.assetsRequireMaintenance(maintenanceDue.length),
-      metric: maintenanceDue.length,
-      priority: 'high'
-    });
-  }
-
-  if (fullyDepreciated.length > 0) {
-    insights.push({
-      type: 'info',
-      title: t.fullyDepreciated,
-      description: t.assetsFullyDepreciated(fullyDepreciated.length),
-      metric: fullyDepreciated.length,
-      priority: 'low'
-    });
-  }
-
-  insights.push({
-    type: 'info',
-    title: t.netBookValue,
-    description: t.currentValueAfter,
-    metric: formatCurrency(netBookValue),
-    priority: 'medium'
-  });
-
-  const recommendations = [];
-
-  if (maintenanceDue.length > 0) {
-    recommendations.push({
-      action: t.scheduleMaintenance2,
-      description: t.planMaintenance(maintenanceDue.length),
-      impact: 'high'
-    });
-  }
-
-  if (fullyDepreciated.length > assets.length * 0.3) {
-    recommendations.push({
-      action: t.assetReplacementPlan,
-      description: t.considerReplacement,
-      impact: 'medium'
-    });
-  }
-
   return {
-    summary: `${activeAssets.length} Active | ${formatCurrency(netBookValue)} NBV`,
     metrics: {
       totalAssets: assets.length,
       activeCount: activeAssets.length,
@@ -1772,8 +1507,8 @@ export const analyzeAssets = (assets = [], language = 'en', formatCurrency = def
       maintenanceDueCount: maintenanceDue.length,
       fullyDepreciatedCount: fullyDepreciated.length
     },
-    insights,
-    recommendations
+    insights: [],
+    recommendations: []
   };
 };
 
@@ -1781,10 +1516,8 @@ export const analyzeAssets = (assets = [], language = 'en', formatCurrency = def
  * Analyzes expense data and provides insights
  */
 export const analyzeExpenses = (expenses = [], language = 'en', formatCurrency = defaultFormatter) => {
-  const t = getT(language);
   if (!expenses || expenses.length === 0) {
     return {
-      summary: t.noExpenseData,
       insights: [],
       recommendations: [],
       metrics: {}
@@ -1809,57 +1542,9 @@ export const analyzeExpenses = (expenses = [], language = 'en', formatCurrency =
     .slice(0, 3)
     .map(([name, amount]) => ({ name, amount }));
 
-  const insights = [];
-
-  if (pendingExpenses.length > 5) {
-    insights.push({
-      type: 'warning',
-      title: t.pendingApprovals,
-      description: t.expensesAwaiting(pendingExpenses.length, pendingAmount, formatCurrency),
-      metric: formatCurrency(pendingAmount),
-      priority: 'high'
-    });
-  }
-
-  if (topCategories.length > 0) {
-    insights.push({
-      type: 'info',
-      title: t.topExpenseCategory,
-      description: t.largestExpense(topCategories[0].name, language),
-      metric: formatCurrency(topCategories[0].amount),
-      priority: 'medium'
-    });
-  }
-
   const rejectionRate = expenses.length > 0 ? (rejectedExpenses.length / expenses.length) * 100 : 0;
-  if (rejectionRate > 10) {
-    insights.push({
-      type: 'warning',
-      title: t.highRejectionRate,
-      description: t.expensesRejected(rejectionRate.toFixed(0)),
-      metric: `${rejectionRate.toFixed(0)}%`,
-      priority: 'medium'
-    });
-  }
-
-  const recommendations = [];
-
-  if (pendingExpenses.length > 5) {
-    recommendations.push({
-      action: t.reviewPendingExpenses,
-      description: t.clearBacklog,
-      impact: 'high'
-    });
-  }
-
-  recommendations.push({
-    action: t.setCategoryBudgets,
-    description: t.establishLimits,
-    impact: 'medium'
-  });
 
   return {
-    summary: `${pendingExpenses.length} Pending | ${formatCurrency(totalAmount)} Total`,
     metrics: {
       totalExpenses: expenses.length,
       pendingCount: pendingExpenses.length,
@@ -1870,8 +1555,8 @@ export const analyzeExpenses = (expenses = [], language = 'en', formatCurrency =
       rejectionRate
     },
     topCategories,
-    insights,
-    recommendations
+    insights: [],
+    recommendations: []
   };
 };
 
@@ -1879,10 +1564,8 @@ export const analyzeExpenses = (expenses = [], language = 'en', formatCurrency =
  * Analyzes payroll data and provides insights
  */
 export const analyzePayroll = (payrollRecords = [], employees = [], language = 'en', formatCurrency = defaultFormatter) => {
-  const t = getT(language);
   if (!payrollRecords || payrollRecords.length === 0) {
     return {
-      summary: t.noPayrollData,
       insights: [],
       recommendations: [],
       metrics: {}
@@ -1898,55 +1581,9 @@ export const analyzePayroll = (payrollRecords = [], employees = [], language = '
 
   const avgSalary = payrollRecords.length > 0 ? totalGross / payrollRecords.length : 0;
 
-  const insights = [];
-
-  if (pendingPayroll.length > 0) {
-    insights.push({
-      type: 'warning',
-      title: t.pendingPayroll,
-      description: t.payrollPending(pendingPayroll.length),
-      metric: pendingPayroll.length,
-      priority: 'high'
-    });
-  }
-
-  insights.push({
-    type: 'info',
-    title: t.totalPayrollCost,
-    description: t.grossPayroll,
-    metric: formatCurrency(totalGross),
-    priority: 'medium'
-  });
-
   const deductionRate = totalGross > 0 ? (totalDeductions / totalGross) * 100 : 0;
-  if (deductionRate > 30) {
-    insights.push({
-      type: 'info',
-      title: t.deductionRate,
-      description: t.ofGrossSalary(deductionRate.toFixed(1)),
-      metric: `${deductionRate.toFixed(1)}%`,
-      priority: 'low'
-    });
-  }
-
-  const recommendations = [];
-
-  if (pendingPayroll.length > 0) {
-    recommendations.push({
-      action: t.processPendingPayroll,
-      description: t.completeProcessing,
-      impact: 'high'
-    });
-  }
-
-  recommendations.push({
-    action: t.reviewTaxCompliance,
-    description: t.ensureWithholdings,
-    impact: 'medium'
-  });
 
   return {
-    summary: `${completedPayroll.length} Processed | ${formatCurrency(totalNet)} Net`,
     metrics: {
       totalRecords: payrollRecords.length,
       pendingCount: pendingPayroll.length,
@@ -1957,8 +1594,8 @@ export const analyzePayroll = (payrollRecords = [], employees = [], language = '
       avgSalary,
       deductionRate
     },
-    insights,
-    recommendations
+    insights: [],
+    recommendations: []
   };
 };
 
@@ -1966,10 +1603,8 @@ export const analyzePayroll = (payrollRecords = [], employees = [], language = '
  * Analyzes contract data and provides insights
  */
 export const analyzeContracts = (contracts = [], language = 'en', formatCurrency = defaultFormatter) => {
-  const t = getT(language);
   if (!contracts || contracts.length === 0) {
     return {
-      summary: t.noContractData,
       insights: [],
       recommendations: [],
       metrics: {}
@@ -1987,54 +1622,7 @@ export const analyzeContracts = (contracts = [], language = 'en', formatCurrency
   const totalValue = contracts.reduce((sum, c) => sum + (c.value || c.contract_value || 0), 0);
   const activeValue = activeContracts.reduce((sum, c) => sum + (c.value || c.contract_value || 0), 0);
 
-  const insights = [];
-
-  if (expiringContracts.length > 0) {
-    insights.push({
-      type: 'warning',
-      title: t.contractsExpiringSoon,
-      description: t.contractsExpire(expiringContracts.length),
-      metric: expiringContracts.length,
-      priority: 'high'
-    });
-  }
-
-  insights.push({
-    type: 'info',
-    title: t.activeContractValue,
-    description: t.totalValueActive,
-    metric: formatCurrency(activeValue),
-    priority: 'medium'
-  });
-
-  if (activeContracts.length > 0) {
-    insights.push({
-      type: 'positive',
-      title: t.activeContracts,
-      description: t.contractsActive(activeContracts.length),
-      metric: activeContracts.length,
-      priority: 'medium'
-    });
-  }
-
-  const recommendations = [];
-
-  if (expiringContracts.length > 0) {
-    recommendations.push({
-      action: t.initiateRenewals,
-      description: t.startRenewalProcess(expiringContracts.length),
-      impact: 'high'
-    });
-  }
-
-  recommendations.push({
-    action: t.contractReview,
-    description: t.regularlyReview,
-    impact: 'medium'
-  });
-
   return {
-    summary: t.contractsSummary(activeContracts.length, activeValue, formatCurrency),
     metrics: {
       totalContracts: contracts.length,
       activeCount: activeContracts.length,
@@ -2043,8 +1631,8 @@ export const analyzeContracts = (contracts = [], language = 'en', formatCurrency
       activeValue
     },
     expiringContracts: expiringContracts.slice(0, 5),
-    insights,
-    recommendations
+    insights: [],
+    recommendations: []
   };
 };
 
