@@ -83,10 +83,16 @@ export default function StockTransfers() {
     reference: ''
   });
 
-  // Get transfer movements only
+  // Get transfer movements only. A transfer writes TWO ledger rows — an
+  // outbound -qty on the source and an inbound +qty on the destination (see
+  // backend TransferInventory) — and BOTH rows carry the same from→to
+  // warehouses, so listing both makes a single transfer look duplicated.
+  // Keep only the inbound (positive) leg so one transfer = one row, matching
+  // how the stat cards already dedupe.
   const transferMovements = useMemo(() => {
     return stockMovements
       .filter(m => (m.transaction_type || m.movement_type) === 'transfer')
+      .filter(m => (m.quantity || 0) > 0)
       .sort((a, b) => new Date(b.transaction_date || b.created_at) - new Date(a.transaction_date || a.created_at));
   }, [stockMovements]);
 

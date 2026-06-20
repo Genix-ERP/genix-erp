@@ -73,7 +73,7 @@ import { ManufacturingProvider } from "@/components/contexts/ManufacturingContex
 import { HRProvider } from "@/components/contexts/HRContext";
 import { ProjectsProvider } from "@/components/contexts/ProjectsContext";
 import { AdminSettingsProvider, useAdminSettings } from "@/components/contexts/AdminSettingsContext";
-import { resolveBrandLogoUrl, readStoredBrandLogo } from "@/utils/brandLogo";
+import { resolveBrandLogoUrl, readStoredBrandLogo, applyFavicon, applyBrowserTitle, readStoredFavicon, readStoredTitle } from "@/utils/brandLogo";
 import { CargoProvider } from "@/components/contexts/CargoContext";
 import { ConstructionProvider } from "@/components/contexts/ConstructionContext";
 import { useTranslation } from "@/components/utils/translations";
@@ -152,11 +152,19 @@ function LayoutContent({ children, currentPageName }) {
   // backend response, so it doesn't get stale-cleared during initial mount.
   const settingsLogo = adminSettings?.general?.company?.logo_url || null;
   const brandLogoUrl = resolveBrandLogoUrl(settingsLogo || readStoredBrandLogo());
+  const settingsFavicon = adminSettings?.general?.company?.favicon_url || null;
+  const settingsTitle = adminSettings?.general?.company?.browser_title || null;
 
-  // Set browser title
+  // Apply the configurable browser title (falls back to the cached value, then
+  // to the default inside applyBrowserTitle).
   React.useEffect(() => {
-    document.title = "Genix";
-  }, [language]);
+    applyBrowserTitle(settingsTitle || readStoredTitle());
+  }, [settingsTitle]);
+
+  // Apply the configurable browser favicon.
+  React.useEffect(() => {
+    applyFavicon(settingsFavicon || readStoredFavicon());
+  }, [settingsFavicon]);
 
   // Force re-render when user role changes by including user in dependency tracking
   const userRole = currentUser?.role;
