@@ -4,12 +4,18 @@ import { useCompany } from './CompanyContext';
 import { useAuth } from './AuthContext';
 import { isDemoMode, checkBackendHealth, getStorageKey } from '@/config/dataMode';
 import { DEFAULT_ADMIN_SETTINGS, deepMerge, getSetting as getSettingValue, setSetting as setSettingValue } from '@/config/defaultSettings';
-import { writeStoredBrandLogo } from '@/utils/brandLogo';
+import { writeStoredBrandLogo, writeStoredFavicon, writeStoredTitle } from '@/utils/brandLogo';
 
 const ADMIN_SETTINGS_STORAGE_KEY = 'genix_admin_settings';
 
-function syncBrandLogoToPublicStorage(settingsData) {
-  writeStoredBrandLogo(settingsData?.general?.company?.logo_url || null);
+// Mirror the brand assets (logo, favicon, browser title) to the public,
+// non-`genix_`-prefixed localStorage cache so pre-auth pages (login, invite,
+// reset) and the next reload can render them before settings load from backend.
+function syncBrandToPublicStorage(settingsData) {
+  const company = settingsData?.general?.company || {};
+  writeStoredBrandLogo(company.logo_url || null);
+  writeStoredFavicon(company.favicon_url || null);
+  writeStoredTitle(company.browser_title || null);
 }
 
 const AdminSettingsContext = createContext();
@@ -90,12 +96,12 @@ export function AdminSettingsProvider({ children }) {
             // Also cache in localStorage
             saveToLocalStorage(mergedSettings);
             // Authoritative backend response: sync the public brand-logo cache
-            syncBrandLogoToPublicStorage(mergedSettings);
+            syncBrandToPublicStorage(mergedSettings);
           } else {
             // No settings from API, use defaults
             setSettings(DEFAULT_ADMIN_SETTINGS);
             setOriginalSettings(DEFAULT_ADMIN_SETTINGS);
-            syncBrandLogoToPublicStorage(DEFAULT_ADMIN_SETTINGS);
+            syncBrandToPublicStorage(DEFAULT_ADMIN_SETTINGS);
           }
         } catch (apiError) {
           console.warn('API failed, falling back to localStorage:', apiError);
@@ -153,11 +159,11 @@ export function AdminSettingsProvider({ children }) {
     }));
   }, []);
 
-  // Commit the brand logo URL immediately (no manual Save needed).
-  // Persists ONLY general.company.logo_url to backend by sending an updated
-  // 'general' section built from the last-saved (originalSettings) state, so
-  // any unrelated unsaved edits the user has in flight are preserved.
-  const commitLogoUrl = useCallback(async (logoUrl) => {
+  // Commit one or more brand/company fields immediately (no manual Save needed).
+  // Persists ONLY the patched general.company fields to backend by sending an
+  // updated 'general' section built from the last-saved (originalSettings)
+  // state, so any unrelated unsaved edits the user has in flight are preserved.
+  const commitCompanyPatch = useCallback(async (patch) => {
     if (!canManageSettings()) {
       setError('Permission denied: Only administrators can save settings');
       return false;
@@ -170,14 +176,14 @@ export function AdminSettingsProvider({ children }) {
       const baseCompany = baseGeneral.company || {};
       const newGeneral = {
         ...baseGeneral,
-        company: { ...baseCompany, logo_url: logoUrl },
+        company: { ...baseCompany, ...patch },
       };
 
       if (backendAvailable && activeCompany?.id) {
         try {
           await adminSettingsService.updateSection(activeCompany.id, 'general', newGeneral);
         } catch (apiError) {
-          console.warn('Logo backend save failed, persisting locally:', apiError);
+          console.warn('Branding backend save failed, persisting locally:', apiError);
         }
       }
 
@@ -186,31 +192,37 @@ export function AdminSettingsProvider({ children }) {
         const next = JSON.parse(JSON.stringify(prev));
         if (!next.general) next.general = {};
         if (!next.general.company) next.general.company = {};
-        next.general.company.logo_url = logoUrl;
+        Object.assign(next.general.company, patch);
         return next;
       });
-      // Mark the logo as committed so the dirty-check doesn't flag it
+      // Mark the patched fields as committed so the dirty-check doesn't flag them
       setOriginalSettings(prev => {
         const next = JSON.parse(JSON.stringify(prev));
         if (!next.general) next.general = {};
         if (!next.general.company) next.general.company = {};
-        next.general.company.logo_url = logoUrl;
+        Object.assign(next.general.company, patch);
         return next;
       });
 
       // Cache & sync to public storage for the (pre-auth) login page
-      saveToLocalStorage({ ...settings, general: { ...(settings.general || {}), company: { ...((settings.general || {}).company || {}), logo_url: logoUrl } } });
-      writeStoredBrandLogo(logoUrl);
+      const mergedCompany = { ...((settings.general || {}).company || {}), ...patch };
+      saveToLocalStorage({ ...settings, general: { ...(settings.general || {}), company: mergedCompany } });
+      syncBrandToPublicStorage({ general: { company: mergedCompany } });
       setLastSaved(new Date());
       return true;
     } catch (err) {
-      console.error('Error committing logo URL:', err);
+      console.error('Error committing company branding:', err);
       setError(err.message);
       return false;
     } finally {
       setIsSaving(false);
     }
   }, [canManageSettings, originalSettings, backendAvailable, activeCompany, saveToLocalStorage, settings]);
+
+  // Thin wrappers for individual brand assets (keep stable call-site APIs)
+  const commitLogoUrl = useCallback((logoUrl) => commitCompanyPatch({ logo_url: logoUrl }), [commitCompanyPatch]);
+  const commitFaviconUrl = useCallback((faviconUrl) => commitCompanyPatch({ favicon_url: faviconUrl }), [commitCompanyPatch]);
+  const commitBrowserTitle = useCallback((title) => commitCompanyPatch({ browser_title: title }), [commitCompanyPatch]);
 
   // Save all settings
   const saveSettings = useCallback(async () => {
@@ -233,7 +245,7 @@ export function AdminSettingsProvider({ children }) {
 
       // Always save to localStorage
       saveToLocalStorage(settings);
-      syncBrandLogoToPublicStorage(settings);
+      syncBrandToPublicStorage(settings);
       setOriginalSettings(settings);
       setLastSaved(new Date());
       return true;
@@ -267,7 +279,7 @@ export function AdminSettingsProvider({ children }) {
 
       // Always save to localStorage
       saveToLocalStorage(settings);
-      syncBrandLogoToPublicStorage(settings);
+      syncBrandToPublicStorage(settings);
       setOriginalSettings(prev => ({
         ...prev,
         [section]: settings[section]
@@ -349,6 +361,8 @@ export function AdminSettingsProvider({ children }) {
     updateSetting,
     updateSection,
     commitLogoUrl,
+    commitFaviconUrl,
+    commitBrowserTitle,
     saveSettings,
     saveSection,
     resetSection,
@@ -360,7 +374,7 @@ export function AdminSettingsProvider({ children }) {
 
     // Default settings reference
     DEFAULT_SETTINGS: DEFAULT_ADMIN_SETTINGS
-  }), [settings, isLoading, isSaving, error, lastSaved, backendAvailable, canManageSettings, hasUnsavedChanges, getSetting, updateSetting, updateSection, commitLogoUrl, saveSettings, saveSection, resetSection, resetAllSettings, discardChanges, loadSettings, exportSettings, importSettings]);
+  }), [settings, isLoading, isSaving, error, lastSaved, backendAvailable, canManageSettings, hasUnsavedChanges, getSetting, updateSetting, updateSection, commitLogoUrl, commitFaviconUrl, commitBrowserTitle, saveSettings, saveSection, resetSection, resetAllSettings, discardChanges, loadSettings, exportSettings, importSettings]);
 
   return (
     <AdminSettingsContext.Provider value={value}>
