@@ -32,7 +32,8 @@ import {
   Zap,
   HardHat,
   Receipt,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Sparkles
 } from 'lucide-react';
 
 // Import settings components
@@ -49,6 +50,7 @@ import ExpensesSettings from '@/components/admin-settings/ExpensesSettings';
 import ProjectSettings from '@/components/admin-settings/ProjectSettings';
 import ConstructionSettings from '@/components/admin-settings/ConstructionSettings';
 import WorkflowSettings from '@/components/admin-settings/WorkflowSettings';
+import AISettings from '@/components/admin-settings/AISettings';
 import CompanySettings from '@/components/settings/CompanySettings';
 import SubscriptionSettings from '@/components/settings/SubscriptionSettings';
 
@@ -69,7 +71,8 @@ const SECTIONS = [
   { id: 'expenses', icon: Receipt, label: 'expenses_settings', component: ExpensesSettings, appIds: ['expenses'] },
   { id: 'projects', icon: FolderKanban, label: 'project_settings', component: ProjectSettings, appIds: ['projects'] },
   { id: 'construction', icon: HardHat, label: 'construction_settings', component: ConstructionSettings, appIds: ['construction'] },
-  { id: 'workflows', icon: Zap, label: 'workflow_settings', component: WorkflowSettings, appIds: null }
+  { id: 'workflows', icon: Zap, label: 'workflow_settings', component: WorkflowSettings, appIds: null },
+  { id: 'ai', icon: Sparkles, label: 'ai_settings', component: AISettings, appIds: null }
 ];
 
 export default function AdminSettings() {

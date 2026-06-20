@@ -36,6 +36,10 @@ const OUTGOING_TYPES = new Set([
   "consume", "production_out", "write_off", "scrap",
 ]);
 
+// Far-past date used as the lower bound for the "Ombor holati" as-of snapshot,
+// so the turnover covers all history up to the chosen as-of date.
+const STOCK_SNAPSHOT_FROM = "1970-01-01";
+
 export default function StockReport() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
@@ -52,6 +56,13 @@ export default function StockReport() {
     return d.toISOString().split("T")[0];
   });
   const [dateTo, setDateTo] = useState(() => new Date().toISOString().split("T")[0]);
+
+  // The "Ombor holati" (stock-status) tab is an AS-OF snapshot: the client only
+  // needs a single date. We keep `dateTo` as that as-of date and hide the "Dan"
+  // (From) input, then query the turnover from the beginning of time up to the
+  // as-of date so closing qty/value reflect the true on-hand stock on that date.
+  const isStockStatus = activeTab === "stock-status";
+  const effectiveDateFrom = isStockStatus ? STOCK_SNAPSHOT_FROM : dateFrom;
 
   // === STOCK STATUS / TURNOVER (Ombor holati) TAB ===
   // This view was moved out of the Products tab. Instead of replaying the
@@ -74,7 +85,7 @@ export default function StockReport() {
   useEffect(() => {
     if (!reloadMovements) return;
     reloadMovements({
-      date_from: dateFrom || undefined,
+      date_from: effectiveDateFrom || undefined,
       date_to: dateTo || undefined,
       warehouse_id: warehouseFilter,
       type: typeFilter,
@@ -86,32 +97,21 @@ export default function StockReport() {
     // tripped the backend rate limiter (429). We only want to re-fetch when a
     // filter actually changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateFrom, dateTo, warehouseFilter, typeFilter]);
+  }, [effectiveDateFrom, dateTo, warehouseFilter, typeFilter]);
 
   // Fetch the turnover sheet for the active window. include_deleted keeps
   // SKUs that existed during the period but have since been removed — same
   // rationale as the original stock-at-date report.
   useEffect(() => {
-    if (activeTab !== "stock-status" || !dateFrom || !dateTo) return;
-    // Validate the range locally so the user gets a localized message instead
-    // of the raw backend 400 ("date_to must not be earlier than date_from").
-    // dateFrom/dateTo are ISO YYYY-MM-DD strings, so a string compare is safe.
-    if (dateFrom > dateTo) {
-      setTurnoverRows([]);
-      setTurnoverLoading(false);
-      setTurnoverError(
-        language === "uz"
-          ? "«Gacha» sanasi «Dan» sanasidan oldin bo'lmasligi kerak"
-          : "«To» date must not be earlier than «From» date",
-      );
-      return;
-    }
+    if (activeTab !== "stock-status" || !dateTo) return;
     let cancelled = false;
     setTurnoverLoading(true);
     setTurnoverError("");
     inventoryService
       .getInventoryTurnover({
-        date_from: dateFrom,
+        // As-of snapshot: from the beginning of time up to the chosen date so
+        // closing qty/value = on-hand stock on that date.
+        date_from: STOCK_SNAPSHOT_FROM,
         date_to: dateTo,
         warehouse_id: warehouseFilter !== "all" ? warehouseFilter : undefined,
         include_deleted: true,
@@ -136,7 +136,7 @@ export default function StockReport() {
     return () => {
       cancelled = true;
     };
-  }, [activeTab, dateFrom, dateTo, warehouseFilter, language]);
+  }, [activeTab, dateTo, warehouseFilter]);
 
   // Client-side search + period totals over the fetched turnover rows. Search
   // is cheap so we filter here rather than re-querying the backend.
@@ -177,7 +177,7 @@ export default function StockReport() {
       .filter((m) => {
         const date = m.created_at || m.transaction_date;
         const dateStr = date ? new Date(date).toISOString().split("T")[0] : "";
-        const inRange = (!dateFrom || dateStr >= dateFrom) && (!dateTo || dateStr <= dateTo);
+        const inRange = (!effectiveDateFrom || dateStr >= effectiveDateFrom) && (!dateTo || dateStr <= dateTo);
         const matchesWh =
           warehouseFilter === "all" ||
           m.warehouse_id === warehouseFilter ||
@@ -187,7 +187,7 @@ export default function StockReport() {
       })
       .sort((a, b) => new Date(b.created_at || b.transaction_date) - new Date(a.created_at || a.transaction_date));
     return { product_name: first.product_name, product_code: first.product_code, movements };
-  }, [turnoverData.rows, stockMovements, dateFrom, dateTo, warehouseFilter]);
+  }, [turnoverData.rows, stockMovements, effectiveDateFrom, dateTo, warehouseFilter]);
 
   // === MOVEMENTS TAB ===
   const filteredMovements = useMemo(() => {
@@ -456,15 +456,21 @@ export default function StockReport() {
                 </Select>
               </div>
             )}
+            {/* Ombor holati is an as-of snapshot → only one date is needed, so
+                the "Dan" (From) input is hidden and "Gacha" becomes the as-of date. */}
+            {!isStockStatus && (
+              <div className="w-[150px]">
+                <label className="text-xs font-medium text-slate-500 mb-1 block">
+                  {language === "uz" ? "Dan" : "From"}
+                </label>
+                <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+              </div>
+            )}
             <div className="w-[150px]">
               <label className="text-xs font-medium text-slate-500 mb-1 block">
-                {language === "uz" ? "Dan" : "From"}
-              </label>
-              <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-            </div>
-            <div className="w-[150px]">
-              <label className="text-xs font-medium text-slate-500 mb-1 block">
-                {language === "uz" ? "Gacha" : "To"}
+                {isStockStatus
+                  ? (language === "uz" ? "Sana (holat)" : "As of date")
+                  : (language === "uz" ? "Gacha" : "To")}
               </label>
               <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
             </div>
@@ -821,9 +827,9 @@ export default function StockReport() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <CalendarDays className="w-4 h-4 text-slate-500" />
-                {language === "uz" ? "Ombor holati — davr bo'yicha aylanma" : "Stock Status — period turnover"}
+                {language === "uz" ? "Ombor holati" : "Stock Status"}
                 <span className="text-xs font-normal text-slate-400">
-                  {formatDate(dateFrom)} — {formatDate(dateTo)}
+                  {language === "uz" ? `${formatDate(dateTo)} sanasiga` : `as of ${formatDate(dateTo)}`}
                 </span>
               </CardTitle>
             </CardHeader>
