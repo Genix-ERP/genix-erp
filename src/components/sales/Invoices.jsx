@@ -110,7 +110,7 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
   } = useSales();
 
   const { customers } = useCustomers();
-  const { canCreate } = usePermissions();
+  const { canCreate, isSuperAdmin } = usePermissions();
 
   const [products, setProducts] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -1079,13 +1079,15 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                                       {t('send')}
                                     </DropdownMenuItem>
                                   )}
-                                  <DropdownMenuItem
-                                    onClick={() => handleDelete(invoice)}
-                                    className="text-red-600"
-                                  >
-                                    <Trash2 className="w-4 h-4 mr-2" />
-                                    {t('delete')}
-                                  </DropdownMenuItem>
+                                  {isSuperAdmin && (
+                                    <DropdownMenuItem
+                                      onClick={() => handleDelete(invoice)}
+                                      className="text-red-600"
+                                    >
+                                      <Trash2 className="w-4 h-4 mr-2" />
+                                      {t('delete')}
+                                    </DropdownMenuItem>
+                                  )}
                                 </>
                               )}
                             </DropdownMenuContent>
