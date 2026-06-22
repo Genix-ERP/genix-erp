@@ -62,7 +62,7 @@ export default function Orders({
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { formatCurrency } = useCurrencyFormatter();
-  const { canCreate, canUpdate, canDelete } = usePermissions();
+  const { canCreate, canUpdate, canDelete, isSuperAdmin } = usePermissions();
   const { salesOrders = [], isLoading: ordersLoading } = useModules();
   const {
     invoices = [],
@@ -319,7 +319,7 @@ export default function Orders({
                                   <Pencil className="w-4 h-4" />
                                 </Button>
                               )}
-                              {canDelete(MODULES.SALES) && !['cancelled', 'shipped', 'delivered'].includes(order.status) && (
+                              {isSuperAdmin && !['cancelled', 'shipped', 'delivered'].includes(order.status) && (
                                 <Button
                                   size="sm"
                                   variant="ghost"

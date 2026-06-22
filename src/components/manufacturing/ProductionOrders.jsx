@@ -37,7 +37,7 @@ const splitPieceFactor = (product) => {
 export default function ProductionOrders() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { canCreate, canUpdate, canDelete } = usePermissions();
+  const { canCreate, canUpdate, canDelete, isSuperAdmin } = usePermissions();
   const { formatCurrency } = useCurrencyFormatter();
 
   const {
@@ -817,7 +817,7 @@ export default function ProductionOrders() {
                                 <X className="w-4 h-4 text-red-500" />
                               </Button>
                             )}
-                            {canDelete(MODULES.MANUFACTURING) && ['draft', 'cancelled', 'completed'].includes(order.status) && (
+                            {isSuperAdmin && ['draft', 'cancelled', 'completed'].includes(order.status) && (
                               <Button size="sm" variant="ghost"
                                 onClick={() => {
                                   if (window.confirm(t('confirm_delete') || 'Delete this production order?')) {
