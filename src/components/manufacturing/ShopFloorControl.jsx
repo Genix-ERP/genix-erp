@@ -620,6 +620,17 @@ export default function ShopFloorControl({ isActive }) {
           } : {}),
         })),
       });
+      // Remember the entered materials as each product's default so the next
+      // split for the same product auto-fills (no need to click "Save as default").
+      await Promise.allSettled(
+        validItems
+          .filter(it => (it.materials || []).some(m => m.product_id && parseFloat(m.quantity_per_piece) > 0))
+          .map(it => apiClient.post(`/products/${it.product_id}/packaging-materials`, {
+            materials: it.materials
+              .filter(m => m.product_id && parseFloat(m.quantity_per_piece) > 0)
+              .map(m => ({ material_id: m.product_id, quantity_per_piece: parseFloat(m.quantity_per_piece) })),
+          }))
+      );
       toast.success(language === 'uz' ? 'Chiqish yakunlandi' : language === 'ru' ? 'Упаковка завершена' : 'Split output completed');
       setShowSplitModal(false);
       setSplitPoId(null);
