@@ -574,7 +574,11 @@ export default function PurchaseReturns() {
                           <label className="text-xs text-slate-500">{t('return_qty') || 'Return Qty'}</label>
                           <Input
                             type="number"
-                            value={line.return_quantity}
+                            // Show a blank field (not a literal "0") when the qty is 0 so the
+                            // user can clear it and type a value. Binding the raw 0 made the
+                            // field snap back to "0" the moment it was emptied.
+                            value={line.return_quantity === 0 ? '' : line.return_quantity}
+                            placeholder="0"
                             onChange={(e) => updateLine(index, 'return_quantity', parseFloat(e.target.value) || 0)}
                             max={line.original_quantity}
                             min={0}
