@@ -461,9 +461,11 @@ export default function Suppliers() {
                       <TableCell>
                         <div>
                           <div className="font-medium">{supplier.name}</div>
-                          <div className="text-xs text-slate-500">
-                            {supplier.contact_person}
-                          </div>
+                          {supplier.contact_person && (
+                            <div className="text-sm text-slate-600">
+                              {supplier.contact_person}
+                            </div>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell>
