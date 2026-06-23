@@ -232,6 +232,7 @@ export function ProcurementProvider({ children }) {
       try {
         const response = await procurementService.createSupplier({
           name: supplierData.name,
+          contact_person: supplierData.contact_person || undefined,
           email: supplierData.email || undefined,
           phone: supplierData.phone || undefined,
           tax_id: supplierData.tax_id || undefined,
@@ -244,7 +245,7 @@ export function ProcurementProvider({ children }) {
         // Map backend response to frontend format
         const mappedSupplier = {
           ...response,
-          contact_person: response.contact_persons?.[0]?.name || '',
+          contact_person: response.contact_person || response.contact_persons?.[0]?.name || '',
           address: response.billing_address?.street || response.shipping_address?.street || '',
           rating: 0,
           total_orders: 0,
