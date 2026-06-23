@@ -37,6 +37,9 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
   const [tagInput, setTagInput] = useState("");
   const [accounts, setAccounts] = useState([]);
 
+  // Guards against double-submit: a slow save (e.g. the full-order flow) used to
+  // let a second click create a duplicate customer + order.
+  const [submitting, setSubmitting] = useState(false);
   // --- Inline order / cost-calculator (new customers only) ---
   const isNew = !customer;
   const [orderEnabled, setOrderEnabled] = useState(false);
@@ -111,8 +114,9 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
     setFormData(prev => ({ ...prev, tags: prev.tags.filter(t => t !== tag) }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    if (submitting) return; // ignore rapid double-clicks while a save is in flight
     const payload = {
       ...formData,
       annual_revenue: Number(formData.annual_revenue),
@@ -136,7 +140,12 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
         })),
       };
     }
-    onSave(payload);
+    setSubmitting(true);
+    try {
+      await onSave(payload);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleChange = (field, value) => {
@@ -382,8 +391,10 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
               <Button type="button" variant="outline" onClick={onCancel}>
                 {t('cancel')}
               </Button>
-              <Button type="submit" className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]">
-                {customer ? t('update') + ' ' + t('customer') : t('add_customer')}
+              <Button type="submit" disabled={submitting} className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] disabled:opacity-60">
+                {submitting
+                  ? (t('saving') || 'Saqlanmoqda...')
+                  : (customer ? t('update') + ' ' + t('customer') : t('add_customer'))}
               </Button>
             </div>
           </form>
