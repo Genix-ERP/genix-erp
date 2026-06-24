@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import {
-  Plus, Pencil, Trash2, Package, Barcode, ShoppingCart, Truck, X, Check
+  Plus, Edit, Trash2, Package, Barcode, ShoppingCart, Truck, X, Check
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -219,7 +219,7 @@ export default function ProductPackagingTab({ productId, productName }) {
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1">
                     <Button size="sm" variant="ghost" onClick={() => handleOpenModal(packaging)}>
-                      <Pencil className="w-4 h-4 text-slate-500" />
+                      <Edit className="w-4 h-4 text-slate-500" />
                     </Button>
                     <Button size="sm" variant="ghost" onClick={() => confirmDelete(packaging)}>
                       <Trash2 className="w-4 h-4 text-red-500" />

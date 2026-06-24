@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Briefcase, Clock, DollarSign, TrendingUp, Brain, CheckCircle, AlertTriangle, Target, Lightbulb, Edit2, LayoutGrid, Columns, Settings, X, GripVertical } from 'lucide-react';
+import { Plus, Search, Briefcase, Clock, DollarSign, TrendingUp, Brain, CheckCircle, AlertTriangle, Target, Lightbulb, Edit, LayoutGrid, Columns, Settings, X, GripVertical, ArrowRight, Trash2 } from 'lucide-react';
 import { Progress } from "@/components/ui/progress";
 import { analyzeProjects } from '@/api/services/aiAnalytics';
 import { contactsService } from '@/api/services/contacts';
@@ -34,7 +34,7 @@ export default function Projects() {
   const { t } = useTranslation(language);
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
   const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
-  const { projects, createProject, updateProject, isLoading, refreshData } = useModules();
+  const { projects, createProject, updateProject, deleteProject, isLoading, refreshData } = useModules();
 
   // Refresh data when navigating to this page
   useEffect(() => {
@@ -46,6 +46,7 @@ export default function Projects() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [confirmDeleteProject, setConfirmDeleteProject] = useState(null);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [editProject, setEditProject] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -175,6 +176,19 @@ export default function Projects() {
       progress_percentage: project.progress_percentage || 0
     });
     setShowEditModal(true);
+  };
+
+  const handleDeleteProject = async () => {
+    if (!confirmDeleteProject) return;
+    try {
+      await deleteProject(confirmDeleteProject.id);
+      setConfirmDeleteProject(null);
+      setShowEditModal(false);
+      setEditProject(null);
+      refreshData();
+    } catch (error) {
+      console.error('Error deleting project:', error);
+    }
   };
 
   const handleUpdateProject = async () => {
@@ -352,64 +366,83 @@ export default function Projects() {
   };
 
   // Project Card Component
-  const ProjectCard = ({ project, draggable = false, hideStatus = false }) => (
+  const ProjectCard = ({ project, draggable = false, hideStatus = false }) => {
+    const progress = Number(project.progress_percentage || 0);
+    const budget = Number(project.budget || 0);
+    const spent = Number(project.spent || 0);
+    const overBudget = budget > 0 && spent > budget;
+    return (
     <Card
-      className={`bg-white border-slate-200 hover:shadow-lg transition-shadow ${draggable ? 'cursor-move' : 'cursor-pointer'}`}
+      className={`group bg-white border border-slate-200 rounded-xl hover:shadow-lg hover:-translate-y-0.5 transition-all ${draggable ? 'cursor-move' : 'cursor-pointer'}`}
       draggable={draggable}
       onDragStart={draggable ? (e) => handleDragStart(e, project) : undefined}
       onDragEnd={draggable ? handleDragEnd : undefined}
       onClick={() => navigate(`/projects/${project.id}`)}
     >
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between">
-          <div className="flex-1 min-w-0">
-            <h3 className="font-bold text-lg text-slate-900 mb-1 truncate">{String(project.project_name || '')}</h3>
-            <p className="text-sm text-slate-500">{String(project.client_name || '')}</p>
+      <CardContent className="p-5 space-y-4">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h3 className="font-bold text-lg text-slate-900 truncate">{String(project.project_name || '')}</h3>
+            {project.client_name && <p className="text-sm text-slate-500 truncate">{String(project.client_name)}</p>}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 shrink-0">
             {!hideStatus && <Badge className={getStatusColor(project.status)}>{getStatusLabel(project.status)}</Badge>}
             {canUpdate(MODULES.PROJECTS) && (
-              <Button size="sm" variant="ghost" onClick={(e) => handleEditProject(project, e)} title={t('edit_project')}>
-                <Edit2 className="w-4 h-4" />
+              <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-400 hover:text-slate-700" onClick={(e) => handleEditProject(project, e)} title={t('edit')}>
+                <Edit className="w-4 h-4" />
+              </Button>
+            )}
+            {canDelete(MODULES.PROJECTS) && (
+              <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-400 hover:text-red-600" onClick={(e) => { e.stopPropagation(); setConfirmDeleteProject(project); }} title={t('delete')}>
+                <Trash2 className="w-4 h-4" />
               </Button>
             )}
           </div>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <div className="flex justify-between text-sm">
-            <span className="text-slate-600">{t('progress')}</span>
-            <span className="font-semibold">{Number(project.progress_percentage || 0)}%</span>
+
+        {/* Progress */}
+        <div>
+          <div className="flex justify-between text-xs mb-1.5">
+            <span className="text-slate-500">{t('progress')}</span>
+            <span className="font-semibold text-slate-700">{progress}%</span>
           </div>
-          <Progress value={Number(project.progress_percentage || 0)} className="h-2" />
+          <Progress value={progress} className="h-2" />
         </div>
 
-        <div className="grid grid-cols-2 gap-4 text-sm">
-          <div>
-            <p className="text-slate-500 mb-1">{t('budget')}</p>
-            <p className="font-semibold">{formatCurrency(Number(project.budget || 0))}</p>
+        {/* Budget */}
+        <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2.5">
+          <div className="min-w-0">
+            <p className="text-[11px] text-slate-500">{t('budget')}</p>
+            <p className="font-semibold text-slate-800 truncate">{formatCurrency(budget)}</p>
           </div>
-          <div>
-            <p className="text-slate-500 mb-1">{t('spent')}</p>
-            <p className="font-semibold">{formatCurrency(Number(project.spent || 0))}</p>
+          <div className="text-right min-w-0">
+            <p className="text-[11px] text-slate-500">{t('spent')}</p>
+            <p className={`font-semibold truncate ${overBudget ? 'text-red-600' : 'text-slate-800'}`}>{formatCurrency(spent)}</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {project.priority && (
+        {/* Footer: priority + open */}
+        <div className="flex items-center justify-between pt-1">
+          {project.priority ? (
             <Badge className={getPriorityColor(project.priority)} variant="outline">
               {t(String(project.priority || 'medium'))}
             </Badge>
-          )}
-          <Badge variant="outline" className="text-xs">
-            <Clock className="w-3 h-3 mr-1" />
-            {Number(project.total_hours || 0).toFixed(1)}h
-          </Badge>
+          ) : <span />}
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 group-hover:bg-blue-50 group-hover:text-blue-600 group-hover:border-blue-200 transition-colors"
+            onClick={(e) => { e.stopPropagation(); navigate(`/projects/${project.id}`); }}
+          >
+            {t('open_project') || 'Open'}
+            <ArrowRight className="w-4 h-4 ml-1.5 group-hover:translate-x-0.5 transition-transform" />
+          </Button>
         </div>
       </CardContent>
     </Card>
-  );
+    );
+  };
 
   // Helper to get translated status label
   const getTranslatedStatusLabel = (status) => {
@@ -921,13 +954,24 @@ export default function Projects() {
                   </div>
                 </div>
 
-                <div className="flex gap-3 pt-4">
-                  <Button variant="outline" onClick={() => { setShowEditModal(false); setEditProject(null); }} className="flex-1">
+                <div className="flex items-center gap-3 pt-4">
+                  {canDelete(MODULES.PROJECTS) && (
+                    <Button
+                      variant="outline"
+                      onClick={() => setConfirmDeleteProject(editProject)}
+                      className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                    >
+                      <Trash2 className="w-4 h-4 mr-1.5" />
+                      {t('delete')}
+                    </Button>
+                  )}
+                  <div className="flex-1" />
+                  <Button variant="outline" onClick={() => { setShowEditModal(false); setEditProject(null); }}>
                     {t('cancel')}
                   </Button>
                   <Button
                     onClick={handleUpdateProject}
-                    className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600"
+                    className="bg-gradient-to-r from-blue-600 to-indigo-600"
                     disabled={!editProject.project_name || !editProject.client_name || isSubmitting}
                   >
                     {isSubmitting ? t('saving') : t('save_changes')}
@@ -935,6 +979,28 @@ export default function Projects() {
                 </div>
               </div>
             )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete confirm modal */}
+        <Dialog open={!!confirmDeleteProject} onOpenChange={(open) => { if (!open) setConfirmDeleteProject(null); }}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <span className="w-9 h-9 rounded-full bg-red-100 text-red-600 flex items-center justify-center">
+                  <Trash2 className="w-4 h-4" />
+                </span>
+                {t('delete_project') || 'Delete project'}
+              </DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground">
+              {t('confirm_delete_project') || 'Are you sure you want to delete this project?'}
+              {confirmDeleteProject ? ` "${confirmDeleteProject.project_name}"` : ''}
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setConfirmDeleteProject(null)}>{t('cancel')}</Button>
+              <Button variant="destructive" onClick={handleDeleteProject}>{t('delete')}</Button>
+            </div>
           </DialogContent>
         </Dialog>
 

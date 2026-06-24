@@ -39,7 +39,7 @@ import {
   Tag,
   MoreVertical,
   Eye,
-  Pencil,
+  Edit,
   Trash2,
   Calendar,
   Users,
@@ -497,7 +497,7 @@ export default function Discounts() {
                                 {t('view')}
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => handleEdit(discount)}>
-                                <Pencil className="w-4 h-4 mr-2" />
+                                <Edit className="w-4 h-4 mr-2" />
                                 {t('edit')}
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => handleToggleStatus(discount)}>

@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Receipt, Upload, CheckCircle, XCircle, Clock, DollarSign, Brain, AlertTriangle, Target, Lightbulb, Edit2, Download, Trash2 } from 'lucide-react';
+import { Plus, Search, Receipt, Upload, CheckCircle, XCircle, Clock, DollarSign, Brain, AlertTriangle, Target, Lightbulb, Edit, Download, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { analyzeExpenses } from '@/api/services/aiAnalytics';
@@ -627,7 +627,7 @@ export default function Expenses() {
                             <div className="flex gap-1">
                               {canUpdate(MODULES.FINANCIALS) && (
                                 <Button size="sm" variant="ghost" onClick={() => handleEditClaim(claim)} title={t('edit_claim')}>
-                                  <Edit2 className="w-4 h-4" />
+                                  <Edit className="w-4 h-4" />
                                 </Button>
                               )}
                               {canUpdate(MODULES.FINANCIALS) && claim.status === 'draft' && (

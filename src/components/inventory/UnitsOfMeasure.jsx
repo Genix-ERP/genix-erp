@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import {
-  Plus, Search, Pencil, Trash2, Scale, RefreshCw
+  Plus, Search, Edit, Trash2, Scale, RefreshCw
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -289,7 +289,7 @@ export default function UnitsOfMeasure() {
                         <div className="flex justify-end gap-1">
                           {canUpdate(MODULES.INVENTORY) && (
                             <Button variant="ghost" size="sm" onClick={() => handleEdit(unit)}>
-                              <Pencil className="w-4 h-4" />
+                              <Edit className="w-4 h-4" />
                             </Button>
                           )}
                           {canDelete(MODULES.INVENTORY) && (

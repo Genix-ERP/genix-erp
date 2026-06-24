@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import {
   Plus, Building2, Car, Monitor, Cpu, Wrench, Package,
-  TrendingDown, Calendar, DollarSign, Edit2, Trash2,
+  TrendingDown, Calendar, DollarSign, Edit, Trash2,
   Calculator, FileText, AlertTriangle, CheckCircle2, Settings, ArrowRight,
   ChevronLeft, ChevronRight
 } from "lucide-react";
@@ -707,7 +707,7 @@ export default function FixedAssets() {
                           )}
                           {canUpdate(MODULES.ASSETS) && (
                             <Button variant="ghost" size="sm" onClick={() => openEditModal(asset)} title={t('edit') || 'Edit'}>
-                              <Edit2 className="w-4 h-4 text-slate-500" />
+                              <Edit className="w-4 h-4 text-slate-500" />
                             </Button>
                           )}
                           {asset.status === 'active' && canDelete(MODULES.ASSETS) && (

@@ -43,7 +43,7 @@ import {
   CreditCard,
   Search,
   Plus,
-  Edit2,
+  Edit,
   Trash2,
   Star,
   Clock,
@@ -468,7 +468,7 @@ export default function PaymentTerms() {
                           size="icon"
                           onClick={() => handleEdit(term)}
                         >
-                          <Edit2 className="h-4 w-4" />
+                          <Edit className="h-4 w-4" />
                         </Button>
                         <Button
                           variant="ghost"

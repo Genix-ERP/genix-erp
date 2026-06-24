@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Plus, Search, Package, Pencil, Trash2, MoreHorizontal,
+  Plus, Search, Package, Edit, Trash2, MoreHorizontal,
   Barcode, PackagePlus, ArrowRightLeft, Truck, Store, Settings2,
   GripVertical, ChevronRight, Shield, Clock, FileText, ArrowDown
 } from "lucide-react";
@@ -1084,7 +1084,7 @@ export default function OperationTypes() {
                                   )}
                                   <div className="flex items-center gap-1 shrink-0">
                                     <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => editStep(step, index)}>
-                                      <Pencil className="w-3.5 h-3.5 text-slate-500" />
+                                      <Edit className="w-3.5 h-3.5 text-slate-500" />
                                     </Button>
                                     <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => deleteStep(index)}>
                                       <Trash2 className="w-3.5 h-3.5 text-red-500" />

@@ -41,7 +41,7 @@ import {
   XCircle,
   MoreVertical,
   Eye,
-  Pencil,
+  Edit,
   Trash2,
   ArrowRight,
   Calendar,
@@ -398,7 +398,7 @@ export default function Quotations() {
                             {quotation.status === "draft" && (
                               <>
                                 <DropdownMenuItem onClick={() => handleEdit(quotation)}>
-                                  <Pencil className="w-4 h-4 mr-2" />
+                                  <Edit className="w-4 h-4 mr-2" />
                                   {t('edit')}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => handleSend(quotation)}>

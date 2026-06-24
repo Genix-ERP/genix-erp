@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { LabelWithHelp } from "@/components/ui/field-help";
-import { Plus, Cog, AlertTriangle, CheckCircle, Wrench, Eye, Pencil, Trash2, Settings, Check, Users } from 'lucide-react';
+import { Plus, Cog, AlertTriangle, CheckCircle, Wrench, Eye, Edit, Trash2, Settings, Check, Users } from 'lucide-react';
 import { Checkbox } from "@/components/ui/checkbox";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -512,7 +512,7 @@ export default function WorkCenters() {
                     </Button>
                     {canUpdate(MODULES.MANUFACTURING) && (
                       <Button variant="outline" size="sm" onClick={() => handleEditWorkCenter(wc)} title={t('edit')}>
-                        <Pencil className="w-4 h-4" />
+                        <Edit className="w-4 h-4" />
                       </Button>
                     )}
                     {canDelete(MODULES.MANUFACTURING) && (
@@ -1510,7 +1510,7 @@ export default function WorkCenters() {
                     }}
                     className="flex-1 bg-gradient-to-r from-slate-700 to-slate-800"
                   >
-                    <Pencil className="w-4 h-4 mr-2" /> {t('edit')}
+                    <Edit className="w-4 h-4 mr-2" /> {t('edit')}
                   </Button>
                 )}
               </div>

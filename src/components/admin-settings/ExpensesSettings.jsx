@@ -47,7 +47,7 @@ import { toast } from 'sonner';
 import {
   Plus,
   Receipt,
-  Edit2,
+  Edit,
   Trash2,
   Loader2,
   Info,
@@ -288,7 +288,7 @@ export default function ExpensesSettings() {
                           onClick={() => openEdit(cat)}
                           className="text-slate-600 hover:text-slate-900"
                         >
-                          <Edit2 className="w-3.5 h-3.5" />
+                          <Edit className="w-3.5 h-3.5" />
                         </Button>
                         <Button
                           variant="ghost"

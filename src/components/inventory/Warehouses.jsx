@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Plus, Search, Warehouse, Pencil, Trash2, Eye, MapPin, Phone,
+  Plus, Search, Warehouse, Edit, Trash2, Eye, MapPin, Phone,
   Mail, User, ChevronRight, ChevronDown, AlertCircle, CheckCircle,
   Building2, Package, LayoutGrid, Truck, PackageCheck, RotateCcw,
   ClipboardCheck, Barcode, Box, Layers, HelpCircle, ArrowLeftRight, Trash
@@ -572,7 +572,7 @@ export default function Warehouses() {
                                 onClick={() => handleEdit(warehouse)}
                                 className="h-8 w-8 p-0"
                               >
-                                <Pencil className="w-4 h-4 text-slate-500" />
+                                <Edit className="w-4 h-4 text-slate-500" />
                               </Button>
                             )}
                             {canDelete(MODULES.INVENTORY) && (
@@ -634,7 +634,7 @@ export default function Warehouses() {
                                           onClick={() => handleEditLocation(warehouse, location)}
                                           className="h-7 w-7 p-0"
                                         >
-                                          <Pencil className="w-3 h-3 text-slate-500" />
+                                          <Edit className="w-3 h-3 text-slate-500" />
                                         </Button>
                                       )}
                                       {canDelete(MODULES.INVENTORY) && (
@@ -1740,7 +1740,7 @@ export default function Warehouses() {
                   }}
                   className="flex-1"
                 >
-                  <Pencil className="w-4 h-4 mr-2" /> {t('edit')}
+                  <Edit className="w-4 h-4 mr-2" /> {t('edit')}
                 </Button>
                 <Button
                   variant="outline"

@@ -18,7 +18,7 @@ import {
   Clock,
   MoreHorizontal,
   Eye,
-  Pencil,
+  Edit,
   Trash2,
   Download,
   RefreshCw,
@@ -504,7 +504,7 @@ export default function EmployeeContracts() {
                               </DropdownMenuItem>
                               {canUpdate(MODULES.HR) && (
                                 <DropdownMenuItem onClick={() => { setSelectedContract(contract); setShowEditModal(true); }}>
-                                  <Pencil className="w-4 h-4 mr-2" />
+                                  <Edit className="w-4 h-4 mr-2" />
                                   {t('edit') || "Tahrirlash"}
                                 </DropdownMenuItem>
                               )}

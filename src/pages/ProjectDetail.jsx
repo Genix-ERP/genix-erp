@@ -58,8 +58,13 @@ import {
   Paperclip,
   Upload,
   Download,
+  ArrowUpDown,
+  ArrowDownWideNarrow,
+  ArrowUpNarrowWide,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import { ru } from 'date-fns/locale/ru';
+import { uz } from 'date-fns/locale/uz';
 import GanttChart from '@/components/projects/GanttChart';
 import { useAuth } from '@/components/contexts/AuthContext';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -69,6 +74,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { projectsService } from '@/api/services/projects';
+import { exportTimeEntriesToExcel, parseTimeEntriesFile } from '@/utils/timeEntriesExcel';
 import { hrService } from '@/api/services/hr';
 import { contactsService } from '@/api/services/contacts';
 
@@ -77,6 +83,9 @@ export default function ProjectDetail() {
   const navigate = useNavigate();
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  // Locale-aware date formatter (months/weekdays in the current language)
+  const dfLocale = language === 'ru' ? ru : language === 'uz' ? uz : undefined;
+  const fmt = (date, pattern) => format(date, pattern, dfLocale ? { locale: dfLocale } : undefined);
   const { projects, updateProject } = useModules();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
   const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
@@ -102,9 +111,27 @@ export default function ProjectDetail() {
   const [onlyMine, setOnlyMine] = useState(false);
   // Filter tasks by milestone (stage); 'all' = no filter
   const [taskMilestoneFilter, setTaskMilestoneFilter] = useState('all');
+  // Per-stage priority sort: { [stage_key]: 'none' | 'desc' | 'asc' }
+  const [stageSort, setStageSort] = useState({});
+  const cycleStageSort = (key) => setStageSort(prev => {
+    const cur = prev[key] || 'none';
+    const next = cur === 'none' ? 'desc' : cur === 'desc' ? 'asc' : 'none';
+    return { ...prev, [key]: next };
+  });
+  const sortByPriority = (arr, mode) => {
+    if (!mode || mode === 'none') return arr;
+    const rank = { critical: 4, high: 3, medium: 2, low: 1 };
+    return [...arr].sort((a, b) => {
+      const ra = rank[a.priority] || 0, rb = rank[b.priority] || 0;
+      return mode === 'desc' ? rb - ra : ra - rb;
+    });
+  };
   // Refs for the custom kanban drag preview (native drag image is unreliable here)
   const taskDragPreviewRef = useRef(null);
   const taskDragMoveRef = useRef(null);
+
+  // Selected assignee ids for the task create/edit dialog (multi-assignee)
+  const [formAssigneeIds, setFormAssigneeIds] = useState([]);
 
   // Backend-driven task stages (kanban columns)
   const [stages, setStages] = useState([]);
@@ -257,6 +284,20 @@ export default function ProjectDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Keep the project's stored progress in sync with task completion, so the
+  // Projects list card and the average-progress KPI match the detail page.
+  useEffect(() => {
+    if (!project || tasks.length === 0) return;
+    const total = tasks.length;
+    const completed = tasks.filter(tk => tk.status === 'completed').length;
+    const pct = Math.round((completed / total) * 100);
+    const current = project.progress_percentage ?? project.progress ?? 0;
+    if (pct !== current) {
+      updateProject(projectId, { progress_percentage: pct }).catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks]);
+
   // For backwards compatibility with task assignee
   const employees = employeesList.map(emp => ({
     id: emp.id,
@@ -376,11 +417,11 @@ export default function ProjectDetail() {
 
   const handleCreateTask = async () => {
     try {
+      const assignees = formAssigneeIds.map(id => ({ employee_id: id, employee_name: employees.find(e => e.id === id)?.name || '' }));
       await projectsService.createProjectTask(projectId, {
         title: newTask.title,
         description: newTask.description,
-        assignee_id: newTask.assignee || undefined,
-        assignee_name: newTask.assignee ? employees.find(e => e.id === newTask.assignee)?.name : undefined,
+        assignees,
         milestone_id: newTask.milestone_id || undefined,
         priority: newTask.priority,
         status: newTask.status,
@@ -390,6 +431,7 @@ export default function ProjectDetail() {
       await loadTasks(projectId);
       setShowTaskDialog(false);
       resetNewTask();
+      setFormAssigneeIds([]);
     } catch (error) {
       console.error('Error creating task:', error);
       toast.error(t('error_creating_task') || 'Error creating task');
@@ -398,12 +440,11 @@ export default function ProjectDetail() {
 
   const handleUpdateTask = async () => {
     try {
-      const assigneeId = editingTask.assignee_id || editingTask.assignee;
+      const assignees = formAssigneeIds.map(id => ({ employee_id: id, employee_name: employees.find(e => e.id === id)?.name || '' }));
       await projectsService.updateProjectTask(projectId, editingTask.id, {
         title: editingTask.title,
         description: editingTask.description,
-        assignee_id: assigneeId || undefined,
-        assignee_name: assigneeId ? employees.find(e => e.id === assigneeId)?.name : undefined,
+        assignees,
         milestone_id: editingTask.milestone_id || '',
         priority: editingTask.priority,
         status: editingTask.status,
@@ -413,11 +454,17 @@ export default function ProjectDetail() {
       await loadTasks(projectId);
       setShowTaskDialog(false);
       setEditingTask(null);
+      setFormAssigneeIds([]);
     } catch (error) {
       console.error('Error updating task:', error);
       toast.error(t('error_updating_task') || 'Error updating task');
     }
   };
+
+  // Open the task dialog with assignee selection prefilled
+  const openNewTask = () => { resetNewTask(); setEditingTask(null); setFormAssigneeIds([]); setShowTaskDialog(true); };
+  const openEditTask = (task) => { setEditingTask(task); setFormAssigneeIds((task.assignees || []).map(a => a.employee_id)); setShowTaskDialog(true); };
+  const toggleFormAssignee = (id) => setFormAssigneeIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
 
   const handleDeleteTask = (task) => {
     const taskId = typeof task === 'string' ? task : task.id;
@@ -849,6 +896,84 @@ export default function ProjectDetail() {
     }
   };
 
+  // Export time entries to a styled Excel file
+  const handleExportTime = async () => {
+    try {
+      const tasksById = {};
+      tasks.forEach(tk => { tasksById[tk.id] = tk.title; });
+      const labelKeys = ['time_entries', 'total_hours', 'billable_hours', 'billable_amount', 'date', 'employee', 'task', 'hours', 'billable', 'hourly_rate', 'amount', 'description', 'yes', 'no', 'total'];
+      const labels = {};
+      labelKeys.forEach(k => { labels[k] = t(k); });
+      await exportTimeEntriesToExcel({
+        projectName: project?.project_name || '',
+        entries: timeEntries,
+        tasksById,
+        labels,
+        formatDate: (d) => fmt(parseISO(d), 'dd.MM.yyyy'),
+      });
+    } catch (error) {
+      console.error('Error exporting time entries:', error);
+      toast.error(t('error_exporting') || 'Error exporting');
+    }
+  };
+
+  // Import time entries from an Excel/CSV file
+  const handleImportTime = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const rows = await parseTimeEntriesFile(file);
+      const pick = (row, keys) => {
+        for (const k of keys) {
+          const found = Object.keys(row).find(h => h.trim().toLowerCase() === k.toLowerCase());
+          if (found && row[found] !== '') return row[found];
+        }
+        return '';
+      };
+      const parseDate = (v) => {
+        if (!v) return '';
+        if (typeof v === 'number') { const d = new Date(Math.round((v - 25569) * 86400 * 1000)); return d.toISOString().split('T')[0]; }
+        const s = String(v).trim();
+        const m = s.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/);
+        if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+        const d = new Date(s); return isNaN(d) ? '' : d.toISOString().split('T')[0];
+      };
+      let imported = 0, skipped = 0;
+      for (const row of rows) {
+        const empName = String(pick(row, ['Xodim', 'Employee', 'Сотрудник'])).trim();
+        const emp = employees.find(x => (x.name || '').trim().toLowerCase() === empName.toLowerCase());
+        const hours = parseFloat(pick(row, ['Soat', 'Hours', 'Часы'])) || 0;
+        const date = parseDate(pick(row, ['Sana', 'Date', 'Дата']));
+        if (!emp || !hours || !date) { skipped++; continue; }
+        const billRaw = String(pick(row, ['Hisob-kitobga kiradi', 'Billable', 'Оплачиваемый'])).trim().toLowerCase();
+        const billable = ['ha', 'yes', 'да', 'true', '1'].includes(billRaw);
+        const rate = parseFloat(String(pick(row, ['Soatlik narx', 'Hourly rate', 'Ставка'])).replace(/[^\d.]/g, '')) || 0;
+        const taskName = String(pick(row, ['Vazifa', 'Task', 'Задача'])).trim();
+        const task = taskName ? tasks.find(tk => (tk.title || '').trim().toLowerCase() === taskName.toLowerCase()) : null;
+        try {
+          await projectsService.createTimeEntry(projectId, {
+            employee_id: emp.id,
+            employee_name: emp.name,
+            task_id: task?.id || undefined,
+            date,
+            hours,
+            description: String(pick(row, ['Tavsif', 'Description', 'Описание']) || ''),
+            billable,
+            hourly_rate: rate,
+          });
+          imported++;
+        } catch { skipped++; }
+      }
+      await loadTimeEntries(projectId);
+      toast.success(`${t('imported') || 'Imported'}: ${imported}${skipped ? ` · ${t('skipped') || 'skipped'}: ${skipped}` : ''}`);
+    } catch (error) {
+      console.error('Error importing time entries:', error);
+      toast.error(t('error_importing') || 'Error importing');
+    } finally {
+      e.target.value = '';
+    }
+  };
+
   const resetNewTimeEntry = () => {
     setNewTimeEntry({
       employee_id: currentEmployeeId || '',
@@ -1036,9 +1161,12 @@ export default function ProjectDetail() {
 
   // Tasks shown in list/kanban, optionally filtered to the current user + milestone
   let displayedTasks = tasks;
-  if (onlyMine) displayedTasks = displayedTasks.filter(tk => tk.assignee_id && tk.assignee_id === currentEmployeeId);
+  const isMine = (tk) => currentEmployeeId && (
+    (tk.assignees && tk.assignees.some(a => a.employee_id === currentEmployeeId)) || tk.assignee_id === currentEmployeeId
+  );
+  if (onlyMine) displayedTasks = displayedTasks.filter(isMine);
   if (taskMilestoneFilter !== 'all') displayedTasks = displayedTasks.filter(tk => (tk.milestone_id || '') === taskMilestoneFilter);
-  const myTaskCount = tasks.filter(tk => tk.assignee_id && tk.assignee_id === currentEmployeeId).length;
+  const myTaskCount = tasks.filter(isMine).length;
 
   // Inline status dropdown (uses backend stages), shared by list + card
   const renderStatusSelect = (task, widthClass = 'w-[150px]') => (
@@ -1056,32 +1184,42 @@ export default function ProjectDetail() {
     ) : getStatusBadge(task.status)
   );
 
-  // Inline assignee dropdown used on the kanban card
-  const renderAssigneeSelect = (task) => (
-    canUpdate(MODULES.PROJECTS) ? (
-      <Select
-        value={task.assignee_id || ''}
-        onValueChange={(v) => handleTaskAssigneeChange(task, v)}
-      >
-        <SelectTrigger className="h-7 text-xs border-none shadow-none px-1 hover:bg-slate-100 w-auto gap-1">
-          <span className="flex items-center gap-1">
-            <User className="w-3 h-3" />
-            <SelectValue placeholder={t('unassigned') || 'Unassigned'} />
-          </span>
-        </SelectTrigger>
-        <SelectContent>
-          {employees.map((emp) => (
-            <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+  // Normalize a task's assignees to [{id, name}] (falls back to the legacy single field)
+  const taskAssignees = (task) => {
+    if (task.assignees && task.assignees.length) return task.assignees.map(a => ({ id: a.employee_id, name: a.employee_name }));
+    if (task.assignee_id) return [{ id: task.assignee_id, name: task.assignee_name }];
+    return [];
+  };
+
+  // Stacked avatars for a task's assignees
+  const renderAssigneeAvatars = (task, size = 'md') => {
+    const list = taskAssignees(task);
+    const dim = size === 'sm' ? 'w-6 h-6 text-[10px]' : 'w-7 h-7 text-[11px]';
+    if (list.length === 0) {
+      return (
+        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+          <User className="w-3.5 h-3.5" />{t('unassigned') || 'Unassigned'}
+        </span>
+      );
+    }
+    const shown = list.slice(0, 3);
+    const extra = list.length - shown.length;
+    return (
+      <div className="flex items-center" title={list.map(a => a.name).filter(Boolean).join(', ')}>
+        <div className="flex -space-x-2">
+          {shown.map((a, i) => (
+            <div key={a.id || i} className={`${dim} rounded-full bg-gradient-to-br from-blue-500 to-purple-500 text-white flex items-center justify-center font-semibold ring-2 ring-white`}>
+              {(a.name || '?').trim().charAt(0).toUpperCase()}
+            </div>
           ))}
-        </SelectContent>
-      </Select>
-    ) : (
-      <span className="flex items-center gap-1 text-xs text-muted-foreground">
-        <User className="w-3 h-3" />
-        {task.assignee_name || t('unassigned') || 'Unassigned'}
-      </span>
-    )
-  );
+          {extra > 0 && (
+            <div className={`${dim} rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-semibold ring-2 ring-white`}>+{extra}</div>
+          )}
+        </div>
+        {list.length === 1 && <span className="ml-2 text-xs text-slate-600 truncate max-w-[110px]">{list[0].name}</span>}
+      </div>
+    );
+  };
 
   return (
     <div className="p-4 md:p-6 lg:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
@@ -1149,10 +1287,10 @@ export default function ProjectDetail() {
             </CardHeader>
             <CardContent>
               <div className="text-sm font-semibold">
-                {project.start_date && format(parseISO(project.start_date), 'MMM dd, yyyy')}
+                {project.start_date && fmt(parseISO(project.start_date), 'MMM dd, yyyy')}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                {t('to') || 'to'} {project.end_date && format(parseISO(project.end_date), 'MMM dd, yyyy')}
+                {t('to') || 'to'} {project.end_date && fmt(parseISO(project.end_date), 'MMM dd, yyyy')}
               </p>
             </CardContent>
           </Card>
@@ -1245,7 +1383,7 @@ export default function ProjectDetail() {
                       </Button>
                     </div>
                     {canCreate(MODULES.PROJECTS) && (
-                      <Button onClick={() => { resetNewTask(); setEditingTask(null); setShowTaskDialog(true); }}>
+                      <Button onClick={openNewTask}>
                         <Plus className="w-4 h-4 mr-2" />
                         {t('new_task') || 'New Task'}
                       </Button>
@@ -1299,7 +1437,6 @@ export default function ProjectDetail() {
                     </TableHeader>
                     <TableBody>
                       {displayedTasks.map((task) => {
-                        const assigneeName = task.assignee_name || employees.find(e => e.id === task.assignee_id)?.name;
                         return (
                         <TableRow key={task.id} className="group hover:bg-slate-50/70 align-top">
                           <TableCell className="max-w-[360px]">
@@ -1313,18 +1450,11 @@ export default function ProjectDetail() {
                               </div>
                             </div>
                           </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2 whitespace-nowrap">
-                              <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-semibold text-slate-600 shrink-0">
-                                {assigneeName ? assigneeName.trim().charAt(0).toUpperCase() : '–'}
-                              </div>
-                              <span className="text-sm">{assigneeName || t('unassigned') || 'Unassigned'}</span>
-                            </div>
-                          </TableCell>
+                          <TableCell>{renderAssigneeAvatars(task, 'sm')}</TableCell>
                           <TableCell>{getPriorityBadge(task.priority)}</TableCell>
                           <TableCell>
                             <span className="text-sm text-slate-600 whitespace-nowrap">
-                              {task.due_date ? format(parseISO(task.due_date), 'MMM dd, yyyy') : '-'}
+                              {task.due_date ? fmt(parseISO(task.due_date), 'MMM dd, yyyy') : '-'}
                             </span>
                           </TableCell>
                           <TableCell>{renderStatusSelect(task)}</TableCell>
@@ -1340,7 +1470,7 @@ export default function ProjectDetail() {
                                 <Eye className="w-4 h-4" />
                               </Button>
                               {canUpdate(MODULES.PROJECTS) && (
-                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditingTask(task); setShowTaskDialog(true); }} title={t('edit') || 'Edit'}>
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditTask(task)} title={t('edit') || 'Edit'}>
                                   <Edit className="w-4 h-4" />
                                 </Button>
                               )}
@@ -1360,7 +1490,9 @@ export default function ProjectDetail() {
                   /* Kanban board (stages from backend, editable) */
                   <div className="flex gap-5 overflow-x-auto pb-2 items-start">
                     {stages.map((col) => {
-                      const colTasks = displayedTasks.filter(tk => (tk.status || stages[0]?.stage_key) === col.stage_key);
+                      const sortMode = stageSort[col.stage_key] || 'none';
+                      const colTasks = sortByPriority(displayedTasks.filter(tk => (tk.status || stages[0]?.stage_key) === col.stage_key), sortMode);
+                      const sortTitle = sortMode === 'desc' ? (t('most_urgent_first') || 'Most urgent first') : sortMode === 'asc' ? (t('least_urgent_first') || 'Least urgent first') : (t('sort_priority') || 'Sort by priority');
                       return (
                         <div
                           key={col.id}
@@ -1378,22 +1510,32 @@ export default function ProjectDetail() {
                                 {colTasks.length}
                               </span>
                             </div>
-                            {canUpdate(MODULES.PROJECTS) && (
-                              <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditStage(col)} title={t('edit') || 'Edit'}>
-                                  <Edit className="w-4 h-4" />
-                                </Button>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-red-600" onClick={() => handleDeleteStage(col)} title={t('delete') || 'Delete'}>
-                                  <Trash2 className="w-4 h-4" />
-                                </Button>
-                              </div>
-                            )}
+                            <div className="flex items-center gap-0.5 shrink-0">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className={`h-7 w-7 ${sortMode !== 'none' ? 'text-blue-600' : 'text-slate-400'}`}
+                                onClick={() => cycleStageSort(col.stage_key)}
+                                title={sortTitle}
+                              >
+                                {sortMode === 'desc' ? <ArrowDownWideNarrow className="w-4 h-4" /> : sortMode === 'asc' ? <ArrowUpNarrowWide className="w-4 h-4" /> : <ArrowUpDown className="w-4 h-4" />}
+                              </Button>
+                              {canUpdate(MODULES.PROJECTS) && (
+                                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditStage(col)} title={t('edit') || 'Edit'}>
+                                    <Edit className="w-4 h-4" />
+                                  </Button>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-red-600" onClick={() => handleDeleteStage(col)} title={t('delete') || 'Delete'}>
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
                           </div>
 
                           {/* Cards */}
                           <div className="p-3 space-y-3 min-h-[160px] flex-1">
                             {colTasks.map((task) => {
-                              const assigneeName = task.assignee_name || employees.find(e => e.id === task.assignee_id)?.name;
                               return (
                               <Card
                                 key={task.id}
@@ -1427,19 +1569,14 @@ export default function ProjectDetail() {
                                     {task.due_date && (
                                       <span className="flex items-center gap-1 text-xs font-medium text-slate-600 bg-slate-100 rounded-md px-2 py-1">
                                         <Calendar className="w-3.5 h-3.5" />
-                                        {format(parseISO(task.due_date), 'MMM dd')}
+                                        {fmt(parseISO(task.due_date), 'MMM dd')}
                                       </span>
                                     )}
                                   </div>
 
                                   <div className="flex items-center justify-between gap-2 pt-4 border-t border-slate-100">
-                                    <div className="flex items-center gap-2 min-w-0">
-                                      <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 text-white flex items-center justify-center text-sm font-semibold shrink-0">
-                                        {assigneeName ? assigneeName.trim().charAt(0).toUpperCase() : '?'}
-                                      </div>
-                                      {renderAssigneeSelect(task)}
-                                    </div>
-                                    {renderStatusSelect(task, 'w-[120px]')}
+                                    {renderAssigneeAvatars(task)}
+                                    {renderStatusSelect(task, 'w-[118px]')}
                                   </div>
 
                                   {/* Edit / Delete split row */}
@@ -1450,7 +1587,7 @@ export default function ProjectDetail() {
                                         size="sm"
                                         className="h-9"
                                         disabled={!canUpdate(MODULES.PROJECTS)}
-                                        onClick={() => { setEditingTask(task); setShowTaskDialog(true); }}
+                                        onClick={() => openEditTask(task)}
                                       >
                                         <Edit className="w-4 h-4 mr-1.5" />
                                         {t('edit') || 'Edit'}
@@ -1558,7 +1695,7 @@ export default function ProjectDetail() {
                               {milestone.due_date && (
                                 <span className="flex items-center gap-1">
                                   <Calendar className="w-4 h-4" />
-                                  {format(parseISO(milestone.due_date), 'MMM dd, yyyy')}
+                                  {fmt(parseISO(milestone.due_date), 'MMM dd, yyyy')}
                                 </span>
                               )}
                             </div>
@@ -1610,19 +1747,16 @@ export default function ProjectDetail() {
                               <p className="text-sm text-muted-foreground">{t('no_tasks') || 'No tasks yet'}</p>
                             ) : milestoneTaskView === 'list' ? (
                               <div className="space-y-2">
-                                {mTasks.map((task) => {
-                                  const an = task.assignee_name || employees.find(e => e.id === task.assignee_id)?.name;
-                                  return (
+                                {mTasks.map((task) => (
                                     <div key={task.id} className={`flex items-center gap-3 bg-white rounded-lg border border-slate-200 border-l-4 ${priorityAccent(task.priority)} p-3 hover:shadow-md transition-shadow`}>
                                       <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setViewTask(task)}>
                                         <div className="font-medium text-slate-800 truncate">{task.title}</div>
-                                        <div className="text-xs text-muted-foreground flex items-center gap-1"><User className="w-3 h-3" />{an || t('unassigned') || 'Unassigned'}</div>
+                                        <div className="mt-1">{renderAssigneeAvatars(task, 'sm')}</div>
                                       </div>
-                                      {task.due_date && <span className="text-xs text-slate-500 flex items-center gap-1 shrink-0"><Calendar className="w-3 h-3" />{format(parseISO(task.due_date), 'MMM dd')}</span>}
+                                      {task.due_date && <span className="text-xs text-slate-500 flex items-center gap-1 shrink-0"><Calendar className="w-3 h-3" />{fmt(parseISO(task.due_date), 'MMM dd')}</span>}
                                       {renderStatusSelect(task, 'w-[130px]')}
                                     </div>
-                                  );
-                                })}
+                                ))}
                               </div>
                             ) : (
                               <div className="flex gap-3 overflow-x-auto pb-1">
@@ -1636,9 +1770,7 @@ export default function ProjectDetail() {
                                         <span className="text-xs text-slate-500">{cTasks.length}</span>
                                       </div>
                                       <div className="space-y-2 min-h-[60px]">
-                                        {cTasks.map((task) => {
-                                          const an = task.assignee_name || employees.find(e => e.id === task.assignee_id)?.name;
-                                          return (
+                                        {cTasks.map((task) => (
                                             <div key={task.id}
                                               draggable={canUpdate(MODULES.PROJECTS)}
                                               onDragStart={(e) => handleTaskDragStart(e, task)}
@@ -1647,14 +1779,13 @@ export default function ProjectDetail() {
                                               className={`bg-white rounded-lg border border-slate-200 border-l-4 ${priorityAccent(task.priority)} p-2.5 cursor-pointer hover:shadow-md transition-shadow`}>
                                               <div className="font-medium text-sm text-slate-800 line-clamp-2">{task.title}</div>
                                               <div className="flex items-center justify-between gap-2 mt-1.5">
-                                                <div className="text-xs text-muted-foreground flex items-center gap-1 min-w-0"><User className="w-3 h-3 shrink-0" /><span className="truncate">{an || t('unassigned') || 'Unassigned'}</span></div>
+                                                {renderAssigneeAvatars(task, 'sm')}
                                                 {task.due_date && (
-                                                  <span className="text-xs text-slate-500 flex items-center gap-1 shrink-0"><Calendar className="w-3 h-3" />{format(parseISO(task.due_date), 'MMM dd')}</span>
+                                                  <span className="text-xs text-slate-500 flex items-center gap-1 shrink-0"><Calendar className="w-3 h-3" />{fmt(parseISO(task.due_date), 'MMM dd')}</span>
                                                 )}
                                               </div>
                                             </div>
-                                          );
-                                        })}
+                                        ))}
                                         {cTasks.length === 0 && <div className="h-10 rounded-lg border-2 border-dashed border-slate-200" />}
                                       </div>
                                     </div>
@@ -1694,14 +1825,29 @@ export default function ProjectDetail() {
           <TabsContent value="time" className="mt-6">
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
                   <CardTitle>{t('time_entries') || 'Time Entries'}</CardTitle>
-                  {canCreate(MODULES.PROJECTS) && (
-                    <Button onClick={() => { resetNewTimeEntry(); setShowTimeEntryDialog(true); }}>
-                      <Plus className="w-4 h-4 mr-2" />
-                      {t('log_time') || 'Log Time'}
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" onClick={handleExportTime} disabled={timeEntries.length === 0}>
+                      <Download className="w-4 h-4 mr-2" />
+                      {t('export') || 'Export'}
                     </Button>
-                  )}
+                    {canCreate(MODULES.PROJECTS) && (
+                      <label className="inline-flex">
+                        <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImportTime} />
+                        <span className="inline-flex items-center justify-center h-9 px-4 rounded-md border border-slate-200 text-sm font-medium cursor-pointer hover:bg-slate-50">
+                          <Upload className="w-4 h-4 mr-2" />
+                          {t('import') || 'Import'}
+                        </span>
+                      </label>
+                    )}
+                    {canCreate(MODULES.PROJECTS) && (
+                      <Button onClick={() => { resetNewTimeEntry(); setShowTimeEntryDialog(true); }}>
+                        <Plus className="w-4 h-4 mr-2" />
+                        {t('log_time') || 'Log Time'}
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
@@ -1754,7 +1900,7 @@ export default function ProjectDetail() {
                       {timeEntries.map((entry) => (
                         <TableRow key={entry.id}>
                           <TableCell>
-                            {entry.date && format(parseISO(entry.date), 'MMM dd, yyyy')}
+                            {entry.date && fmt(parseISO(entry.date), 'MMM dd, yyyy')}
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
@@ -1852,7 +1998,7 @@ export default function ProjectDetail() {
                       {expenses.map((expense) => (
                         <TableRow key={expense.id}>
                           <TableCell>
-                            {expense.expense_date && format(parseISO(expense.expense_date), 'MMM dd, yyyy')}
+                            {expense.expense_date && fmt(parseISO(expense.expense_date), 'MMM dd, yyyy')}
                           </TableCell>
                           <TableCell>
                             <Badge variant="outline">{expense.category ? categoryLabel(expense.category) : (t('general') || 'General')}</Badge>
@@ -2025,8 +2171,8 @@ export default function ProjectDetail() {
                   <div className="flex justify-between">
                     <span className="text-sm text-slate-500">{t('timeline') || 'Timeline'}</span>
                     <span className="text-sm font-medium">
-                      {project.start_date ? format(parseISO(project.start_date), 'MMM dd, yyyy') : '-'}
-                      {project.end_date ? ` → ${format(parseISO(project.end_date), 'MMM dd, yyyy')}` : ''}
+                      {project.start_date ? fmt(parseISO(project.start_date), 'MMM dd, yyyy') : '-'}
+                      {project.end_date ? ` → ${fmt(parseISO(project.end_date), 'MMM dd, yyyy')}` : ''}
                     </span>
                   </div>
                 </CardContent>
@@ -2071,43 +2217,43 @@ export default function ProjectDetail() {
                   rows={3}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>{t('assignee') || 'Assignee'}</Label>
-                  <Select
-                    value={editingTask?.assignee_id || editingTask?.assignee || newTask.assignee}
-                    onValueChange={(value) => {
-                      if (editingTask) {
-                        setEditingTask({ ...editingTask, assignee_id: value, assignee: value });
-                      } else {
-                        setNewTask({ ...newTask, assignee: value });
-                      }
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={t('select_assignee') || 'Select assignee'} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {employees.map((emp) => (
-                        <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+              <div>
+                <Label>{t('assignees') || 'Assignees'}</Label>
+                <div className="mt-1 max-h-44 overflow-y-auto rounded-lg border border-slate-200 p-2 space-y-0.5">
+                  {employees.length === 0 ? (
+                    <p className="text-sm text-muted-foreground px-1 py-2">{t('no_employees') || 'No employees'}</p>
+                  ) : employees.map((emp) => (
+                    <label key={emp.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-slate-50 cursor-pointer text-sm">
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4 rounded border-slate-300"
+                        checked={formAssigneeIds.includes(emp.id)}
+                        onChange={() => toggleFormAssignee(emp.id)}
+                      />
+                      <span className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 text-white flex items-center justify-center text-[10px] font-semibold">
+                        {(emp.name || '?').trim().charAt(0).toUpperCase()}
+                      </span>
+                      {emp.name}
+                    </label>
+                  ))}
                 </div>
-                <div>
-                  <Label>{t('finish_date') || 'Finish date'}</Label>
-                  <Input
-                    type="date"
-                    value={editingTask?.due_date || newTask.due_date}
-                    onChange={(e) => {
-                      if (editingTask) {
-                        setEditingTask({ ...editingTask, due_date: e.target.value });
-                      } else {
-                        setNewTask({ ...newTask, due_date: e.target.value });
-                      }
-                    }}
-                  />
-                </div>
+                {formAssigneeIds.length > 0 && (
+                  <p className="text-xs text-muted-foreground mt-1">{formAssigneeIds.length} {t('selected') || 'selected'}</p>
+                )}
+              </div>
+              <div>
+                <Label>{t('finish_date') || 'Finish date'}</Label>
+                <Input
+                  type="date"
+                  value={editingTask?.due_date || newTask.due_date}
+                  onChange={(e) => {
+                    if (editingTask) {
+                      setEditingTask({ ...editingTask, due_date: e.target.value });
+                    } else {
+                      setNewTask({ ...newTask, due_date: e.target.value });
+                    }
+                  }}
+                />
               </div>
               <div>
                 <Label>{t('milestone') || 'Stage'}</Label>
@@ -2209,11 +2355,8 @@ export default function ProjectDetail() {
                 )}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label className="text-muted-foreground">{t('assignee') || 'Assignee'}</Label>
-                    <p className="text-sm mt-1 flex items-center gap-1">
-                      <User className="w-4 h-4" />
-                      {viewTask.assignee_name || employees.find(e => e.id === viewTask.assignee_id)?.name || t('unassigned') || 'Unassigned'}
-                    </p>
+                    <Label className="text-muted-foreground">{t('assignees') || 'Assignees'}</Label>
+                    <div className="mt-1">{renderAssigneeAvatars(viewTask, 'sm')}</div>
                   </div>
                   <div>
                     <Label className="text-muted-foreground">{t('status') || 'Status'}</Label>
@@ -2225,7 +2368,7 @@ export default function ProjectDetail() {
                   </div>
                   <div>
                     <Label className="text-muted-foreground">{t('finish_date') || 'Finish date'}</Label>
-                    <p className="text-sm mt-1">{viewTask.due_date ? format(parseISO(viewTask.due_date), 'MMM dd, yyyy') : '-'}</p>
+                    <p className="text-sm mt-1">{viewTask.due_date ? fmt(parseISO(viewTask.due_date), 'MMM dd, yyyy') : '-'}</p>
                   </div>
                   <div>
                     <Label className="text-muted-foreground">{t('hours_logged') || 'Hours'}</Label>
@@ -2245,7 +2388,7 @@ export default function ProjectDetail() {
             )}
             <DialogFooter>
               {canUpdate(MODULES.PROJECTS) && (
-                <Button onClick={() => { setEditingTask(viewTask); setViewTask(null); setShowTaskDialog(true); }}>
+                <Button onClick={() => { const tk = viewTask; setViewTask(null); openEditTask(tk); }}>
                   <Edit className="w-4 h-4 mr-2" />
                   {t('edit') || 'Edit'}
                 </Button>
@@ -2299,7 +2442,7 @@ export default function ProjectDetail() {
                         {n.created_by_name || (t('unknown') || 'Unknown')}
                       </div>
                       <span className="text-xs text-muted-foreground">
-                        {n.created_at ? format(parseISO(n.created_at), 'MMM dd, HH:mm') : ''}
+                        {n.created_at ? fmt(parseISO(n.created_at), 'MMM dd, HH:mm') : ''}
                       </span>
                     </div>
                     <p className="text-sm text-slate-700 whitespace-pre-line">{n.note}</p>

@@ -33,7 +33,7 @@ import {
   Building2,
   Search,
   Plus,
-  Edit2,
+  Edit,
   Trash2,
   Star,
   Phone,
@@ -507,7 +507,7 @@ export default function Suppliers() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => handleEdit(supplier)}>
-                              <Edit2 className="w-4 h-4 mr-2" />
+                              <Edit className="w-4 h-4 mr-2" />
                               {t('edit') || "Tahrirlash"}
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleRating(supplier)}>

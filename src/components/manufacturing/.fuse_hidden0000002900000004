@@ -1,0 +1,310 @@
+import React, { useState } from 'react';
+import { InventoryItem, BillOfMaterials } from '@/api/entities';
+import { InvokeLLM } from '@/api/integrations';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Zap, Brain, TrendingUp, AlertTriangle, CheckCircle } from 'lucide-react';
+import { useManufacturing } from '@/components/contexts/ManufacturingContext';
+import { useLanguage } from '@/components/contexts/LanguageContext';
+import { useTranslation } from '@/components/utils/translations';
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+
+export default function MRPPlanning() {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
+  const { productionOrders } = useManufacturing();
+  const { formatCurrency } = useCurrencyFormatter();
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [mrpResults, setMrpResults] = useState(null);
+  const [error, setError] = useState(null);
+
+  const generateMRPPlan = async () => {
+    setIsGenerating(true);
+    setError(null);
+    try {
+      // Get inventory and BOM data - handle errors gracefully
+      // Production orders come from context
+      const [inventory, boms] = await Promise.all([
+        InventoryItem.list().catch(() => []),
+        BillOfMaterials.list().catch(() => [])
+      ]);
+      const orders = productionOrders;
+
+      // Build more detailed prompt with actual data
+      const inventoryDetails = inventory.slice(0, 10).map(i =>
+        `${i.name || i.product_name}: ${i.quantity_on_hand || 0} units`
+      ).join(', ');
+
+      const ordersDetails = orders.filter(o => o.status === 'in_progress' || o.status === 'confirmed')
+        .slice(0, 5).map(o => `${o.product_name}: ${o.quantity_to_produce} units`).join(', ');
+
+      // Use AI to generate MRP recommendations
+      const plan = await InvokeLLM({
+        prompt: `As a manufacturing planning AI, analyze this data and create an MRP (Material Requirements Planning) plan:
+
+Inventory Summary: ${inventory.length} items. Sample: ${inventoryDetails || 'No inventory items'}
+Active/Confirmed Production Orders: ${orders.filter(o => o.status === 'in_progress' || o.status === 'confirmed').length}. Sample: ${ordersDetails || 'No active orders'}
+Available BOMs: ${boms.length}
+
+Based on this data, provide a realistic MRP plan with:
+1. Materials to procure (what, when, how much) - based on inventory levels and production needs
+2. Production schedule recommendations - when to start/complete production orders
+3. Bottleneck identification - potential constraints or issues
+4. Lead time optimization suggestions - how to improve delivery times
+
+Return a JSON object with arrays for: procurement_needs, production_schedule, bottlenecks, optimization_tips.
+Each array should have 2-4 realistic items.`,
+        response_json_schema: {
+          type: "object",
+          properties: {
+            procurement_needs: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  material: { type: "string" },
+                  quantity: { type: "number" },
+                  priority: { type: "string" },
+                  lead_time_days: { type: "number" },
+                  estimated_cost: { type: "number" }
+                }
+              }
+            },
+            production_schedule: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  product: { type: "string" },
+                  recommended_start: { type: "string" },
+                  estimated_completion: { type: "string" },
+                  priority: { type: "string" }
+                }
+              }
+            },
+            bottlenecks: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  location: { type: "string" },
+                  severity: { type: "string" },
+                  mitigation: { type: "string" }
+                }
+              }
+            },
+            optimization_tips: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  tip: { type: "string" },
+                  impact: { type: "string" },
+                  implementation_effort: { type: "string" }
+                }
+              }
+            }
+          }
+        }
+      });
+
+      // Check if we got valid results
+      if (plan && (plan.procurement_needs?.length > 0 || plan.production_schedule?.length > 0 ||
+          plan.bottlenecks?.length > 0 || plan.optimization_tips?.length > 0)) {
+        setMrpResults(plan);
+      } else {
+        setError('AI returned empty results. Please ensure you have inventory, production orders, or BOMs in the system.');
+      }
+    } catch (error) {
+      console.error('Error generating MRP plan:', error);
+      setError('Failed to generate MRP plan. Please check your connection and try again.');
+    }
+    setIsGenerating(false);
+  };
+
+  return (
+    <div className="space-y-6">
+      
+      {/* Header */}
+      <Card className="bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-xl">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+                <Zap className="w-6 h-6" />
+              </div>
+              <div>
+                <CardTitle className="text-xl">{t('ai_powered_mrp_planning') || 'AI-Powered MRP Planning'}</CardTitle>
+                <p className="text-sm text-white/80 mt-1">{t('mrp_subtitle') || 'Material Requirements Planning with Genix AI'}</p>
+              </div>
+            </div>
+            <Button
+              onClick={generateMRPPlan}
+              disabled={isGenerating}
+              className="bg-white text-slate-800 hover:bg-white/90"
+            >
+              {isGenerating ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-slate-800 border-t-transparent rounded-full animate-spin mr-2" />
+                  {t('generating') || 'Generating...'}
+                </>
+              ) : (
+                <>
+                  <Brain className="w-4 h-4 mr-2" />
+                  {t('generate_mrp_plan') || 'Generate MRP Plan'}
+                </>
+              )}
+            </Button>
+          </div>
+        </CardHeader>
+      </Card>
+
+      {/* Error Display */}
+      {error && (
+        <Card className="bg-red-50 border-red-200">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="w-5 h-5 text-red-600" />
+              <p className="text-red-700">{error}</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {!mrpResults ? (
+        <Card className="bg-white/80 backdrop-blur-sm">
+          <CardContent className="text-center py-16">
+            <div className="w-20 h-20 bg-gradient-to-br from-slate-100 to-slate-200 rounded-2xl flex items-center justify-center mx-auto mb-6">
+              <Zap className="w-10 h-10 text-slate-400" />
+            </div>
+            <h3 className="text-lg font-semibold text-slate-900 mb-2">{t('no_mrp_plan_generated_yet') || 'No MRP Plan Generated Yet'}</h3>
+            <p className="text-sm text-slate-500 mb-6 max-w-md mx-auto">
+              {t('mrp_plan_description') || 'Click "Generate MRP Plan" to get AI-powered recommendations for material procurement, production scheduling, and optimization opportunities.'}
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          
+          {/* Procurement Needs */}
+          {mrpResults.procurement_needs && mrpResults.procurement_needs.length > 0 && (
+            <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-blue-600" />
+                  {t('procurement_needs') || 'Procurement Needs'}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {mrpResults.procurement_needs.map((item, index) => (
+                  <div key={index} className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                    <div className="flex items-start justify-between mb-2">
+                      <h4 className="font-semibold text-slate-900">{item.material}</h4>
+                      <Badge className={
+                        item.priority === 'high' ? 'bg-red-100 text-red-800' :
+                        item.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-blue-100 text-blue-800'
+                      }>
+                        {item.priority}
+                      </Badge>
+                    </div>
+                    <div className="space-y-1 text-sm text-slate-600">
+                      <p>{t('quantity') || 'Quantity'}: <span className="font-semibold">{item.quantity} {t('units') || 'units'}</span></p>
+                      <p>{t('lead_time') || 'Lead Time'}: <span className="font-semibold">{item.lead_time_days} {t('days') || 'days'}</span></p>
+                      <p>{t('est_cost') || 'Est. Cost'}: <span className="font-semibold">{formatCurrency(item.estimated_cost || 0)}</span></p>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Production Schedule */}
+          {mrpResults.production_schedule && mrpResults.production_schedule.length > 0 && (
+            <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-green-600" />
+                  {t('recommended_production_schedule') || 'Recommended Production Schedule'}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {mrpResults.production_schedule.map((item, index) => (
+                  <div key={index} className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                    <div className="flex items-start justify-between mb-2">
+                      <h4 className="font-semibold text-slate-900">{item.product}</h4>
+                      <Badge variant="outline">{item.priority}</Badge>
+                    </div>
+                    <div className="space-y-1 text-sm text-slate-600">
+                      <p>{t('start') || 'Start'}: <span className="font-medium">{item.recommended_start}</span></p>
+                      <p>{t('complete') || 'Complete'}: <span className="font-medium">{item.estimated_completion}</span></p>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Bottlenecks */}
+          {mrpResults.bottlenecks && mrpResults.bottlenecks.length > 0 && (
+            <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-orange-600" />
+                  {t('identified_bottlenecks') || 'Identified Bottlenecks'}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {mrpResults.bottlenecks.map((item, index) => (
+                  <div key={index} className="p-4 bg-orange-50 rounded-lg border border-orange-200">
+                    <div className="flex items-start justify-between mb-2">
+                      <h4 className="font-semibold text-slate-900">{item.location}</h4>
+                      <Badge className={
+                        item.severity === 'high' ? 'bg-red-100 text-red-800' :
+                        item.severity === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-blue-100 text-blue-800'
+                      }>
+                        {item.severity}
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-slate-700"><strong>{t('mitigation') || 'Mitigation'}:</strong> {item.mitigation}</p>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Optimization Tips */}
+          {mrpResults.optimization_tips && mrpResults.optimization_tips.length > 0 && (
+            <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Brain className="w-5 h-5 text-purple-600" />
+                  {t('optimization_opportunities') || 'Optimization Opportunities'}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {mrpResults.optimization_tips.map((item, index) => (
+                  <div key={index} className="p-4 bg-purple-50 rounded-lg border border-purple-200">
+                    <p className="text-sm text-slate-900 mb-2">{item.tip}</p>
+                    <div className="flex gap-2 text-xs">
+                      <Badge className="bg-purple-100 text-purple-800">
+                        {t('impact') || 'Impact'}: {item.impact}
+                      </Badge>
+                      <Badge variant="outline">
+                        {t('effort') || 'Effort'}: {item.implementation_effort}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+        </div>
+      )}
+
+    </div>
+  );
+}

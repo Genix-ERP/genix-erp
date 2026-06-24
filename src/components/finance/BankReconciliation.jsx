@@ -7,7 +7,7 @@ import {
   Plus, Search, Building2, CreditCard, CheckCircle, Clock, AlertCircle,
   ArrowUpRight, ArrowDownLeft, RefreshCw, FileText, Upload, Download,
   MoreHorizontal, Eye, Check, X, Landmark, Wallet, TrendingUp, TrendingDown, Globe,
-  Calendar, Target, Scale, Trash2, Pencil, Lock, FileSpreadsheet
+  Calendar, Target, Scale, Trash2, Edit, Lock, FileSpreadsheet
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -566,7 +566,7 @@ export default function BankReconciliation() {
                                 setEditAccount({ ...account });
                               }}
                             >
-                              <Pencil className="w-4 h-4 text-amber-600" />
+                              <Edit className="w-4 h-4 text-amber-600" />
                             </Button>
                           )}
                           {canDelete(MODULES.FINANCIALS) && (

@@ -22,7 +22,7 @@ import {
   UserX,
   Brain,
   Eye,
-  Pencil,
+  Edit,
   Trash2,
   MoreHorizontal,
   Mail,
@@ -1064,7 +1064,7 @@ Only return the JSON, no other text.`;
                           </DropdownMenuItem>
                           {e.status !== 'terminated' && canUpdate(MODULES.HR) && (
                             <DropdownMenuItem onClick={() => handleEditEmployee(e)}>
-                              <Pencil className="mr-2 h-4 w-4" />
+                              <Edit className="mr-2 h-4 w-4" />
                               {t('edit') || 'Edit'}
                             </DropdownMenuItem>
                           )}
@@ -1423,7 +1423,7 @@ Only return the JSON, no other text.`;
                       }}
                       className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
                     >
-                      <Pencil className="w-4 h-4 mr-2" />
+                      <Edit className="w-4 h-4 mr-2" />
                       {t('edit') || 'Edit'}
                     </Button>
                   )}

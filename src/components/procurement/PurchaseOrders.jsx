@@ -28,7 +28,7 @@ import {
   Search,
   ShoppingCart,
   Truck,
-  Edit2,
+  Edit,
   X,
   Eye,
   MessageSquareWarning,
@@ -1095,7 +1095,7 @@ export default function PurchaseOrders() {
                               </Button>
                               {canUpdate(MODULES.PURCHASES) && (po.status === 'draft' || po.status === 'cancelled') && (
                                 <Button size="sm" variant="ghost" onClick={(e) => handleEditPO(po, e)} title={t('edit') || 'Edit'}>
-                                  <Edit2 className="w-4 h-4" />
+                                  <Edit className="w-4 h-4" />
                                 </Button>
                               )}
                               {canUpdate(MODULES.PURCHASES) && po.status === 'draft' && (
@@ -2139,7 +2139,7 @@ export default function PurchaseOrders() {
                     onClick={(e) => { setShowDetailModal(false); handleEditPO(detailPO, e); }}
                     className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600"
                   >
-                    <Edit2 className="w-4 h-4 mr-2" />
+                    <Edit className="w-4 h-4 mr-2" />
                     {t('edit') || 'Edit'}
                   </Button>
                 )}

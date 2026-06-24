@@ -14,7 +14,7 @@ import { useInstalledApps } from '@/components/contexts/InstalledAppsContext';
 import { AVAILABLE_MODULES } from '@/components/contexts/EmployeePermissionsContext';
 import { MODULES } from "@/config/permissions";
 import apiClient from '@/api/client';
-import { Shield, Plus, Pencil, Trash2, Search, Check, X as XIcon, Eye, Users } from 'lucide-react';
+import { Shield, Plus, Edit, Trash2, Search, Check, X as XIcon, Eye, Users } from 'lucide-react';
 import { hrService } from "@/api/services/hr";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -344,7 +344,7 @@ export default function RoleManagement({ roles, onRefresh }) {
                           </Button>
                           {canUpdate(MODULES.HR) && (
                             <Button variant="ghost" size="sm" onClick={() => openModal(role)}>
-                              <Pencil className="w-4 h-4 text-slate-500" />
+                              <Edit className="w-4 h-4 text-slate-500" />
                             </Button>
                           )}
                           {!role.is_system && canDelete(MODULES.HR) && (

@@ -1,0 +1,986 @@
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import {
+  Search, FileText, Clock, CheckCircle, AlertCircle, AlertTriangle,
+  Building2, Receipt, Ban, DollarSign, CreditCard, Eye, Calendar, Download, FileSpreadsheet, X,
+  ChevronLeft, ChevronRight
+} from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { format } from "date-fns";
+import { useLanguage } from "@/components/contexts/LanguageContext";
+import { useTranslation } from "@/components/utils/translations";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { useFinancials } from "@/components/contexts/FinancialsContext";
+import financeService from "@/api/services/finance";
+
+export default function FinanceVendorBills() {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
+  const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
+  const { vendorBills, isLoading, journals = [], paymentJournals = [] } = useFinancials();
+  const bankCashJournals = paymentJournals.length > 0 ? paymentJournals : journals.filter(j => j.type === 'bank' || j.type === 'cash');
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [codeFilter, setCodeFilter] = useState("");
+  const [selectedBill, setSelectedBill] = useState(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentBill, setPaymentBill] = useState(null);
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("bank");
+  const [paymentJournalId, setPaymentJournalId] = useState("");
+  const [isPaying, setIsPaying] = useState(false);
+  const [backendStats, setBackendStats] = useState(null);
+
+  // Server-side pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalBills, setTotalBills] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [paginatedBills, setPaginatedBills] = useState([]);
+  const [billsLoading, setBillsLoading] = useState(false);
+  const pageSize = 20;
+
+  const fetchBills = useCallback(async () => {
+    setBillsLoading(true);
+    try {
+      const params = { page: currentPage, page_size: pageSize };
+      if (searchQuery) params.search = searchQuery;
+      if (statusFilter !== 'all') params.status = statusFilter === 'not_paid' ? 'posted' : statusFilter;
+      if (dateFrom) params.date_from = dateFrom;
+      if (dateTo) params.date_to = dateTo;
+      const result = await financeService.listPurchaseInvoices(params);
+      const bills = Array.isArray(result?.data) ? result.data : Array.isArray(result) ? result : [];
+      setPaginatedBills(bills);
+      const meta = result?.meta || {};
+      setTotalBills(meta.total || bills.length);
+      setTotalPages(meta.total_pages || Math.ceil((meta.total || bills.length) / pageSize));
+    } catch (e) {
+      console.error('Failed to load vendor bills', e);
+      setPaginatedBills([]);
+    } finally {
+      setBillsLoading(false);
+    }
+  }, [currentPage, searchQuery, statusFilter, dateFrom, dateTo]);
+
+  useEffect(() => { fetchBills(); }, [fetchBills]);
+
+  // Reset page when filters change
+  useEffect(() => { setCurrentPage(1); }, [searchQuery, statusFilter, dateFrom, dateTo, codeFilter]);
+
+  // Fetch backend stats on mount
+  useEffect(() => {
+    financeService.getPurchaseInvoiceStats()
+      .then(data => setBackendStats(data))
+      .catch(() => setBackendStats(null));
+  }, [paginatedBills]);
+
+  const isOverdue = (bill) => {
+    // Use backend-computed is_overdue if available
+    if (bill.is_overdue !== undefined) return bill.is_overdue;
+    if (!bill.due_date) return false;
+    const status = bill.status;
+    if (status === 'paid' || status === 'cancelled') return false;
+    return new Date(bill.due_date) < new Date(new Date().toDateString());
+  };
+
+  // Derive payment status from bill data
+  const getPaymentStatus = (bill) => {
+    const paid = bill.amount_paid || 0;
+    const total = bill.total_amount || 0;
+    const status = bill.status;
+
+    if (status === 'cancelled') return 'cancelled';
+    if (status === 'reversed') return 'reversed';
+    if (status === 'draft') return 'draft';
+    if (total <= 0) return 'not_paid';
+    if (paid >= total) return 'paid';
+    if (paid > 0) return 'partial';
+    if (isOverdue(bill)) return 'overdue';
+    return 'not_paid';
+  };
+
+  const statusBadgeConfig = {
+    draft: { color: "bg-gray-100 text-gray-700 border-gray-200", label: t('draft') || 'Draft', icon: Clock },
+    not_paid: { color: "bg-orange-100 text-orange-800 border-orange-200", label: t('not_paid') || "To'lanmagan", icon: AlertCircle },
+    partial: { color: "bg-blue-100 text-blue-800 border-blue-200", label: t('partially_paid') || 'Qisman', icon: Clock },
+    paid: { color: "bg-green-100 text-green-800 border-green-200", label: t('paid') || "To'langan", icon: CheckCircle },
+    overdue: { color: "bg-red-100 text-red-800 border-red-200", label: t('overdue') || "Muddati o'tgan", icon: AlertTriangle },
+    cancelled: { color: "bg-red-100 text-red-800 border-red-200", label: t('cancelled') || 'Bekor qilingan', icon: Ban },
+    reversed: { color: "bg-purple-100 text-purple-800 border-purple-200", label: t('reversed') || 'Reversed', icon: AlertCircle },
+  };
+
+  const activeFilterCount = (dateFrom ? 1 : 0) + (dateTo ? 1 : 0) + (codeFilter ? 1 : 0);
+  const clearAllFilters = () => { setDateFrom(''); setDateTo(''); setCodeFilter(''); setSearchQuery(''); setStatusFilter('all'); };
+
+  // Filter bills (server handles search, status, date filters; only code filter is client-side)
+  const filteredBills = useMemo(() => {
+    let filtered = paginatedBills;
+    if (codeFilter) {
+      const cf = codeFilter.toLowerCase();
+      filtered = filtered.filter(bill =>
+        bill.invoice_number?.toLowerCase().includes(cf) ||
+        bill.bill_number?.toLowerCase().includes(cf)
+      );
+    }
+    return filtered;
+  }, [paginatedBills, codeFilter]);
+
+  // Summary stats - use backend stats if available, otherwise compute client-side
+  const summaryStats = useMemo(() => {
+    if (backendStats) {
+      return {
+        total: backendStats.total_count || 0,
+        totalAmount: backendStats.total_amount || 0,
+        notPaid: backendStats.unpaid_count || 0,
+        unpaidAmount: backendStats.unpaid_amount || 0,
+        partial: backendStats.partial_count || 0,
+        partialAmount: backendStats.partial_amount || 0,
+        overdue: backendStats.overdue_count || 0,
+        overdueAmount: backendStats.overdue_amount || 0,
+      };
+    }
+    const bills = vendorBills || [];
+    const unpaidBills = bills.filter(b => {
+      const s = getPaymentStatus(b);
+      return s === 'not_paid' || s === 'draft';
+    });
+    const partialBills = bills.filter(b => getPaymentStatus(b) === 'partial');
+    const overdueBills = bills.filter(b => isOverdue(b));
+    return {
+      total: bills.length,
+      totalAmount: bills.reduce((sum, b) => sum + (b.total_amount || 0), 0),
+      notPaid: unpaidBills.length,
+      unpaidAmount: unpaidBills.reduce((sum, b) => sum + ((b.total_amount || 0) - (b.amount_paid || 0)), 0),
+      partial: partialBills.length,
+      partialAmount: partialBills.reduce((sum, b) => sum + ((b.total_amount || 0) - (b.amount_paid || 0)), 0),
+      overdue: overdueBills.length,
+      overdueAmount: overdueBills.reduce((sum, b) => sum + ((b.total_amount || 0) - (b.amount_paid || 0)), 0),
+    };
+  }, [vendorBills, backendStats]);
+
+  const handleViewDetail = async (bill) => {
+    setSelectedBill(bill);
+    setShowDetailModal(true);
+    // Fetch full detail with payment_allocations
+    try {
+      const fullBill = await financeService.getPurchaseInvoice(bill.id);
+      if (fullBill) {
+        setSelectedBill(prev => ({ ...prev, ...fullBill }));
+      }
+    } catch (err) {
+      console.warn('Failed to fetch bill detail:', err);
+    }
+  };
+
+  const handleOpenPayment = (bill, e) => {
+    if (e) e.stopPropagation();
+    const amountDue = bill.amount_due ?? ((bill.total_amount || 0) - (bill.amount_paid || 0));
+    setPaymentBill(bill);
+    setPaymentAmount(String(amountDue));
+    setPaymentMethod("bank");
+    setShowPaymentModal(true);
+  };
+
+  const handleSubmitPayment = useCallback(async () => {
+    if (!paymentBill || !paymentAmount || parseFloat(paymentAmount) <= 0) return;
+    setIsPaying(true);
+    try {
+      await financeService.payPurchaseInvoice(paymentBill.id, parseFloat(paymentAmount), paymentMethod);
+      setShowPaymentModal(false);
+      setPaymentBill(null);
+      setPaymentAmount("");
+      // Reload page to refresh data
+      window.location.reload();
+    } catch (err) {
+      console.error('Payment failed:', err);
+    } finally {
+      setIsPaying(false);
+    }
+  }, [paymentBill, paymentAmount, paymentMethod]);
+
+  const renderStatusBadge = (bill) => {
+    let payStatus = getPaymentStatus(bill);
+    // Override with overdue if applicable
+    if (isOverdue(bill) && payStatus !== 'paid' && payStatus !== 'cancelled') {
+      payStatus = 'overdue';
+    }
+    const config = statusBadgeConfig[payStatus] || statusBadgeConfig.not_paid;
+    const Icon = config.icon;
+    return (
+      <Badge className={`${config.color} flex items-center gap-1 w-fit`}>
+        <Icon className="w-3 h-3" />
+        {config.label}
+      </Badge>
+    );
+  };
+
+  const canPay = (bill) => {
+    const status = getPaymentStatus(bill);
+    return status === 'not_paid' || status === 'partial' || status === 'overdue' || isOverdue(bill);
+  };
+
+  const getJournalForMethod = (method) => {
+    if (paymentJournalId) {
+      const j = bankCashJournals.find(j => j.id === paymentJournalId);
+      if (j) return j.name;
+    }
+    switch (method) {
+      case 'cash': return 'CASH';
+      case 'bank': return 'BANK';
+      case 'card': return 'BANK';
+      default: return 'BANK';
+    }
+  };
+
+  const getProvodka = (method) => {
+    switch (method) {
+      case 'cash': return 'Dt 2000 Kreditor / Kt 1000 Kassa';
+      case 'bank': return 'Dt 2000 Kreditor / Kt 1010 Bank';
+      case 'card': return 'Dt 2000 Kreditor / Kt 1010 Bank';
+      default: return 'Dt 2000 Kreditor / Kt 1010 Bank';
+    }
+  };
+
+  // Format number with spaces: 7000000 -> 7 000 000
+  const formatAmountWithSpaces = (val) => {
+    const num = String(val).replace(/\s/g, '').replace(/[^0-9.]/g, '');
+    const parts = num.split('.');
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    return parts.join('.');
+  };
+
+  const parseAmountFromFormatted = (val) => {
+    return val.replace(/\s/g, '');
+  };
+
+  // Export to Excel
+  const handleExportExcel = async () => {
+    const ExcelJS = await import('exceljs');
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'GenixERP';
+    wb.created = new Date();
+    const sheetName = (t('vendor_bills') || 'Yetkazib beruvchi hisob-fakturalari').substring(0, 31);
+    const ws = wb.addWorksheet(sheetName, {
+      pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
+    });
+    const HEADER_BG = '1E3A5F';
+    const HEADER_FG = 'FFFFFF';
+    const BORDER_CLR = 'CBD5E1';
+    const STRIPE_BG = 'F8FAFC';
+    const TOTAL_BG = 'EEF2FF';
+    const BRAND_BLUE = '4F46E5';
+    const thin = { style: 'thin', color: { argb: BORDER_CLR } };
+    const borders = { top: thin, bottom: thin, left: thin, right: thin };
+    const thickTop = { style: 'medium', color: { argb: BRAND_BLUE } };
+    ws.columns = [
+      { width: 5.5 }, { width: 26 }, { width: 24 }, { width: 14 }, { width: 14 },
+      { width: 16 }, { width: 18 }, { width: 18 }, { width: 16 },
+    ];
+    const periodText = `${dateFrom || '...'} — ${dateTo || '...'}`;
+    const titleRow = ws.addRow([t('vendor_bills') || 'Yetkazib beruvchi hisob-fakturalari']);
+    ws.mergeCells(`A${titleRow.number}:I${titleRow.number}`);
+    titleRow.getCell(1).font = { bold: true, size: 16, color: { argb: '1E293B' } };
+    titleRow.getCell(1).alignment = { vertical: 'middle' };
+    titleRow.height = 30;
+    const subRow = ws.addRow([`${periodText}  •  ${filteredBills.length} ${t('bills') || 'faktura'}`]);
+    ws.mergeCells(`A${subRow.number}:I${subRow.number}`);
+    subRow.getCell(1).font = { size: 10, color: { argb: '64748B' } };
+    subRow.height = 18;
+    ws.addRow([]);
+    const headers = ['№', t('number') || 'Raqam', t('vendor') || 'Yetkazib beruvchi', t('invoice_date') || 'Sana', t('due_date') || "To'lov muddati", t('tax') || 'Soliq', t('total') || 'Jami', t('amount_due') || "To'lanishi kerak", t('status') || 'Holat'];
+    const headerRow = ws.addRow(headers);
+    headerRow.height = 26;
+    headerRow.eachCell((cell) => {
+      cell.font = { bold: true, size: 11, color: { argb: HEADER_FG } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: HEADER_BG } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      cell.border = borders;
+    });
+    let sumTotal = 0, sumDue = 0;
+    filteredBills.forEach((bill, idx) => {
+      const total = bill.total_amount || 0;
+      const due = bill.amount_due || 0;
+      sumTotal += total;
+      sumDue += due;
+      const isStripe = idx % 2 === 1;
+      const row = ws.addRow([
+        idx + 1,
+        bill.invoice_number || bill.bill_number || '-',
+        bill.vendor_name || bill.partner_name || '-',
+        bill.invoice_date ? format(new Date(bill.invoice_date), 'dd.MM.yyyy') : '-',
+        bill.due_date ? format(new Date(bill.due_date), 'dd.MM.yyyy') : '-',
+        bill.tax_amount || 0,
+        total,
+        due,
+        getPaymentStatus(bill) || '-',
+      ]);
+      row.eachCell((cell, colNumber) => {
+        cell.font = { size: 10 };
+        cell.border = borders;
+        cell.alignment = { vertical: 'middle' };
+        if (isStripe) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: STRIPE_BG } };
+        if ([6,7,8].includes(colNumber)) { cell.numFmt = '#,##0'; cell.alignment = { horizontal: 'right', vertical: 'middle' }; }
+        if (colNumber === 1) cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        if (colNumber === 2) cell.font = { size: 10, name: 'Consolas' };
+      });
+    });
+    const totRow = ws.addRow(['', '', '', '', t('total') || 'Jami:', '', sumTotal, sumDue, '']);
+    totRow.height = 28;
+    totRow.eachCell((cell, colNumber) => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: TOTAL_BG } };
+      cell.border = { ...borders, top: { ...thickTop } };
+      cell.font = { bold: true, size: 11, color: { argb: '1E293B' } };
+      cell.alignment = { vertical: 'middle' };
+      if ([6,7,8].includes(colNumber)) { cell.numFmt = '#,##0'; cell.alignment = { horizontal: 'right', vertical: 'middle' }; }
+    });
+    ws.autoFilter = { from: { row: headerRow.number, column: 1 }, to: { row: headerRow.number, column: 9 } };
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `vendor_bills_${dateFrom || 'all'}_${dateTo || 'all'}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-500">{t('total_bills') || 'Jami fakturalar'}</p>
+                <p className="text-2xl font-bold text-slate-900">{summaryStats.total}</p>
+              </div>
+              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                <Receipt className="w-6 h-6 text-blue-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-500">{t('not_paid') || "To'lanmagan"}</p>
+                <p className="text-2xl font-bold text-orange-600">{summaryStats.notPaid}</p>
+                <p className="text-xs text-orange-500 mt-0.5">{formatCurrencyCompact(summaryStats.unpaidAmount)}</p>
+              </div>
+              <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
+                <AlertCircle className="w-6 h-6 text-orange-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-500">{t('partially_paid') || 'Qisman'}</p>
+                <p className="text-2xl font-bold text-blue-600">{summaryStats.partial}</p>
+                <p className="text-xs text-blue-500 mt-0.5">{formatCurrencyCompact(summaryStats.partialAmount)}</p>
+              </div>
+              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                <Clock className="w-6 h-6 text-blue-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-red-50 to-red-100 border-red-200 shadow-sm">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-red-600 font-medium">{t('overdue') || "Muddati o'tgan"}</p>
+                <p className="text-2xl font-bold text-red-700">{summaryStats.overdue}</p>
+                <p className="text-xs text-red-600 font-medium mt-0.5">{formatCurrencyCompact(summaryStats.overdueAmount)}</p>
+              </div>
+              <div className="w-12 h-12 bg-red-500/20 rounded-xl flex items-center justify-center">
+                <AlertTriangle className="w-6 h-6 text-red-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-500">{t('total_amount') || 'Jami summa'}</p>
+                <p className="text-2xl font-bold text-slate-900">{formatCurrency(summaryStats.totalAmount)}</p>
+              </div>
+              <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+                <FileText className="w-6 h-6 text-green-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Bills Table */}
+      <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+        <CardHeader className="border-b border-slate-100 pb-6">
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-[var(--genix-purple)]/10 rounded-xl flex items-center justify-center">
+                <Receipt className="w-5 h-5 text-[var(--genix-purple)]" />
+              </div>
+              <div>
+                <CardTitle className="text-xl font-bold text-slate-900">
+                  {t('vendor_bills') || 'Yetkazib beruvchi hisob-fakturalari'}
+                </CardTitle>
+                <p className="text-sm text-slate-500 mt-1">
+                  {totalBills} {t('bills') || 'faktura'}
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col gap-3">
+              {/* Search row */}
+              <div className="flex flex-col sm:flex-row gap-3">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <Input
+                    placeholder={t('search') || 'Qidirish...'}
+                    className="pl-9 bg-slate-50 border-slate-200 focus:ring-2 focus:ring-[var(--genix-purple)]/20 h-10"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-[180px] h-10 bg-slate-50">
+                    <SelectValue placeholder={t('payment_status') || 'Barcha holatlar'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t('all_status') || 'Barcha holatlar'}</SelectItem>
+                    <SelectItem value="draft">{t('draft') || 'Draft'}</SelectItem>
+                    <SelectItem value="not_paid">{t('not_paid') || "To'lanmagan"}</SelectItem>
+                    <SelectItem value="partial">{t('partially_paid') || 'Qisman'}</SelectItem>
+                    <SelectItem value="paid">{t('paid') || "To'langan"}</SelectItem>
+                    <SelectItem value="overdue">{t('overdue') || "Muddati o'tgan"}</SelectItem>
+                    <SelectItem value="cancelled">{t('cancelled') || 'Bekor qilingan'}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {/* Always-visible filter row */}
+              <div className="flex flex-wrap items-end gap-3 p-3 bg-gradient-to-r from-slate-50 to-purple-50/40 rounded-xl border border-slate-200/80">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-500 flex items-center gap-1">
+                    <Calendar className="w-3 h-3" />
+                    {t('from_date') || 'Dan'}
+                  </label>
+                  <Input
+                    type="date"
+                    value={dateFrom}
+                    onChange={e => setDateFrom(e.target.value)}
+                    className="h-9 w-[155px] bg-white border-slate-200 focus:ring-2 focus:ring-[var(--genix-purple)]/20 rounded-lg text-sm"
+                  />
+                </div>
+                <div className="flex items-end pb-[6px]">
+                  <span className="text-slate-400 text-sm font-medium">—</span>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-500 flex items-center gap-1">
+                    <Calendar className="w-3 h-3" />
+                    {t('to_date') || 'Gacha'}
+                  </label>
+                  <Input
+                    type="date"
+                    value={dateTo}
+                    onChange={e => setDateTo(e.target.value)}
+                    className="h-9 w-[155px] bg-white border-slate-200 focus:ring-2 focus:ring-[var(--genix-purple)]/20 rounded-lg text-sm"
+                  />
+                </div>
+                <div className="w-px h-8 bg-slate-200 mx-1 self-end mb-[2px] hidden sm:block" />
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-500 flex items-center gap-1">
+                    <FileText className="w-3 h-3" />
+                    {t('number') || 'Raqam'}
+                  </label>
+                  <Input
+                    placeholder={t('bill_code') || 'Kod...'}
+                    value={codeFilter}
+                    onChange={e => setCodeFilter(e.target.value)}
+                    className="h-9 w-[160px] bg-white border-slate-200 focus:ring-2 focus:ring-[var(--genix-purple)]/20 rounded-lg text-sm"
+                  />
+                </div>
+                {activeFilterCount > 0 && (
+                  <Button variant="ghost" size="sm" onClick={clearAllFilters} className="h-9 text-slate-500 hover:text-red-500 gap-1 transition-colors">
+                    <X className="w-3.5 h-3.5" />
+                    {t('clear') || 'Tozalash'}
+                  </Button>
+                )}
+                <div className="flex-1" />
+                <Button
+                  onClick={handleExportExcel}
+                  className="h-9 gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white shadow-md shadow-emerald-200/50 transition-all duration-200 hover:shadow-lg hover:shadow-emerald-200/60 rounded-lg px-4"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>{t('export') || 'Export'}</span>
+                  <FileSpreadsheet className="w-4 h-4 opacity-70" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          {(isLoading || billsLoading) ? (
+            <div className="flex items-center justify-center py-16">
+              <div className="text-center">
+                <div className="w-8 h-8 border-4 border-[var(--genix-purple)] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                <p className="text-slate-600 text-sm">{t('loading')}</p>
+              </div>
+            </div>
+          ) : filteredBills.length === 0 ? (
+            <div className="text-center py-16 px-6">
+              <div className="w-20 h-20 bg-gradient-to-br from-slate-100 to-slate-200 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                <Receipt className="w-10 h-10 text-slate-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                {searchQuery || statusFilter !== 'all'
+                  ? (t('no_results_found') || 'Natija topilmadi')
+                  : (t('no_vendor_bills') || 'Hali fakturalar yo\'q')}
+              </h3>
+              <p className="text-sm text-slate-500 max-w-md mx-auto">
+                {searchQuery || statusFilter !== 'all'
+                  ? (t('try_adjusting_search') || 'Qidiruv yoki filtrlarni o\'zgartiring')
+                  : (t('vendor_bills_desc') || 'Fakturalar xarid orderlari tasdiqlanganda paydo bo\'ladi')}
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-slate-50 hover:bg-slate-50">
+                    <TableHead className="font-semibold text-slate-700">{t('number') || 'Raqam'}</TableHead>
+                    <TableHead className="font-semibold text-slate-700">
+                      <div className="flex items-center gap-2">
+                        <Building2 className="w-4 h-4" />
+                        {t('vendor') || 'Yetkazuvchi'}
+                      </div>
+                    </TableHead>
+                    <TableHead className="font-semibold text-slate-700">{t('bill_date') || 'Sana'}</TableHead>
+                    <TableHead className="font-semibold text-slate-700">{t('due_date') || "To'lov muddati"}</TableHead>
+                    <TableHead className="font-semibold text-slate-700">{t('reference') || 'Havola'}</TableHead>
+                    <TableHead className="font-semibold text-slate-700 text-right">{t('tax') || 'QQS'}</TableHead>
+                    <TableHead className="font-semibold text-slate-700 text-right">{t('total') || 'Jami'}</TableHead>
+                    <TableHead className="font-semibold text-slate-700 text-right">{t('amount_due') || 'Qolgan qarz'}</TableHead>
+                    <TableHead className="font-semibold text-slate-700">{t('status') || 'Holat'}</TableHead>
+                    <TableHead className="font-semibold text-slate-700 text-right">{t('actions') || 'Amallar'}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredBills.map((bill, index) => {
+                    const overdue = isOverdue(bill);
+                    const amountDue = bill.amount_residual ?? bill.amount_due ?? ((bill.total_amount || 0) - (bill.amount_paid || 0));
+                    return (
+                      <TableRow
+                        key={bill.id || `bill-${index}`}
+                        className={`transition-colors cursor-pointer ${
+                          overdue
+                            ? 'bg-red-50/80 hover:bg-red-100/60'
+                            : 'hover:bg-blue-50/50'
+                        }`}
+                        onClick={() => handleViewDetail(bill)}
+                      >
+                        <TableCell className="font-mono text-sm font-medium text-slate-900">
+                          {bill.invoice_number || bill.bill_number || '-'}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Building2 className="w-4 h-4 text-slate-400" />
+                            <span className="text-slate-700">{bill.vendor_name || bill.partner_name || '-'}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-slate-600">
+                          {(bill.invoice_date || bill.bill_date || bill.date)
+                            ? format(new Date(bill.invoice_date || bill.bill_date || bill.date), 'dd/MM/yyyy')
+                            : '-'}
+                        </TableCell>
+                        <TableCell className={overdue ? 'text-red-600 font-semibold' : 'text-slate-600'}>
+                          {bill.due_date
+                            ? format(new Date(bill.due_date), 'dd/MM/yyyy')
+                            : '-'}
+                          {overdue && <span className="ml-1">⚠️</span>}
+                        </TableCell>
+                        <TableCell className="text-slate-600 max-w-[150px] truncate">
+                          {bill.vendor_invoice_number || bill.reference || bill.origin || '-'}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums text-slate-600">
+                          {formatCurrency(bill.tax_amount || 0)}
+                        </TableCell>
+                        <TableCell className="text-right font-semibold tabular-nums text-slate-900">
+                          {formatCurrency(bill.total_amount || 0)}
+                        </TableCell>
+                        <TableCell className={`text-right font-semibold tabular-nums ${amountDue > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                          {formatCurrency(amountDue)}
+                        </TableCell>
+                        <TableCell>
+                          {renderStatusBadge(bill)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => { e.stopPropagation(); handleViewDetail(bill); }}
+                              title={t('view') || "Ko'rish"}
+                            >
+                              <Eye className="w-4 h-4 text-slate-500" />
+                            </Button>
+                            {canPay(bill) && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => handleOpenPayment(bill, e)}
+                                className={overdue ? 'text-red-600 hover:text-red-700 hover:bg-red-50' : 'text-green-600 hover:text-green-700 hover:bg-green-50'}
+                                title={t('pay') || "To'lash"}
+                              >
+                                <CreditCard className="w-4 h-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between px-4 py-3 border-t">
+                  <span className="text-sm text-slate-600">
+                    {t('showing') || 'Showing'} {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, totalBills)} {t('of') || 'of'} {totalBills}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>
+                      <ChevronLeft className="w-4 h-4" />
+                    </Button>
+                    <span className="text-sm font-medium">{currentPage} / {totalPages}</span>
+                    <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}>
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Detail Modal */}
+      <Dialog open={showDetailModal} onOpenChange={setShowDetailModal}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <Receipt className="w-5 h-5 text-[var(--genix-purple)]" />
+              {selectedBill?.invoice_number || selectedBill?.bill_number || t('vendor_bill')}
+            </DialogTitle>
+          </DialogHeader>
+          {selectedBill && (
+            <div className="space-y-6 py-4">
+              {/* Status Badge */}
+              <div className="flex items-center gap-3">
+                {renderStatusBadge(selectedBill)}
+                {isOverdue(selectedBill) && (
+                  <Badge className="bg-red-100 text-red-800 border-red-200 flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3" />
+                    {t('overdue') || "Muddati o'tgan"}
+                  </Badge>
+                )}
+              </div>
+
+              {/* Bill Info Grid */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <p className="text-sm text-slate-500">{t('vendor') || 'Yetkazuvchi'}</p>
+                  <p className="font-medium text-slate-900 flex items-center gap-2">
+                    <Building2 className="w-4 h-4 text-slate-400" />
+                    {selectedBill.vendor_name || selectedBill.partner_name || '-'}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm text-slate-500">{t('bill_number') || 'Faktura raqami'}</p>
+                  <p className="font-mono font-medium text-slate-900">
+                    {selectedBill.invoice_number || selectedBill.bill_number || '-'}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm text-slate-500">{t('bill_date') || 'Faktura sanasi'}</p>
+                  <p className="font-medium text-slate-900">
+                    {(selectedBill.invoice_date || selectedBill.bill_date || selectedBill.date)
+                      ? format(new Date(selectedBill.invoice_date || selectedBill.bill_date || selectedBill.date), 'dd.MM.yyyy')
+                      : '-'}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm text-slate-500">{t('due_date') || "To'lov muddati"}</p>
+                  <p className={`font-medium ${isOverdue(selectedBill) ? 'text-red-600' : 'text-slate-900'}`}>
+                    {selectedBill.due_date
+                      ? format(new Date(selectedBill.due_date), 'dd.MM.yyyy')
+                      : '-'}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm text-slate-500">{t('vendor_ref') || 'Yetkazuvchi hujjat №'}</p>
+                  <p className="font-medium text-slate-900">
+                    {selectedBill.vendor_invoice_number || selectedBill.reference || '-'}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm text-slate-500">{t('purchase_order') || 'Xarid orderi'}</p>
+                  <p className="font-medium text-slate-900">
+                    {selectedBill.purchase_order_number || selectedBill.origin || '-'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Amounts */}
+              <div className="border-t pt-4 space-y-3">
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">{t('tax_excluded') || 'Soliqsiz summa'}</span>
+                  <span className="font-medium text-slate-700">
+                    {formatCurrency(selectedBill.subtotal || (selectedBill.total_amount || 0) - (selectedBill.tax_amount || 0))}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">{t('tax') || 'QQS'}</span>
+                  <span className="font-medium text-slate-700">
+                    {formatCurrency(selectedBill.tax_amount || 0)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-base font-bold border-t pt-3">
+                  <span className="text-slate-900">{t('total') || 'Jami'}</span>
+                  <span className="text-slate-900">
+                    {formatCurrency(selectedBill.total_amount || 0)}
+                  </span>
+                </div>
+                {(() => {
+                  const allocations = selectedBill.payment_allocations || [];
+                  const confirmedTotal = allocations
+                    .filter(a => a.status === 'confirmed')
+                    .reduce((sum, a) => sum + (a.amount || 0), 0);
+                  const draftTotal = allocations
+                    .filter(a => a.status === 'draft')
+                    .reduce((sum, a) => sum + (a.amount || 0), 0);
+                  // Use amount_paid as fallback when no payment_allocations exist
+                  const totalPaid = confirmedTotal > 0 ? confirmedTotal : (selectedBill.amount_paid || 0);
+                  const remainingDebt = (selectedBill.total_amount || 0) - totalPaid;
+                  return (
+                    <>
+                      <div className="flex justify-between text-sm">
+                        <span className="flex items-center gap-1 text-slate-500">
+                          <CheckCircle className="w-3.5 h-3.5 text-green-600" />
+                          {t('confirmed_payments') || "To'langan"}
+                        </span>
+                        <span className="font-medium text-green-600">
+                          {formatCurrency(totalPaid)}
+                        </span>
+                      </div>
+                      {draftTotal > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="flex items-center gap-1 text-slate-500">
+                            <Clock className="w-3.5 h-3.5 text-amber-500" />
+                            {t('pending_payments') || 'Kutilmoqda'}
+                          </span>
+                          <span className="font-medium text-amber-600">
+                            {formatCurrency(draftTotal)}
+                          </span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-base font-bold">
+                        <span className="text-slate-900">{t('remaining_debt') || 'Qoldiq qarz'}</span>
+                        <span className={remainingDebt > 0 ? "text-red-600" : "text-green-600"}>
+                          {formatCurrency(remainingDebt)}
+                        </span>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+
+              {/* Payment History */}
+              {(selectedBill.payment_allocations || []).length > 0 && (
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="bg-slate-50 px-4 py-2 border-b">
+                    <h4 className="text-sm font-medium">{t('payment_history') || "To'lovlar tarixi"}</h4>
+                  </div>
+                  <div className="divide-y">
+                    {(selectedBill.payment_allocations || []).map((alloc) => (
+                      <div key={alloc.id} className="px-4 py-2 flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          <Badge variant={alloc.status === 'confirmed' ? 'default' : 'secondary'}
+                            className={alloc.status === 'confirmed'
+                              ? 'bg-green-100 text-green-700 hover:bg-green-100'
+                              : 'bg-amber-100 text-amber-700 hover:bg-amber-100'
+                            }>
+                            {alloc.status === 'confirmed' ? t('confirmed') || 'Tasdiqlangan' : t('draft') || 'Qoralama'}
+                          </Badge>
+                          <span className="text-slate-600">{alloc.payment_number}</span>
+                          {alloc.journal_name && (
+                            <span className="text-slate-400 text-xs">({alloc.journal_name})</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-slate-500 text-xs">
+                            {format(new Date(alloc.payment_date), 'dd.MM.yyyy')}
+                          </span>
+                          <span className={`font-medium ${alloc.status === 'confirmed' ? 'text-green-600' : 'text-amber-600'}`}>
+                            {formatCurrency(alloc.amount)}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Pay button in detail modal */}
+              {canPay(selectedBill) && (
+                <div className="border-t pt-4">
+                  <Button
+                    onClick={() => { setShowDetailModal(false); handleOpenPayment(selectedBill); }}
+                    className={`w-full ${isOverdue(selectedBill)
+                      ? 'bg-red-600 hover:bg-red-700 text-white'
+                      : 'bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white'}`}
+                  >
+                    <CreditCard className="w-4 h-4 mr-2" />
+                    {t('pay') || "To'lov qilish"}
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Payment Modal */}
+      <Dialog open={showPaymentModal} onOpenChange={setShowPaymentModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <CreditCard className="w-5 h-5 text-green-600" />
+              {t('record_payment') || "To'lov qilish"}
+            </DialogTitle>
+            <DialogDescription>
+              {t('record_payment_desc') || "Yetkazuvchiga to'lovni qayd etish"}
+            </DialogDescription>
+          </DialogHeader>
+          {paymentBill && (
+            <div className="space-y-4 mt-2">
+              {/* Bill info */}
+              <div className="bg-slate-50 rounded-lg p-3 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">{t('bill') || 'Faktura'}</span>
+                  <span className="font-mono font-medium">{paymentBill.invoice_number || paymentBill.bill_number}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">{t('vendor') || 'Yetkazuvchi'}</span>
+                  <span className="font-medium">{paymentBill.vendor_name || paymentBill.partner_name}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">{t('total') || 'Jami summa'}</span>
+                  <span className="font-semibold">{formatCurrency(paymentBill.total_amount || 0)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">{t('amount_paid') || "To'langan"}</span>
+                  <span className="font-medium text-green-600">{formatCurrency(paymentBill.amount_paid || 0)}</span>
+                </div>
+                <div className="flex justify-between text-sm font-bold border-t pt-2">
+                  <span className="text-orange-600">{t('amount_due') || 'Qolgan qarz'}</span>
+                  <span className="text-orange-600">
+                    {formatCurrency(paymentBill.amount_due ?? ((paymentBill.total_amount || 0) - (paymentBill.amount_paid || 0)))}
+                  </span>
+                </div>
+              </div>
+
+              {/* Payment method */}
+              <div>
+                <label className="text-sm font-medium">{t('payment_method') || "To'lov usuli"} *</label>
+                {bankCashJournals.length > 0 ? (
+                  <Select value={paymentJournalId} onValueChange={(value) => {
+                    setPaymentJournalId(value);
+                    const j = bankCashJournals.find(j => j.id === value);
+                    if (j) setPaymentMethod(j.type === 'cash' ? 'cash' : 'bank');
+                  }}>
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('select_journal') || "Jurnal tanlang"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {bankCashJournals.map((j) => (
+                        <SelectItem key={j.id} value={j.id}>
+                          {j.name} ({j.type === 'bank' ? t('bank') || 'Bank' : t('cash') || 'Naqd'})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="bank">{t('bank_transfer') || "Bank o'tkazmasi"}</SelectItem>
+                      <SelectItem value="cash">{t('cash') || 'Naqd'}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+
+              {/* Amount */}
+              <div>
+                <label className="text-sm font-medium">{t('amount') || 'Summa'} *</label>
+                <Input
+                  type="text"
+                  inputMode="decimal"
+                  value={formatAmountWithSpaces(paymentAmount)}
+                  onChange={(e) => setPaymentAmount(parseAmountFromFormatted(e.target.value))}
+                  placeholder="0"
+                />
+              </div>
+
+              {/* Journal + Provodka info */}
+              <div className="bg-blue-50 rounded-lg p-3 space-y-1">
+                <div className="flex justify-between text-sm">
+                  <span className="text-blue-600">{t('journal') || 'Jurnal'}</span>
+                  <span className="font-mono font-medium text-blue-800">{getJournalForMethod(paymentMethod)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-blue-600">{t('accounting_entry') || 'Provodka'}</span>
+                  <span className="font-mono text-xs text-blue-800">{getProvodka(paymentMethod)}</span>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-2 justify-end pt-2">
+                <Button variant="outline" onClick={() => setShowPaymentModal(false)}>
+                  {t('cancel') || 'Bekor qilish'}
+                </Button>
+                <Button
+                  onClick={handleSubmitPayment}
+                  disabled={isPaying || !paymentAmount || parseFloat(paymentAmount) <= 0}
+                  className="bg-green-600 hover:bg-green-700 text-white"
+                >
+                  {isPaying
+                    ? (t('loading') || "Yuklanmoqda...")
+                    : (t('confirm_payment') || "To'lovni tasdiqlash")}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

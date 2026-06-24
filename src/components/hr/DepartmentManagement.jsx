@@ -11,7 +11,7 @@ import { useTranslation } from "@/components/utils/translations";
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import apiClient from '@/api/client';
-import { FolderTree, Plus, Pencil, Trash2, Search, Users } from 'lucide-react';
+import { FolderTree, Plus, Edit, Trash2, Search, Users } from 'lucide-react';
 
 export default function DepartmentManagement({ departments, onRefresh }) {
   const { language } = useLanguage();
@@ -198,7 +198,7 @@ export default function DepartmentManagement({ departments, onRefresh }) {
                       <div className="flex items-center gap-1">
                         {canUpdate(MODULES.HR) && (
                           <Button variant="ghost" size="sm" onClick={() => openModal(dept)}>
-                            <Pencil className="w-4 h-4 text-slate-500" />
+                            <Edit className="w-4 h-4 text-slate-500" />
                           </Button>
                         )}
                         {canDelete(MODULES.HR) && (

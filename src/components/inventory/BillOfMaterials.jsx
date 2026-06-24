@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Plus, Search, Layers, ChevronRight, ChevronDown, Edit2, Trash2,
+  Plus, Search, Layers, ChevronRight, ChevronDown, Edit, Trash2,
   Package, Copy, FileText, Calculator, AlertTriangle, CheckCircle2,
   Settings, Eye, Wrench, Calendar, GitBranch, Clock, Cog, Factory,
   Timer, Users, ArrowRight, HelpCircle
@@ -582,7 +582,7 @@ export default function BillOfMaterials() {
                                   size="sm"
                                   onClick={() => openEditModal(bom)}
                                 >
-                                  <Edit2 className="w-4 h-4" />
+                                  <Edit className="w-4 h-4" />
                                 </Button>
                               )}
                               {canDelete(MODULES.INVENTORY) && (
@@ -1054,7 +1054,7 @@ export default function BillOfMaterials() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Edit2 className="w-5 h-5 text-[var(--genix-blue)]" />
+              <Edit className="w-5 h-5 text-[var(--genix-blue)]" />
               {t('edit_bom') || 'Edit Bill of Materials'}
             </DialogTitle>
           </DialogHeader>

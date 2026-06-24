@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, FileText, AlertTriangle, CheckCircle, Clock, Brain, Bell, Target, Lightbulb, Eye, Edit2, Trash2, Building2 } from 'lucide-react';
+import { Plus, Search, FileText, AlertTriangle, CheckCircle, Clock, Brain, Bell, Target, Lightbulb, Eye, Edit, Trash2, Building2 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { ru, uz } from 'date-fns/locale';
 import { analyzeContracts } from '@/api/services/aiAnalytics';
@@ -618,7 +618,7 @@ Provide only analysis results based on the numbers and specific contract data, n
                           </Button>
                           {canUpdate(MODULES.CONTRACTS) && (
                             <Button size="sm" variant="ghost" onClick={() => handleEditContract(contract)} title={t('edit_contract')}>
-                              <Edit2 className="w-4 h-4" />
+                              <Edit className="w-4 h-4" />
                             </Button>
                           )}
                           {canDelete(MODULES.CONTRACTS) && (

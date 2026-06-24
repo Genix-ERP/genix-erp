@@ -12,7 +12,7 @@ import { useTranslation } from "@/components/utils/translations";
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import apiClient from '@/api/client';
-import { Briefcase, Plus, Pencil, Trash2, Search } from 'lucide-react';
+import { Briefcase, Plus, Edit, Trash2, Search } from 'lucide-react';
 
 export default function JobPositionManagement({ jobPositions, onRefresh }) {
   const { language } = useLanguage();
@@ -165,7 +165,7 @@ export default function JobPositionManagement({ jobPositions, onRefresh }) {
                       <div className="flex items-center justify-end gap-2">
                         {canUpdate(MODULES.HR) && (
                           <Button variant="ghost" size="icon" onClick={() => openModal(jp)}>
-                            <Pencil className="w-4 h-4 text-slate-500" />
+                            <Edit className="w-4 h-4 text-slate-500" />
                           </Button>
                         )}
                         {canDelete(MODULES.HR) && (

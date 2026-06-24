@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
-  Plus, Search, Package, Pencil, Trash2, Eye, DollarSign,
+  Plus, Search, Package, Edit, Trash2, Eye, DollarSign,
   Tag, Barcode, Box, Boxes, Filter, MoreHorizontal, AlertCircle,
   CheckCircle, XCircle, ShoppingCart, Archive, Upload, Download, History,
   Layers, Printer, HelpCircle, Truck, RefreshCw, Scale, ChevronDown, ChevronLeft, ChevronRight, ShieldCheck,
@@ -2285,7 +2285,7 @@ export default function Products() {
                                 onClick={() => handleEdit(product)}
                                 className="h-8 w-8 p-0"
                               >
-                                <Pencil className="w-4 h-4 text-slate-500" />
+                                <Edit className="w-4 h-4 text-slate-500" />
                               </Button>
                             )}
                             {canDelete(MODULES.INVENTORY) && (
@@ -2463,7 +2463,7 @@ export default function Products() {
                                     onClick={() => handleEditCategoryClick(category)}
                                     className="h-8 w-8 p-0 hover:bg-blue-50"
                                   >
-                                    <Pencil className="w-4 h-4 text-slate-500 hover:text-blue-600" />
+                                    <Edit className="w-4 h-4 text-slate-500 hover:text-blue-600" />
                                   </Button>
                                 )}
                                 {canDelete(MODULES.INVENTORY) && (
@@ -4327,7 +4327,7 @@ export default function Products() {
                     }}
                     className="flex-1"
                   >
-                    <Pencil className="w-4 h-4 mr-2" /> {t('edit') || 'Edit'}
+                    <Edit className="w-4 h-4 mr-2" /> {t('edit') || 'Edit'}
                   </Button>
                 )}
                 <Button
@@ -4757,7 +4757,7 @@ export default function Products() {
                           onClick={() => handleEditCategoryClick(category)}
                           className="h-8 w-8 p-0"
                         >
-                          <Pencil className="w-4 h-4 text-slate-500" />
+                          <Edit className="w-4 h-4 text-slate-500" />
                         </Button>
                       )}
                       {canDelete(MODULES.INVENTORY) && (
