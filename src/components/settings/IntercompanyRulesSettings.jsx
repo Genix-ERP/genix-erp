@@ -25,7 +25,7 @@ import {
   Settings,
   ArrowRight,
   Trash2,
-  Pencil,
+  Edit,
   Building2,
   FileText,
   RefreshCw,
@@ -351,7 +351,7 @@ export default function IntercompanyRulesSettings() {
                           size="sm"
                           onClick={() => { setSelectedRule(rule); setShowEditModal(true); }}
                         >
-                          <Pencil className="w-4 h-4" />
+                          <Edit className="w-4 h-4" />
                         </Button>
                         <Button
                           variant="ghost"

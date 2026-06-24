@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Plus, Target, TrendingUp, TrendingDown, AlertTriangle, DollarSign,
-  Edit2, Trash2, BarChart3, CheckCircle2, XCircle, Clock, ArrowLeft,
+  Edit, Trash2, BarChart3, CheckCircle2, XCircle, Clock, ArrowLeft,
   ChevronRight, ChevronLeft, Send, ThumbsUp, ThumbsDown, RefreshCw,
   Wallet, CreditCard, ArrowUpRight, ArrowDownRight, Calendar,
   FileText, Star, Zap, LayoutDashboard, Eye,
@@ -491,7 +491,7 @@ export default function BudgetManagement() {
                           )}
                           {canUpdate(MODULES.FINANCIALS) && (
                             <Button variant="ghost" size="sm" onClick={() => { setSelectedBudget(budget); initWizard('edit', budget); }}>
-                              <Edit2 className="w-4 h-4 text-slate-500" />
+                              <Edit className="w-4 h-4 text-slate-500" />
                             </Button>
                           )}
                           {canDelete(MODULES.FINANCIALS) && (
@@ -998,7 +998,7 @@ export default function BudgetManagement() {
             )}
             {canUpdate(MODULES.FINANCIALS) && (
               <Button variant="outline" size="sm" onClick={() => initWizard('edit', selectedBudget)}>
-                <Edit2 className="w-4 h-4 mr-1" />{t('edit') || 'Edit'}
+                <Edit className="w-4 h-4 mr-1" />{t('edit') || 'Edit'}
               </Button>
             )}
           </div>

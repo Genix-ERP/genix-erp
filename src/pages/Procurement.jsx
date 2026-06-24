@@ -22,7 +22,7 @@ import {
   AlertTriangle,
   Target,
   Lightbulb,
-  Edit2,
+  Edit,
   LayoutDashboard,
   Building2,
   FileQuestion,

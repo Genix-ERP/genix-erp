@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   Kanban, Phone, Mail, Calendar, User, Building, Target,
-  Loader2, AlertCircle, Pencil, Trash2, MoreVertical,
+  Loader2, AlertCircle, Edit, Trash2, MoreVertical,
   PhoneCall, Clock, CheckCircle, XCircle, UserPlus, Plus,
   GripVertical, Settings2, Trophy, ThumbsDown, X,
   ChevronDown, ChevronUp, Bell, CalendarDays, CheckCircle2
@@ -551,7 +551,7 @@ export default function LeadsKanban({
               )}
               {canUpdate(MODULES.CUSTOMERS) && onEditLead && (
                 <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEditLead(lead); }}>
-                  <Pencil className="w-4 h-4 mr-2" />{t('edit')}
+                  <Edit className="w-4 h-4 mr-2" />{t('edit')}
                 </DropdownMenuItem>
               )}
               {canDelete(MODULES.CUSTOMERS) && onDeleteLead && (
@@ -1130,7 +1130,7 @@ export default function LeadsKanban({
                                 >
                                   <div className="flex items-center justify-between mb-2">
                                     <span className="font-medium text-slate-800 flex items-center gap-1.5">
-                                      <Pencil className="w-3.5 h-3.5 text-amber-600" />
+                                      <Edit className="w-3.5 h-3.5 text-amber-600" />
                                       {entry.user_name || t('action_note') || 'Note'}
                                     </span>
                                     <span className="text-xs text-slate-500">
@@ -1224,7 +1224,7 @@ export default function LeadsKanban({
                     }}
                     className="gap-2 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90"
                   >
-                    <Pencil className="w-4 h-4" />
+                    <Edit className="w-4 h-4" />
                     {t('edit') || 'Edit'}
                   </Button>
                 )}

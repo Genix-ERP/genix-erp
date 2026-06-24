@@ -1,0 +1,1002 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { useModules } from '@/components/contexts/ModulesContext';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Plus, Search, Receipt, Upload, CheckCircle, XCircle, Clock, DollarSign, Brain, AlertTriangle, Target, Lightbulb, Edit2, Download, Trash2 } from 'lucide-react';
+import { format } from 'date-fns';
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
+import { analyzeExpenses } from '@/api/services/aiAnalytics';
+import { financeService } from '@/api/services/finance';
+import { useLanguage } from '@/components/contexts/LanguageContext';
+import { useTranslation } from '@/components/utils/translations';
+import { usePermissions } from "@/hooks/usePermissions";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { Link } from 'react-router-dom';
+import * as XLSX from 'xlsx';
+
+const COLORS = ['#0ea5e9', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444'];
+
+// Money input helpers — keep the underlying state as a raw numeric string
+// (no separators) so parseFloat() at submit time stays correct, but
+// render the input with thin-space thousands grouping so a user typing
+// 120000 sees "120 000" while typing. Decimal point/comma both accepted.
+const formatAmountForInput = (val) => {
+  if (val === '' || val === null || val === undefined) return '';
+  const cleaned = String(val).replace(/\s/g, '').replace(',', '.');
+  const [intPart, decPart] = cleaned.split('.');
+  const grouped = (intPart || '').replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return decPart !== undefined ? `${grouped}.${decPart}` : grouped;
+};
+const stripAmountInput = (val) => {
+  if (val === '' || val === null || val === undefined) return '';
+  // Strip everything that isn't a digit or a single decimal point.
+  const cleaned = String(val).replace(/\s/g, '').replace(',', '.').replace(/[^\d.]/g, '');
+  // Keep only the first dot — collapse anything after it.
+  const firstDot = cleaned.indexOf('.');
+  if (firstDot === -1) return cleaned;
+  return cleaned.slice(0, firstDot + 1) + cleaned.slice(firstDot + 1).replace(/\./g, '');
+};
+
+export default function Expenses() {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
+  const { expenses, createExpense, updateExpense, recognizeExpense, isLoading, employees, refreshData } = useModules();
+  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
+
+  // Refresh data when navigating to this page
+  useEffect(() => {
+    refreshData();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
+
+  // AI Analysis
+  const expenseAnalysis = useMemo(() => analyzeExpenses(expenses, language), [expenses, language]);
+  const [filteredClaims, setFilteredClaims] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  // Profit-tax recognition filter: 'all' | 'recognized' | 'unrecognized'.
+  // See §6 of ТЗ_Ish_Haqi_Soliq_Tolik.docx — lets accountants review the
+  // unrecognized ("тан олинмаган") list in isolation when closing a period.
+  const [recognitionFilter, setRecognitionFilter] = useState('all');
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editClaim, setEditClaim] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [claimToDelete, setClaimToDelete] = useState(null);
+
+  // Categories are now driven by the `expense_categories` table —
+  // managed in Settings → Expenses. The page loads them on mount and
+  // both the create and edit modals render their dropdowns from this
+  // list. `category_id` (UUID) is the canonical reference to the
+  // selected row; we still pass `category` (the name) for the legacy
+  // text column the backend keeps for backwards-compatibility.
+  const [categories, setCategories] = useState([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setCategoriesLoading(true);
+    financeService.listExpenseCategories()
+      .then((rows) => {
+        if (cancelled) return;
+        setCategories(Array.isArray(rows) ? rows : []);
+      })
+      .catch(() => { /* silent — empty state already covers this */ })
+      .finally(() => { if (!cancelled) setCategoriesLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const [newClaim, setNewClaim] = useState({
+    employee_name: '',
+    expense_date: new Date().toISOString().split('T')[0],
+    category_id: '',
+    category: '',
+    amount: 0,
+    // Matches the DB default from migration 336. Accountants flip this
+    // to false for fines, undocumented costs, personal items, etc. —
+    // see the "YO'Q" list in §6.3 of ТЗ_Ish_Haqi_Soliq_Tolik.docx.
+    is_recognized: true,
+    description: ''
+  });
+
+  useEffect(() => {
+    let filtered = expenses;
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(c => c.status === statusFilter);
+    }
+    if (recognitionFilter !== 'all') {
+      // `is_recognized` defaults to true for any row the backend hasn't
+      // populated yet — we coerce undefined to true to match the column
+      // default in migration 336.
+      const want = recognitionFilter === 'recognized';
+      filtered = filtered.filter(c => (c.is_recognized !== false) === want);
+    }
+    if (searchQuery) {
+      filtered = filtered.filter(c =>
+        c.claim_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        c.employee_name?.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+    setFilteredClaims(filtered);
+  }, [expenses, searchQuery, statusFilter, recognitionFilter]);
+
+  const handleCreateClaim = async () => {
+    setIsSubmitting(true);
+    try {
+      const claimData = {
+        ...newClaim,
+        amount: parseFloat(newClaim.amount),
+        status: 'draft',
+        claim_date: new Date().toISOString().split('T')[0]
+      };
+
+      await createExpense(claimData);
+      setShowCreateModal(false);
+
+      setNewClaim({
+        employee_name: '',
+        expense_date: new Date().toISOString().split('T')[0],
+        category_id: '',
+        category: '',
+        amount: 0,
+        description: '',
+        is_recognized: true,
+      });
+    } catch (error) {
+      console.error('Error creating claim:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleEditClaim = (claim) => {
+    // Legacy rows may carry only the text `category` column without a
+    // category_id. Resolve it by name from the loaded list so the edit
+    // dropdown opens with the right row pre-selected.
+    let categoryId = claim.category_id || '';
+    if (!categoryId && claim.category && categories.length > 0) {
+      const match = categories.find(
+        (c) => String(c.name).toLowerCase() === String(claim.category).toLowerCase()
+            || String(c.code).toLowerCase() === String(claim.category).toLowerCase(),
+      );
+      if (match) categoryId = match.id;
+    }
+    setEditClaim({
+      ...claim,
+      category_id: categoryId,
+      amount: claim.amount || 0,
+    });
+    setShowEditModal(true);
+  };
+
+  const handleUpdateClaim = async () => {
+    if (!editClaim) return;
+
+    setIsSubmitting(true);
+    try {
+      updateExpense(editClaim.id, {
+        employee_name: editClaim.employee_name,
+        expense_date: editClaim.expense_date,
+        // Send the canonical category_id (UUID) so the backend can join
+        // through to expense_categories; `category` keeps the legacy
+        // text column populated for backwards-compatibility.
+        category_id: editClaim.category_id,
+        category: editClaim.category,
+        amount: parseFloat(editClaim.amount) || 0,
+        description: editClaim.description,
+        status: editClaim.status,
+        is_recognized: editClaim.is_recognized,
+      });
+      setShowEditModal(false);
+      setEditClaim(null);
+    } catch (error) {
+      console.error('Error updating claim:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const updateClaimStatus = (claimId, newStatus) => {
+    const updates = { status: newStatus };
+    if (newStatus === 'approved') {
+      updates.approval_date = new Date().toISOString().split('T')[0];
+    }
+    if (newStatus === 'paid') {
+      updates.payment_date = new Date().toISOString().split('T')[0];
+    }
+    updateExpense(claimId, updates);
+  };
+
+  const handleDeleteClick = (claim) => {
+    setClaimToDelete(claim);
+    setShowDeleteDialog(true);
+  };
+
+  const handleDeleteClaim = () => {
+    if (claimToDelete) {
+      // For demo purposes, we'll update status to 'cancelled' instead of actually deleting
+      updateExpense(claimToDelete.id, { status: 'cancelled' });
+      setShowDeleteDialog(false);
+      setClaimToDelete(null);
+    }
+  };
+
+  const handleRecommendationClick = (recommendation) => {
+    // Generate proper prompt based on recommendation type and language
+    let prompt = '';
+
+    if (recommendation.action.includes('Set Category Budgets') || recommendation.action.includes('Toifa byudjetlarini belgilash') || recommendation.action.includes('Установка бюджетов по категориям')) {
+      // Set category budgets prompt
+      if (language === 'uz') {
+        prompt = 'Xarajat toifalari uchun byudjet chegaralarini qanday belgilashim kerak? Har bir toifa uchun optimal xarajat limitlarini aniqlashda menga yordam bering.';
+      } else if (language === 'ru') {
+        prompt = 'Как мне установить бюджетные лимиты для категорий расходов? Помогите мне определить оптимальные лимиты расходов для каждой категории.';
+      } else {
+        prompt = 'How should I set budget limits for expense categories? Help me determine optimal spending limits for each category.';
+      }
+    } else if (recommendation.action.includes('Review Pending') || recommendation.action.includes('Kutilayotgan xarajatlarni') || recommendation.action.includes('Проверка ожидающих')) {
+      // Review pending expenses prompt
+      const pending = expenses.filter(e => e.status === 'pending' || e.status === 'submitted').length;
+      if (language === 'uz') {
+        prompt = `Menda ${pending} ta kutilayotgan xarajat tasdiqlanishi kerak. Xarajatlarni ko'rib chiqish va tasdiqlash jarayonini qanday tartibga solishim mumkin?`;
+      } else if (language === 'ru') {
+        prompt = `У меня ${pending} расходов ожидают одобрения. Как я могу организовать процесс проверки и одобрения расходов?`;
+      } else {
+        prompt = `I have ${pending} expenses awaiting approval. How can I streamline the expense review and approval process?`;
+      }
+    } else {
+      // Generic prompt
+      prompt = recommendation.action;
+    }
+
+    // Open AI chatbox with the prompt
+    if (window.openAIChat) {
+      window.openAIChat(prompt);
+    }
+  };
+
+  const handleExportToExcel = () => {
+    // Prepare data for export
+    const exportData = filteredClaims.map(claim => ({
+      [t('claim_number')]: claim.claim_number,
+      [t('employee')]: claim.employee_name,
+      [t('expense_date')]: claim.expense_date ? format(new Date(claim.expense_date), 'dd.MM.yyyy') : '',
+      [t('category')]: t(claim.category),
+      [t('amount')]: claim.amount,
+      [t('description')]: claim.description,
+      [t('status')]: t(claim.status),
+      [t('submission_date')]: claim.submission_date ? format(new Date(claim.submission_date), 'dd.MM.yyyy') : '',
+      [t('approval_date')]: claim.approval_date ? format(new Date(claim.approval_date), 'dd.MM.yyyy') : '',
+      [t('payment_date')]: claim.payment_date ? format(new Date(claim.payment_date), 'dd.MM.yyyy') : ''
+    }));
+
+    // Create worksheet
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+
+    // Set column widths
+    const columnWidths = [
+      { wch: 15 }, // Claim Number
+      { wch: 20 }, // Employee
+      { wch: 12 }, // Expense Date
+      { wch: 15 }, // Category
+      { wch: 12 }, // Amount
+      { wch: 30 }, // Description
+      { wch: 12 }, // Status
+      { wch: 12 }, // Submission Date
+      { wch: 12 }, // Approval Date
+      { wch: 12 }  // Payment Date
+    ];
+    worksheet['!cols'] = columnWidths;
+
+    // Create workbook
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, t('expense_claims'));
+
+    // Generate filename with current date
+    const filename = `expense_claims_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+
+    // Download
+    XLSX.writeFile(workbook, filename);
+  };
+
+  const getStatusColor = (status) => {
+    const colors = {
+      draft: 'bg-gray-100 text-gray-800',
+      pending: 'bg-yellow-100 text-yellow-800',
+      submitted: 'bg-blue-100 text-blue-800',
+      approved: 'bg-green-100 text-green-800',
+      rejected: 'bg-red-100 text-red-800',
+      paid: 'bg-purple-100 text-purple-800',
+      cancelled: 'bg-slate-100 text-slate-800'
+    };
+    return colors[status] || colors.draft;
+  };
+
+  const metrics = {
+    totalClaims: expenses.length,
+    totalAmount: expenses.reduce((sum, c) => sum + (c.amount || 0), 0),
+    pendingApproval: expenses.filter(c => c.status === 'submitted').length,
+    pendingPayment: expenses.filter(c => c.status === 'approved').length
+  };
+
+  const categoryData = {};
+  expenses.forEach(c => {
+    categoryData[c.category] = (categoryData[c.category] || 0) + (c.amount || 0);
+  });
+  const chartData = Object.entries(categoryData).map(([name, value]) => ({ name: t(name), value }));
+
+  return (
+    <div className="p-4 md:p-6 lg:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
+      <div className="space-y-6">
+
+        {/* Metrics */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <Receipt className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-600">{t('total_claims')}</p>
+                  <p className="text-2xl font-bold text-slate-900">{metrics.totalClaims}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                  <DollarSign className="w-5 h-5 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-600">{t('total_amount')}</p>
+                  <p className="text-2xl font-bold text-slate-900">{formatCurrencyCompact(metrics.totalAmount)}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
+                  <Clock className="w-5 h-5 text-yellow-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-600">{t('pending_approval')}</p>
+                  <p className="text-2xl font-bold text-slate-900">{metrics.pendingApproval}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                  <DollarSign className="w-5 h-5 text-purple-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-600">{t('pending_payment')}</p>
+                  <p className="text-2xl font-bold text-slate-900">{metrics.pendingPayment}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* AI Insights Panel */}
+        {(expenseAnalysis.insights.length > 0 || expenseAnalysis.recommendations.length > 0) && (
+          <Card className="bg-gradient-to-r from-blue-50 to-purple-50 border-blue-200/50">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Brain className="w-5 h-5 text-blue-600" />
+                {t('ai_expense_insights')}
+                <Badge className="bg-blue-100 text-blue-700 text-xs">{t('live')}</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {expenseAnalysis.insights.slice(0, 3).map((insight, index) => (
+                  <div key={index} className="bg-white rounded-lg p-4 shadow-sm border border-blue-100">
+                    <div className="flex items-start gap-3">
+                      {insight.type === 'positive' ? (
+                        <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
+                      ) : insight.type === 'warning' ? (
+                        <AlertTriangle className="w-5 h-5 text-orange-500 mt-0.5" />
+                      ) : (
+                        <Target className="w-5 h-5 text-blue-500 mt-0.5" />
+                      )}
+                      <div>
+                        <h4 className="font-medium text-slate-900 text-sm">{insight.title}</h4>
+                        <p className="text-xs text-slate-600 mt-0.5">{insight.description}</p>
+                        {insight.metric && (
+                          <p className="text-lg font-bold text-blue-600 mt-1">{insight.metric}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {expenseAnalysis.recommendations.length > 0 && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {expenseAnalysis.recommendations.map((rec, index) => (
+                    <button
+                      key={index}
+                      onClick={() => handleRecommendationClick(rec)}
+                      className="flex items-center gap-2 text-xs bg-white rounded-full px-3 py-1.5 border border-blue-100 hover:bg-blue-50 hover:border-blue-300 transition-colors cursor-pointer"
+                      title={t('ask_ai_about_this')}
+                    >
+                      <Lightbulb className="w-3 h-3 text-yellow-500" />
+                      <span className="text-slate-700">{rec.action}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Category Breakdown */}
+        {chartData.length > 0 && (
+          <Card className="bg-white/80 backdrop-blur-sm">
+            <CardHeader>
+              <CardTitle>{t('expense_claims_by_category')}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={280}>
+                <PieChart>
+                  <Pie
+                    data={chartData}
+                    cx="50%"
+                    cy="45%"
+                    innerRadius={40}
+                    outerRadius={70}
+                    fill="#8884d8"
+                    dataKey="value"
+                    paddingAngle={2}
+                  >
+                    {chartData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value) => formatCurrency(value)} />
+                  <Legend
+                    layout="horizontal"
+                    align="center"
+                    verticalAlign="bottom"
+                    wrapperStyle={{ paddingTop: '10px' }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Claims Table */}
+        <Card className="bg-white/80 backdrop-blur-sm">
+            <CardHeader className="border-b">
+              <div className="flex items-center justify-between">
+                <CardTitle>{t('expense_claims')}</CardTitle>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={handleExportToExcel}
+                    variant="outline"
+                    className="border-blue-200 text-blue-700 hover:bg-blue-50"
+                  >
+                    <Download className="w-4 h-4 mr-2" /> {t('export')}
+                  </Button>
+                  {canCreate(MODULES.FINANCIALS) && (
+                    <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]">
+                      <Plus className="w-4 h-4 mr-2" /> {t('new_claim')}
+                    </Button>
+                  )}
+                </div>
+              </div>
+              <div className="flex gap-3 mt-4">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <Input
+                    placeholder={t('search_claims')}
+                    className="pl-9"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-[150px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t('all_status')}</SelectItem>
+                    <SelectItem value="draft">{t('draft')}</SelectItem>
+                    <SelectItem value="submitted">{t('submitted')}</SelectItem>
+                    <SelectItem value="approved">{t('approved')}</SelectItem>
+                    <SelectItem value="rejected">{t('rejected')}</SelectItem>
+                    <SelectItem value="paid">{t('paid')}</SelectItem>
+                    <SelectItem value="cancelled">{t('cancelled')}</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {/* Profit-tax recognition filter — mirrors §8.2 of the TZ. */}
+                <Select value={recognitionFilter} onValueChange={setRecognitionFilter}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t('recognition_all') || 'Barchasi (tan olish)'}</SelectItem>
+                    <SelectItem value="recognized">{t('recognition_recognized') || 'Tan olingan'}</SelectItem>
+                    <SelectItem value="unrecognized">{t('recognition_unrecognized') || 'Tan olinmagan'}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              {isLoading ? (
+                <div className="flex items-center justify-center py-16">
+                  <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                </div>
+              ) : filteredClaims.length === 0 ? (
+                <div className="text-center py-16">
+                  <Receipt className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+                  <p className="text-slate-500">{t('no_expense_claims_yet')}</p>
+                  {canCreate(MODULES.FINANCIALS) && (
+                    <Button onClick={() => setShowCreateModal(true)} className="mt-4">{t('submit_first_claim')}</Button>
+                  )}
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-slate-50">
+                        <TableHead>{t('claim_number')}</TableHead>
+                        <TableHead>{t('employee')}</TableHead>
+                        <TableHead>{t('date')}</TableHead>
+                        <TableHead>{t('category')}</TableHead>
+                        <TableHead>{t('amount')}</TableHead>
+                        <TableHead>{t('recognition') || 'Tan olinadi?'}</TableHead>
+                        <TableHead>{t('status')}</TableHead>
+                        <TableHead>{t('actions')}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredClaims.map((claim) => {
+                        // Treat missing flag as recognized (matches DB
+                        // default from migration 336). Row tint follows
+                        // the colour standard from §8.3 of the TZ:
+                        // light-green for recognized, light-red otherwise.
+                        const isRecognized = claim.is_recognized !== false;
+                        const rowTint = isRecognized
+                          ? 'hover:bg-emerald-50/60'
+                          : 'bg-red-50/50 hover:bg-red-50';
+                        return (
+                        <TableRow key={claim.id} className={rowTint}>
+                          <TableCell className="font-mono text-sm">{claim.claim_number}</TableCell>
+                          <TableCell className="font-medium">{claim.employee_name}</TableCell>
+                          <TableCell className="text-sm">
+                            {claim.expense_date ? format(new Date(claim.expense_date), 'dd.MM.yyyy') : '-'}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{t(claim.category)}</Badge>
+                          </TableCell>
+                          <TableCell className="font-semibold">{formatCurrency(claim.amount || 0)}</TableCell>
+                          <TableCell>
+                            {/* Recognition toggle — click flips is_recognized
+                                via PATCH /expenses/:id/recognize. Guarded
+                                by the same update permission as the edit
+                                button so view-only users can't toggle. */}
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className={`h-7 px-2 rounded-full text-xs font-medium border ${
+                                isRecognized
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                                  : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                              }`}
+                              disabled={!canUpdate(MODULES.FINANCIALS)}
+                              title={
+                                isRecognized
+                                  ? (t('recognition_click_to_unrecognize') || 'Tan olinmaydi qilish uchun bosing')
+                                  : (t('recognition_click_to_recognize') || 'Tan olinadi qilish uchun bosing')
+                              }
+                              onClick={async () => {
+                                try {
+                                  await recognizeExpense(claim.id, !isRecognized);
+                                } catch (e) {
+                                  console.error('Failed to toggle recognition', e);
+                                }
+                              }}
+                            >
+                              {isRecognized ? (t('recognized_short') || 'HA') : (t('unrecognized_short') || "YO'Q")}
+                            </Button>
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={getStatusColor(claim.status)}>{t(claim.status)}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              {canUpdate(MODULES.FINANCIALS) && (
+                                <Button size="sm" variant="ghost" onClick={() => handleEditClaim(claim)} title={t('edit_claim')}>
+                                  <Edit2 className="w-4 h-4" />
+                                </Button>
+                              )}
+                              {canUpdate(MODULES.FINANCIALS) && claim.status === 'draft' && (
+                                <Button size="sm" variant="ghost" onClick={() => updateClaimStatus(claim.id, 'submitted')}>
+                                  {t('submit')}
+                                </Button>
+                              )}
+                              {canUpdate(MODULES.FINANCIALS) && (claim.status === 'submitted' || claim.status === 'pending') && (
+                                <>
+                                  <Button size="sm" variant="ghost" className="text-green-600" onClick={() => updateClaimStatus(claim.id, 'approved')} title={t('approve')}>
+                                    <CheckCircle className="w-4 h-4" />
+                                  </Button>
+                                  <Button size="sm" variant="ghost" className="text-red-600" onClick={() => updateClaimStatus(claim.id, 'rejected')} title={t('reject')}>
+                                    <XCircle className="w-4 h-4" />
+                                  </Button>
+                                </>
+                              )}
+                              {canUpdate(MODULES.FINANCIALS) && claim.status === 'approved' && (
+                                <Button size="sm" variant="ghost" onClick={() => updateClaimStatus(claim.id, 'paid')}>
+                                  {t('pay')}
+                                </Button>
+                              )}
+                              {canDelete(MODULES.FINANCIALS) && (claim.status === 'draft' || claim.status === 'rejected') && (
+                                <Button size="sm" variant="ghost" onClick={() => handleDeleteClick(claim)} title={t('delete_claim')}>
+                                  <Trash2 className="w-4 h-4 text-red-500" />
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+        {/* Create Claim Modal */}
+        <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Brain className="w-5 h-5 text-blue-600" />
+                {t('submit_expense_claim')}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium mb-1 block">{t('employee_name')} *</label>
+                  <Select value={newClaim.employee_name} onValueChange={(value) => setNewClaim({...newClaim, employee_name: value})}>
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('select_employee')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(employees || []).map((emp) => (
+                        <SelectItem key={emp.id} value={emp.full_name || `${emp.first_name || ''} ${emp.last_name || ''}`.trim()}>
+                          {emp.full_name || `${emp.first_name || ''} ${emp.last_name || ''}`.trim()}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="text-sm font-medium mb-1 block">{t('expense_date')} *</label>
+                  <Input
+                    type="date"
+                    value={newClaim.expense_date}
+                    onChange={(e) => setNewClaim({...newClaim, expense_date: e.target.value})}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-1 block">{t('category')} *</label>
+                  <Select
+                    value={newClaim.category_id || ''}
+                    onValueChange={(value) => {
+                      const picked = categories.find((c) => c.id === value);
+                      setNewClaim({
+                        ...newClaim,
+                        category_id: value,
+                        // Keep the name in sync so the legacy `category`
+                        // text column still gets a sensible value on
+                        // backends that haven't migrated to category_id.
+                        category: picked?.name || '',
+                      });
+                    }}
+                    disabled={categoriesLoading || categories.length === 0}
+                  >
+                    <SelectTrigger>
+                      <SelectValue
+                        placeholder={
+                          categoriesLoading
+                            ? (t('loading') || 'Loading…')
+                            : categories.length === 0
+                              ? (t('no_categories_yet') || 'No categories yet')
+                              : (t('select_category') || 'Select category')
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name}
+                          {c.account_code && (
+                            <span className="ml-2 text-[10px] font-mono text-slate-400">
+                              {c.account_code}
+                            </span>
+                          )}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {!categoriesLoading && categories.length === 0 && (
+                    <p className="text-[11px] text-amber-700 mt-1">
+                      {t('no_categories_create_first')
+                        || 'No categories yet — '}
+                      <Link
+                        to="/settings?tab=expenses"
+                        className="underline font-medium"
+                      >
+                        {t('create_in_settings') || 'create one in Settings'}
+                      </Link>
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-1 block">{t('amount')} *</label>
+                  <Input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0"
+                    value={formatAmountForInput(newClaim.amount)}
+                    onChange={(e) => setNewClaim({ ...newClaim, amount: stripAmountInput(e.target.value) })}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium mb-1 block">{t('description')}</label>
+                <Input
+                  placeholder={t('expense_description')}
+                  value={newClaim.description}
+                  onChange={(e) => setNewClaim({...newClaim, description: e.target.value})}
+                />
+              </div>
+
+              {/* Profit-tax recognition toggle — lets the submitter flag
+                  non-deductible expenses up front (fines, undocumented
+                  spending, personal costs). Defaults to "recognized"
+                  which matches the DB default from migration 336. */}
+              <div className="flex items-center justify-between rounded-md border p-3">
+                <div className="text-sm">
+                  <p className="font-medium">{t('recognition') || 'Tan olinadi?'}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {t('recognition_help') || "Tan olinmagan xarajat foyda solig'i bazasidan chiqarilmaydi."}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className={`h-7 px-3 rounded-full text-xs font-medium ${
+                    newClaim.is_recognized
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                      : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                  }`}
+                  onClick={() => setNewClaim({ ...newClaim, is_recognized: !newClaim.is_recognized })}
+                >
+                  {newClaim.is_recognized ? (t('recognized_short') || 'HA') : (t('unrecognized_short') || "YO'Q")}
+                </Button>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <Button variant="outline" onClick={() => setShowCreateModal(false)} className="flex-1">
+                  {t('cancel')}
+                </Button>
+                <Button
+                  onClick={handleCreateClaim}
+                  className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
+                  disabled={!newClaim.amount || !newClaim.employee_name || !newClaim.category_id || isSubmitting}
+                >
+                  {isSubmitting ? t('submitting') : t('submit_claim')}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{t('confirm_delete_claim')}</AlertDialogTitle>
+              <AlertDialogDescription>
+                {t('delete_claim_confirm')} <strong>{claimToDelete?.claim_number}</strong>? {t('action_cannot_undone')}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDeleteClaim}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                {t('delete')}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Edit Claim Modal */}
+        <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>{t('edit_expense_claim')}</DialogTitle>
+            </DialogHeader>
+            {editClaim && (
+              <div className="space-y-4 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">{t('employee_name')} *</label>
+                    <Select value={editClaim.employee_name} onValueChange={(value) => setEditClaim({...editClaim, employee_name: value})}>
+                      <SelectTrigger>
+                        <SelectValue placeholder={t('select_employee')} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(employees || []).map((emp) => (
+                          <SelectItem key={emp.id} value={emp.full_name || `${emp.first_name || ''} ${emp.last_name || ''}`.trim()}>
+                            {emp.full_name || `${emp.first_name || ''} ${emp.last_name || ''}`.trim()}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">{t('expense_date')}</label>
+                    <Input
+                      type="date"
+                      value={editClaim.expense_date?.split('T')[0] || ''}
+                      onChange={(e) => setEditClaim({...editClaim, expense_date: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">{t('category')}</label>
+                    <Select
+                      value={editClaim.category_id || ''}
+                      onValueChange={(value) => {
+                        const picked = categories.find((c) => c.id === value);
+                        setEditClaim({
+                          ...editClaim,
+                          category_id: value,
+                          category: picked?.name || editClaim.category || '',
+                        });
+                      }}
+                      disabled={categoriesLoading || categories.length === 0}
+                    >
+                      <SelectTrigger>
+                        <SelectValue
+                          placeholder={
+                            categories.length === 0
+                              ? (t('no_categories_yet') || 'No categories yet')
+                              : (t('select_category') || 'Select category')
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categories.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.name}
+                            {c.account_code && (
+                              <span className="ml-2 text-[10px] font-mono text-slate-400">
+                                {c.account_code}
+                              </span>
+                            )}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">{t('amount')} *</label>
+                    <Input
+                      type="text"
+                      inputMode="decimal"
+                      value={formatAmountForInput(editClaim.amount)}
+                      onChange={(e) => setEditClaim({ ...editClaim, amount: stripAmountInput(e.target.value) })}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium mb-1 block">{t('status')}</label>
+                  <Select value={editClaim.status || 'pending'} onValueChange={(value) => setEditClaim({...editClaim, status: value})}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pending">{t('pending')}</SelectItem>
+                      <SelectItem value="approved">{t('approved')}</SelectItem>
+                      <SelectItem value="rejected">{t('rejected')}</SelectItem>
+                      <SelectItem value="paid">{t('paid')}</SelectItem>
+                      <SelectItem value="cancelled">{t('cancelled')}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium mb-1 block">{t('description')}</label>
+                  <Input
+                    value={editClaim.description || ''}
+                    onChange={(e) => setEditClaim({...editClaim, description: e.target.value})}
+                  />
+                </div>
+
+                {/* Same recognition toggle as the create modal — reusing
+                    the same component-level semantics so a row can be
+                    re-classified without having to use the table pill. */}
+                <div className="flex items-center justify-between rounded-md border p-3">
+                  <div className="text-sm">
+                    <p className="font-medium">{t('recognition') || 'Tan olinadi?'}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {t('recognition_help') || "Tan olinmagan xarajat foyda solig'i bazasidan chiqarilmaydi."}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className={`h-7 px-3 rounded-full text-xs font-medium ${
+                      editClaim.is_recognized !== false
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                        : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                    }`}
+                    onClick={() => setEditClaim({ ...editClaim, is_recognized: !(editClaim.is_recognized !== false) })}
+                  >
+                    {editClaim.is_recognized !== false
+                      ? (t('recognized_short') || 'HA')
+                      : (t('unrecognized_short') || "YO'Q")}
+                  </Button>
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <Button variant="outline" onClick={() => { setShowEditModal(false); setEditClaim(null); }} className="flex-1">
+                    {t('cancel')}
+                  </Button>
+                  <Button
+                    onClick={handleUpdateClaim}
+                    className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
+                    disabled={!editClaim.employee_name || isSubmitting}
+                  >
+                    {isSubmitting ? t('saving') : t('save_changes')}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+      </div>
+    </div>
+  );
+}

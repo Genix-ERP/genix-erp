@@ -39,7 +39,7 @@ import {
   FileText,
   Search,
   Plus,
-  Edit2,
+  Edit,
   Trash2,
   Eye,
   CalendarDays,
@@ -533,7 +533,7 @@ export default function BlanketOrders() {
                               size="sm"
                               onClick={() => handleEdit(order)}
                             >
-                              <Edit2 className="w-4 h-4" />
+                              <Edit className="w-4 h-4" />
                             </Button>
                             <Button
                               variant="ghost"
@@ -908,7 +908,7 @@ export default function BlanketOrders() {
                       {t('activate')}
                     </Button>
                     <Button variant="outline" onClick={() => handleEdit(selectedOrder)}>
-                      <Edit2 className="w-4 h-4 mr-2" />
+                      <Edit className="w-4 h-4 mr-2" />
                       {t('edit')}
                     </Button>
                   </div>

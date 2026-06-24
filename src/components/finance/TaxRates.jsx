@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Plus, Search, Percent, Pencil, Trash2, CheckCircle, XCircle,
+  Plus, Search, Percent, Edit, Trash2, CheckCircle, XCircle,
   Calculator, ShoppingCart, Package, AlertCircle, Receipt
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -331,7 +331,7 @@ export default function TaxRates({ hideReports = false }) {
                                 onClick={() => handleEdit(taxRate)}
                                 className="h-8 w-8 p-0"
                               >
-                                <Pencil className="w-4 h-4 text-slate-500" />
+                                <Edit className="w-4 h-4 text-slate-500" />
                               </Button>
                             )}
                             {canDelete(MODULES.FINANCIALS) && (
@@ -501,7 +501,7 @@ export default function TaxRates({ hideReports = false }) {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
-              <Pencil className="w-5 h-5 text-[var(--genix-blue)]" />
+              <Edit className="w-5 h-5 text-[var(--genix-blue)]" />
               {t('edit_tax_rate') || 'Edit Tax Rate'}
             </DialogTitle>
           </DialogHeader>
@@ -708,7 +708,7 @@ export default function TaxRates({ hideReports = false }) {
                       <div className="flex items-center gap-0.5">
                         {canUpdate(MODULES.FINANCIALS) && (
                           <Button variant="ghost" size="sm" onClick={() => handleEdit(taxRate)} className="h-7 w-7 p-0">
-                            <Pencil className="w-3.5 h-3.5 text-slate-400" />
+                            <Edit className="w-3.5 h-3.5 text-slate-400" />
                           </Button>
                         )}
                         {canDelete(MODULES.FINANCIALS) && (

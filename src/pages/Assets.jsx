@@ -10,7 +10,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Monitor, TrendingDown, Wrench, DollarSign, AlertTriangle, Brain, CheckCircle, Target, Lightbulb, Edit2, Download, Trash2, ArrowRightLeft, History, Printer, FileText } from 'lucide-react';
+import { Plus, Search, Monitor, TrendingDown, Wrench, DollarSign, AlertTriangle, Brain, CheckCircle, Target, Lightbulb, Edit, Download, Trash2, ArrowRightLeft, History, Printer, FileText } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { analyzeAssets } from '@/api/services/aiAnalytics';
 import financeService from '@/api/services/finance';
@@ -644,7 +644,7 @@ export default function Assets() {
                           <div className="flex gap-1">
                             {canUpdate(MODULES.ASSETS) && (
                               <Button size="sm" variant="ghost" onClick={() => handleEditAsset(asset)} title={t('edit_asset')}>
-                                <Edit2 className="w-4 h-4" />
+                                <Edit className="w-4 h-4" />
                               </Button>
                             )}
                             {canUpdate(MODULES.ASSETS) && (

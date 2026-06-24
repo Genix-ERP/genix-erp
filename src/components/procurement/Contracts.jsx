@@ -33,7 +33,7 @@ import {
   FileText,
   Search,
   Plus,
-  Edit2,
+  Edit,
   Trash2,
   Eye,
   CalendarDays,
@@ -460,7 +460,7 @@ export default function Contracts() {
                               <Eye className="w-4 h-4" />
                             </Button>
                             <Button size="icon" variant="ghost" onClick={() => handleEdit(contract)}>
-                              <Edit2 className="w-4 h-4" />
+                              <Edit className="w-4 h-4" />
                             </Button>
                             {contract.status === "draft" && (
                               <Button

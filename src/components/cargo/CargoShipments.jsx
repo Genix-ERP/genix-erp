@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
-  Plus, Search, Eye, Trash2, Upload, Download, Ship, Pencil, Edit
+  Plus, Search, Eye, Trash2, Upload, Download, Ship, Edit
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -501,7 +501,7 @@ export default function CargoShipments() {
                           size="sm"
                           onClick={() => handleEditShipment(shipment)}
                         >
-                          <Pencil className="w-4 h-4" />
+                          <Edit className="w-4 h-4" />
                         </Button>
                         <Button
                           variant="ghost"

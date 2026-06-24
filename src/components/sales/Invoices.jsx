@@ -40,7 +40,7 @@ import {
   CheckCircle,
   MoreVertical,
   Eye,
-  Pencil,
+  Edit,
   Trash2,
   DollarSign,
   Calendar,
@@ -1069,7 +1069,7 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                                 <>
                                   {(invoice.invoice_type || "invoice") === "invoice" && (
                                     <DropdownMenuItem onClick={() => handleEdit(invoice)}>
-                                      <Pencil className="w-4 h-4 mr-2" />
+                                      <Edit className="w-4 h-4 mr-2" />
                                       {t('edit')}
                                     </DropdownMenuItem>
                                   )}

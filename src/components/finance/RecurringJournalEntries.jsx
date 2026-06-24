@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import {
-  Plus, RefreshCw, Edit2, Trash2, Play, Calendar, Clock,
+  Plus, RefreshCw, Edit, Trash2, Play, Calendar, Clock,
   CheckCircle2, XCircle, AlertTriangle, Eye, Search
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -600,7 +600,7 @@ export default function RecurringJournalEntries() {
                               onClick={() => openEditModal(template)}
                               title={t('edit')}
                             >
-                              <Edit2 className="h-4 w-4" />
+                              <Edit className="h-4 w-4" />
                             </Button>
                           </>
                         )}
@@ -986,7 +986,7 @@ export default function RecurringJournalEntries() {
                 setShowViewModal(false);
                 openEditModal(selectedTemplate);
               }}>
-                <Edit2 className="h-4 w-4 mr-2" />
+                <Edit className="h-4 w-4 mr-2" />
                 {t('edit')}
               </Button>
             )}
