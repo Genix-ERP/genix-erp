@@ -165,6 +165,37 @@ export default function ProjectDetail() {
     notes: '',
   });
 
+  // Expense categories: built-in keys + tenant-wide custom ones from the backend
+  const DEFAULT_EXPENSE_CATEGORIES = ['travel', 'materials', 'equipment', 'software', 'services', 'other'];
+  const [customExpenseCategories, setCustomExpenseCategories] = useState([]); // [{id, name}]
+  const [showCategoryDialog, setShowCategoryDialog] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const categoryLabel = (c) => DEFAULT_EXPENSE_CATEGORIES.includes(c) ? (t(c) || c) : c;
+
+  const loadExpenseCategories = async () => {
+    try {
+      const data = await projectsService.listExpenseCategories();
+      setCustomExpenseCategories(data || []);
+    } catch (error) {
+      console.error('Error loading expense categories:', error);
+    }
+  };
+
+  const handleAddCategory = async () => {
+    const name = newCategoryName.trim();
+    if (!name) return;
+    try {
+      await projectsService.createExpenseCategory(name);
+      await loadExpenseCategories();
+    } catch (error) {
+      console.error('Error adding category:', error);
+      toast.error(t('error_saving_category') || 'Error saving category');
+    }
+    setNewExpense(prev => ({ ...prev, category: name }));
+    setNewCategoryName('');
+    setShowCategoryDialog(false);
+  };
+
   const [newTask, setNewTask] = useState({
     title: '',
     description: '',
@@ -218,6 +249,12 @@ export default function ProjectDetail() {
       }
     };
     fetchVendors();
+  }, []);
+
+  // Load tenant-wide expense categories
+  useEffect(() => {
+    loadExpenseCategories();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // For backwards compatibility with task assignee
@@ -980,6 +1017,23 @@ export default function ProjectDetail() {
     pending: milestones.filter(m => m.status === 'pending').length,
   };
 
+  // ---- Overview report metrics (computed from live data) ----
+  const reportLoggedHours = timeEntries.reduce((s, e) => s + (e.hours || 0), 0);
+  const reportBillableHours = timeEntries.filter(e => e.billable).reduce((s, e) => s + (e.hours || 0), 0);
+  const reportBillableAmount = timeEntries.filter(e => e.billable).reduce((s, e) => s + (e.amount || 0), 0);
+  const reportExpensesTotal = expenses.reduce((s, e) => s + (e.amount || 0), 0);
+  const reportSpent = Number(project?.spent || 0);
+  const reportBudget = Number(project?.budget || 0);
+  const reportBudgetPct = reportBudget > 0 ? (reportSpent / reportBudget) * 100 : 0;
+  const reportRemaining = reportBudget - reportSpent;
+  const reportTodayStr = new Date().toDateString();
+  const reportOverdue = tasks.filter(tk => {
+    const d = tk.due_date ? new Date(tk.due_date) : null;
+    return d && d < new Date(reportTodayStr) && tk.status !== 'completed';
+  }).length;
+  const reportTaskPct = taskStats.total > 0 ? Math.round((taskStats.completed / taskStats.total) * 100) : 0;
+  const reportMilestonePct = milestoneStats.total > 0 ? Math.round((milestoneStats.completed / milestoneStats.total) * 100) : 0;
+
   // Tasks shown in list/kanban, optionally filtered to the current user + milestone
   let displayedTasks = tasks;
   if (onlyMine) displayedTasks = displayedTasks.filter(tk => tk.assignee_id && tk.assignee_id === currentEmployeeId);
@@ -1055,8 +1109,17 @@ export default function ProjectDetail() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{project.progress || 0}%</div>
-              <Progress value={project.progress || 0} className="mt-2" />
+              {(() => {
+                // Auto-derive from task completion; fall back to the stored
+                // project.progress only when there are no tasks.
+                const p = taskStats.total > 0 ? reportTaskPct : (project.progress || 0);
+                return (
+                  <>
+                    <div className="text-2xl font-bold">{p}%</div>
+                    <Progress value={p} className="mt-2" />
+                  </>
+                );
+              })()}
             </CardContent>
           </Card>
 
@@ -1792,7 +1855,7 @@ export default function ProjectDetail() {
                             {expense.expense_date && format(parseISO(expense.expense_date), 'MMM dd, yyyy')}
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline">{expense.category || t('general') || 'General'}</Badge>
+                            <Badge variant="outline">{expense.category ? categoryLabel(expense.category) : (t('general') || 'General')}</Badge>
                           </TableCell>
                           <TableCell className="max-w-[200px] truncate">
                             {expense.description}
@@ -1832,65 +1895,139 @@ export default function ProjectDetail() {
           </TabsContent>
 
           {/* Overview Tab */}
-          <TabsContent value="overview" className="mt-6">
+          <TabsContent value="overview" className="mt-6 space-y-6">
+            {/* KPI row */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {[
+                { label: t('task_completion') || 'Tasks done', value: `${taskStats.completed}/${taskStats.total}`, sub: `${reportTaskPct}%`, icon: ListTodo, cls: 'text-blue-600', bg: 'bg-blue-100' },
+                { label: t('milestones') || 'Milestones', value: `${milestoneStats.completed}/${milestoneStats.total}`, sub: `${reportMilestonePct}%`, icon: Target, cls: 'text-amber-600', bg: 'bg-amber-100' },
+                { label: t('total_hours') || 'Hours logged', value: `${reportLoggedHours.toFixed(1)} ${t('hours_short') || 'h'}`, sub: `${reportBillableHours.toFixed(1)} ${t('billable_hours') || 'billable'}`, icon: Clock, cls: 'text-purple-600', bg: 'bg-purple-100' },
+                { label: t('overdue') || 'Overdue', value: `${reportOverdue}`, sub: t('tasks') || 'tasks', icon: AlertCircle, cls: reportOverdue > 0 ? 'text-red-600' : 'text-slate-600', bg: reportOverdue > 0 ? 'bg-red-100' : 'bg-slate-100' },
+              ].map((k, i) => {
+                const Icon = k.icon;
+                return (
+                  <Card key={i}>
+                    <CardContent className="p-4 flex items-center gap-3">
+                      <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${k.bg} ${k.cls}`}><Icon className="w-5 h-5" /></div>
+                      <div className="min-w-0">
+                        <div className={`text-xl font-bold leading-none ${k.cls}`}>{k.value}</div>
+                        <div className="text-xs text-slate-500 mt-1 truncate">{k.label} · {k.sub}</div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Task status breakdown */}
               <Card>
-                <CardHeader>
-                  <CardTitle>{t('project_details') || 'Project Details'}</CardTitle>
-                </CardHeader>
+                <CardHeader><CardTitle className="text-base">{t('tasks') || 'Tasks'} {t('by_status') || 'by status'}</CardTitle></CardHeader>
                 <CardContent className="space-y-3">
-                  <div>
-                    <Label className="text-muted-foreground">{t('project_code') || 'Project Code'}</Label>
-                    <p className="font-medium">{project.project_code}</p>
+                  {stages.length === 0 || taskStats.total === 0 ? (
+                    <p className="text-sm text-muted-foreground">{t('no_tasks') || 'No tasks yet'}</p>
+                  ) : stages.map((s) => {
+                    const count = tasks.filter(tk => (tk.status || stages[0]?.stage_key) === s.stage_key).length;
+                    const pctv = taskStats.total > 0 ? (count / taskStats.total) * 100 : 0;
+                    return (
+                      <div key={s.id}>
+                        <div className="flex justify-between text-sm mb-1">
+                          <span className="flex items-center gap-2"><span className={`px-2 py-0.5 rounded text-xs font-semibold ${s.color || 'bg-slate-100 text-slate-700'}`}>{stageLabel(s)}</span></span>
+                          <span className="font-semibold text-slate-700">{count}</span>
+                        </div>
+                        <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                          <div className="h-full bg-slate-400 rounded-full" style={{ width: `${pctv}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </CardContent>
+              </Card>
+
+              {/* Budget report */}
+              <Card>
+                <CardHeader><CardTitle className="text-base">{t('budget') || 'Budget'}</CardTitle></CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-3 gap-3 text-center">
+                    <div>
+                      <div className="text-lg font-bold text-slate-800">{formatCurrencyCompact(reportBudget)}</div>
+                      <div className="text-xs text-slate-500">{t('budget') || 'Budget'}</div>
+                    </div>
+                    <div>
+                      <div className="text-lg font-bold text-orange-600">{formatCurrencyCompact(reportSpent)}</div>
+                      <div className="text-xs text-slate-500">{t('spent') || 'Spent'}</div>
+                    </div>
+                    <div>
+                      <div className={`text-lg font-bold ${reportRemaining < 0 ? 'text-red-600' : 'text-green-600'}`}>{formatCurrencyCompact(reportRemaining)}</div>
+                      <div className="text-xs text-slate-500">{t('remaining') || 'Remaining'}</div>
+                    </div>
                   </div>
                   <div>
-                    <Label className="text-muted-foreground">{t('billing_type') || 'Billing Type'}</Label>
-                    <p className="font-medium">{t(project.billing_type) || project.billing_type}</p>
-                  </div>
-                  <div>
-                    <Label className="text-muted-foreground">{t('priority') || 'Priority'}</Label>
-                    <div className="mt-1">{getPriorityBadge(project.priority)}</div>
-                  </div>
-                  <div>
-                    <Label className="text-muted-foreground">{t('status') || 'Status'}</Label>
-                    <p className="font-medium capitalize">{project.status}</p>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span>{t('budget_utilization') || 'Budget utilization'}</span>
+                      <span className={`font-semibold ${reportBudgetPct > 100 ? 'text-red-600' : ''}`}>{Math.round(reportBudgetPct)}%</span>
+                    </div>
+                    <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden">
+                      <div className={`h-full rounded-full ${reportBudgetPct > 100 ? 'bg-red-500' : 'bg-blue-500'}`} style={{ width: `${Math.min(reportBudgetPct, 100)}%` }} />
+                    </div>
+                    {reportBudgetPct > 100 && (
+                      <p className="text-xs text-red-600 mt-1 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{t('over_budget') || 'Over budget'}</p>
+                    )}
                   </div>
                 </CardContent>
               </Card>
 
+              {/* Time & billing report */}
               <Card>
-                <CardHeader>
-                  <CardTitle>{t('statistics') || 'Statistics'}</CardTitle>
-                </CardHeader>
+                <CardHeader><CardTitle className="text-base">{t('time') || 'Time'} & {t('billing_type') || 'billing'}</CardTitle></CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
-                    <div>
-                      <div className="flex justify-between mb-1">
-                        <span className="text-sm">{t('task_completion') || 'Task Completion'}</span>
-                        <span className="text-sm font-semibold">
-                          {taskStats.total > 0 ? Math.round((taskStats.completed / taskStats.total) * 100) : 0}%
-                        </span>
-                      </div>
-                      <Progress value={taskStats.total > 0 ? (taskStats.completed / taskStats.total) * 100 : 0} />
+                  <div className="grid grid-cols-3 gap-3 text-center">
+                    <div className="p-3 rounded-lg bg-blue-50">
+                      <div className="text-lg font-bold text-blue-600">{reportLoggedHours.toFixed(1)} {t('hours_short') || 'h'}</div>
+                      <div className="text-xs text-blue-600">{t('total_hours') || 'Total'}</div>
                     </div>
-                    <div>
-                      <div className="flex justify-between mb-1">
-                        <span className="text-sm">{t('milestone_completion') || 'Milestone Completion'}</span>
-                        <span className="text-sm font-semibold">
-                          {milestoneStats.total > 0 ? Math.round((milestoneStats.completed / milestoneStats.total) * 100) : 0}%
-                        </span>
-                      </div>
-                      <Progress value={milestoneStats.total > 0 ? (milestoneStats.completed / milestoneStats.total) * 100 : 0} />
+                    <div className="p-3 rounded-lg bg-green-50">
+                      <div className="text-lg font-bold text-green-600">{reportBillableHours.toFixed(1)} {t('hours_short') || 'h'}</div>
+                      <div className="text-xs text-green-600">{t('billable_hours') || 'Billable'}</div>
                     </div>
-                    <div>
-                      <div className="flex justify-between mb-1">
-                        <span className="text-sm">{t('budget_utilization') || 'Budget Utilization'}</span>
-                        <span className="text-sm font-semibold">
-                          {project.budget > 0 ? Math.round(((project.spent || 0) / project.budget) * 100) : 0}%
-                        </span>
-                      </div>
-                      <Progress value={project.budget > 0 ? ((project.spent || 0) / project.budget) * 100 : 0} />
+                    <div className="p-3 rounded-lg bg-purple-50">
+                      <div className="text-lg font-bold text-purple-600">{formatCurrencyCompact(reportBillableAmount)}</div>
+                      <div className="text-xs text-purple-600">{t('billable_amount') || 'Amount'}</div>
                     </div>
+                  </div>
+                  <div className="flex justify-between text-sm mt-4 pt-3 border-t border-slate-100">
+                    <span className="text-slate-500">{t('total_expenses') || 'Total expenses'}</span>
+                    <span className="font-semibold">{formatCurrency(reportExpensesTotal)}</span>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Project details */}
+              <Card>
+                <CardHeader><CardTitle className="text-base">{t('project_details') || 'Project details'}</CardTitle></CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex justify-between">
+                    <span className="text-sm text-slate-500">{t('project_code') || 'Project code'}</span>
+                    <span className="text-sm font-medium">{project.project_code}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-slate-500">{t('billing_type') || 'Billing type'}</span>
+                    <span className="text-sm font-medium">{t(project.billing_type) || project.billing_type}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-slate-500">{t('priority') || 'Priority'}</span>
+                    {getPriorityBadge(project.priority)}
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-slate-500">{t('status') || 'Status'}</span>
+                    <span className="text-sm font-medium">{t(project.status) || project.status}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-slate-500">{t('timeline') || 'Timeline'}</span>
+                    <span className="text-sm font-medium">
+                      {project.start_date ? format(parseISO(project.start_date), 'MMM dd, yyyy') : '-'}
+                      {project.end_date ? ` → ${format(parseISO(project.end_date), 'MMM dd, yyyy')}` : ''}
+                    </span>
                   </div>
                 </CardContent>
               </Card>
@@ -2173,6 +2310,29 @@ export default function ProjectDetail() {
 
             <DialogFooter>
               <Button variant="outline" onClick={() => setNotesTask(null)}>{t('close') || 'Close'}</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Add expense category */}
+        <Dialog open={showCategoryDialog} onOpenChange={(o) => { setShowCategoryDialog(o); if (!o) setNewCategoryName(''); }}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>{t('add_category') || 'Add category'}</DialogTitle>
+            </DialogHeader>
+            <div>
+              <Label>{t('category') || 'Category'}</Label>
+              <Input
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleAddCategory(); }}
+                placeholder={t('category') || 'Category'}
+                autoFocus
+              />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => { setShowCategoryDialog(false); setNewCategoryName(''); }}>{t('cancel') || 'Cancel'}</Button>
+              <Button onClick={handleAddCategory} disabled={!newCategoryName.trim()}>{t('add') || 'Add'}</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -2531,18 +2691,24 @@ export default function ProjectDetail() {
                   <Label>{t('category') || 'Category'}</Label>
                   <Select
                     value={newExpense.category}
-                    onValueChange={(value) => setNewExpense({ ...newExpense, category: value })}
+                    onValueChange={(value) => {
+                      if (value === '__add__') { setShowCategoryDialog(true); return; }
+                      setNewExpense({ ...newExpense, category: value });
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder={t('select_category') || 'Select category'} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="travel">{t('travel') || 'Travel'}</SelectItem>
-                      <SelectItem value="materials">{t('materials') || 'Materials'}</SelectItem>
-                      <SelectItem value="equipment">{t('equipment') || 'Equipment'}</SelectItem>
-                      <SelectItem value="software">{t('software') || 'Software'}</SelectItem>
-                      <SelectItem value="services">{t('services') || 'Services'}</SelectItem>
-                      <SelectItem value="other">{t('other') || 'Other'}</SelectItem>
+                      {DEFAULT_EXPENSE_CATEGORIES.map((c) => (
+                        <SelectItem key={c} value={c}>{categoryLabel(c)}</SelectItem>
+                      ))}
+                      {customExpenseCategories.map((c) => (
+                        <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                      ))}
+                      <SelectItem value="__add__" className="text-blue-600 font-medium">
+                        + {t('add_category') || 'Add category'}
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

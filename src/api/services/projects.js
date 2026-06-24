@@ -66,6 +66,19 @@ export const projectsService = {
     await apiClient.delete(`/projects/${projectId}/stages/${stageId}`);
   },
 
+  // Expense categories (tenant-wide)
+  async listExpenseCategories() {
+    const response = await apiClient.get(`/expense-categories`);
+    return response.data.data;
+  },
+  async createExpenseCategory(name) {
+    const response = await apiClient.post(`/expense-categories`, { name });
+    return response.data.data;
+  },
+  async deleteExpenseCategory(id) {
+    await apiClient.delete(`/expense-categories/${id}`);
+  },
+
   // Task Notes
   async listTaskNotes(projectId, taskId) {
     const response = await apiClient.get(`/projects/${projectId}/tasks/${taskId}/notes`);
