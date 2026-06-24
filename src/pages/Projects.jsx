@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useModules } from '@/components/contexts/ModulesContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -50,6 +50,11 @@ export default function Projects() {
   const [editProject, setEditProject] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'kanban'
+
+  // Refs for the custom drag preview (the native HTML5 drag image is unreliable
+  // on this page and drifts from the cursor / captures page artifacts).
+  const dragPreviewRef = useRef(null);
+  const dragMoveRef = useRef(null);
 
   // Default statuses with translations
   const DEFAULT_STATUSES = useMemo(() => DEFAULT_STATUS_IDS.map(id => ({
@@ -200,6 +205,55 @@ export default function Projects() {
 
   const handleDragStart = (e, project) => {
     e.dataTransfer.setData('projectId', project.id);
+    e.dataTransfer.effectAllowed = 'move';
+
+    const node = e.currentTarget;
+    const rect = node.getBoundingClientRect();
+    const offsetX = e.clientX - rect.left;
+    const offsetY = e.clientY - rect.top;
+
+    // Hide the native drag image with a 1x1 transparent pixel; we render our own
+    // preview so it sits exactly under the cursor and contains only the card.
+    const transparent = new Image();
+    transparent.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+    e.dataTransfer.setDragImage(transparent, 0, 0);
+
+    // Floating clone of just the card that follows the mouse.
+    const preview = node.cloneNode(true);
+    preview.style.position = 'fixed';
+    preview.style.top = '0';
+    preview.style.left = '0';
+    preview.style.width = `${rect.width}px`;
+    preview.style.margin = '0';
+    preview.style.boxShadow = '0 10px 25px rgba(0,0,0,0.18)';
+    preview.style.pointerEvents = 'none';
+    preview.style.zIndex = '99999';
+    preview.style.transform = `translate(${e.clientX - offsetX}px, ${e.clientY - offsetY}px)`;
+    document.body.appendChild(preview);
+    dragPreviewRef.current = preview;
+
+    // Track the cursor via dragover (clientX/Y are reliable there) and keep the
+    // preview pinned to the same grab point on the card.
+    const move = (ev) => {
+      if (ev.clientX === 0 && ev.clientY === 0) return; // ignore the final invalid event
+      preview.style.transform = `translate(${ev.clientX - offsetX}px, ${ev.clientY - offsetY}px)`;
+    };
+    dragMoveRef.current = move;
+    document.addEventListener('dragover', move);
+
+    node.style.opacity = '0.4';
+  };
+
+  const handleDragEnd = (e) => {
+    e.currentTarget.style.opacity = '';
+    if (dragMoveRef.current) {
+      document.removeEventListener('dragover', dragMoveRef.current);
+      dragMoveRef.current = null;
+    }
+    if (dragPreviewRef.current) {
+      dragPreviewRef.current.remove();
+      dragPreviewRef.current = null;
+    }
   };
 
   const handleDragOver = (e) => {
@@ -303,6 +357,7 @@ export default function Projects() {
       className={`bg-white border-slate-200 hover:shadow-lg transition-shadow ${draggable ? 'cursor-move' : 'cursor-pointer'}`}
       draggable={draggable}
       onDragStart={draggable ? (e) => handleDragStart(e, project) : undefined}
+      onDragEnd={draggable ? handleDragEnd : undefined}
       onClick={() => navigate(`/projects/${project.id}`)}
     >
       <CardHeader className="pb-3">
