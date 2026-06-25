@@ -45,6 +45,7 @@ import {
   Loader2,
   ChevronLeft,
   ChevronRight,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useSearchParams } from 'react-router-dom';
@@ -105,6 +106,35 @@ export default function PurchaseOrders() {
   const [activeTab, setActiveTab] = useState('orders');
   const [filteredOrders, setFilteredOrders] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Toggleable list columns (persisted per browser).
+  const PO_COLS = [
+    { key: 'po_number', label: t('po_number') || 'PO #' },
+    { key: 'supplier', label: t('supplier') || 'Supplier' },
+    { key: 'order_date', label: t('order_date') || 'Order Date' },
+    { key: 'delivery_date', label: t('delivery_date') || 'Delivery Date' },
+    { key: 'quantity', label: t('quantity') || 'Quantity' },
+    { key: 'amount', label: t('amount') || 'Amount' },
+    { key: 'payment_status', label: t('payment_status') || 'Payment' },
+    { key: 'status', label: t('status') || 'Status' },
+  ];
+  const [visibleCols, setVisibleCols] = useState(() => {
+    try { const s = JSON.parse(localStorage.getItem('po_visible_cols')); if (s && typeof s === 'object') return s; } catch { /* ignore */ }
+    return { po_number: true, supplier: true, order_date: true, delivery_date: true, quantity: true, amount: true, payment_status: true, status: true };
+  });
+  useEffect(() => { try { localStorage.setItem('po_visible_cols', JSON.stringify(visibleCols)); } catch { /* ignore */ } }, [visibleCols]);
+  const colOn = (k) => visibleCols[k] !== false;
+  const toggleCol = (k) => setVisibleCols(prev => ({ ...prev, [k]: !colOn(k) }));
+  const paymentStatusColor = (s) => ({
+    paid: 'bg-green-100 text-green-700',
+    partial: 'bg-amber-100 text-amber-700',
+    unpaid: 'bg-red-100 text-red-700',
+    pending: 'bg-slate-100 text-slate-600',
+  }[s] || 'bg-slate-100 text-slate-600');
+  const paymentStatusLabel = (s) => {
+    if (s === 'partial') return t('partially_paid') || 'Partially paid';
+    return t(s) || s || '-';
+  };
   const [statusFilter, setStatusFilter] = useState('all');
 
   // Server-side pagination
@@ -1037,6 +1067,25 @@ export default function PurchaseOrders() {
                     <SelectItem value="received">{t('received') || 'Received'}</SelectItem>
                   </SelectContent>
                 </Select>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="gap-2 whitespace-nowrap">
+                      <SlidersHorizontal className="w-4 h-4" />
+                      {t('columns') || 'Columns'}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-56">
+                    <p className="text-xs font-semibold text-slate-500 mb-2">{t('visible_columns') || 'Visible columns'}</p>
+                    <div className="space-y-2">
+                      {PO_COLS.map(c => (
+                        <label key={c.key} className="flex items-center justify-between gap-3 text-sm cursor-pointer">
+                          <span>{c.label}</span>
+                          <Switch checked={colOn(c.key)} onCheckedChange={() => toggleCol(c.key)} />
+                        </label>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </div>
             </CardHeader>
             <CardContent className="p-0">
@@ -1057,37 +1106,57 @@ export default function PurchaseOrders() {
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-slate-50">
-                        <TableHead>{t('po_number') || 'PO #'}</TableHead>
-                        <TableHead>{t('supplier') || 'Supplier'}</TableHead>
-                        <TableHead>{t('order_date') || 'Order Date'}</TableHead>
-                        <TableHead>{t('delivery_date') || 'Delivery Date'}</TableHead>
-                        <TableHead>{t('amount') || 'Amount'}</TableHead>
-                        <TableHead>{t('status') || 'Status'}</TableHead>
+                        {colOn('po_number') && <TableHead>{t('po_number') || 'PO #'}</TableHead>}
+                        {colOn('supplier') && <TableHead>{t('supplier') || 'Supplier'}</TableHead>}
+                        {colOn('order_date') && <TableHead>{t('order_date') || 'Order Date'}</TableHead>}
+                        {colOn('delivery_date') && <TableHead>{t('delivery_date') || 'Delivery Date'}</TableHead>}
+                        {colOn('quantity') && <TableHead className="text-right">{t('quantity') || 'Quantity'}</TableHead>}
+                        {colOn('amount') && <TableHead>{t('amount') || 'Amount'}</TableHead>}
+                        {colOn('payment_status') && <TableHead>{t('payment_status') || 'Payment'}</TableHead>}
+                        {colOn('status') && <TableHead>{t('status') || 'Status'}</TableHead>}
                         <TableHead>{t('actions') || 'Actions'}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {filteredOrders.map((po) => (
                         <TableRow key={po.id} className="hover:bg-slate-50">
-                          <TableCell className="font-mono text-sm">
-                            <div className="flex items-center gap-2">
-                              {po.po_number}
-                              {orderHasReturns(po.id) && (
-                                <MessageSquareWarning className="w-4 h-4 text-red-500" title={t('has_returns') || 'Has Returns'} />
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell className="font-medium">{po.supplier_name || po.vendor_name}</TableCell>
-                          <TableCell className="text-sm">
-                            {po.order_date ? format(new Date(po.order_date), 'dd.MM.yyyy') : '-'}
-                          </TableCell>
-                          <TableCell className="text-sm">
-                            {(po.expected_delivery_date || po.expected_date) ? format(new Date(po.expected_delivery_date || po.expected_date), 'dd.MM.yyyy') : '-'}
-                          </TableCell>
-                          <TableCell className="font-semibold">{formatCurrency(po.total_amount || 0)}</TableCell>
-                          <TableCell>
-                            <Badge className={getStatusColor(po.status)}>{t(po.status) || po.status}</Badge>
-                          </TableCell>
+                          {colOn('po_number') && (
+                            <TableCell className="font-mono text-sm">
+                              <div className="flex items-center gap-2">
+                                {po.po_number}
+                                {orderHasReturns(po.id) && (
+                                  <MessageSquareWarning className="w-4 h-4 text-red-500" title={t('has_returns') || 'Has Returns'} />
+                                )}
+                              </div>
+                            </TableCell>
+                          )}
+                          {colOn('supplier') && <TableCell className="font-medium">{po.supplier_name || po.vendor_name}</TableCell>}
+                          {colOn('order_date') && (
+                            <TableCell className="text-sm">
+                              {po.order_date ? format(new Date(po.order_date), 'dd.MM.yyyy') : '-'}
+                            </TableCell>
+                          )}
+                          {colOn('delivery_date') && (
+                            <TableCell className="text-sm">
+                              {(po.expected_delivery_date || po.expected_date) ? format(new Date(po.expected_delivery_date || po.expected_date), 'dd.MM.yyyy') : '-'}
+                            </TableCell>
+                          )}
+                          {colOn('quantity') && (
+                            <TableCell className="text-right text-sm">
+                              {po.total_quantity != null ? Number(po.total_quantity).toLocaleString() : '-'}
+                            </TableCell>
+                          )}
+                          {colOn('amount') && <TableCell className="font-semibold">{formatCurrency(po.total_amount || 0)}</TableCell>}
+                          {colOn('payment_status') && (
+                            <TableCell>
+                              <Badge className={`${paymentStatusColor(po.payment_status)} capitalize`}>{paymentStatusLabel(po.payment_status)}</Badge>
+                            </TableCell>
+                          )}
+                          {colOn('status') && (
+                            <TableCell>
+                              <Badge className={getStatusColor(po.status)}>{t(po.status) || po.status}</Badge>
+                            </TableCell>
+                          )}
                           <TableCell>
                             <div className="flex gap-1">
                               <Button size="sm" variant="ghost" onClick={(e) => handleViewPO(po, e)} title={t('view_details') || 'View Details'}>
