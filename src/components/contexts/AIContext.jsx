@@ -279,6 +279,68 @@ const getUserData = (companyId) => {
   }
 };
 
+// computeGroundedAnalytics derives accurate, pre-computed metrics from the
+// business data so the LLM analyzes real numbers instead of recomputing (and
+// potentially mis-counting) from raw records. This is the "grounding" payload.
+const computeGroundedAnalytics = (data = {}) => {
+  const num = (v) => Number(v) || 0;
+  const arr = (v) => (Array.isArray(v) ? v : []);
+
+  const salesOrders = arr(data.salesOrders);
+  const purchaseOrders = arr(data.purchaseOrders);
+  const expenses = arr(data.expenses);
+  const inventory = arr(data.inventory);
+
+  // Sales
+  const totalRevenue = salesOrders.reduce((s, o) => s + num(o.total_amount), 0);
+  const statusCounts = {};
+  const customerRevenue = {};
+  let unpaidCount = 0, unpaidAmount = 0;
+  salesOrders.forEach((o) => {
+    statusCounts[o.status || 'unknown'] = (statusCounts[o.status || 'unknown'] || 0) + 1;
+    const name = o.customer_name || o.customer || 'Unknown';
+    customerRevenue[name] = (customerRevenue[name] || 0) + num(o.total_amount);
+    if (o.payment_status === 'unpaid' || o.payment_status === 'pending') {
+      unpaidCount += 1;
+      unpaidAmount += num(o.total_amount);
+    }
+  });
+  const topCustomers = Object.entries(customerRevenue)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([name, revenue]) => ({ name, revenue }));
+
+  // Inventory low stock
+  const lowStock = inventory.filter((i) => num(i.current_stock ?? i.quantity) <= num(i.reorder_level ?? i.min_stock ?? 0)).length;
+
+  return {
+    generated_at: new Date().toISOString(),
+    sales: {
+      total_revenue: totalRevenue,
+      total_orders: salesOrders.length,
+      avg_order_value: salesOrders.length ? totalRevenue / salesOrders.length : 0,
+      status_counts: statusCounts,
+      top_customers: topCustomers,
+      unpaid: { count: unpaidCount, amount: unpaidAmount },
+    },
+    purchases: {
+      total_orders: purchaseOrders.length,
+      total_amount: purchaseOrders.reduce((s, o) => s + num(o.total_amount), 0),
+    },
+    expenses: {
+      count: expenses.length,
+      total_amount: expenses.reduce((s, e) => s + num(e.amount), 0),
+    },
+    inventory: { item_count: inventory.length, low_stock_count: lowStock },
+    counts: {
+      customers: arr(data.customers).length,
+      employees: arr(data.employees).length,
+      projects: arr(data.projects).length,
+      contracts: arr(data.contracts).length,
+    },
+  };
+};
+
 // AI text translations for multilingual support
 const AI_TEXTS = {
   en: {
@@ -2755,15 +2817,44 @@ To change your subscription, go to **Settings** → **Subscription**.`
         return assistantMessage;
       }
 
+      // Pull live data from active contexts so the AI grounds on API-backed
+      // state, not just localStorage (which may be empty if data lives in backend).
+      const pickNonEmpty = (...sources) => sources.find(s => Array.isArray(s) && s.length > 0) || sources.find(s => Array.isArray(s)) || [];
+      const liveData = {
+        customers: customersContext?.customers,
+        inventory: pickNonEmpty(inventoryContext?.products, inventoryContext?.inventory),
+        salesOrders: modulesContext?.salesOrders,
+        purchaseOrders: modulesContext?.purchaseOrders,
+        employees: modulesContext?.employees,
+        projects: modulesContext?.projects,
+        assets: pickNonEmpty(modulesContext?.assets, financialsContext?.fixedAssets),
+        expenses: modulesContext?.expenses,
+        payroll: modulesContext?.payrolls,
+        contracts: modulesContext?.contracts,
+        financialTransactions: financialsContext?.financialTransactions,
+        customerInvoices: financialsContext?.customerInvoices,
+        vendorBills: financialsContext?.vendorBills,
+        cashTransactions: financialsContext?.cashTransactions,
+        payments: financialsContext?.payments,
+      };
+      // Fall back to the localStorage snapshot only when live contexts are empty.
+      const rawData = getUserData(activeCompany?.id);
+      const groundedData = {
+        ...rawData,
+        ...Object.fromEntries(Object.entries(liveData).filter(([, v]) => Array.isArray(v) && v.length > 0)),
+      };
+      // Accurate, pre-computed metrics so the model reports real figures.
+      groundedData.computed_analytics = computeGroundedAnalytics(groundedData);
+
       // Try backend AI service first
       if (isBackendConnected) {
         try {
-          // Enhance context with business data for better AI responses
+          // Enhance context with grounded business data for accurate AI analysis
           const enhancedContext = {
             ...context,
             company_id: activeCompany?.id,
             user_language: currentLanguage,
-            business_data: getUserData(activeCompany?.id) // Send actual business data to AI
+            business_data: groundedData,
           };
 
           // Call backend AI without requiring conversation ID
@@ -2794,31 +2885,8 @@ To change your subscription, go to **Settings** → **Subscription**.`
       // Generate demo response with slight delay for realism (only as fallback)
       await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 1200));
 
-      // Pull live data from active contexts so responses reflect API-backed state,
-      // not just localStorage (which may be empty if data lives in backend).
-      // Prefer ModulesContext (unified hub) then fall back to domain contexts.
-      const pickNonEmpty = (...sources) => sources.find(s => Array.isArray(s) && s.length > 0) || sources.find(s => Array.isArray(s)) || [];
-      const liveData = {
-        customers: customersContext?.customers,
-        // Treat the product catalog as "inventory" for emptiness checks — users
-        // see items they added, not per-warehouse stock positions.
-        inventory: pickNonEmpty(inventoryContext?.products, inventoryContext?.inventory),
-        salesOrders: modulesContext?.salesOrders,
-        purchaseOrders: modulesContext?.purchaseOrders,
-        employees: modulesContext?.employees,
-        projects: modulesContext?.projects,
-        assets: pickNonEmpty(modulesContext?.assets, financialsContext?.fixedAssets),
-        expenses: modulesContext?.expenses,
-        payroll: modulesContext?.payrolls,
-        contracts: modulesContext?.contracts,
-        financialTransactions: financialsContext?.financialTransactions,
-        customerInvoices: financialsContext?.customerInvoices,
-        vendorBills: financialsContext?.vendorBills,
-        cashTransactions: financialsContext?.cashTransactions,
-        payments: financialsContext?.payments,
-      };
-
-      const demoResponse = generateDemoResponse(content, context, activeCompany?.id, currentLanguage, formatCurrency, liveData);
+      // Reuse the grounded live data computed above for the local fallback too.
+      const demoResponse = generateDemoResponse(content, context, activeCompany?.id, currentLanguage, formatCurrency, groundedData);
       const assistantMessage = {
         id: `msg_${++messageIdCounter.current}`,
         role: 'assistant',

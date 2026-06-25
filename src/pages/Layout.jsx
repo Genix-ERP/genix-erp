@@ -12,6 +12,8 @@ import {
   Briefcase,
   Grid3x3,
   Zap,
+  Workflow,
+  FolderKanban,
   Settings,
   Bell,
   Search,
@@ -282,7 +284,7 @@ function LayoutContent({ children, currentPageName }) {
     'projects': {
       title: t("projects"),
       url: createPageUrl("Projects"),
-      icon: Briefcase,
+      icon: FolderKanban,
       badge: null,
       moduleId: 'projects'
     },
@@ -367,7 +369,7 @@ function LayoutContent({ children, currentPageName }) {
     {
       title: t("workflows"),
       url: createPageUrl("Workflows"),
-      icon: Zap,
+      icon: Workflow,
       badge: null
     },
     {

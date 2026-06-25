@@ -136,7 +136,11 @@ export function ModulesProvider({ children }) {
       const mappedContracts = rawContracts.map(c => ({
         ...c,
         contract_name: c.title || c.contract_name,
-        party_name: c.vendor_name || c.party_name || '',
+        party_type: c.party_type || 'vendor',
+        party_name: c.vendor_name || c.asset_name || c.party_name || '',
+        asset_id: c.asset_id || '',
+        asset_name: c.asset_name || '',
+        vendor_id: c.vendor_id || '',
         contract_value: c.value || c.contract_value || 0,
         billing_cycle: c.terms || c.billing_cycle || 'monthly',
         auto_renew: c.auto_renewal || c.auto_renew || false,
@@ -630,7 +634,9 @@ export function ModulesProvider({ children }) {
     // Backend contract_type options: fixed, annual, monthly, project
     const apiData = {
       title: data.title || data.contract_name,
-      vendor_id: data.vendor_id,
+      party_type: data.party_type || 'vendor',
+      vendor_id: data.vendor_id || undefined,
+      asset_id: data.asset_id || undefined,
       contract_type: data.contract_type || 'fixed',
       start_date: data.start_date,
       end_date: data.end_date || undefined,
@@ -644,7 +650,11 @@ export function ModulesProvider({ children }) {
       const mappedResult = {
         ...result,
         contract_name: result.title,
-        party_name: result.vendor_name || data.party_name || '',
+        party_type: result.party_type || apiData.party_type,
+        party_name: result.vendor_name || result.asset_name || data.party_name || '',
+        asset_id: result.asset_id || '',
+        asset_name: result.asset_name || '',
+        vendor_id: result.vendor_id || '',
         contract_value: result.value,
         billing_cycle: result.terms
       };
@@ -657,6 +667,9 @@ export function ModulesProvider({ children }) {
   const updateContract = useCallback(async (id, data) => {
     const apiData = {
       title: data.contract_name || data.title,
+      party_type: data.party_type || undefined,
+      vendor_id: data.vendor_id || undefined,
+      asset_id: data.asset_id || undefined,
       contract_type: data.contract_type,
       start_date: data.start_date,
       end_date: data.end_date,
