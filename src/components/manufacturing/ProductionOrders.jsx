@@ -524,6 +524,13 @@ export default function ProductionOrders() {
     return { used, remaining: splitBulkQty - used, over: used > splitBulkQty + 1e-6 };
   }, [splitItems, inventoryProducts, products, splitBulkQty]);
 
+  // Unit-of-measure label (Metr, kg, Dona…) of a selected split product,
+  // shown next to its quantity so the worker knows what unit they're entering.
+  const productUnitLabel = (productId) => {
+    const p = (inventoryProducts || products || []).find(x => x.id === productId);
+    return p?.unit_name || p?.unit_code || '';
+  };
+
   const handleSplitSubmit = async () => {
     const validItems = splitItems.filter(it => it.product_id && parseFloat(it.quantity) > 0);
     if (!validItems.length) return;
@@ -1273,14 +1280,20 @@ export default function ProductionOrders() {
                   </div>
                   <div className="col-span-3 space-y-1">
                     <label className="text-xs font-medium">{language === 'uz' ? 'Miqdori' : language === 'ru' ? 'Кол-во' : 'Quantity'} *</label>
-                    <Input
-                      type="number"
-                      min="0.0001"
-                      step="any"
-                      value={item.quantity}
-                      onChange={(e) => updateSplitItem(idx, 'quantity', e.target.value)}
-                      placeholder="0"
-                    />
+                    <div className="flex items-center gap-1">
+                      <Input
+                        type="number"
+                        min="0.0001"
+                        step="any"
+                        value={item.quantity}
+                        onChange={(e) => updateSplitItem(idx, 'quantity', e.target.value)}
+                        placeholder="0"
+                        className="flex-1"
+                      />
+                      {productUnitLabel(item.product_id) && (
+                        <span className="text-xs text-slate-500 whitespace-nowrap">{productUnitLabel(item.product_id)}</span>
+                      )}
+                    </div>
                   </div>
                   <div className="col-span-3 space-y-1">
                     <label className="text-xs font-medium">{language === 'uz' ? 'Sklad' : language === 'ru' ? 'Склад' : 'Warehouse'}</label>
