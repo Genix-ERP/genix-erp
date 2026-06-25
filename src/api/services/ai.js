@@ -17,6 +17,17 @@ export const aiService = {
     return response.data.data;
   },
 
+  // Transcribe a recorded audio blob to text (server-side Whisper).
+  async transcribe(blob, language = '') {
+    const form = new FormData();
+    form.append('file', blob, 'audio.webm');
+    if (language) form.append('language', language);
+    const response = await apiClient.post('/ai/transcribe', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data.data;
+  },
+
   // Conversations
   async listConversations(params = {}) {
     const response = await apiClient.get('/ai/conversations', { params });
