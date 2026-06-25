@@ -240,6 +240,137 @@ const parseActionIntent = (message) => {
   return null;
 };
 
+// ===== Conversational "create contact" (client/customer/vendor) slot-filling =====
+
+// Pull name/email/phone out of free text (works for the initial command and
+// for short follow-up replies like "901234567" or "email: x@y.com").
+const extractContactFields = (text) => {
+  const out = {};
+  const email = text.match(/[\w.+-]+@[\w-]+\.[\w.-]+/);
+  if (email) out.email = email[0];
+  const phoneLabeled = text.match(/(?:phone|tel|telefon|raqam|number|nomer|тел|телефон)[:\s]*([+\d][\d\s()-]{6,})/i);
+  const phoneBare = text.match(/(\+?\d[\d\s()-]{5,}\d)/);
+  const phone = phoneLabeled ? phoneLabeled[1] : (phoneBare ? phoneBare[1] : null);
+  if (phone) out.phone = phone.replace(/[^\d+]/g, '');
+  // Name: prefer an explicit introducer ("name/named/ismi/nomi: X"), stopping
+  // before connectors like "in / and / email / phone" (matched as whole words).
+  let nameM = text.match(/(?:name|named|called|ismi|nomi|nomli)\s+(?:is\s+|:\s*)?["']?([\p{L}][\p{L}'`ʼ.\- ]{1,60}?)["']?(?=$|[,.\n]|\s+(?:and|email|e-mail|phone|tel|telefon|va|bilan|in|и)\b)/iu);
+  // Fallback: "client/customer/mijoz/vendor <Capitalized Name>" (must start uppercase
+  // so filler words like "with" aren't captured).
+  if (!nameM) {
+    nameM = text.match(/(?:client|customer|mijoz|vendor|supplier|yetkazuvchi|contact|klient|клиент|поставщик)\s+["']?(\p{Lu}[\p{L}'`ʼ.-]*(?:\s+\p{Lu}[\p{L}'`ʼ.-]*){0,3})/u);
+  }
+  if (nameM) out.name = nameM[1].trim();
+  return out;
+};
+
+// Detect "create client/customer/vendor" and which module it belongs to.
+const detectCreateContactIntent = (message) => {
+  const m = message.toLowerCase();
+  if (!/(create|add|new|qo'?sh|yarat|создать|добав|нов)/.test(m)) return null;
+  const isClient = /(client|customer|mijoz|contact|klient|клиент|контакт)/.test(m);
+  const isVendor = /(vendor|supplier|yetkaz|ta'?minot|hamkor|поставщ)/.test(m);
+  if (!isClient && !isVendor) return null;
+  const purchaseCtx = /(purchase|xarid|закуп)/.test(m);
+  const salesCtx = /(crm|sale|sotuv|savdo|продаж)/.test(m);
+  const action = (isVendor || (purchaseCtx && !salesCtx)) ? AI_ACTIONS.CREATE_VENDOR : AI_ACTIONS.CREATE_CUSTOMER;
+  return { action, params: extractContactFields(message) };
+};
+
+const RECOMMENDED_CONTACT_FIELDS = ['phone', 'email'];
+const missingRecommended = (p) => RECOMMENDED_CONTACT_FIELDS.filter(k => !p[k]);
+
+// Extract an order's party (customer/vendor) name and amount from free text.
+const extractOrderFields = (text) => {
+  const out = {};
+  const amt = text.match(/(?:\$|amount|summa|sum|qiymat|сумм\w*|на сумму)\s*([\d][\d\s.,]*\d|\d)/i)
+    || text.match(/([\d][\d\s.,]*\d|\d)\s*(?:so'?m|sum|usd|\$|dollar|долл)/i);
+  if (amt) { const n = parseFloat(String(amt[1]).replace(/[\s,]/g, '')); if (!isNaN(n)) out.amount = n; }
+  const nameM = text.match(/(?:\bfor\b|\bfrom\b|customer|client|mijoz|vendor|supplier|yetkazuvchi)\s+["']?(\p{Lu}[\p{L}0-9'`ʼ&.\- ]*?)["']?\s*(?=$|[,.\n]|\d|\$|order\b|buyurtma|amount|summa|so'?m|usd|dollar|и\b)/iu);
+  if (nameM) {
+    out.name = nameM[1].trim();
+  } else {
+    // Uzbek postpositions: "<Name> uchun/dan/ga" = for/from <Name>.
+    const uz = text.match(/(\p{Lu}[\p{L}0-9'`ʼ&.-]*(?:\s+\p{Lu}[\p{L}0-9'`ʼ&.-]*){0,3})\s+(?:uchun|dan|ga)\b/u);
+    if (uz) out.name = uz[1].trim();
+  }
+  return out;
+};
+
+// Detect "create sales/purchase order" and which side it is.
+const detectOrderIntent = (message) => {
+  const m = message.toLowerCase();
+  if (!/(create|add|new|make|qo'?sh|yarat|создать|добав|нов|sot )/.test(m)) return null;
+  if (!/(order|buyurtma|заказ)/.test(m)) return null;
+  const isPurchase = /(purchase|xarid|закуп)/.test(m)
+    || (/(supplier|vendor|yetkaz|ta'?minot|поставщ)/.test(m) && !/(customer|client|mijoz|sales|sotuv|savdo|продаж)/.test(m))
+    || ((/\bfrom\b|\bdan\b/.test(m)) && !(/\bfor\b|uchun/.test(m)));
+  const action = isPurchase ? AI_ACTIONS.CREATE_PURCHASE_ORDER : AI_ACTIONS.CREATE_SALES_ORDER;
+  return { action, params: extractOrderFields(message) };
+};
+
+// Resolve the unit price from a catalog product (sale vs purchase side).
+const productUnitPrice = (p, isPurchase) => {
+  const n = (...vals) => { for (const v of vals) { const x = Number(v); if (!isNaN(x) && x) return x; } return 0; };
+  return isPurchase ? n(p.cost_price, p.purchase_price, p.list_price, p.price)
+                    : n(p.list_price, p.sale_price, p.selling_price, p.price, p.cost_price);
+};
+const findProduct = (typed, products) => {
+  const q = (typed || '').toLowerCase().trim();
+  if (!q || !Array.isArray(products)) return null;
+  return products.find(x => (x.name || '').toLowerCase() === q)
+      || products.find(x => [x.code, x.sku, x.barcode].some(c => (c || '').toLowerCase() === q))
+      || products.find(x => (x.name || '').toLowerCase().includes(q))
+      || null;
+};
+const productSuggestions = (typed, products, n = 4) => {
+  const q = (typed || '').toLowerCase().trim();
+  const arr = Array.isArray(products) ? products : [];
+  const matches = q ? arr.filter(x => (x.name || '').toLowerCase().includes(q)) : arr;
+  return (matches.length ? matches : arr).slice(0, n).map(x => x.name).filter(Boolean);
+};
+const parseQty = (text) => { const m = String(text).match(/\d+/); return m ? parseInt(m[0], 10) : null; };
+
+const orderPrompts = (lang, isPurchase) => {
+  const party = isPurchase ? (lang === 'ru' ? 'поставщика' : lang === 'en' ? 'vendor' : 'yetkazuvchi')
+                           : (lang === 'ru' ? 'клиента' : lang === 'en' ? 'customer' : 'mijoz');
+  return {
+    askName: lang === 'ru' ? `Укажите имя ${party}.` : lang === 'en' ? `Please provide the ${party} name.` : `Iltimos, ${party} nomini kiriting.`,
+    cancelled: lang === 'ru' ? 'Отменено.' : lang === 'en' ? 'Cancelled.' : 'Bekor qilindi.',
+    askProduct: lang === 'ru' ? 'Какой товар добавить? Напишите название (или "создать" для завершения).'
+      : lang === 'en' ? 'Which product to add? Type its name (or "create" to finish).'
+      : 'Qaysi mahsulot qo\'shamiz? Nomini yozing (yoki "yaratish" deb tugating).',
+    askQty: (name) => lang === 'ru' ? `Сколько «${name}»?` : lang === 'en' ? `How many "${name}"?` : `"${name}" nechta?`,
+    added: (name, qty) => lang === 'ru' ? `Добавлено: ${name} ×${qty}. Ещё товар? Напишите название или "создать".`
+      : lang === 'en' ? `Added: ${name} ×${qty}. Another product? Type a name, or "create".`
+      : `Qo'shildi: ${name} ×${qty}. Yana mahsulot? Nomini yozing yoki "yaratish".`,
+    notFound: (sugg) => (lang === 'ru' ? 'Товар не найден.' : lang === 'en' ? 'Product not found.' : 'Mahsulot topilmadi.')
+      + (sugg.length ? ` ${lang === 'ru' ? 'Возможно' : lang === 'en' ? 'Maybe' : 'Balki'}: ${sugg.join(', ')}.` : ''),
+    badQty: lang === 'ru' ? 'Введите число.' : lang === 'en' ? 'Please enter a number.' : 'Iltimos, son kiriting.',
+    needLines: lang === 'ru' ? 'Добавьте хотя бы один товар, чтобы создать заказ.' : lang === 'en' ? 'Add at least one product to create the order.' : 'Buyurtma yaratish uchun kamida bitta mahsulot qo\'shing.',
+    askTax: lang === 'ru' ? 'Налог в %? (например 12, или "0" / "без налога")' : lang === 'en' ? 'Tax %? (e.g. 12, or "0" / "no tax")' : 'Soliq necha %? (masalan 12, yoki "0" / "soliqsiz")',
+  };
+};
+
+const contactFieldLabel = (k, lang) => (({
+  phone: { uz: 'telefon', ru: 'телефон', en: 'phone' },
+  email: { uz: 'email', ru: 'email', en: 'email' },
+  name: { uz: 'ism', ru: 'имя', en: 'name' },
+})[k] || {})[lang] || k;
+
+const summarizeContact = (p, lang) =>
+  ['name', 'email', 'phone'].filter(k => p[k]).map(k => `• ${contactFieldLabel(k, lang)}: ${p[k]}`).join('\n');
+
+const contactPrompts = (lang) => ({
+  askName: lang === 'ru' ? 'Укажите имя клиента.' : lang === 'en' ? 'Please provide the client name.' : 'Iltimos, mijoz ismini kiriting.',
+  cancelled: lang === 'ru' ? 'Отменено.' : lang === 'en' ? 'Cancelled.' : 'Bekor qilindi.',
+  askMore: (have, missingLabels) => lang === 'ru'
+    ? `Принято:\n${have}\n\nДобавить ещё (${missingLabels})? Напишите значение, или "создать" для подтверждения.`
+    : lang === 'en'
+    ? `Got it:\n${have}\n\nAdd more (${missingLabels})? Type the value, or "create" to confirm.`
+    : `Qabul qilindi:\n${have}\n\nQo'shimcha (${missingLabels}) bormi? Qiymatni yozing, yoki "yaratish" deb tasdiqlang.`,
+});
+
 // Helper to get company-specific storage key
 const getStorageKey = (baseKey, companyId) => {
   return companyId ? `${baseKey}_${companyId}` : baseKey;
@@ -2107,6 +2238,7 @@ export function AIProvider({ children }) {
   const [capabilities, setCapabilities] = useState([]);
   const [aiLimitReached, setAiLimitReached] = useState(false);
   const [pendingAction, setPendingAction] = useState(null); // For confirmation flow
+  const pendingDraftRef = useRef(null); // Partial create-contact draft (slot filling)
   const messageIdCounter = useRef(0);
 
   // Execute AI action with permission checks
@@ -2327,23 +2459,32 @@ export function AIProvider({ children }) {
           };
         }
 
+        const soLines = Array.isArray(params.lines) ? params.lines : [];
+        const soSubtotal = soLines.length
+          ? soLines.reduce((s, l) => s + (Number(l.quantity) || 0) * (Number(l.unit_price) || 0), 0)
+          : (Number(params.subtotal) || Number(params.total_amount) || 0);
+        const soTax = Number(params.tax_amount) || 0;
+        const soTotal = params.total_amount != null ? Number(params.total_amount) : (soSubtotal + soTax);
         const orderData = {
           customer_name: params.customer_name,
           order_date: new Date().toISOString().split('T')[0],
           delivery_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          subtotal: params.total_amount || 0,
-          tax_amount: (params.total_amount || 0) * 0.08,
+          subtotal: soSubtotal,
+          tax_amount: soTax,
           shipping_cost: 0,
-          total_amount: (params.total_amount || 0) * 1.08,
+          total_amount: soTotal,
           status: 'draft',
-          payment_status: 'unpaid'
+          payment_status: 'unpaid',
+          ...(soLines.length ? { lines: soLines } : {})
         };
 
         try {
           const newOrder = await modulesContext.createSalesOrder(orderData);
+          const soItemsLine = soLines.length ? `\n**Mahsulotlar:** ${soLines.map(l => `${l.description} ×${l.quantity}`).join(', ')}` : '';
+          const soTaxLine = soTax > 0 ? `\n**Soliq:** ${formatCurrency(soTax)}` : '';
           return {
             success: true,
-            message: `✅ **Buyurtma yaratildi!**\n\n**Buyurtma raqami:** ${newOrder.order_number}\n**Mijoz:** ${params.customer_name}\n**Summa:** ${formatCurrency(params.total_amount || 0)}\n\nSavdo buyurtmalari bo'limida ko'rishingiz mumkin.`,
+            message: `✅ **Buyurtma yaratildi!**\n\n**Buyurtma raqami:** ${newOrder.order_number}\n**Mijoz:** ${params.customer_name}${soItemsLine}${soTaxLine}\n**Summa:** ${formatCurrency(soTotal)}\n\nSavdo buyurtmalari bo'limida ko'rishingiz mumkin.`,
             data: newOrder
           };
         } catch (err) {
@@ -2372,20 +2513,31 @@ export function AIProvider({ children }) {
           };
         }
 
+        const poLines = Array.isArray(params.lines) ? params.lines : [];
+        const poSubtotal = poLines.length
+          ? poLines.reduce((s, l) => s + (Number(l.quantity) || 0) * (Number(l.unit_price) || 0), 0)
+          : (Number(params.subtotal) || Number(params.total_amount) || 0);
+        const poTax = Number(params.tax_amount) || 0;
+        const poTotal = params.total_amount != null ? Number(params.total_amount) : (poSubtotal + poTax);
         const poData = {
           vendor_name: params.vendor_name,
           order_date: new Date().toISOString().split('T')[0],
           expected_delivery_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          total_amount: params.total_amount || 0,
+          subtotal: poSubtotal,
+          tax_amount: poTax,
+          total_amount: poTotal,
           status: 'draft',
-          payment_terms: 'net_30'
+          payment_terms: 'net_30',
+          ...(poLines.length ? { lines: poLines } : {})
         };
 
         try {
           const newPO = await modulesContext.createPurchaseOrder(poData);
+          const poItemsLine = poLines.length ? `\n**Mahsulotlar:** ${poLines.map(l => `${l.description} ×${l.quantity}`).join(', ')}` : '';
+          const poTaxLine = poTax > 0 ? `\n**Soliq:** ${formatCurrency(poTax)}` : '';
           return {
             success: true,
-            message: `✅ **Xarid buyurtmasi yaratildi!**\n\n**Buyurtma raqami:** ${newPO.po_number}\n**Yetkazuvchi:** ${params.vendor_name}\n**Summa:** ${formatCurrency(params.total_amount || 0)}\n\nXarid buyurtmalari bo'limida ko'rishingiz mumkin.`,
+            message: `✅ **Xarid buyurtmasi yaratildi!**\n\n**Buyurtma raqami:** ${newPO.po_number}\n**Yetkazuvchi:** ${params.vendor_name}${poItemsLine}${poTaxLine}\n**Summa:** ${formatCurrency(poTotal)}\n\nXarid buyurtmalari bo'limida ko'rishingiz mumkin.`,
             data: newPO
           };
         } catch (err) {
@@ -2791,6 +2943,132 @@ To change your subscription, go to **Settings** → **Subscription**.`
     try {
       // Increment AI usage counter
       incrementAIUsage();
+
+      // --- Conversational create: client/customer/vendor + sales/purchase order ---
+      const draftLang = detectMessageLanguage(content) || currentLanguage || 'en';
+      const catalogProducts = (inventoryContext?.products?.length ? inventoryContext.products : inventoryContext?.inventory) || [];
+      const pushAssistant = (text, extra = {}) => {
+        const m = { id: `msg_${++messageIdCounter.current}`, role: 'assistant', content: text, created_at: new Date().toISOString(), ...extra };
+        setMessages(prev => [...prev, m]);
+        setIsLoading(false);
+        return m;
+      };
+      const finishAction = async (action, actionParams) => {
+        const result = await executeAction({ action, params: actionParams });
+        return pushAssistant(result.message, {
+          isActionResult: true, actionSuccess: result.success, actionData: result.data,
+          tool_calls: result.success ? [{ name: action, status: 'completed' }] : [],
+        });
+      };
+      const runContactAction = async (action, p) => {
+        const actionParams = action === AI_ACTIONS.CREATE_VENDOR
+          ? { vendor_name: p.name, contact_name: p.name, email: p.email, phone: p.phone }
+          : { name: p.name, email: p.email, phone: p.phone };
+        return finishAction(action, actionParams);
+      };
+      const runOrderAction = async (action, name, lines, taxPct = 0) => {
+        const isPurchase = action === AI_ACTIONS.CREATE_PURCHASE_ORDER;
+        const apiLines = lines.map(l => ({ product_id: l.product_id, description: l.name, quantity: l.quantity, unit_price: l.unit_price }));
+        const subtotal = apiLines.reduce((s, l) => s + (Number(l.quantity) || 0) * (Number(l.unit_price) || 0), 0);
+        const taxAmount = subtotal * (Number(taxPct) || 0) / 100;
+        const total = subtotal + taxAmount;
+        const base = { lines: apiLines, subtotal, tax_amount: taxAmount, tax_percent: Number(taxPct) || 0, total_amount: total };
+        const params = isPurchase ? { vendor_name: name, ...base } : { customer_name: name, ...base };
+        return finishAction(action, params);
+      };
+      const CREATE_WORDS = /(yarat|create|создать|tasdiq|done|tayyor|tamom|готов|хватит|подтвер|qoralama|draft|finish)/;
+      const CANCEL_WORDS = /(bekor|cancel|отмен|стоп|^stop\b)/;
+
+      // Continue an in-progress draft.
+      if (pendingDraftRef.current) {
+        const draft = pendingDraftRef.current;
+        const lower = content.toLowerCase();
+        if (CANCEL_WORDS.test(lower)) {
+          pendingDraftRef.current = null;
+          const PRc = draft.kind === 'order' ? orderPrompts(draftLang, draft.action === AI_ACTIONS.CREATE_PURCHASE_ORDER) : contactPrompts(draftLang);
+          return pushAssistant(PRc.cancelled);
+        }
+
+        if (draft.kind === 'order') {
+          const isPurchase = draft.action === AI_ACTIONS.CREATE_PURCHASE_ORDER;
+          const PR = orderPrompts(draftLang, isPurchase);
+          if (draft.stage === 'name') {
+            let nm = extractContactFields(content).name;
+            if (!nm) { const bare = content.trim(); if (bare && bare.split(/\s+/).length <= 6 && bare.length <= 60) nm = bare; }
+            if (!nm) return pushAssistant(PR.askName);
+            pendingDraftRef.current = { ...draft, name: nm, stage: 'product' };
+            return pushAssistant(PR.askProduct);
+          }
+          if (draft.stage === 'qty') {
+            const q = parseQty(content);
+            if (!q || q <= 0) return pushAssistant(PR.badQty);
+            const pp = draft.pendingProduct;
+            const lines = [...draft.lines, { product_id: pp.id, name: pp.name, quantity: q, unit_price: pp.price }];
+            pendingDraftRef.current = { ...draft, lines, stage: 'product', pendingProduct: null };
+            return pushAssistant(PR.added(pp.name, q));
+          }
+          if (draft.stage === 'tax') {
+            let taxPct = 0;
+            if (!/(soliqsiz|no tax|без налог|^skip|^0$|yo'?q|^no\b|^none\b)/.test(lower)) {
+              const n = parseFloat((String(content).replace(',', '.').match(/\d+(?:\.\d+)?/) || [])[0]);
+              if (!isNaN(n)) taxPct = Math.max(0, n);
+            }
+            pendingDraftRef.current = null;
+            return await runOrderAction(draft.action, draft.name, draft.lines, taxPct);
+          }
+          // stage 'product'
+          if (CREATE_WORDS.test(lower)) {
+            if (draft.lines.length === 0) return pushAssistant(PR.needLines);
+            pendingDraftRef.current = { ...draft, stage: 'tax' };
+            return pushAssistant(PR.askTax);
+          }
+          const prod = findProduct(content, catalogProducts);
+          if (!prod) return pushAssistant(PR.notFound(productSuggestions(content, catalogProducts)));
+          pendingDraftRef.current = { ...draft, stage: 'qty', pendingProduct: { id: prod.id, name: prod.name, price: productUnitPrice(prod, isPurchase) } };
+          return pushAssistant(PR.askQty(prod.name));
+        }
+
+        // kind === 'contact'
+        const CP = contactPrompts(draftLang);
+        const upd = extractContactFields(content);
+        const merged = { ...draft.params };
+        ['name', 'email', 'phone'].forEach(k => { if (upd[k]) merged[k] = upd[k]; });
+        if (!merged.name) {
+          const bare = content.trim();
+          if (bare && !/[@\d]/.test(bare) && bare.split(/\s+/).length <= 5 && bare.length <= 60) merged.name = bare;
+        }
+        if (!merged.name) { pendingDraftRef.current = { ...draft, params: merged }; return pushAssistant(CP.askName); }
+        const wantsCreate = CREATE_WORDS.test(lower) || /(skip|yo'?q|^no\b)/.test(lower);
+        if (wantsCreate || draft.asked) { pendingDraftRef.current = null; return await runContactAction(draft.action, merged); }
+        const stillMissing = missingRecommended(merged);
+        if (stillMissing.length) {
+          pendingDraftRef.current = { ...draft, params: merged, asked: true };
+          return pushAssistant(CP.askMore(summarizeContact(merged, draftLang), stillMissing.map(k => contactFieldLabel(k, draftLang)).join(', ')));
+        }
+        pendingDraftRef.current = null;
+        return await runContactAction(draft.action, merged);
+      }
+
+      // New request — orders first (they include "order/buyurtma"), then contacts.
+      const orderIntent = detectOrderIntent(content);
+      if (orderIntent) {
+        const isPurchase = orderIntent.action === AI_ACTIONS.CREATE_PURCHASE_ORDER;
+        const PR = orderPrompts(draftLang, isPurchase);
+        const name = orderIntent.params.name;
+        if (!name) { pendingDraftRef.current = { kind: 'order', action: orderIntent.action, name: '', lines: [], stage: 'name' }; return pushAssistant(PR.askName); }
+        pendingDraftRef.current = { kind: 'order', action: orderIntent.action, name, lines: [], stage: 'product' };
+        return pushAssistant(PR.askProduct);
+      }
+
+      const contactIntent = detectCreateContactIntent(content);
+      if (contactIntent) {
+        const CP = contactPrompts(draftLang);
+        const p = contactIntent.params;
+        if (!p.name) { pendingDraftRef.current = { kind: 'contact', action: contactIntent.action, params: p, asked: false }; return pushAssistant(CP.askName); }
+        const missing = missingRecommended(p);
+        if (missing.length) { pendingDraftRef.current = { kind: 'contact', action: contactIntent.action, params: p, asked: true }; return pushAssistant(CP.askMore(summarizeContact(p, draftLang), missing.map(k => contactFieldLabel(k, draftLang)).join(', '))); }
+        return await runContactAction(contactIntent.action, p);
+      }
 
       // Check for action intent in the message
       const actionIntent = parseActionIntent(content);
