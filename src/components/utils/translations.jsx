@@ -1,5 +1,9 @@
 export const translations = {
   en: {
+    reset_to_draft: 'Reset to Draft',
+    reverse_entry: 'Reverse Entry',
+    entry_reset_to_draft: 'Entry reset to draft — you can edit it now',
+    reverse_entry_description: 'A reversing entry will be created to cancel the posted entry',
     create_order_with_customer: 'Create order with this customer',
     components_cost: 'Components cost',
     est_total: 'Est. total',
@@ -8286,6 +8290,10 @@ export const translations = {
   },
 
   uz: {
+    reset_to_draft: 'Qoralamaga qaytarish',
+    reverse_entry: 'Teskari yozuv',
+    entry_reset_to_draft: 'Yozuv qoralamaga qaytarildi — endi tahrirlash mumkin',
+    reverse_entry_description: 'Tasdiqlangan yozuvni bekor qilish uchun teskari yozuv yaratiladi',
     create_order_with_customer: 'Mijoz bilan buyurtma yaratish',
     components_cost: 'Komponentlar narxi',
     est_total: 'Taxminiy jami',
@@ -16815,6 +16823,10 @@ export const translations = {
   },
 
   ru: {
+    reset_to_draft: 'Вернуть в черновик',
+    reverse_entry: 'Сторнировать',
+    entry_reset_to_draft: 'Запись возвращена в черновик — теперь её можно редактировать',
+    reverse_entry_description: 'Будет создана сторнирующая запись для отмены проведённой записи',
     create_order_with_customer: 'Создать заказ с клиентом',
     components_cost: 'Стоимость компонентов',
     est_total: 'Примерно итого',
