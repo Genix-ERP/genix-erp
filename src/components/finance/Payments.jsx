@@ -995,9 +995,9 @@ export default function Payments() {
   // Inner content rendered for both tabs
   function PaymentContent() {
     return (
-      <div className="space-y-6">
+      <div className="flex flex-col gap-6">
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="order-1 grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
@@ -1052,8 +1052,8 @@ export default function Payments() {
           </Card>
         </div>
 
-        {/* Payments Table */}
-        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+        {/* Payment history (transactions) — secondary, below the invoice/bill list */}
+        <Card className="order-3 bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-md">
           <CardHeader className="border-b border-slate-100 pb-6">
             <div className="flex flex-col gap-4">
               <div className="flex items-center gap-3">
@@ -1274,8 +1274,8 @@ export default function Payments() {
           </CardContent>
         </Card>
 
-        {/* Related Invoices / Bills */}
-        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
+        {/* Customer Invoices / Vendor Bills — primary list inside each tab */}
+        <Card className="order-2 bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
           <CardHeader className="border-b border-slate-100 pb-4">
             <CardTitle className="text-lg font-bold text-slate-900">
               {isCustomerTab
