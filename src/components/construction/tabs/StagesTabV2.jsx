@@ -1821,7 +1821,9 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
             const status = stageStatus(stage);
             const stMeta = STATUS_META[status] || STATUS_META.pending;
             const pct = stageProgress(stage, resolveWorkQty);
-            const cost = stage.works.reduce((m, w) => m + Number(w.total_amount || 0), 0);
+            // Cost must include sub-stage works too, otherwise a stage whose
+            // works all live under sub-stages reports "0 so'm".
+            const cost = allStageWorks(stage).reduce((m, w) => m + Number(w.total_amount || 0), 0);
             const isLocked = status === 'confirmed_engineer';
             const hasSubmitted = stage.works.some((w) => w.approval_status === 'submitted');
 
@@ -1984,6 +1986,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
                       onRejectEngineer={rejectAsEngineer}
                       viewRole={viewRole}
                       vorPlanByName={vorPlanByName}
+                      resolveWorkQty={resolveWorkQty}
                       expandedWorks={expandedWorks}
                       toggleWork={toggleWork}
                       subResourcesByWork={subResourcesByWork}
@@ -2311,18 +2314,11 @@ function StageBody(props) {
 
 function SubStageCard({ sub, ...props }) {
   const [open, setOpen] = useState(true);
-  const pct = (() => {
-    let plan = 0, done = 0;
-    for (const w of sub.works) {
-      const c = Number(w.total_amount || 0);
-      plan += c;
-      const ratio = Number(w.quantity || 0) > 0
-        ? Math.min(Number(w.done_quantity || 0) / Number(w.quantity || 0), 1)
-        : 0;
-      done += c * ratio;
-    }
-    return plan > 0 ? (done / plan) * 100 : 0;
-  })();
+  // Use the same progress helper as the stage/project rollups so the sub-stage
+  // bar matches its work rows: REJA via resolveWorkQty (original_quantity / ВОР,
+  // not the live `quantity` which is 0 for not-yet-started works), cost-weighted
+  // with a quantity-ratio fallback.
+  const pct = progressFromWorks(sub.works, props.resolveWorkQty);
   const cost = sub.works.reduce((m, w) => m + Number(w.total_amount || 0), 0);
   const finalised = sub.works.filter((w) => w.approval_status === 'confirmed_engineer').length;
 

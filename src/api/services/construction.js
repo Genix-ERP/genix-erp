@@ -1604,6 +1604,15 @@ export const constructionService = {
     return response.data.data;
   },
 
+  // Resource-NORMA consolidation: planned normative quantities of resources
+  // (materials, equipment, labor) aggregated across all estimate sections, per
+  // block, each group tagged with its `type` so the UI can filter by resource
+  // type. Mirrors the Material yig'indisi report but Plan/NORMA-based.
+  async getResourceConsolidationReport(projectId) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/reports/resource-consolidation`);
+    return response.data.data;
+  },
+
   async getMaterialsReport(projectId, params = {}) {
     const response = await apiClient.get(`/construction/projects/${projectId}/reports/materials`, { params });
     return response.data.data;

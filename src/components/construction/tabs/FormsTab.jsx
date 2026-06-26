@@ -17,6 +17,7 @@ import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { sortBuildings } from '@/utils/naturalSort';
 import { toast } from 'sonner';
+import MaterialConsolidationModal from '@/components/construction/MaterialConsolidationModal';
 
 const TYPE_COLORS = {
   ks2: 'bg-blue-100 text-blue-700',
@@ -132,6 +133,8 @@ const FormsTab = ({ project }) => {
   // Create modal state
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
+  // Forma 19 == Material yig'indisi (materials consolidation) modal.
+  const [matConsOpen, setMatConsOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
@@ -1481,7 +1484,7 @@ const FormsTab = ({ project }) => {
             </Select>
             <Button variant="outline" onClick={() => { setAutoGenForm({ subcontract_id: '', building_id: '', period_from: '', period_to: '', ...defaultClientFields }); setShowAutoGenClientFields(false); setShowAutoGenModal(true); }}><Zap className="w-4 h-4 mr-2" /> {t('auto_ks2') || 'Forma 2 avto'}</Button>
             <Button variant="outline" onClick={() => { setGenF3Form({ subcontract_id: '', building_id: '', period_from: '', period_to: '', ...defaultClientFields }); setShowGenF3ClientFields(false); setShowGenF3Modal(true); }}><FileText className="w-4 h-4 mr-2" /> {t('gen_ks3') || 'Forma 3 yaratish'}</Button>
-            <Button variant="outline" className="text-orange-600 border-orange-300" onClick={() => { setF19CreateForm({ building_id: '', period_from: '', period_to: '', notes: '' }); setShowF19CreateModal(true); }}>
+            <Button variant="outline" className="text-orange-600 border-orange-300" onClick={() => setMatConsOpen(true)}>
               <Plus className="w-4 h-4 mr-2" /> {t('create_f19') || 'Forma 19'}
             </Button>
             {/* Forma yaratish button hidden - other buttons (KS-2 avto, KS-3, Forma 19) cover the same functionality */}
@@ -1863,7 +1866,16 @@ const FormsTab = ({ project }) => {
         </DialogContent>
       </Dialog>
 
-      {/* Create Forma 19 Modal */}
+      {/* Forma 19 == Material yig'indisi. Opened from the orange "Forma 19"
+         toolbar button; its Saqlash button writes the report to project files. */}
+      <MaterialConsolidationModal
+        open={matConsOpen}
+        onClose={() => setMatConsOpen(false)}
+        projectId={project?.id}
+        projectName={project?.name}
+      />
+
+      {/* Create Forma 19 Modal (legacy period-based form, no longer triggered) */}
       <Dialog open={showF19CreateModal} onOpenChange={setShowF19CreateModal}>
         <DialogContent className="max-w-md" aria-describedby={undefined}>
           <DialogHeader><DialogTitle>{t('create_f19') || 'Forma 19 yaratish'}</DialogTitle><DialogDescription className="sr-only">Create Forma 19</DialogDescription></DialogHeader>
