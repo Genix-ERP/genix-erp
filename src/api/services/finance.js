@@ -295,6 +295,24 @@ export const financeService = {
     return response.data.data;
   },
 
+  // Odoo-style reconciliation
+  // List each partner's invoiced/paid/due totals + unallocated credit.
+  async getPartnerBalances(direction = 'customer') {
+    const response = await apiClient.get('/payments/partner-balances', { params: { direction } });
+    return response.data.data;
+  },
+  // One partner's open docs, available credit, and the payments behind it.
+  async getPartnerLedger(contactId, direction = 'customer') {
+    const response = await apiClient.get('/payments/partner-ledger', { params: { contact_id: contactId, direction } });
+    return response.data.data;
+  },
+  // Apply a partner's unallocated payment credit to one of their open docs.
+  // data: { contact_id, direction, document_id, amount }
+  async reconcilePartnerCredit(data) {
+    const response = await apiClient.post('/payments/reconcile', data);
+    return response.data.data;
+  },
+
   // Tax Rates
   async listTaxRates(params = {}) {
     const response = await apiClient.get('/tax-rates', { params });
