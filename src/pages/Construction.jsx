@@ -117,8 +117,8 @@ const SmetaVsFactTab = lazy(() => import('@/components/construction/tabs/SmetaVs
 const PhotoReportsTab = lazy(() => import('@/components/construction/tabs/PhotoReportsTab'));
 const TeamTab = lazy(() => import('@/components/construction/tabs/TeamTab'));
 import { ImportModal, ExportModal, ImportExportButtons } from '@/components/shared';
-import { ReportGenerator } from '@/components/construction/ReportGenerator';
 import { ProjectKanban } from '@/components/construction/ProjectKanban';
+import MaterialConsolidationModal from '@/components/construction/MaterialConsolidationModal';
 import { UZ_REGIONS, citiesForRegion } from '@/components/construction/uzRegions';
 import CRMLinkPanel from '@/components/construction/CRMLinkPanel';
 import {
@@ -144,6 +144,8 @@ const ALLOWED_PROJECT_TRANSITIONS = Object.freeze({
 const ProgressTrackingTab = ({ project, sections, t, formatCurrency, onRefresh }) => {
   const [estimates, setEstimates] = useState([]);
   const [allItems, setAllItems] = useState([]);
+  // Forma 19 == Material yig'indisi (materials consolidation) modal.
+  const [matConsOpen, setMatConsOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [selectedEstimate, setSelectedEstimate] = useState(null);
   const [estimateLines, setEstimateLines] = useState([]);
@@ -199,16 +201,14 @@ const ProgressTrackingTab = ({ project, sections, t, formatCurrency, onRefresh }
   // Value-based: completedValue / totalValue. Quantity-based: derived from
   // per-item ratios so partial completion is represented correctly (not binary).
   const calculateProgress = useCallback((items) => {
-    if (!items || items.length === 0) {
-      return {
-        percent: 0,
-        byQty: 0,
-        completed: 0,
-        total: 0,
-        byValue: 0,
-        completedValue: 0,
-        totalValue: 0,
-      };
+    // Only top-level work lines count — exclude resource sub-lines
+    // (resource_type set or parent_line_id present) so we don't double-count
+    // a work's materials/labor as separate "items".
+    const works = (items || []).filter(
+      (it) => String(it.resource_type || '') === '' && !Number(it.parent_line_id || 0),
+    );
+    if (works.length === 0) {
+      return { percent: 0, byQty: 0, completed: 0, total: 0, byValue: 0, completedValue: 0, totalValue: 0 };
     }
 
     let totalQty = 0;
@@ -216,16 +216,22 @@ const ProgressTrackingTab = ({ project, sections, t, formatCurrency, onRefresh }
     let totalValue = 0;
     let completedValue = 0;
 
-    for (const item of items) {
-      const qty = Number(item.quantity) || 0;
+    for (const item of works) {
+      // REJA quantity: prefer the smeta plan anchors over the live `quantity`
+      // (which is 0 for works not yet started), matching the Bosqichlar view.
+      const qty = Number(item.imported_quantity) || Number(item.original_quantity) || Number(item.quantity) || 0;
       const total = Number(item.total_amount) || 0;
-      const actual = Math.max(0, Math.min(Number(item.actual_amount) || 0, total || Infinity));
-      const ratio = total > 0 ? actual / total : 0;
+      // Physical progress from done_quantity; fall back to billed actual_amount
+      // for legacy items that track completion by money rather than quantity.
+      const doneQ = Number(item.done_quantity) || 0;
+      const ratio = qty > 0
+        ? Math.min(doneQ / qty, 1)
+        : (total > 0 ? Math.max(0, Math.min(Number(item.actual_amount) || 0, total)) / total : 0);
 
       totalQty += qty;
       doneQty += qty * ratio;
       totalValue += total;
-      completedValue += actual;
+      completedValue += total * ratio;
     }
 
     const byValue = totalValue > 0 ? Math.round((completedValue / totalValue) * 100) : 0;
@@ -934,7 +940,9 @@ const OverviewTabContent = React.memo(function OverviewTabContent({
       label: 'Forma 19',
       icon: FileText,
       hint: t('forma_19_hint') || "Material sarflangani bo'yicha rasmiy hisobot",
-      go: () => { setActiveGroup('materiallar'); setActiveTab('forms'); },
+      // Forma 19 IS the material consolidation (Material yig'indisi). Open that
+      // modal directly so the user can review and Save it to project files.
+      go: () => { setMatConsOpen(true); },
     },
     {
       // Forma 3 (KS-3) lives in the same forms tab alongside Forma 2 /
@@ -2447,12 +2455,6 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
              tab — the portal mounts and unmounts automatically with
              the StagesTabV2 component. */}
           <div id="stages-tab-topbar-slot" className="contents" />
-          <ReportGenerator
-            project={project}
-            sections={sections}
-            items={[]}
-            buildings={buildings}
-          />
         </div>
       </div>
 
@@ -3904,6 +3906,16 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
         columns={buildingExportColumns}
         entityName={t('buildings') || 'Binolar'}
         title={`${project.name} - ${t('buildings') || 'Binolar'}`}
+      />
+
+      {/* Forma 19 — Material yig'indisi (materials consolidation) modal,
+         opened from the Tez amallar "Forma 19" quick action. The modal's
+         Saqlash button writes the report into the project's documents. */}
+      <MaterialConsolidationModal
+        open={matConsOpen}
+        onClose={() => setMatConsOpen(false)}
+        projectId={project?.id}
+        projectName={project?.name}
       />
 
 
