@@ -461,6 +461,18 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
     }
   };
 
+  // Un-post a sent/posted invoice back to draft so it can be edited or deleted.
+  const handleResetToDraft = async (invoice) => {
+    try {
+      await salesService.resetInvoiceToDraft(invoice.id);
+      await fetchInvoices();
+    } catch (err) {
+      const msg = err?.response?.data?.error?.message || err?.message || "Failed to reset invoice";
+      window.alert(msg);
+      console.error("Failed to reset invoice:", err);
+    }
+  };
+
   const handlePayment = (invoice) => {
     setSelectedInvoice(invoice);
     const defaultJournal = bankCashJournals.find(j => j.type === 'bank') || bankCashJournals[0];
@@ -1063,6 +1075,12 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                                 <DropdownMenuItem onClick={() => handleConfirmCreditNote(invoice.id)}>
                                   <CheckCircle className="w-4 h-4 mr-2 text-green-500" />
                                   {t('confirm_credit_note')}
+                                </DropdownMenuItem>
+                              )}
+                              {invoice.status !== "draft" && isSuperAdmin && (invoice.amount_paid || 0) === 0 && (
+                                <DropdownMenuItem onClick={() => handleResetToDraft(invoice)}>
+                                  <RotateCcw className="w-4 h-4 mr-2 text-blue-600" />
+                                  {t('reset_to_draft') || 'Qoralamaga qaytarish'}
                                 </DropdownMenuItem>
                               )}
                               {invoice.status === "draft" && (

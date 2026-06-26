@@ -713,6 +713,11 @@ export const financeService = {
     return response.data.data;
   },
 
+  async resetPurchaseInvoiceToDraft(id) {
+    const response = await apiClient.post(`/purchase-invoices/${id}/reset-to-draft`);
+    return response.data.data;
+  },
+
   async payPurchaseInvoice(id, amount = 0, paymentMethod = 'bank') {
     const response = await apiClient.post(`/purchase-invoices/${id}/pay`, { amount, payment_method: paymentMethod });
     return response.data.data;
