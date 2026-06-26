@@ -22,9 +22,14 @@ import { useSales } from "@/components/contexts/SalesContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { contactsService } from "@/api/services";
 import financeService from "@/api/services/finance";
+import FinanceVendorBills from "@/components/finance/FinanceVendorBills";
 import { toast } from 'sonner';
 
-export default function Payments() {
+export default function Payments({ side } = {}) {
+  // When `side` is 'customer' or 'vendor', this instance renders ONLY that side
+  // (no top-level Customer/Vendor toggle) — used by the split Customer / Vendor
+  // top-level Financials tabs.
+  const forcedSide = (side === 'customer' || side === 'vendor') ? side : null;
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
@@ -44,7 +49,7 @@ export default function Payments() {
   const customerInvoices = salesInvoices || [];
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
 
-  const [activeTab, setActiveTab] = useState("customer");
+  const [activeTab, setActiveTab] = useState(forcedSide || "customer");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [methodFilter, setMethodFilter] = useState("all");
@@ -500,7 +505,7 @@ export default function Payments() {
     return labels[method] || method;
   };
 
-  const isCustomerTab = activeTab === 'customer';
+  const isCustomerTab = (forcedSide || activeTab) === 'customer';
 
   // Payment status helpers for invoices/bills
   const getPaymentStatus = (inv) => {
@@ -528,6 +533,11 @@ export default function Payments() {
 
   return (
     <div className="space-y-6">
+      {forcedSide ? (
+        // Single side (Customer or Vendor) — no top-level toggle; the top-level
+        // Financials tab already chose the side.
+        <PaymentContent />
+      ) : (
       <Tabs value={activeTab} onValueChange={(val) => { setActiveTab(val); setSubTab('documents'); setSearchQuery(''); setStatusFilter('all'); setMethodFilter('all'); setDateFrom(''); setDateTo(''); setCustomerFilter('all'); }}>
         <TabsList className="bg-white/60 p-1 rounded-lg border border-slate-200/60 shadow-sm mb-4">
           <TabsTrigger value="customer" className={subTabClass}>
@@ -548,6 +558,7 @@ export default function Payments() {
           <PaymentContent />
         </TabsContent>
       </Tabs>
+      )}
 
       {/* Create Payment Modal */}
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
@@ -1293,7 +1304,8 @@ export default function Payments() {
           </TabsContent>
 
           <TabsContent value="documents" className="mt-0">
-        {/* Customer Invoices / Vendor Bills */}
+        {/* Customer → simple invoice list with Record Payment; Vendor → full Bills manager */}
+        {isCustomerTab ? (
         <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
           <CardHeader className="border-b border-slate-100 pb-4">
             <CardTitle className="text-lg font-bold text-slate-900">
@@ -1392,6 +1404,9 @@ export default function Payments() {
             })()}
           </CardContent>
         </Card>
+        ) : (
+          <FinanceVendorBills />
+        )}
           </TabsContent>
         </Tabs>
       </div>
