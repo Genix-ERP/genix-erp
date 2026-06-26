@@ -98,6 +98,10 @@ const STATUS_META = {
   submitted:            { shortKey: 'work_status_submitted',            longKey: 'work_status_submitted_long',            bg: '#FEF3C7', fg: '#B45309', dot: '#B45309', border: 'transparent' },
   confirmed_supervisor: { shortKey: 'work_status_confirmed_supervisor', longKey: 'work_status_confirmed_supervisor_long', bg: '#FED7AA', fg: '#9A3412', dot: '#9A3412', border: '#FB923C' },
   confirmed_engineer:   { shortKey: 'work_status_confirmed_engineer',   longKey: 'work_status_confirmed_engineer_long',   bg: '#D1FAE5', fg: '#065F46', dot: '#10B981', border: '#10B981' },
+  // Physically 100% done but not (yet) engineer-confirmed. Same green
+  // "completed" look as confirmed_engineer, but a distinct value so it does
+  // NOT lock the stage (isLocked only triggers on real engineer confirmation).
+  completed:            { shortKey: 'work_status_confirmed_engineer',   longKey: 'work_status_confirmed_engineer_long',   bg: '#D1FAE5', fg: '#065F46', dot: '#10B981', border: '#10B981' },
 };
 
 // Up to 6 fractional digits with trailing zeros dropped, so imported
@@ -320,14 +324,25 @@ function deriveStages(lines) {
   }));
 }
 
-function stageStatus(stage) {
-  const ws = stage.works;
+function stageStatus(stage, resolveQty) {
+  // Include sub-stage works — a stage that keeps everything under sub-stages
+  // has an empty `stage.works`, which previously made it read "not started"
+  // even when its sub-stage works were done.
+  const ws = allStageWorks(stage);
   if (ws.length === 0) return 'pending';
+  // Formal approval workflow takes precedence once a stage enters it.
   if (ws.every((w) => w.approval_status === 'confirmed_engineer')) return 'confirmed_engineer';
   if (ws.every((w) => ['submitted', 'confirmed_supervisor', 'confirmed_engineer'].includes(w.approval_status))) {
     if (ws.every((w) => ['confirmed_supervisor', 'confirmed_engineer'].includes(w.approval_status))) return 'confirmed_supervisor';
     return 'submitted';
   }
+  // Otherwise drive the badge from physical progress (done vs reja qty).
+  const workDone = (w) => {
+    const qty = resolveQty ? Number(resolveQty(w) || 0) : Number(w.quantity || 0);
+    const dq = Number(w.done_quantity || 0);
+    return qty > 0 ? (dq / qty) >= 0.999 : dq > 0;
+  };
+  if (ws.every(workDone)) return 'completed';                        // every work fully done
   if (ws.some((w) => Number(w.done_quantity || 0) > 0)) return 'in_progress';
   return 'pending';
 }
@@ -1818,14 +1833,14 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
           {visibleStages.map((stage) => {
             const stKey = stage.name;
             const expanded = expandedStages.has(stKey);
-            const status = stageStatus(stage);
+            const status = stageStatus(stage, resolveWorkQty);
             const stMeta = STATUS_META[status] || STATUS_META.pending;
             const pct = stageProgress(stage, resolveWorkQty);
             // Cost must include sub-stage works too, otherwise a stage whose
             // works all live under sub-stages reports "0 so'm".
             const cost = allStageWorks(stage).reduce((m, w) => m + Number(w.total_amount || 0), 0);
             const isLocked = status === 'confirmed_engineer';
-            const hasSubmitted = stage.works.some((w) => w.approval_status === 'submitted');
+            const hasSubmitted = allStageWorks(stage).some((w) => w.approval_status === 'submitted');
 
             return (
               <div
