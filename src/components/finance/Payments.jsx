@@ -21,6 +21,7 @@ import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { useSales } from "@/components/contexts/SalesContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { contactsService } from "@/api/services";
+import financeService from "@/api/services/finance";
 import { toast } from 'sonner';
 
 export default function Payments() {
@@ -194,9 +195,36 @@ export default function Payments() {
       const backendType = newPayment.payment_type === 'inbound' ? 'receipt' : 'payment';
       const selectedContact = contacts.find(c => c.id === newPayment.contact_id);
 
+      const paymentAmount = parseFloat(newPayment.amount) || 0;
+
+      // Odoo-style: no specific invoice/bill chosen → register a partner payment
+      // that auto-settles their open invoices/bills oldest-first; excess stays as
+      // a credit on the partner balance.
+      if (!newPayment.bill_id && !newPayment.invoice_id) {
+        const jr = bankCashJournals.find(j => j.id === newPayment.journal_id);
+        const res = await financeService.registerPartnerPayment({
+          contact_id: newPayment.contact_id,
+          amount: paymentAmount,
+          direction: isCustomerTab ? 'customer' : 'vendor',
+          method: jr?.type === 'cash' ? 'cash' : 'bank',
+          payment_date: newPayment.payment_date,
+          notes: newPayment.description,
+        });
+        const allocCount = (res?.allocated || []).length;
+        const credit = res?.credit_remaining || 0;
+        toast.success(
+          (allocCount > 0
+            ? (language === 'ru' ? `${allocCount} счёт(ов) закрыто` : language === 'uz' ? `${allocCount} ta hisob-faktura yopildi` : `${allocCount} invoice(s) settled`)
+            : (language === 'ru' ? 'Платёж принят' : language === 'uz' ? "To'lov qabul qilindi" : 'Payment recorded'))
+          + (credit > 0.001 ? ` · ${formatCurrency(credit)} ` + (language === 'ru' ? 'на баланс' : language === 'uz' ? 'balansda qoldi' : 'left as credit') : '')
+        );
+        try { await refreshSalesData(); } catch { /* ignore */ }
+        setShowCreateModal(false);
+        return;
+      }
+
       // Build allocations array if linked to an invoice/bill
       const allocations = [];
-      const paymentAmount = parseFloat(newPayment.amount) || 0;
       if (newPayment.bill_id) {
         allocations.push({
           document_type: 'purchase_invoice',
@@ -621,11 +649,14 @@ export default function Payments() {
               </Select>
             </div>
 
-            {/* Invoice Selector - Required for customer payments */}
+            {/* Invoice Selector - optional; if left empty the payment auto-settles oldest invoices first */}
             {isCustomerTab && (
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">
-                  {t('invoice') || 'Faktura'} *
+                  {t('invoice') || 'Faktura'}
+                  <span className="ml-2 text-xs font-normal text-slate-400">
+                    {language === 'ru' ? '(необязательно — иначе закроются старые)' : language === 'uz' ? "(ixtiyoriy — bo'sh qoldirilsa eng eskisidan yopiladi)" : '(optional — else settles oldest first)'}
+                  </span>
                 </label>
                 {unpaidInvoices.length > 0 ? (
                   <Select
@@ -676,11 +707,14 @@ export default function Payments() {
               </div>
             )}
 
-            {/* Bill Selector - Required for vendor payments */}
+            {/* Bill Selector - optional; if left empty the payment auto-settles oldest bills first */}
             {!isCustomerTab && (
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">
-                  {t('bill') || 'Hisob-faktura'} *
+                  {t('bill') || 'Hisob-faktura'}
+                  <span className="ml-2 text-xs font-normal text-slate-400">
+                    {language === 'ru' ? '(необязательно — иначе закроются старые)' : language === 'uz' ? "(ixtiyoriy — bo'sh qoldirilsa eng eskisidan yopiladi)" : '(optional — else settles oldest first)'}
+                  </span>
                 </label>
                 {unpaidBills.length > 0 ? (
                   <Select
@@ -824,7 +858,7 @@ export default function Payments() {
               <Button
                 onClick={handleCreatePayment}
                 className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-                disabled={isSaving || !newPayment.amount || !newPayment.contact_id || !newPayment.payment_date || !newPayment.journal_id || (isCustomerTab ? !newPayment.invoice_id : !newPayment.bill_id)}
+                disabled={isSaving || !newPayment.amount || !newPayment.contact_id || !newPayment.payment_date || !newPayment.journal_id}
               >
                 {isSaving ? t('saving') : t('create_payment')}
               </Button>
