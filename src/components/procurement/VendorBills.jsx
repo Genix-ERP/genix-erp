@@ -47,7 +47,8 @@ import {
   ChevronDown,
   ChevronUp,
   CreditCard,
-  Calendar
+  Calendar,
+  RotateCcw
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -64,7 +65,7 @@ import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 export default function VendorBills() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { canCreate } = usePermissions();
+  const { canCreate, isSuperAdmin } = usePermissions();
   const { formatCurrency } = useCurrencyFormatter();
   const { currencies = [], exchangeRates = [], getLatestExchangeRate, taxRates = [], journals = [], paymentJournals = [] } = useFinancials();
   const bankCashJournals = paymentJournals.length > 0 ? paymentJournals : journals.filter(j => j.type === 'bank' || j.type === 'cash');
@@ -299,6 +300,18 @@ export default function VendorBills() {
       fetchBills();
     } catch (error) {
       console.error('Failed to approve bill:', error);
+    }
+  };
+
+  // Un-post an approved/posted bill back to draft so it can be edited or deleted.
+  const handleResetBillToDraft = async (billId) => {
+    try {
+      await financeService.resetPurchaseInvoiceToDraft(billId);
+      fetchBills();
+    } catch (error) {
+      const msg = error?.response?.data?.error?.message || error?.message || 'Failed to reset bill';
+      window.alert(msg);
+      console.error('Failed to reset bill:', error);
     }
   };
 
@@ -773,6 +786,17 @@ export default function VendorBills() {
                           >
                             <Eye className="w-4 h-4" />
                           </Button>
+                          {bill.status !== 'draft' && isSuperAdmin && (bill.amount_paid || 0) === 0 && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleResetBillToDraft(bill.id)}
+                              className="text-blue-600 hover:text-blue-700"
+                              title={t('reset_to_draft') || 'Qoralamaga qaytarish'}
+                            >
+                              <RotateCcw className="w-4 h-4" />
+                            </Button>
+                          )}
                           {bill.status === 'draft' && (
                             <>
                               <Button

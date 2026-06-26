@@ -107,6 +107,11 @@ export const salesService = {
     return response.data.data;
   },
 
+  async resetInvoiceToDraft(id) {
+    const response = await apiClient.post(`/sales-invoices/${id}/reset-to-draft`);
+    return response.data.data;
+  },
+
   async recordPayment(invoiceId, data) {
     const response = await apiClient.post(`/sales-invoices/${invoiceId}/record-payment`, data);
     return response.data.data;
