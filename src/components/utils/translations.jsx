@@ -11283,6 +11283,8 @@ export const translations = {
     "entry_deleted_successfully": "Jurnal yozuvi o'chirildi",
     "original_entry": "Asl yozuv",
     "reverse_entry": "Teskari yozuv",
+    "reset_to_draft": "Qoralamaga qaytarish",
+    "entry_reset_to_draft": "Yozuv qoralamaga qaytarildi — endi tahrirlash mumkin",
     "reversal_entry": "Teskari yozuv",
     "has_reversal": "Teskarilangan",
     "reversal_reason": "Sabab",
@@ -23004,6 +23006,8 @@ export const translations = {
     "unposted": "Не проведено",
     "void": "Аннулировано",
     "reverse_entry": "Сторнировать проводку",
+    "reset_to_draft": "Вернуть в черновик",
+    "entry_reset_to_draft": "Запись возвращена в черновик — теперь можно редактировать",
 
     // Bank Reconciliation
     "bank_reconciliation": "Банковская сверка",

@@ -217,12 +217,13 @@ export default function GeneralLedger() {
     cancelJournalEntry,
     postJournalEntry,
     reverseJournalEntry,
+    resetJournalEntryToDraft,
     getJournalLines,
     accounts,
     journals,
     isLoading
   } = useFinancials();
-  const { canCreate } = usePermissions();
+  const { canCreate, isSuperAdmin } = usePermissions();
   const { formatCurrency } = useCurrencyFormatter();
   const { modal, showAlert, showError, showSuccess, close } = useAlertModal();
 
@@ -496,6 +497,21 @@ export default function GeneralLedger() {
           ? t('insufficient_account_balance').replace('{name}', name).replace('{code}', code).replace('{balance}', balance)
           : `Insufficient funds in ${name} (${code}). Current balance: ${balance} so'm`;
       }
+      showError(msg);
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleResetToDraft = async () => {
+    if (!selectedEntry || selectedEntry.status !== 'posted') return;
+    setIsActionLoading(true);
+    try {
+      await resetJournalEntryToDraft(selectedEntry.id);
+      setSelectedEntry(prev => prev ? { ...prev, status: 'draft', posted_at: null } : prev);
+      showSuccess(t('entry_reset_to_draft') || 'Yozuv qoralamaga qaytarildi — endi tahrirlash mumkin');
+    } catch (error) {
+      const msg = error?.response?.data?.error?.message || error?.message || 'Failed to reset entry';
       showError(msg);
     } finally {
       setIsActionLoading(false);
@@ -1239,6 +1255,18 @@ export default function GeneralLedger() {
                     >
                       <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
                       {t('reverse_entry') || 'Teskari yozuv'}
+                    </Button>
+                  )}
+                  {/* Reset to draft (super admins only) — un-post to edit + re-post */}
+                  {selectedEntry.status === 'posted' && !selectedEntry.reversed_entry_id && isSuperAdmin && (
+                    <Button
+                      variant="outline"
+                      className="w-full text-sm text-blue-600 border-blue-200 hover:bg-blue-50"
+                      onClick={handleResetToDraft}
+                      disabled={isActionLoading}
+                    >
+                      <Pencil className="w-3.5 h-3.5 mr-1.5" />
+                      {t('reset_to_draft') || 'Qoralamaga qaytarish'}
                     </Button>
                   )}
                   {/* Always show PDF */}

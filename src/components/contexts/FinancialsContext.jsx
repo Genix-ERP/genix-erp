@@ -1021,6 +1021,20 @@ export function FinancialsProvider({ children }) {
     }
   }, [backendAvailable]);
 
+  const resetJournalEntryToDraft = useCallback(async (id) => {
+    if (backendAvailable) {
+      try {
+        const result = await financeService.resetJournalEntryToDraft(id);
+        const entries = await financeService.listJournalEntries({ limit: 1000 });
+        setJournalEntries(entries || []);
+        return result;
+      } catch (err) {
+        console.error('API error:', err);
+        throw err;
+      }
+    }
+  }, [backendAvailable]);
+
   const listJournalEntries = useCallback((sortField, limit) => {
     let sorted = [...journalEntries];
     if (sortField) {
@@ -1693,7 +1707,7 @@ export function FinancialsProvider({ children }) {
   }, [backendAvailable]);
 
   const value = useMemo(() => ({
-    journalEntries, journalLines, createJournalEntry, updateJournalEntry, deleteJournalEntry, cancelJournalEntry, postJournalEntry, reverseJournalEntry, listJournalEntries, getJournalLines, createJournalLine,
+    journalEntries, journalLines, createJournalEntry, updateJournalEntry, deleteJournalEntry, cancelJournalEntry, postJournalEntry, reverseJournalEntry, resetJournalEntryToDraft, listJournalEntries, getJournalLines, createJournalLine,
     accounts, accountTypes, createAccount, updateAccount, deleteAccount, getAccountTransactions,
     payments, createPayment, confirmPayment,
     taxRates, createTaxRate, updateTaxRate, deleteTaxRate,
@@ -1737,7 +1751,7 @@ export function FinancialsProvider({ children }) {
       receivables: financeSettings.defaultReceivablesAccount,
       payables: financeSettings.defaultPayablesAccount
     })
-  }), [journalEntries, journalLines, createJournalEntry, updateJournalEntry, deleteJournalEntry, cancelJournalEntry, postJournalEntry, reverseJournalEntry, listJournalEntries, getJournalLines, createJournalLine, accounts, accountTypes, createAccount, updateAccount, deleteAccount, getAccountTransactions, payments, createPayment, confirmPayment, taxRates, createTaxRate, updateTaxRate, deleteTaxRate, journals, createJournal, updateJournal, deleteJournal, bankAccounts, createBankAccount, updateBankAccount, deleteBankAccount, bankTransactions, loadBankTransactions, getBankTransactionsByAccount, createBankTransaction, reconcileBankTransaction, cashTransactions, createCashTransaction, updateCashTransaction, deleteCashTransaction, getCashBalance, currencies, createCurrency, updateCurrency, deleteCurrency, exchangeRates, setExchangeRate, getLatestExchangeRate, convertCurrency, vendorBills, createVendorBill, updateVendorBill, listVendorBills, postVendorBill, payVendorBill, customerInvoices, createCustomerInvoice, updateCustomerInvoice, listCustomerInvoices, financialTransactions, listFinancialTransactions, fiscalYears, createFiscalYear, updateFiscalYear, closeFiscalYear, deleteFiscalYear, fiscalPeriods, createFiscalPeriod, createFiscalPeriods, closeFiscalPeriod, reopenFiscalPeriod, getFiscalPeriodsByYear, budgets, createBudget, updateBudget, deleteBudget, activateBudget, budgetLines, createBudgetLine, updateBudgetLine, deleteBudgetLine, getBudgetLinesByBudget, getBudgetVariance, fixedAssets, createFixedAsset, updateFixedAsset, deleteFixedAsset, disposeFixedAsset, depreciationEntries, createDepreciationEntry, getDepreciationEntriesByAsset, calculateMonthlyDepreciation, runDepreciationForPeriod, cashRegisters, createCashRegister, cashOrders, createCashOrder, confirmCashOrder, deleteCashOrder, getCashBook, reconciliationActs, createReconciliationAct, updateReconciliationAct, deleteReconciliationAct, bulkGenerateReconciliation, refreshReconciliationAct, exportReconciliationAct, exchangeDiffs, syncExchangeRates, revalueCurrency, getBalanceSheet, getIncomeStatement, getCashFlow, getTrialBalance, getGeneralLedger, getAgingReceivables, getAgingPayables, isLoading, backendAvailable, error, loadData, financeSettings]);
+  }), [journalEntries, journalLines, createJournalEntry, updateJournalEntry, deleteJournalEntry, cancelJournalEntry, postJournalEntry, reverseJournalEntry, resetJournalEntryToDraft, listJournalEntries, getJournalLines, createJournalLine, accounts, accountTypes, createAccount, updateAccount, deleteAccount, getAccountTransactions, payments, createPayment, confirmPayment, taxRates, createTaxRate, updateTaxRate, deleteTaxRate, journals, createJournal, updateJournal, deleteJournal, bankAccounts, createBankAccount, updateBankAccount, deleteBankAccount, bankTransactions, loadBankTransactions, getBankTransactionsByAccount, createBankTransaction, reconcileBankTransaction, cashTransactions, createCashTransaction, updateCashTransaction, deleteCashTransaction, getCashBalance, currencies, createCurrency, updateCurrency, deleteCurrency, exchangeRates, setExchangeRate, getLatestExchangeRate, convertCurrency, vendorBills, createVendorBill, updateVendorBill, listVendorBills, postVendorBill, payVendorBill, customerInvoices, createCustomerInvoice, updateCustomerInvoice, listCustomerInvoices, financialTransactions, listFinancialTransactions, fiscalYears, createFiscalYear, updateFiscalYear, closeFiscalYear, deleteFiscalYear, fiscalPeriods, createFiscalPeriod, createFiscalPeriods, closeFiscalPeriod, reopenFiscalPeriod, getFiscalPeriodsByYear, budgets, createBudget, updateBudget, deleteBudget, activateBudget, budgetLines, createBudgetLine, updateBudgetLine, deleteBudgetLine, getBudgetLinesByBudget, getBudgetVariance, fixedAssets, createFixedAsset, updateFixedAsset, deleteFixedAsset, disposeFixedAsset, depreciationEntries, createDepreciationEntry, getDepreciationEntriesByAsset, calculateMonthlyDepreciation, runDepreciationForPeriod, cashRegisters, createCashRegister, cashOrders, createCashOrder, confirmCashOrder, deleteCashOrder, getCashBook, reconciliationActs, createReconciliationAct, updateReconciliationAct, deleteReconciliationAct, bulkGenerateReconciliation, refreshReconciliationAct, exportReconciliationAct, exchangeDiffs, syncExchangeRates, revalueCurrency, getBalanceSheet, getIncomeStatement, getCashFlow, getTrialBalance, getGeneralLedger, getAgingReceivables, getAgingPayables, isLoading, backendAvailable, error, loadData, financeSettings]);
 
   return (
     <FinancialsContext.Provider value={value}>
