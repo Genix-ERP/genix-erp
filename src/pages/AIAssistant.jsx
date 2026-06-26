@@ -87,14 +87,17 @@ export default function AIAssistant() {
     scrollToBottom();
   }, [messages]);
 
+  // Start a conversation only when none is active AND there's no restored
+  // history. This keeps the page and the floating widget on the same thread
+  // (both read `messages` from the shared AI context) instead of resetting it.
   useEffect(() => {
-    if (!activeConversation) {
+    if (!activeConversation && messages.length === 0) {
       createConversation({
         name: "Business AI Copilot Session",
         description: "Intelligent assistant for business operations"
       });
     }
-  }, []);
+  }, [activeConversation, messages.length]);
 
   const getUserInitials = () => {
     if (user?.first_name && user?.last_name) {
