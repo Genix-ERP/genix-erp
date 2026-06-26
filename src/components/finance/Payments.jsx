@@ -57,6 +57,8 @@ export default function Payments() {
   const [isSaving, setIsSaving] = useState(false);
   const [contacts, setContacts] = useState([]);
   const [contactsLoading, setContactsLoading] = useState(false);
+  // Inner view inside each Customer/Vendor tab: 'documents' (invoices/bills) | 'payments'
+  const [subTab, setSubTab] = useState('documents');
 
   const [newPayment, setNewPayment] = useState({
     payment_type: 'inbound',
@@ -526,7 +528,7 @@ export default function Payments() {
 
   return (
     <div className="space-y-6">
-      <Tabs value={activeTab} onValueChange={(val) => { setActiveTab(val); setSearchQuery(''); setStatusFilter('all'); setMethodFilter('all'); setDateFrom(''); setDateTo(''); setCustomerFilter('all'); }}>
+      <Tabs value={activeTab} onValueChange={(val) => { setActiveTab(val); setSubTab('documents'); setSearchQuery(''); setStatusFilter('all'); setMethodFilter('all'); setDateFrom(''); setDateTo(''); setCustomerFilter('all'); }}>
         <TabsList className="bg-white/60 p-1 rounded-lg border border-slate-200/60 shadow-sm mb-4">
           <TabsTrigger value="customer" className={subTabClass}>
             <ArrowDownLeft className="w-4 h-4" />
@@ -995,9 +997,9 @@ export default function Payments() {
   // Inner content rendered for both tabs
   function PaymentContent() {
     return (
-      <div className="flex flex-col gap-6">
+      <div className="space-y-6">
         {/* Summary Cards */}
-        <div className="order-1 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
@@ -1052,8 +1054,22 @@ export default function Payments() {
           </Card>
         </div>
 
-        {/* Payment history (transactions) — secondary, below the invoice/bill list */}
-        <Card className="order-3 bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-md">
+        {/* Inner views: Invoices/Bills list and Payments — like Odoo (Customer > Invoices/Payments, Vendor > Bills/Payments) */}
+        <Tabs value={subTab} onValueChange={setSubTab} className="w-full">
+          <TabsList className="bg-white/60 p-1 rounded-lg border border-slate-200/60 shadow-sm mb-4">
+            <TabsTrigger value="documents" className={subTabClass}>
+              {isCustomerTab
+                ? (language === 'ru' ? 'Счета' : language === 'uz' ? 'Hisob-fakturalar' : 'Invoices')
+                : (language === 'ru' ? 'Счета поставщиков' : language === 'uz' ? 'Hisob-fakturalar' : 'Bills')}
+            </TabsTrigger>
+            <TabsTrigger value="payments" className={subTabClass}>
+              {language === 'ru' ? 'Платежи' : language === 'uz' ? "To'lovlar" : 'Payments'}
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="payments" className="mt-0">
+        {/* Payment history (transactions) */}
+        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-md">
           <CardHeader className="border-b border-slate-100 pb-6">
             <div className="flex flex-col gap-4">
               <div className="flex items-center gap-3">
@@ -1274,8 +1290,11 @@ export default function Payments() {
           </CardContent>
         </Card>
 
-        {/* Customer Invoices / Vendor Bills — primary list inside each tab */}
-        <Card className="order-2 bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+          </TabsContent>
+
+          <TabsContent value="documents" className="mt-0">
+        {/* Customer Invoices / Vendor Bills */}
+        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
           <CardHeader className="border-b border-slate-100 pb-4">
             <CardTitle className="text-lg font-bold text-slate-900">
               {isCustomerTab
@@ -1373,6 +1392,8 @@ export default function Payments() {
             })()}
           </CardContent>
         </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     );
   }
