@@ -245,6 +245,11 @@ export const financeService = {
     return response.data.data;
   },
 
+  async resetJournalEntryToDraft(id) {
+    const response = await apiClient.post(`/journal-entries/${id}/reset-to-draft`);
+    return response.data.data;
+  },
+
   async lockFiscalPeriod(id) {
     const response = await apiClient.post(`/fiscal-periods/${id}/lock`);
     return response.data.data;
