@@ -283,6 +283,13 @@ export const financeService = {
     return response.data.data;
   },
 
+  // Odoo-style: register a payment for a partner (no invoice picked).
+  // data: { contact_id, amount, direction: 'customer'|'vendor', method, payment_date, notes }
+  async registerPartnerPayment(data) {
+    const response = await apiClient.post('/payments/register', data);
+    return response.data.data;
+  },
+
   async confirmPayment(id) {
     const response = await apiClient.post(`/payments/${id}/confirm`);
     return response.data.data;
