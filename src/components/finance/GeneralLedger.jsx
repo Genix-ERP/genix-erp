@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -436,7 +436,40 @@ export default function GeneralLedger() {
     }));
   };
 
+  // ---- Account-correspondence (шахматка) dropdown filtering ----
+  // When an account is chosen on a line, restrict the OTHER lines' account
+  // dropdowns to the accounts it validly pairs with. Accounts not in the matrix
+  // impose no restriction.
+  const cpCache = useRef({}); // accountId -> { inMatrix, ids:Set, loading? }
+  const [, setCpVersion] = useState(0);
+  const fetchCounterparts = useCallback((accountId) => {
+    if (!accountId || cpCache.current[accountId]) return;
+    cpCache.current[accountId] = { inMatrix: false, ids: new Set(), loading: true };
+    financeService.getAccountCorrespondenceCounterparts(accountId)
+      .then(res => { cpCache.current[accountId] = { inMatrix: !!res?.in_matrix, ids: new Set(res?.account_ids || []) }; })
+      .catch(() => { cpCache.current[accountId] = { inMatrix: false, ids: new Set() }; })
+      .finally(() => setCpVersion(v => v + 1));
+  }, []);
+
+  // The accounts allowed in line `index`'s dropdown, given the other lines'
+  // chosen in-matrix accounts (intersection of their counterpart sets).
+  const accountsForLine = (index) => {
+    const constraints = (newEntry.lines || [])
+      .filter((_, i) => i !== index)
+      .map(l => l.account_id).filter(Boolean)
+      .map(id => cpCache.current[id])
+      .filter(cp => cp && cp.inMatrix && !cp.loading);
+    if (constraints.length === 0) return accounts;
+    let allowed = null;
+    for (const cp of constraints) {
+      allowed = allowed === null ? new Set(cp.ids) : new Set([...allowed].filter(x => cp.ids.has(x)));
+    }
+    const own = newEntry.lines[index]?.account_id;
+    return (accounts || []).filter(a => allowed.has(a.id) || a.id === own);
+  };
+
   const updateLine = (index, field, value) => {
+    if (field === 'account_id' && value) fetchCounterparts(value);
     setNewEntry(prev => ({
       ...prev,
       lines: prev.lines.map((line, i) => {
@@ -1457,7 +1490,7 @@ export default function GeneralLedger() {
                       <TableRow key={index}>
                         <TableCell className="p-2">
                           <AccountCombobox
-                            accounts={accounts}
+                            accounts={accountsForLine(index)}
                             value={line.account_id}
                             onValueChange={(value) => updateLine(index, 'account_id', value)}
                             placeholder={t('select_account')}

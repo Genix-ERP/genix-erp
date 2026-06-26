@@ -250,6 +250,13 @@ export const financeService = {
     return response.data.data;
   },
 
+  // Valid correspondence counterpart accounts for a given account (шахматка).
+  // Returns { in_matrix, account_ids }. Empty account_ids => no restriction.
+  async getAccountCorrespondenceCounterparts(accountId) {
+    const response = await apiClient.get('/account-correspondences/counterparts', { params: { account_id: accountId } });
+    return response.data.data;
+  },
+
   async lockFiscalPeriod(id) {
     const response = await apiClient.post(`/fiscal-periods/${id}/lock`);
     return response.data.data;
