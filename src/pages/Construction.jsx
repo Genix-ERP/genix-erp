@@ -144,8 +144,6 @@ const ALLOWED_PROJECT_TRANSITIONS = Object.freeze({
 const ProgressTrackingTab = ({ project, sections, t, formatCurrency, onRefresh }) => {
   const [estimates, setEstimates] = useState([]);
   const [allItems, setAllItems] = useState([]);
-  // Forma 19 == Material yig'indisi (materials consolidation) modal.
-  const [matConsOpen, setMatConsOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [selectedEstimate, setSelectedEstimate] = useState(null);
   const [estimateLines, setEstimateLines] = useState([]);
@@ -934,6 +932,9 @@ const OverviewTabContent = React.memo(function OverviewTabContent({
   const locationParts = [project.region, project.city, project.address].filter(Boolean);
   const locationStr = locationParts.join(', '); // still used by other call sites for tooltips
 
+  // Forma 19 == Material yig'indisi (materials consolidation) modal.
+  const [matConsOpen, setMatConsOpen] = useState(false);
+
   const quickActions = [
     {
       id: 'forma19',
@@ -1109,6 +1110,15 @@ const OverviewTabContent = React.memo(function OverviewTabContent({
         sections={sections}
         vendors={vendors}
         acts={acts}
+      />
+
+      {/* Forma 19 == Material yig'indisi. Opened from the Tez amallar
+         "Forma 19" quick action; Saqlash writes it to project documents. */}
+      <MaterialConsolidationModal
+        open={matConsOpen}
+        onClose={() => setMatConsOpen(false)}
+        projectId={project?.id}
+        projectName={project?.name}
       />
     </div>
   );
@@ -3908,15 +3918,6 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
         title={`${project.name} - ${t('buildings') || 'Binolar'}`}
       />
 
-      {/* Forma 19 — Material yig'indisi (materials consolidation) modal,
-         opened from the Tez amallar "Forma 19" quick action. The modal's
-         Saqlash button writes the report into the project's documents. */}
-      <MaterialConsolidationModal
-        open={matConsOpen}
-        onClose={() => setMatConsOpen(false)}
-        projectId={project?.id}
-        projectName={project?.name}
-      />
 
 
       {/* Team Member Modal */}
