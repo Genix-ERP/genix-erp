@@ -8,6 +8,7 @@ import { useCustomers } from './CustomersContext';
 import { useFinancials } from './FinancialsContext';
 import { useModules } from './ModulesContext';
 import { useVendors } from './VendorsContext';
+import { useProcurement } from './ProcurementContext';
 import { useLanguage } from './LanguageContext';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { createCurrencyFormatter } from '@/utils/formatCurrency';
@@ -254,7 +255,7 @@ const extractContactFields = (text) => {
   if (phone) out.phone = phone.replace(/[^\d+]/g, '');
   // Name: prefer an explicit introducer ("name/named/ismi/nomi: X"), stopping
   // before connectors like "in / and / email / phone" (matched as whole words).
-  let nameM = text.match(/(?:name|named|called|ismi|nomi|nomli)\s+(?:is\s+|:\s*)?["']?([\p{L}][\p{L}'`ʼ.\- ]{1,60}?)["']?(?=$|[,.\n]|\s+(?:and|email|e-mail|phone|tel|telefon|va|bilan|in|и)\b)/iu);
+  let nameM = text.match(/(?:name|named|called|ismi|nomi|nomli)\s+(?:is\s+|of\s+|=\s*|:\s*)?["']?([\p{L}][\p{L}'`ʼ.\- ]{1,60}?)["']?(?=$|[,.\n]|\s+(?:and|email|e-mail|phone|tel|telefon|va|bilan|in|и)\b)/iu);
   // Fallback: "client/customer/mijoz/vendor <Capitalized Name>" (must start uppercase
   // so filler words like "with" aren't captured).
   if (!nameM) {
@@ -286,23 +287,30 @@ const extractOrderFields = (text) => {
   const amt = text.match(/(?:\$|amount|summa|sum|qiymat|сумм\w*|на сумму)\s*([\d][\d\s.,]*\d|\d)/i)
     || text.match(/([\d][\d\s.,]*\d|\d)\s*(?:so'?m|sum|usd|\$|dollar|долл)/i);
   if (amt) { const n = parseFloat(String(amt[1]).replace(/[\s,]/g, '')); if (!isNaN(n)) out.amount = n; }
-  const nameM = text.match(/(?:\bfor\b|\bfrom\b|customer|client|mijoz|vendor|supplier|yetkazuvchi)\s+["']?(\p{Lu}[\p{L}0-9'`ʼ&.\- ]*?)["']?\s*(?=$|[,.\n]|\d|\$|order\b|buyurtma|amount|summa|so'?m|usd|dollar|и\b)/iu);
+  // "for/from/customer/... <Name>" — first letter any case, allows mixed-case
+  // company names like "Ali tech solutions".
+  const nameM = text.match(/(?:\bfor\b|\bfrom\b|customer|client|mijoz|vendor|supplier|yetkazuvchi)\s+["']?(\p{L}[\p{L}0-9'`ʼ&.\- ]*?)["']?\s*(?=$|[,.\n]|\d|\$|order\b|buyurtma|amount|summa|so'?m|usd|dollar|и\b)/iu);
   if (nameM) {
     out.name = nameM[1].trim();
   } else {
-    // Uzbek postpositions: "<Name> uchun/dan/ga" = for/from <Name>.
-    const uz = text.match(/(\p{Lu}[\p{L}0-9'`ʼ&.-]*(?:\s+\p{Lu}[\p{L}0-9'`ʼ&.-]*){0,3})\s+(?:uchun|dan|ga)\b/u);
+    // Uzbek postpositions: "<Name> uchun/dan/ga" = for/from <Name>. First word
+    // starts uppercase; following words may be lowercase (e.g. "Ali tech solutions").
+    const uz = text.match(/(\p{Lu}[\p{L}0-9'`ʼ&.\-]*(?:\s+[\p{L}0-9'`ʼ&.\-]+){0,4}?)\s+(?:uchun|dan|ga)\b/u);
     if (uz) out.name = uz[1].trim();
   }
   return out;
 };
 
-// Detect "create sales/purchase order" and which side it is.
+// Detect "create sales/purchase order". Recognizes both the explicit "order/
+// buyurtma" word and bare "sale/sotuv/savdo/purchase/xarid" intents.
 const detectOrderIntent = (message) => {
   const m = message.toLowerCase();
   if (!/(create|add|new|make|qo'?sh|yarat|создать|добав|нов|sot )/.test(m)) return null;
-  if (!/(order|buyurtma|заказ)/.test(m)) return null;
-  const isPurchase = /(purchase|xarid|закуп)/.test(m)
+  const hasOrderWord = /(order|buyurtma|заказ)/.test(m);
+  const hasSale = /(sale|sales|sotuv|savdo|sell|продаж)/.test(m);
+  const hasPurchase = /(purchase|xarid|закуп)/.test(m);
+  if (!hasOrderWord && !hasSale && !hasPurchase) return null;
+  const isPurchase = hasPurchase
     || (/(supplier|vendor|yetkaz|ta'?minot|поставщ)/.test(m) && !/(customer|client|mijoz|sales|sotuv|savdo|продаж)/.test(m))
     || ((/\bfrom\b|\bdan\b/.test(m)) && !(/\bfor\b|uchun/.test(m)));
   const action = isPurchase ? AI_ACTIONS.CREATE_PURCHASE_ORDER : AI_ACTIONS.CREATE_SALES_ORDER;
@@ -330,6 +338,64 @@ const productSuggestions = (typed, products, n = 4) => {
   return (matches.length ? matches : arr).slice(0, n).map(x => x.name).filter(Boolean);
 };
 const parseQty = (text) => { const m = String(text).match(/\d+/); return m ? parseInt(m[0], 10) : null; };
+
+// Detect an optional reporting period in the user's message so analytics can be
+// scoped (e.g. "this month / bu oy / этот месяц"). Returns {key,start,end}|null.
+const detectSalesPeriod = (lower) => {
+  const now = new Date();
+  const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  if (/(today|bugun|сегодня)/.test(lower)) return { key: 'today', start: startOfDay(now), end: now };
+  if (/(this week|bu hafta|shu hafta|эт(?:ой|а) недел)/.test(lower)) {
+    const day = (now.getDay() + 6) % 7; // Monday = 0
+    const s = startOfDay(now); s.setDate(s.getDate() - day);
+    return { key: 'this_week', start: s, end: now };
+  }
+  if (/(last 30|past 30|oxirgi 30|30 kun|30 дн|последн\w* 30)/.test(lower)) {
+    const s = new Date(now); s.setDate(s.getDate() - 30);
+    return { key: 'last_30', start: s, end: now };
+  }
+  if (/(this month|current month|bu oy|shu oy|этот месяц|в этом месяце|за месяц|текущ\w* месяц)/.test(lower)) {
+    return { key: 'this_month', start: new Date(now.getFullYear(), now.getMonth(), 1), end: now };
+  }
+  if (/(this year|current year|bu yil|shu yil|этот год|в этом году|за год|текущ\w* год)/.test(lower)) {
+    return { key: 'this_year', start: new Date(now.getFullYear(), 0, 1), end: now };
+  }
+  return null;
+};
+const orderDateValue = (o) => {
+  const raw = o.order_date || o.date || o.created_at || o.createdAt;
+  if (!raw) return null;
+  const d = new Date(raw);
+  return isNaN(d.getTime()) ? null : d;
+};
+const withinPeriod = (o, p) => {
+  const d = orderDateValue(o);
+  return d ? (d >= p.start && d <= p.end) : false;
+};
+const periodLabel = (key, lang) => (({
+  this_month: { uz: 'Shu oy', ru: 'Этот месяц', en: 'This month' },
+  today: { uz: 'Bugun', ru: 'Сегодня', en: 'Today' },
+  last_30: { uz: 'Oxirgi 30 kun', ru: 'Последние 30 дней', en: 'Last 30 days' },
+  this_week: { uz: 'Shu hafta', ru: 'Эта неделя', en: 'This week' },
+  this_year: { uz: 'Shu yil', ru: 'Этот год', en: 'This year' },
+})[key] || {})[lang] || (({
+  this_month: 'This month', today: 'Today', last_30: 'Last 30 days', this_week: 'This week', this_year: 'This year',
+})[key] || '');
+
+// Localized strings for create-entity (customer/vendor) action results.
+const entityMsgs = (lang) => ({
+  customerAdded: lang === 'ru' ? 'Клиент добавлен!' : lang === 'en' ? 'Customer added!' : 'Mijoz qo‘shildi!',
+  vendorAdded: lang === 'ru' ? 'Поставщик добавлен!' : lang === 'en' ? 'Supplier added!' : 'Yetkazuvchi qo‘shildi!',
+  nameLabel: lang === 'ru' ? 'Имя' : lang === 'en' ? 'Name' : 'Nomi',
+  codeLabel: lang === 'ru' ? 'Код' : lang === 'en' ? 'Code' : 'Kodi',
+  phoneLabel: lang === 'ru' ? 'Телефон' : lang === 'en' ? 'Phone' : 'Telefon',
+  seeCustomers: lang === 'ru' ? 'Его можно найти в разделе «Клиенты».' : lang === 'en' ? 'You can find it in the Customers section.' : 'Mijozlar bo‘limida ko‘rishingiz mumkin.',
+  seeVendors: lang === 'ru' ? 'Его можно найти в разделе «Поставщики».' : lang === 'en' ? 'You can find it in the Suppliers section.' : 'Yetkazuvchilar bo‘limida ko‘rishingiz mumkin.',
+  needCustomerName: lang === 'ru' ? 'Укажите имя клиента.' : lang === 'en' ? 'Please enter the customer name.' : 'Mijoz nomini kiriting.',
+  needVendorName: lang === 'ru' ? 'Укажите имя поставщика.' : lang === 'en' ? 'Please enter the supplier name.' : 'Yetkazuvchi nomini kiriting.',
+  createCustomerFailed: lang === 'ru' ? 'Ошибка при добавлении клиента' : lang === 'en' ? 'Failed to add customer' : 'Mijoz qo‘shishda xatolik',
+  createVendorFailed: lang === 'ru' ? 'Ошибка при добавлении поставщика' : lang === 'en' ? 'Failed to add supplier' : 'Yetkazuvchi qo‘shishda xatolik',
+});
 
 const orderPrompts = (lang, isPurchase) => {
   const party = isPurchase ? (lang === 'ru' ? 'поставщика' : lang === 'en' ? 'vendor' : 'yetkazuvchi')
@@ -1422,6 +1488,9 @@ const generateDemoResponse = (message, context = {}, companyId = null, systemLan
       lowerMessage.includes('savdo') || lowerMessage.includes('daromad') || lowerMessage.includes('sotuv') ||
       lowerMessage.includes('buyurtma') || lowerMessage.includes('mijoz')) {
     const { salesOrders = [], customers = [] } = userData;
+    const salesPeriod = detectSalesPeriod(lowerMessage);
+    const orders = salesPeriod ? salesOrders.filter(o => withinPeriod(o, salesPeriod)) : salesOrders;
+    const periodSuffix = salesPeriod ? ` — ${periodLabel(salesPeriod.key, lang)}` : '';
 
     if (salesOrders.length === 0) {
       return {
@@ -1445,12 +1514,19 @@ ${t('noSalesOrders')}
       };
     }
 
-    const totalRevenue = salesOrders.reduce((sum, o) => sum + (o.total_amount || 0), 0);
-    const avgOrderValue = salesOrders.length > 0 ? totalRevenue / salesOrders.length : 0;
+    if (salesPeriod && orders.length === 0) {
+      return {
+        content: `**${t('salesAnalysis')}${periodSuffix}**\n\n${lang === 'ru' ? 'За выбранный период заказов нет.' : lang === 'en' ? 'No sales orders in the selected period.' : 'Tanlangan davr uchun buyurtmalar yo‘q.'}`,
+        tool_calls: [{ name: 'analyze_sales_data', status: 'completed' }],
+      };
+    }
+
+    const totalRevenue = orders.reduce((sum, o) => sum + (o.total_amount || 0), 0);
+    const avgOrderValue = orders.length > 0 ? totalRevenue / orders.length : 0;
 
     // Calculate customer revenue
     const customerRevenue = {};
-    salesOrders.forEach(o => {
+    orders.forEach(o => {
       if (o.customer_name) {
         customerRevenue[o.customer_name] = (customerRevenue[o.customer_name] || 0) + (o.total_amount || 0);
       }
@@ -1461,12 +1537,12 @@ ${t('noSalesOrders')}
       .slice(0, 5);
 
     // Status breakdown
-    const statusCounts = salesOrders.reduce((acc, o) => {
+    const statusCounts = orders.reduce((acc, o) => {
       acc[o.status || 'unknown'] = (acc[o.status || 'unknown'] || 0) + 1;
       return acc;
     }, {});
 
-    const unpaidOrders = salesOrders.filter(o => o.payment_status === 'unpaid');
+    const unpaidOrders = orders.filter(o => o.payment_status === 'unpaid');
     const unpaidTotal = unpaidOrders.reduce((sum, o) => sum + (o.total_amount || 0), 0);
 
     let topCustomersText = topCustomers.length > 0
@@ -1474,11 +1550,11 @@ ${t('noSalesOrders')}
       : t('noCustomerData');
 
     return {
-      content: `**${t('salesAnalysis')} - ${t('yourDataSummary')}:**
+      content: `**${t('salesAnalysis')}${periodSuffix} - ${t('yourDataSummary')}:**
 
 **${t('keyMetrics')}**
 - ${t('totalRevenue')}: ${fmtCurrency(totalRevenue)}
-- ${t('totalOrders')}: ${salesOrders.length}
+- ${t('totalOrders')}: ${orders.length}
 - ${t('avgOrderValue')}: ${fmtCurrency(avgOrderValue)}
 
 **${t('orderStatusBreakdown')}**
@@ -2231,6 +2307,13 @@ export function AIProvider({ children }) {
     // Context not available
   }
 
+  let procurementContext = null;
+  try {
+    procurementContext = useProcurement();
+  } catch (e) {
+    // Context not available
+  }
+
   const [conversations, setConversations] = useState([]);
   const [activeConversation, setActiveConversation] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -2239,7 +2322,28 @@ export function AIProvider({ children }) {
   const [aiLimitReached, setAiLimitReached] = useState(false);
   const [pendingAction, setPendingAction] = useState(null); // For confirmation flow
   const pendingDraftRef = useRef(null); // Partial create-contact draft (slot filling)
+  const lastContactRef = useRef(null);  // Last created/used party name, for "unga / for him" follow-ups
   const messageIdCounter = useRef(0);
+
+  // ===== Persist chat history (per company) so it survives reload/navigation =====
+  const aiMsgKey = (cid) => `genix_ai_messages_${cid || 'default'}`;
+  const hydratedCompanyRef = useRef(null);
+  // Restore saved history when the active company becomes known / changes.
+  useEffect(() => {
+    const cid = activeCompany?.id || 'default';
+    try {
+      const raw = localStorage.getItem(aiMsgKey(cid));
+      const saved = raw ? JSON.parse(raw) : [];
+      setMessages(Array.isArray(saved) ? saved : []);
+    } catch { setMessages([]); }
+    hydratedCompanyRef.current = cid;
+  }, [activeCompany?.id]);
+  // Save history on every change (cap to the last 100 messages).
+  useEffect(() => {
+    const cid = activeCompany?.id || 'default';
+    if (hydratedCompanyRef.current !== cid) return; // don't overwrite before hydration
+    try { localStorage.setItem(aiMsgKey(cid), JSON.stringify(messages.slice(-100))); } catch { /* ignore */ }
+  }, [messages, activeCompany?.id]);
 
   // Execute AI action with permission checks
   const executeAction = useCallback(async (actionIntent) => {
@@ -2409,11 +2513,12 @@ export function AIProvider({ children }) {
           };
         }
 
+        const M = entityMsgs(currentLanguage);
         if (!params.name) {
           return {
             success: false,
             error: 'missing_params',
-            message: 'Mijoz nomini kiriting. Masalan: "Yangi mijoz qo\'shing Ali Valiyev, email: ali@example.com"'
+            message: M.needCustomerName
           };
         }
 
@@ -2430,14 +2535,14 @@ export function AIProvider({ children }) {
           const newCustomer = await customersContext.createCustomer(customerData);
           return {
             success: true,
-            message: `✅ **Mijoz qo'shildi!**\n\n**Ismi:** ${params.name}${params.email ? `\n**Email:** ${params.email}` : ''}${params.phone ? `\n**Telefon:** ${params.phone}` : ''}\n\nMijozlar bo'limida ko'rishingiz mumkin.`,
+            message: `✅ **${M.customerAdded}**\n\n**${M.nameLabel}:** ${params.name}${params.email ? `\n**Email:** ${params.email}` : ''}${params.phone ? `\n**${M.phoneLabel}:** ${params.phone}` : ''}\n\n${M.seeCustomers}`,
             data: newCustomer
           };
         } catch (err) {
           return {
             success: false,
             error: 'create_failed',
-            message: `Mijoz qo'shishda xatolik: ${err.message}`
+            message: `${M.createCustomerFailed}: ${err.message}`
           };
         }
       }
@@ -2727,7 +2832,7 @@ export function AIProvider({ children }) {
       }
 
       case AI_ACTIONS.CREATE_VENDOR: {
-        if (!vendorsContext) {
+        if (!vendorsContext && !procurementContext) {
           return {
             success: false,
             error: 'context_unavailable',
@@ -2735,34 +2840,47 @@ export function AIProvider({ children }) {
           };
         }
 
+        const MV = entityMsgs(currentLanguage);
         if (!params.vendor_name) {
           return {
             success: false,
             error: 'missing_params',
-            message: 'Yetkazuvchi nomini kiriting. Masalan: "Yangi yetkazuvchi qo\'shing Office Depot, email: vendor@office.com"'
+            message: MV.needVendorName
           };
         }
 
-        const vendorData = {
-          vendor_name: params.vendor_name,
-          contact_name: params.contact_name || '',
-          email: params.email || '',
-          phone: params.phone || '',
-          status: 'active'
-        };
-
         try {
-          const newVendor = vendorsContext.createVendor(vendorData);
+          // Prefer the backend-backed Procurement suppliers store so the new
+          // supplier appears in the Procurement → Suppliers list. Fall back to
+          // the local vendors store only if Procurement isn't available.
+          let newRec;
+          if (procurementContext?.createSupplier) {
+            newRec = await procurementContext.createSupplier({
+              name: params.vendor_name,
+              contact_person: params.contact_name || '',
+              email: params.email || '',
+              phone: params.phone || '',
+            });
+          } else {
+            newRec = vendorsContext.createVendor({
+              vendor_name: params.vendor_name,
+              contact_name: params.contact_name || '',
+              email: params.email || '',
+              phone: params.phone || '',
+              status: 'active',
+            });
+          }
+          const code = newRec?.vendor_code || newRec?.code || newRec?.supplier_code || '';
           return {
             success: true,
-            message: `✅ **Yetkazuvchi qo'shildi!**\n\n**Nomi:** ${params.vendor_name}\n**Kodi:** ${newVendor.vendor_code}${params.email ? `\n**Email:** ${params.email}` : ''}${params.phone ? `\n**Telefon:** ${params.phone}` : ''}\n\nYetkazuvchilar bo'limida ko'rishingiz mumkin.`,
-            data: newVendor
+            message: `✅ **${MV.vendorAdded}**\n\n**${MV.nameLabel}:** ${params.vendor_name}${code ? `\n**${MV.codeLabel}:** ${code}` : ''}${params.email ? `\n**Email:** ${params.email}` : ''}${params.phone ? `\n**${MV.phoneLabel}:** ${params.phone}` : ''}\n\n${MV.seeVendors}`,
+            data: newRec
           };
         } catch (err) {
           return {
             success: false,
             error: 'create_failed',
-            message: `Yetkazuvchi qo'shishda xatolik: ${err.message}`
+            message: `${MV.createVendorFailed}: ${err.message}`
           };
         }
       }
@@ -2774,7 +2892,7 @@ export function AIProvider({ children }) {
           message: 'Noma\'lum amal'
         };
     }
-  }, [isOwner, isSiteAdmin, canAddCompany, getPlanLimits, addCompany, inventoryContext, customersContext, modulesContext, vendorsContext, formatCurrency]);
+  }, [isOwner, isSiteAdmin, canAddCompany, getPlanLimits, addCompany, inventoryContext, customersContext, modulesContext, vendorsContext, procurementContext, formatCurrency, currentLanguage]);
 
   // Confirm and execute pending action
   const confirmAction = useCallback(async () => {
@@ -2964,6 +3082,7 @@ To change your subscription, go to **Settings** → **Subscription**.`
         const actionParams = action === AI_ACTIONS.CREATE_VENDOR
           ? { vendor_name: p.name, contact_name: p.name, email: p.email, phone: p.phone }
           : { name: p.name, email: p.email, phone: p.phone };
+        if (p.name) lastContactRef.current = p.name; // remember for "create a sale for him"
         return finishAction(action, actionParams);
       };
       const runOrderAction = async (action, name, lines, taxPct = 0) => {
@@ -2996,6 +3115,7 @@ To change your subscription, go to **Settings** → **Subscription**.`
             let nm = extractContactFields(content).name;
             if (!nm) { const bare = content.trim(); if (bare && bare.split(/\s+/).length <= 6 && bare.length <= 60) nm = bare; }
             if (!nm) return pushAssistant(PR.askName);
+            lastContactRef.current = nm;
             pendingDraftRef.current = { ...draft, name: nm, stage: 'product' };
             return pushAssistant(PR.askProduct);
           }
@@ -3054,8 +3174,14 @@ To change your subscription, go to **Settings** → **Subscription**.`
       if (orderIntent) {
         const isPurchase = orderIntent.action === AI_ACTIONS.CREATE_PURCHASE_ORDER;
         const PR = orderPrompts(draftLang, isPurchase);
-        const name = orderIntent.params.name;
+        let name = orderIntent.params.name;
+        // Resolve pronouns ("unga / for him / для него") to the last contact.
+        if (!name && lastContactRef.current
+          && /(unga|uni|ungga|usha|shu mijoz|shu mijozga|him|her|them|для него|для неё|ему|его|ей|неё|нему)/i.test(content)) {
+          name = lastContactRef.current;
+        }
         if (!name) { pendingDraftRef.current = { kind: 'order', action: orderIntent.action, name: '', lines: [], stage: 'name' }; return pushAssistant(PR.askName); }
+        lastContactRef.current = name;
         pendingDraftRef.current = { kind: 'order', action: orderIntent.action, name, lines: [], stage: 'product' };
         return pushAssistant(PR.askProduct);
       }
@@ -3121,6 +3247,26 @@ To change your subscription, go to **Settings** → **Subscription**.`
         ...rawData,
         ...Object.fromEntries(Object.entries(liveData).filter(([, v]) => Array.isArray(v) && v.length > 0)),
       };
+      // Scope to the active company. The tenant may hold several organizations
+      // (companies); records carry organization_id, so analytics must only see
+      // the active one — otherwise other companies' orders/customers leak in.
+      const activeOrgId = activeCompany?.id;
+      if (activeOrgId) {
+        const scopeToActiveCompany = (rows) => {
+          if (!Array.isArray(rows)) return rows;
+          // Only filter arrays whose records actually carry an organization id;
+          // leave tenant-level lists (no org field) untouched.
+          const hasOrg = rows.some(r => r && (r.organization_id != null || r.organisation_id != null || r.company_id != null));
+          if (!hasOrg) return rows;
+          return rows.filter(r => {
+            const oid = r?.organization_id ?? r?.organisation_id ?? r?.company_id;
+            return oid == null || String(oid) === String(activeOrgId);
+          });
+        };
+        Object.keys(groundedData).forEach(k => {
+          if (Array.isArray(groundedData[k])) groundedData[k] = scopeToActiveCompany(groundedData[k]);
+        });
+      }
       // Accurate, pre-computed metrics so the model reports real figures.
       groundedData.computed_analytics = computeGroundedAnalytics(groundedData);
 
@@ -3197,11 +3343,13 @@ To change your subscription, go to **Settings** → **Subscription**.`
     }
   }, [isBackendConnected, activeConversation, canMakeAIRequest, incrementAIUsage, getPlanLimits, executeAction, activeCompany, formatCurrency, currentLanguage, customersContext, inventoryContext, financialsContext, modulesContext]);
 
-  // Clear current conversation
+  // Clear current conversation (also wipes the persisted history).
   const clearConversation = useCallback(() => {
     setMessages([]);
     setActiveConversation(null);
-  }, []);
+    pendingDraftRef.current = null;
+    try { localStorage.removeItem(aiMsgKey(activeCompany?.id || 'default')); } catch { /* ignore */ }
+  }, [activeCompany?.id]);
 
   // List conversations
   const listConversations = useCallback(async () => {
