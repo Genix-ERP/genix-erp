@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import {
   Upload, FileSpreadsheet, CheckCircle, AlertCircle, ArrowDownLeft,
-  ArrowUpRight, Loader2, Landmark, Check, X, User
+  ArrowUpRight, Loader2, Landmark, Check, User
 } from "lucide-react";
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
@@ -27,13 +27,25 @@ export default function BankVipiskaImport() {
   const [uploading, setUploading] = useState(false);
   const [meta, setMeta] = useState(null);
   const [rows, setRows] = useState([]);
-  const [busyLine, setBusyLine] = useState(null);
-  const [confirmRow, setConfirmRow] = useState(null);
+  const [posting, setPosting] = useState(false);
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
+  const [showConfirm, setShowConfirm] = useState(false);
 
   // Leaf accounts for the pickers (you post to leaf accounts).
   const leafAccounts = useMemo(
     () => (accounts || []).filter(a => a.is_leaf !== false),
     [accounts]
+  );
+
+  // Rows ready to post: not posted/rejected and both accounts chosen.
+  const eligible = useMemo(
+    () => rows.filter(r => !r.posted && r.status !== 'matched' && r.status !== 'ignored'
+      && r.debet_account_id && r.kredit_account_id),
+    [rows]
+  );
+  const eligibleTotal = useMemo(
+    () => eligible.reduce((s, r) => s + (r.amount || 0), 0),
+    [eligible]
   );
 
   const onPick = () => fileRef.current?.click();
@@ -82,30 +94,30 @@ export default function BankVipiskaImport() {
     }
   };
 
-  const doPost = async (row) => {
-    setBusyLine(row.id);
-    try {
-      const res = await financeService.confirmBankVipiskaLine(row.id);
-      patchRow(row.id, { posted: true, status: 'matched' });
-      toast.success(tr(`O'tkazildi (${res?.entry_number || ''})`, `Проведено (${res?.entry_number || ''})`, `Posted (${res?.entry_number || ''})`));
-    } catch (err) {
-      toast.error(errMsg(err) || tr('O\'tkazishda xatolik', 'Ошибка проводки', 'Posting failed'));
-    } finally {
-      setBusyLine(null);
-      setConfirmRow(null);
+  // Post all eligible operations one by one.
+  const doPostAll = async () => {
+    const list = eligible;
+    if (list.length === 0) return;
+    setPosting(true);
+    setProgress({ done: 0, total: list.length });
+    let ok = 0, fail = 0;
+    for (let i = 0; i < list.length; i++) {
+      const row = list[i];
+      try {
+        await financeService.confirmBankVipiskaLine(row.id);
+        patchRow(row.id, { posted: true, status: 'matched' });
+        ok++;
+      } catch (err) {
+        fail++;
+        if (fail <= 2) toast.error(`#${row.line_number}: ${errMsg(err) || tr('xatolik', 'ошибка', 'error')}`);
+      }
+      setProgress({ done: i + 1, total: list.length });
     }
-  };
-
-  const doReject = async (row) => {
-    setBusyLine(row.id);
-    try {
-      await financeService.rejectBankVipiskaLine(row.id);
-      patchRow(row.id, { status: 'ignored' });
-    } catch (err) {
-      toast.error(errMsg(err) || tr('Xatolik', 'Ошибка', 'Error'));
-    } finally {
-      setBusyLine(null);
-    }
+    setPosting(false);
+    setShowConfirm(false);
+    toast.success(tr(`${ok} ta operatsiya o'tkazildi${fail ? `, ${fail} tasi xato` : ''}`,
+      `Проведено ${ok}${fail ? `, ошибок ${fail}` : ''}`,
+      `Posted ${ok}${fail ? `, ${fail} failed` : ''}`));
   };
 
   const accName = (id) => {
@@ -177,15 +189,27 @@ export default function BankVipiskaImport() {
           {/* Review table */}
           <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
             <CardHeader className="border-b border-slate-100 pb-4">
-              <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                <FileSpreadsheet className="w-5 h-5 text-[var(--genix-purple)]" />
-                {tr('Operatsiyalarni tekshirish', 'Проверка операций', 'Review operations')} ({rows.length})
-              </CardTitle>
-              <p className="text-sm text-slate-500 mt-1">
-                {tr('Hisoblarni o\'zgartirishingiz, so\'ng "Ha" bilan o\'tkazishingiz mumkin.',
-                    'Можно изменить счета и провести кнопкой «Да».',
-                    'You can change the accounts, then post with "Yes".')}
-              </p>
+              <div className="flex items-start justify-between gap-4 flex-wrap">
+                <div>
+                  <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                    <FileSpreadsheet className="w-5 h-5 text-[var(--genix-purple)]" />
+                    {tr('Operatsiyalarni tekshirish', 'Проверка операций', 'Review operations')} ({rows.length})
+                  </CardTitle>
+                  <p className="text-sm text-slate-500 mt-1">
+                    {tr('Hisoblarni tekshiring/o\'zgartiring, so\'ng hammasini bitta tugma bilan o\'tkazing.',
+                        'Проверьте/измените счета, затем проведите всё одной кнопкой.',
+                        'Review/change the accounts, then post everything with one button.')}
+                  </p>
+                </div>
+                <Button
+                  className="bg-green-600 hover:bg-green-700 shrink-0"
+                  disabled={eligible.length === 0 || posting}
+                  onClick={() => setShowConfirm(true)}
+                >
+                  {posting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Check className="w-4 h-4 mr-2" />}
+                  {tr('Hammasini tasdiqlash', 'Подтвердить всё', 'Confirm all')} ({eligible.length})
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="p-0">
               <div className="overflow-x-auto">
@@ -199,13 +223,11 @@ export default function BankVipiskaImport() {
                       <TableHead className="font-semibold text-slate-700 min-w-[190px]">{tr('Dt hisob', 'Дт счёт', 'Dr acct')}</TableHead>
                       <TableHead className="font-semibold text-slate-700 min-w-[190px]">{tr('Kt hisob', 'Кт счёт', 'Cr acct')}</TableHead>
                       <TableHead className="font-semibold text-slate-700">{tr('Holati', 'Статус', 'Status')}</TableHead>
-                      <TableHead className="font-semibold text-slate-700 text-center">{tr('Amal', 'Действие', 'Action')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {rows.map((t) => {
                       const locked = t.posted || t.status === 'matched';
-                      const canPost = !!t.debet_account_id && !!t.kredit_account_id && !locked;
                       return (
                         <TableRow key={t.id} className="hover:bg-blue-50/50 align-top">
                           <TableCell className="text-sm text-slate-600 whitespace-nowrap">{t.doc_date || '-'}</TableCell>
@@ -245,23 +267,6 @@ export default function BankVipiskaImport() {
                                   placeholder={tr('Tanlang', 'Выбрать', 'Select')} />}
                           </TableCell>
                           <TableCell>{statusBadge(t)}</TableCell>
-                          <TableCell className="text-center whitespace-nowrap">
-                            {!locked && t.status !== 'ignored' && (
-                              <div className="flex items-center justify-center gap-1">
-                                <Button size="sm" className="h-8 bg-green-600 hover:bg-green-700 px-2"
-                                  disabled={!canPost || busyLine === t.id}
-                                  onClick={() => setConfirmRow(t)}>
-                                  {busyLine === t.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                                  <span className="ml-1 text-xs">{tr('Ha', 'Да', 'Yes')}</span>
-                                </Button>
-                                <Button size="sm" variant="outline" className="h-8 px-2 border-red-200 text-red-600 hover:bg-red-50"
-                                  disabled={busyLine === t.id}
-                                  onClick={() => doReject(t)}>
-                                  <X className="w-4 h-4" />
-                                </Button>
-                              </div>
-                            )}
-                          </TableCell>
                         </TableRow>
                       );
                     })}
@@ -280,30 +285,38 @@ export default function BankVipiskaImport() {
         </div>
       )}
 
-      {/* Confirm-before-post dialog (TZ §5.3) */}
-      <Dialog open={!!confirmRow} onOpenChange={(o) => { if (!o) setConfirmRow(null); }}>
+      {/* Confirm-all dialog (TZ §5.3) */}
+      <Dialog open={showConfirm} onOpenChange={(o) => { if (!o && !posting) setShowConfirm(false); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{tr('Operatsiyani tasdiqlash', 'Подтверждение операции', 'Confirm operation')}</DialogTitle>
+            <DialogTitle>{tr('Hammasini tasdiqlash', 'Подтвердить всё', 'Confirm all')}</DialogTitle>
             <DialogDescription>
-              {tr('Ushbu operatsiyani tekshirdingizmi? Tasdiqlasangiz, hisob raqamlari bo\'yicha o\'tkaziladi.',
-                  'Вы проверили эту операцию? После подтверждения она будет проведена по счетам.',
-                  'Have you reviewed this operation? Once confirmed it will be posted to the accounts.')}
+              {tr('Operatsiyalarni tekshirdingizmi? Tasdiqlasangiz, ular hisob raqamlari bo\'yicha o\'tkaziladi.',
+                  'Вы проверили операции? После подтверждения они будут проведены по счетам.',
+                  'Have you reviewed the operations? Once confirmed they will be posted to the accounts.')}
             </DialogDescription>
           </DialogHeader>
-          {confirmRow && (
-            <div className="space-y-2 text-sm py-2">
-              <Row k={tr('Sana', 'Дата', 'Date')} v={confirmRow.doc_date} />
-              <Row k={tr('Kontragent', 'Контрагент', 'Counterparty')} v={confirmRow.counterparty_name} />
-              <Row k={tr('Summa', 'Сумма', 'Amount')} v={formatCurrency(confirmRow.amount || 0)} />
-              <Row k={tr('O\'tkazma', 'Проводка', 'Entry')} v={`Dt ${accName(confirmRow.debet_account_id)} / Kt ${accName(confirmRow.kredit_account_id)}`} />
+          <div className="space-y-2 text-sm py-2">
+            <Row k={tr('O\'tkaziladigan operatsiyalar', 'Операций к проводке', 'Operations to post')} v={String(eligible.length)} />
+            <Row k={tr('Jami summa', 'Итого сумма', 'Total amount')} v={formatCurrency(eligibleTotal)} />
+            {rows.some(r => !r.posted && r.status !== 'ignored' && (!r.debet_account_id || !r.kredit_account_id)) && (
+              <p className="text-xs text-amber-600 pt-1">
+                {tr('Hisobi tanlanmagan (Aniqlanmadi) operatsiyalar o\'tkazilmaydi.',
+                    'Операции без счетов («Не распознано») не будут проведены.',
+                    'Operations without accounts ("Undetected") will be skipped.')}
+              </p>
+            )}
+          </div>
+          {posting && (
+            <div className="text-sm text-slate-600">
+              {tr('O\'tkazilmoqda', 'Проводится', 'Posting')}… {progress.done}/{progress.total}
             </div>
           )}
           <div className="flex gap-3 pt-2">
-            <Button variant="outline" className="flex-1" onClick={() => setConfirmRow(null)}>{tr('Bekor', 'Отмена', 'Cancel')}</Button>
-            <Button className="flex-1 bg-green-600 hover:bg-green-700" disabled={busyLine === confirmRow?.id}
-              onClick={() => doPost(confirmRow)}>
-              {busyLine === confirmRow?.id ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Check className="w-4 h-4 mr-2" />}
+            <Button variant="outline" className="flex-1" disabled={posting} onClick={() => setShowConfirm(false)}>{tr('Bekor', 'Отмена', 'Cancel')}</Button>
+            <Button className="flex-1 bg-green-600 hover:bg-green-700" disabled={posting || eligible.length === 0}
+              onClick={doPostAll}>
+              {posting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Check className="w-4 h-4 mr-2" />}
               {tr('Ha, o\'tkazish', 'Да, провести', 'Yes, post')}
             </Button>
           </div>
