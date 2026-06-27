@@ -16,7 +16,6 @@ import { constructionService } from '@/api/services/construction';
 import { formatApiError } from '@/utils/apiErrors';
 import Form2Preview from '@/components/construction/Form2Preview';
 import MaterialConsolidationModal from '@/components/construction/MaterialConsolidationModal';
-import ResourceConsolidationModal from '@/components/construction/ResourceConsolidationModal';
 import ResourcesPanel from '@/components/construction/ResourcesPanel';
 import AddResourcePickerModal from '@/components/construction/AddResourcePickerModal';
 import AddSubWorkModal from '@/components/construction/AddSubWorkModal';
@@ -239,8 +238,6 @@ export default function SmetaManagementTab({ project }) {
   // Material consolidation modal — toggled by the "Material yig'indisi"
   // button in the topbar next to "Forma 2 ni yaratish".
   const [matConsOpen, setMatConsOpen] = useState(false);
-  // Resource-NORMA consolidation modal — toggled by the "Resurslar normasi" button.
-  const [resConsOpen, setResConsOpen] = useState(false);
   const [qtyDraft, setQtyDraft] = useState({});
 
   // Forma 2 iterations (migration 419). The same tab strip Bosqichlar
@@ -2087,25 +2084,6 @@ export default function SmetaManagementTab({ project }) {
               en: 'Materials consolidation',
             })[language] || "Material yig'indisi"}
           </button>
-          {/* Resource-NORMA consolidation — planned normative quantities of
-              materials / equipment / labor across the selected blocks. */}
-          <button
-            onClick={() => setResConsOpen(true)}
-            className="px-3.5 py-2.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition"
-            style={{ background: C.sec, color: C.teal, border: '1px solid rgba(13,148,136,0.3)' }}
-            title={({
-              uz: 'Resurslar normasi',
-              ru: 'Нормы ресурсов',
-              en: 'Resource norms',
-            })[language] || 'Resurslar normasi'}
-          >
-            <Boxes className="w-3.5 h-3.5" />
-            {({
-              uz: 'Resurslar normasi',
-              ru: 'Нормы ресурсов',
-              en: 'Resource norms',
-            })[language] || 'Resurslar normasi'}
-          </button>
         </div>
       </div>
 
@@ -3068,13 +3046,6 @@ export default function SmetaManagementTab({ project }) {
         projectName={project?.name}
       />
 
-      {/* Resource-NORMA consolidation modal — opened from the topbar button. */}
-      <ResourceConsolidationModal
-        open={resConsOpen}
-        onClose={() => setResConsOpen(false)}
-        projectId={project?.id}
-        projectName={project?.name}
-      />
 
       {/* Generic estimate-line edit modal — opened from the pencil icon
          on any work card or any resource sub-line. Routes the save to the

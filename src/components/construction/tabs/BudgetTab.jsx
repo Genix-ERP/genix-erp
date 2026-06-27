@@ -2,13 +2,14 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { constructionService } from '@/api/services/construction';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { TrendingUp, ChevronLeft, ChevronRight, FileSpreadsheet } from 'lucide-react';
+import { TrendingUp, ChevronLeft, ChevronRight, FileSpreadsheet, Boxes } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { sortBuildings } from '@/utils/naturalSort';
 import SvodReportModal from '@/components/construction/SvodReportModal';
+import ResourceConsolidationModal from '@/components/construction/ResourceConsolidationModal';
 
 const getRowColor = (pct) => {
   if (pct <= 0) return '';
@@ -44,6 +45,8 @@ const BudgetTab = ({ project }) => {
   // "Сводная сметная" layout with the project's per-building FAKT figures
   // and user-editable percentage rows (overhead / insurance / VAT / PQ-161).
   const [svodOpen, setSvodOpen] = useState(false);
+  // Resurslar normasi (resource-NORMA consolidation) modal.
+  const [resConsOpen, setResConsOpen] = useState(false);
 
   // Load buildings once per project for the tab row.
   useEffect(() => {
@@ -174,6 +177,15 @@ const BudgetTab = ({ project }) => {
               We keep this label localised here (3 strings) instead of
               extending the 24k-line translations.jsx file. */}
           {({ uz: 'Свод hisobot', ru: 'Сводный отчёт', en: 'Svod report' })[language] || 'Свод hisobot'}
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setResConsOpen(true)}
+          className="text-xs"
+        >
+          <Boxes className="w-4 h-4 mr-1" />
+          {({ uz: 'Resurslar normasi', ru: 'Нормы ресурсов', en: 'Resource norms' })[language] || 'Resurslar normasi'}
         </Button>
       </div>
 
@@ -330,6 +342,14 @@ const BudgetTab = ({ project }) => {
       <SvodReportModal
         open={svodOpen}
         onClose={() => setSvodOpen(false)}
+        projectId={project?.id}
+        projectName={project?.name}
+      />
+
+      {/* Resurslar normasi — resource-NORMA consolidation. */}
+      <ResourceConsolidationModal
+        open={resConsOpen}
+        onClose={() => setResConsOpen(false)}
         projectId={project?.id}
         projectName={project?.name}
       />
