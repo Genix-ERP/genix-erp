@@ -141,6 +141,11 @@ export default function ResourceConsolidationModal({ open, onClose, projectId, p
     () => filteredBlocks.reduce((s, b) => s + (Number(b.total_amount) || 0), 0),
     [filteredBlocks]);
 
+  // When every block is selected, show ONE combined table instead of splitting
+  // per block — the user wants the whole-project roll-up in that case.
+  const allBlocksSelected = (data?.blocks?.length || 0) > 0
+    && selectedBlockIds.size === (data?.blocks?.length || 0);
+
   // ─────────────── Exports ───────────────
   const handlePrint = () => {
     document.body.classList.add('rescons-printing');
@@ -219,10 +224,15 @@ export default function ResourceConsolidationModal({ open, onClose, projectId, p
       row += 2;
     };
 
-    filteredBlocks.forEach((blk) => {
-      if ((blk.groups || []).length) writeBlock(`${tt('block_name', language)}: ${blk.name}`, blk.groups, blk.total_amount);
-    });
-    if (totalGroups.length > 0) writeBlock(tt('total_project', language), totalGroups, projectTotal);
+    if (allBlocksSelected) {
+      // Combined whole-project table only.
+      if (totalGroups.length > 0) writeBlock(tt('total_project', language), totalGroups, projectTotal);
+    } else {
+      filteredBlocks.forEach((blk) => {
+        if ((blk.groups || []).length) writeBlock(`${tt('block_name', language)}: ${blk.name}`, blk.groups, blk.total_amount);
+      });
+      if (totalGroups.length > 0) writeBlock(tt('total_project', language), totalGroups, projectTotal);
+    }
 
     ws.getColumn(1).width = 5; ws.getColumn(2).width = 14; ws.getColumn(3).width = 48;
     ws.getColumn(4).width = 10; ws.getColumn(5).width = 14; ws.getColumn(6).width = 14; ws.getColumn(7).width = 18;
@@ -409,6 +419,14 @@ export default function ResourceConsolidationModal({ open, onClose, projectId, p
                   <div className="text-center text-sm text-slate-500 py-8">{tt('no_blocks_picked', language)}</div>
                 ) : selectedTypes.size === 0 ? (
                   <div className="text-center text-sm text-slate-500 py-8">{tt('no_types_picked', language)}</div>
+                ) : allBlocksSelected ? (
+                  // All blocks selected → a single combined table (no per-block split).
+                  totalGroups.length === 0 ? (
+                    <div className="text-center text-sm text-slate-500 py-8">{tt('no_rows', language)}</div>
+                  ) : (
+                    <ResBlockSection label={tt('total_project', language)} groups={totalGroups}
+                      totalAmount={projectTotal} language={language} totalLabel={tt('total_project', language)} isProjectTotal />
+                  )
                 ) : (
                   <>
                     {filteredBlocks.filter((b) => (b.groups || []).length).length === 0 ? (
