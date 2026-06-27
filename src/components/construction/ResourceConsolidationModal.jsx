@@ -43,11 +43,13 @@ const T = {
   no_blocks_picked:{ uz: 'Hech qaysi blok tanlanmagan',      ru: 'Не выбрано ни одного блока',     en: 'No blocks selected' },
   no_types_picked: { uz: 'Hech qaysi tur tanlanmagan',       ru: 'Не выбран ни один тип',          en: 'No types selected' },
   t_material:      { uz: 'Material',                          ru: 'Материал',                        en: 'Material' },
-  t_equipment:     { uz: 'Mexanizm',                          ru: 'Машины/Механизмы',                en: 'Equipment' },
+  t_cable:         { uz: 'Kabel',                             ru: 'Кабель',                          en: 'Cable' },
+  t_installed:     { uz: 'Uskuna',                            ru: 'Оборудование',                    en: 'Equipment' },
+  t_equipment:     { uz: 'Mexanizm',                          ru: 'Машины/Механизмы',                en: 'Machinery' },
   t_labor:         { uz: 'Mehnat',                            ru: 'Трудозатраты',                    en: 'Labor' },
 };
 const tt = (key, lang) => T[key]?.[lang] || T[key]?.uz || key;
-const RES_TYPES = ['material', 'equipment', 'labor'];
+const RES_TYPES = ['material', 'cable', 'installed', 'equipment', 'labor'];
 const typeLabel = (type, lang) => tt(`t_${type}`, lang);
 
 const fmt = (v) => {
@@ -484,8 +486,13 @@ function ResBlockSection({ label, groups, totalAmount, language, totalLabel, isP
                 className={['border-b border-slate-200', g.subcontractor ? 'bg-orange-50/60 hover:bg-orange-50' : 'hover:bg-slate-50'].join(' ')}>
                 <td className="px-3 py-1.5 border-r border-slate-200 text-center text-slate-500 font-mono">{i + 1}</td>
                 <td className="px-3 py-1.5 border-r border-slate-200">
-                  <span className={['inline-block px-1.5 py-0.5 rounded text-[10px] font-medium',
-                    g.type === 'material' ? 'bg-blue-50 text-blue-700' : g.type === 'equipment' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'].join(' ')}>
+                  <span className={['inline-block px-1.5 py-0.5 rounded text-[10px] font-medium', {
+                    material: 'bg-blue-50 text-blue-700',
+                    cable: 'bg-rose-50 text-rose-700',
+                    installed: 'bg-violet-50 text-violet-700',
+                    equipment: 'bg-amber-50 text-amber-700',
+                    labor: 'bg-emerald-50 text-emerald-700',
+                  }[g.type] || 'bg-slate-50 text-slate-700'].join(' ')}>
                     {typeLabel(g.type, language)}
                   </span>
                 </td>
