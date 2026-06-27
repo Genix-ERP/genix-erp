@@ -193,6 +193,8 @@ export default function SmetaManagementTab({ project }) {
     }
   }, [blockStorageKey]);
   const [estimateId, setEstimateId] = useState('');
+  // Subcontractor filter for the active block. null = project's own (in-house).
+  const [subFilter, setSubFilter] = useState(null);
   const [lines, setLines] = useState([]);
   const [loadingEstimates, setLoadingEstimates] = useState(false);
   const [loadingLines, setLoadingLines] = useState(false);
@@ -355,7 +357,7 @@ export default function SmetaManagementTab({ project }) {
     if (!project?.id) return;
     let cancelled = false;
     setLoadingEstimates(true);
-    constructionService.listEstimates(project.id)
+    constructionService.listEstimates(project.id, { scope: 'all' })
       .then((rows) => {
         if (cancelled) return;
         const list = Array.isArray(rows) ? rows : [];
@@ -420,10 +422,24 @@ export default function SmetaManagementTab({ project }) {
     () => blockOptions.find((b) => String(b.id) === String(buildingId)) || null,
     [blockOptions, buildingId],
   );
-  const activeEstimateIds = useMemo(
-    () => (activeBlock ? activeBlock.edinich.map((e) => Number(e.id)) : []),
-    [activeBlock],
-  );
+  // Subcontractors that have an edinich estimate for the active block.
+  const blockSubcontractors = useMemo(() => {
+    if (!activeBlock) return [];
+    const map = new Map();
+    for (const e of activeBlock.edinich) {
+      if (e.subcontract_id) map.set(Number(e.subcontract_id), e.subcontract_name || `#${e.subcontract_id}`);
+    }
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+  }, [activeBlock]);
+  // Reset the subcontractor filter when the block changes.
+  useEffect(() => { setSubFilter(null); }, [buildingId]);
+
+  const activeEstimateIds = useMemo(() => {
+    if (!activeBlock) return [];
+    // null → project's own (subcontract_id NULL); number → that subcontractor.
+    const matchesSub = (e) => subFilter ? Number(e.subcontract_id) === Number(subFilter) : !e.subcontract_id;
+    return activeBlock.edinich.filter(matchesSub).map((e) => Number(e.id));
+  }, [activeBlock, subFilter]);
   // Sync estimateId to the latest едиinич of the selected block. This is
   // what the mutation handlers / Form 2 / audit / "+resurs" modal use as
   // a concrete single-estimate target.
@@ -2027,6 +2043,24 @@ export default function SmetaManagementTab({ project }) {
               </option>
             ))}
           </select>
+          {/* Subcontractor filter — only when the block has subcontractor
+              estimates. Empty value = project's own (in-house) estimate. */}
+          {blockSubcontractors.length > 0 && (
+            <select
+              value={subFilter == null ? '' : String(subFilter)}
+              onChange={(e) => setSubFilter(e.target.value ? Number(e.target.value) : null)}
+              className="px-3 py-2 rounded-md text-xs outline-none cursor-pointer"
+              style={{ background: C.inset, color: C.text, border: `1px solid ${C.border2}`, fontFamily: 'inherit', minWidth: 180 }}
+              title={({ uz: 'Subpudratchi', ru: 'Субподрядчик', en: 'Subcontractor' })[language] || 'Subpudratchi'}
+            >
+              <option value="" style={{ background: C.card, color: C.text }}>
+                {({ uz: 'Loyiha smetasi', ru: 'Смета проекта', en: 'Project estimate' })[language] || 'Loyiha smetasi'}
+              </option>
+              {blockSubcontractors.map((s) => (
+                <option key={s.id} value={s.id} style={{ background: C.card, color: C.text }}>{s.name}</option>
+              ))}
+            </select>
+          )}
           <button
             onClick={() => loadLines(activeEstimateIds, { force: true })}
             disabled={activeEstimateIds.length === 0 || loadingLines}

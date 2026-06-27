@@ -480,7 +480,8 @@ function ResBlockSection({ label, groups, totalAmount, language, totalLabel, isP
             {visibleGroups.length === 0 ? (
               <tr><td colSpan={7} className="text-center text-slate-400 py-3">—</td></tr>
             ) : visibleGroups.map((g, i) => (
-              <tr key={`${g.type}|${g.name}|${g.uom}|${g.unit_rate}|${i}`} className="border-b border-slate-200 hover:bg-slate-50">
+              <tr key={`${g.type}|${g.name}|${g.uom}|${g.unit_rate}|${i}`}
+                className={['border-b border-slate-200', g.subcontractor ? 'bg-orange-50/60 hover:bg-orange-50' : 'hover:bg-slate-50'].join(' ')}>
                 <td className="px-3 py-1.5 border-r border-slate-200 text-center text-slate-500 font-mono">{i + 1}</td>
                 <td className="px-3 py-1.5 border-r border-slate-200">
                   <span className={['inline-block px-1.5 py-0.5 rounded text-[10px] font-medium',
@@ -488,7 +489,14 @@ function ResBlockSection({ label, groups, totalAmount, language, totalLabel, isP
                     {typeLabel(g.type, language)}
                   </span>
                 </td>
-                <td className="px-3 py-1.5 border-r border-slate-200">{g.name}</td>
+                <td className="px-3 py-1.5 border-r border-slate-200">
+                  {g.name}
+                  {g.subcontractor && (
+                    <span className="ml-2 inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-100 text-orange-700 align-middle">
+                      {g.subcontractor}
+                    </span>
+                  )}
+                </td>
                 <td className="px-3 py-1.5 border-r border-slate-200 text-center text-slate-600">{g.uom}</td>
                 <td className="px-3 py-1.5 border-r border-slate-200 text-right font-mono">{fmtQty(g.norma_quantity)}</td>
                 <td className="px-3 py-1.5 border-r border-slate-200 text-right font-mono">{fmt(g.unit_rate)}</td>
