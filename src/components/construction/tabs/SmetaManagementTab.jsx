@@ -237,6 +237,9 @@ export default function SmetaManagementTab({ project }) {
   const [editLineTarget, setEditLineTarget] = useState(null);
 
   const [form2Open, setForm2Open] = useState(false);
+  // Forma 3 (КС-3) generator modal. Builds the certificate from
+  // engineer-confirmed (YAKUNIY) works, split into the three КС-3 windows by
+  // confirmation date relative to the chosen reporting month.
   // Material consolidation modal — toggled by the "Material yig'indisi"
   // button in the topbar next to "Forma 2 ni yaratish".
   const [matConsOpen, setMatConsOpen] = useState(false);
@@ -433,7 +436,6 @@ export default function SmetaManagementTab({ project }) {
   }, [activeBlock]);
   // Reset the subcontractor filter when the block changes.
   useEffect(() => { setSubFilter(null); }, [buildingId]);
-
   const activeEstimateIds = useMemo(() => {
     if (!activeBlock) return [];
     // null → project's own (subcontract_id NULL); number → that subcontractor.
