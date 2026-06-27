@@ -953,7 +953,7 @@ const OverviewTabContent = React.memo(function OverviewTabContent({
       label: 'Forma 3',
       icon: FileSpreadsheet,
       hint: t('forma_3_hint') || "Bajarilgan ish qiymati to'g'risidagi ma'lumotnoma",
-      go: () => { setActiveGroup('materiallar'); setActiveTab('forms'); },
+      go: () => { setActiveGroup('hujjatlar'); setActiveTab('forms'); },
     },
     {
       // Foto hisobot replaces the old Material shortcut — the
@@ -1212,6 +1212,7 @@ const ProjectDetailView = ({
     //   { key: 'material_usage', label: t('nav_material_usage') || 'Material sarfi' },
     // ]},
     { key: 'hujjatlar', label: t('nav_documents') || 'Hujjatlar', icon: FileText, subs: [
+      { key: 'forms', label: t('nav_forms') || 'Formalar' },
       { key: 'acts', label: t('nav_acts') || 'Aktlar' },
       { key: 'daily_logs', label: t('nav_daily_log') || 'Kunlik jurnal' },
       { key: 'subcontractors', label: t('nav_subcontractors') || 'Subpudratchilar' },

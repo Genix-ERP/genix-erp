@@ -1318,6 +1318,28 @@ export const constructionService = {
     return response.data.data;
   },
 
+  // --- Subcontractor file attachments ---
+  // Two-step: upload the raw file to /files/upload, then store the reference.
+  async uploadRawFile(file) {
+    const form = new FormData();
+    form.append('file', file);
+    const response = await apiClient.post('/files/upload', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data.data; // { id, url, filename, size, mime_type }
+  },
+  async listSubcontractFiles(subId) {
+    const response = await apiClient.get(`/construction/subcontracts/${subId}/files`);
+    return response.data.data;
+  },
+  async createSubcontractFile(subId, data) {
+    const response = await apiClient.post(`/construction/subcontracts/${subId}/files`, data);
+    return response.data.data;
+  },
+  async deleteSubcontractFile(subId, fileId) {
+    await apiClient.delete(`/construction/subcontracts/${subId}/files/${fileId}`);
+  },
+
   // =====================================================
   // CONSTRUCTION ACTS (KS-2 / KS-3)
   // =====================================================
@@ -1389,6 +1411,17 @@ export const constructionService = {
   async generateForma3(projectId, data) {
     const response = await apiClient.post(`/construction/projects/${projectId}/acts/generate-ks3`, data);
     return response.data.data;
+  },
+
+  // Works-driven Forma 3 (КС-3): builds the certificate from engineer-confirmed
+  // (YAKUNIY) works, split into the three КС-3 windows by confirmation date.
+  // params: { subcontract_id, building_id, cert_date, period_month, period_year }
+  async generateForma3FromWorks(projectId, params = {}) {
+    const response = await apiClient.get(
+      `/construction/projects/${projectId}/f3/generate-works-xlsx`,
+      { params, responseType: 'blob' },
+    );
+    return response.data;
   },
 
   // =====================================================
@@ -1468,8 +1501,9 @@ export const constructionService = {
     const response = await apiClient.get(`/construction/acts/${f3Id}/export?format=pdf`, { responseType: 'blob' });
     return response.data;
   },
-  async exportF3XLSX(projectId, f3Id) {
-    const response = await apiClient.get(`/construction/acts/${f3Id}/export?format=xlsx`, { responseType: 'blob' });
+  async exportF3XLSX(projectId, f3Id, lang) {
+    const langQ = lang ? `&lang=${encodeURIComponent(lang)}` : '';
+    const response = await apiClient.get(`/construction/acts/${f3Id}/export?format=xlsx${langQ}`, { responseType: 'blob' });
     return response.data;
   },
 
