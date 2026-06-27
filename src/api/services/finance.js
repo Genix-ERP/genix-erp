@@ -489,6 +489,20 @@ export const financeService = {
     return response.data.data;
   },
 
+  // Bank vipiska (Excel) import — parse + auto-classify + review (Phase 1)
+  async importBankVipiska(file) {
+    const form = new FormData();
+    form.append('file', file);
+    const response = await apiClient.post('/bank-statement-imports/vipiska', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data.data;
+  },
+  async getBankVipiskaTransactions(importId) {
+    const response = await apiClient.get(`/bank-statement-imports/${importId}/transactions`);
+    return response.data.data;
+  },
+
   // E-invoices (TT §8.2)
   async ingestEInvoice(payload) {
     const response = await apiClient.post('/einvoices/ingest', payload);
