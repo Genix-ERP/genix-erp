@@ -508,6 +508,9 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
   const [buildings, setBuildings] = useState([]);    // act as v2's "blocks"
   const [estimates, setEstimates] = useState([]);    // current building → primary estimate
   const [activeBuildingId, setActiveBuildingId] = useState(null);
+  // Subcontractor filter for the active block. null = project's own (in-house)
+  // estimate; a number = that subcontractor's estimate for the block.
+  const [subFilter, setSubFilter] = useState(null);
   const [lines, setLines] = useState([]);            // works of the active estimate
   const [activeEstimateId, setActiveEstimateId] = useState(null); // edinich estimate id of active building
   const [loading, setLoading] = useState(false);
@@ -763,11 +766,16 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
     setLines([]);
     setEstimates([]);
 
-    constructionService.listEstimates(project.id)
+    constructionService.listEstimates(project.id, { scope: 'all' })
       .then(async (rows) => {
         if (cancelled) return;
         const list = Array.isArray(rows) ? rows : [];
         setEstimates(list);
+        // Subcontractor scope: null → project's own (subcontract_id NULL);
+        // a number → that subcontractor's estimate for the block.
+        const matchesSub = (e) => subFilter
+          ? Number(e.subcontract_id) === Number(subFilter)
+          : !e.subcontract_id;
         // Pick the right estimate for this building. The Bosqichlar tab
         // is now driven EXCLUSIVELY by `edinich`-type estimates — the
         // ВОР flavour's "sections" are just block names and the Ресурс
@@ -789,6 +797,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
         // id makes the most recent import authoritative.
         const sortedEdinich = sameBuilding
           .filter((e) => String(e.source_type || '').toLowerCase() === 'edinich')
+          .filter(matchesSub)
           .sort((a, b) => Number(b.id || 0) - Number(a.id || 0));
         let matchedEst = sortedEdinich[0] || null;
         // ВОР side-fetch — same building. Used only to source the user-
@@ -799,6 +808,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
         // imports may not match the current єдинич's section structure.
         const sortedVor = sameBuilding
           .filter((e) => String(e.source_type || '').toLowerCase() === 'vor')
+          .filter(matchesSub)
           .sort((a, b) => Number(b.id || 0) - Number(a.id || 0));
         const vorEst = sortedVor[0] || null;
         if (!matchedEst) {
@@ -906,7 +916,24 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
 
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project?.id, activeBuildingId, refreshTick]);
+  }, [project?.id, activeBuildingId, subFilter, refreshTick]);
+
+  // Reset the subcontractor filter to "project's own" whenever the block
+  // changes, so a subcontractor that doesn't exist on the new block can't
+  // leave the view stuck on an empty selection.
+  useEffect(() => { setSubFilter(null); }, [activeBuildingId]);
+
+  // Subcontractors that have an estimate for the active block (for the filter
+  // dropdown). Derived from the loaded estimates.
+  const blockSubcontractors = useMemo(() => {
+    const map = new Map();
+    for (const e of estimates) {
+      if (activeBuildingId && Number(e.building_id) !== Number(activeBuildingId)) continue;
+      if (!e.subcontract_id) continue;
+      map.set(Number(e.subcontract_id), e.subcontract_name || `#${e.subcontract_id}`);
+    }
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+  }, [estimates, activeBuildingId]);
 
   // Per-building stage counts — fetched once per estimates list change so
   // each block button can show its own etap count instead of repeating the
@@ -1807,6 +1834,26 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
             })
           )}
         </div>
+
+        {/* Subcontractor filter — only when the active block has subcontractor
+            estimates. "Loyiha smetasi" = the project's own (in-house) estimate. */}
+        {blockSubcontractors.length > 0 && (
+          <div className="mt-3 flex items-center gap-2">
+            <span className="text-[13px] text-slate-500">
+              {({ uz: 'Subpudratchi', ru: 'Субподрядчик', en: 'Subcontractor' })[language] || 'Subpudratchi'}:
+            </span>
+            <select
+              value={subFilter == null ? '' : String(subFilter)}
+              onChange={(e) => setSubFilter(e.target.value ? Number(e.target.value) : null)}
+              className="border border-slate-200 rounded-md px-3 py-1.5 text-sm"
+            >
+              <option value="">{({ uz: 'Loyiha smetasi', ru: 'Смета проекта', en: 'Project estimate' })[language] || 'Loyiha smetasi'}</option>
+              {blockSubcontractors.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* STAGES LIST */}

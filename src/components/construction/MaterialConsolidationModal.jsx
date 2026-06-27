@@ -734,9 +734,16 @@ function BlockSection({ label, groups, totalAmount, language, totalLabel, isProj
               </tr>
             ) : visibleGroups.map((g, i) => (
               <React.Fragment key={`${g.name}|${g.uom}|${g.unit_rate}|${i}`}>
-                <tr className="border-b border-slate-200 hover:bg-slate-50">
+                <tr className={['border-b border-slate-200', g.subcontractor ? 'bg-orange-50/60 hover:bg-orange-50' : 'hover:bg-slate-50'].join(' ')}>
                   <td className="px-3 py-1.5 border-r border-slate-200 text-center text-slate-500 font-mono">{i + 1}</td>
-                  <td className="px-3 py-1.5 border-r border-slate-200">{g.name}</td>
+                  <td className="px-3 py-1.5 border-r border-slate-200">
+                    {g.name}
+                    {g.subcontractor && (
+                      <span className="ml-2 inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-100 text-orange-700 align-middle">
+                        {g.subcontractor}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-3 py-1.5 border-r border-slate-200 text-center text-slate-600">{g.uom}</td>
                   <td className="px-3 py-1.5 border-r border-slate-200 text-right font-mono">{fmtQty(g.fakt_quantity)}</td>
                   <td className="px-3 py-1.5 border-r border-slate-200 text-right font-mono">{fmt(g.unit_rate)}</td>
