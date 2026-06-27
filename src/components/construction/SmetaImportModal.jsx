@@ -973,6 +973,28 @@ function parseResurs(workbook) {
     return 0;
   };
 
+  // Pre-scan: does the file declare explicit КАБЕЛЬНАЯ ПРОДУКЦИЯ / ОБОРУДОВАНИЕ
+  // section headers? When it does, those sections are authoritative and we must
+  // NOT let the name-based fallback re-bucket a material-section item (e.g. a
+  // СВЕТИЛЬНИК listed under МАТЕРИАЛЬНЫЕ РЕСУРСЫ) into cable/equipment — that is
+  // exactly what diverged from the Excel's section subtotals. The name fallback
+  // is kept ONLY for single-bucket files (one big МАТЕРИАЛЬНЫЕ РЕСУРСЫ list).
+  let hasExplicitSubBuckets = false;
+  for (let k = 11; k < rawData.length; k++) {
+    const rk = rawData[k];
+    if (!rk) continue;
+    const a = rk[0] != null ? String(rk[0]).trim() : '';
+    const d = rk[3] != null ? String(rk[3]).trim() : '';
+    const nm = rk[2] != null ? String(rk[2]).trim() : '';
+    if (!a && !d) {
+      const meta = detectResourceSection(nm);
+      if (meta && (meta.materialType === 'cable' || meta.materialType === 'equipment')) {
+        hasExplicitSubBuckets = true;
+        break;
+      }
+    }
+  }
+
   for (let i = 11; i < rawData.length; i++) {
     const row = rawData[i];
     if (!row || row.every((cell) => cell == null || cell === '')) continue;
@@ -1083,7 +1105,9 @@ function parseResurs(workbook) {
     let materialType = null;
     if (resType === 'material') {
       materialType = currentSection.materialType || 'standard';
-      if (materialType === 'standard') {
+      // Only name-guess when the file has NO explicit cable/equipment sections;
+      // otherwise the section is authoritative and matches the Excel subtotals.
+      if (materialType === 'standard' && !hasExplicitSubBuckets) {
         const guess = classifyMaterialByName(colC);
         if (guess) materialType = guess;
       }
