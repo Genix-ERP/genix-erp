@@ -502,6 +502,18 @@ export const financeService = {
     const response = await apiClient.get(`/bank-statement-imports/${importId}/transactions`);
     return response.data.data;
   },
+  async updateBankVipiskaLineAccounts(lineId, data) {
+    const response = await apiClient.put(`/bank-statement-imports/lines/${lineId}/accounts`, data);
+    return response.data.data;
+  },
+  async confirmBankVipiskaLine(lineId) {
+    const response = await apiClient.post(`/bank-statement-imports/lines/${lineId}/confirm`);
+    return response.data.data;
+  },
+  async rejectBankVipiskaLine(lineId) {
+    const response = await apiClient.post(`/bank-statement-imports/lines/${lineId}/reject`);
+    return response.data.data;
+  },
 
   // E-invoices (TT §8.2)
   async ingestEInvoice(payload) {
