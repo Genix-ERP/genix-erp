@@ -483,6 +483,27 @@ export default function PurchaseOrders() {
     const newLines = [...newPO.lines];
     newLines[index] = { ...newLines[index], [field]: value };
 
+    // "Jami" lot-entry mode (goods bought as a lot — total known, per-unit price
+    // unknown). Clicking the total clears Narx and opens a free-typing draft;
+    // the = button (or leaving the field) derives unit_price = total / quantity
+    // so it flows into inventory cost on receipt. Empty → the price is restored.
+    if (field === 'jami_focus') {
+      newLines[index] = { ...newLines[index], _prevNarx: newLines[index].unit_price, unit_price: '', jami_draft: '' };
+      setNewPO({ ...newPO, lines: newLines, total_amount: calculateOrderTotal(newLines) });
+      return;
+    }
+    if (field === 'jami_calc') {
+      const ln = newLines[index];
+      if (ln.jami_draft === undefined) return; // already committed
+      const qty = parseFloat(ln.quantity || 0);
+      const total = parseFloat(parsePriceInput(String(ln.jami_draft || '')) || 0);
+      const up = (total > 0 && qty > 0) ? total / qty : (ln._prevNarx ?? 0);
+      const { jami_draft, _prevNarx, jami_calc, ...rest } = ln;
+      newLines[index] = { ...rest, unit_price: up };
+      setNewPO({ ...newPO, lines: newLines, total_amount: calculateOrderTotal(newLines) });
+      return;
+    }
+
     if (field === 'product_id' && value) {
       // `productObj` fallback: a just-created product isn't in `products` yet
       // (setProducts is async), so use the passed object to populate price/name.
@@ -844,6 +865,24 @@ export default function PurchaseOrders() {
     if (!editPO) return;
     const newLines = [...editPO.lines];
     newLines[index] = { ...newLines[index], [field]: value };
+    // "Jami" lot-entry mode → clear Narx on focus, type the total, then derive
+    // unit_price = total / quantity on = / blur (restore price if left empty).
+    if (field === 'jami_focus') {
+      newLines[index] = { ...newLines[index], _prevNarx: newLines[index].unit_price, unit_price: '', jami_draft: '' };
+      setEditPO({ ...editPO, lines: newLines, total_amount: calculateOrderTotal(newLines) });
+      return;
+    }
+    if (field === 'jami_calc') {
+      const ln = newLines[index];
+      if (ln.jami_draft === undefined) return;
+      const qty = parseFloat(ln.quantity || 0);
+      const total = parseFloat(parsePriceInput(String(ln.jami_draft || '')) || 0);
+      const up = (total > 0 && qty > 0) ? total / qty : (ln._prevNarx ?? 0);
+      const { jami_draft, _prevNarx, jami_calc, ...rest } = ln;
+      newLines[index] = { ...rest, unit_price: up };
+      setEditPO({ ...editPO, lines: newLines, total_amount: calculateOrderTotal(newLines) });
+      return;
+    }
     if (field === 'product_id' && value) {
       const product = products.find(p => p.id === value) || productObj;
       if (product) {
@@ -1542,8 +1581,24 @@ export default function PurchaseOrders() {
                       </div>
                       <div className="flex-[1.5] min-w-0">
                         {index === 0 && <label className="text-xs text-slate-500 mb-1 block">{t('total')}</label>}
-                        <div className="h-9 flex items-center justify-end px-3 bg-white border rounded-md text-sm font-medium text-slate-700">
-                          {formatPriceInput(String((parseFloat(line.quantity || 0) * parseFloat(line.unit_price || 0)).toFixed(2)))}
+                        {/* Editable lot total — click to clear Narx, type the total,
+                            then press = (or leave) to derive Narx = Jami ÷ Miqdor. */}
+                        <div className="flex items-center gap-1">
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            className="text-right font-medium"
+                            placeholder={t('total') || 'Total'}
+                            value={line.jami_draft !== undefined ? formatPriceInput(line.jami_draft) : formatPriceInput(String((parseFloat(line.quantity || 0) * parseFloat(line.unit_price || 0)).toFixed(2)))}
+                            onFocus={() => { if (line.jami_draft === undefined) handleLineChange(index, 'jami_focus', true); }}
+                            onChange={(e) => handleLineChange(index, 'jami_draft', parsePriceInput(e.target.value))}
+                            onBlur={() => handleLineChange(index, 'jami_calc', true)}
+                          />
+                          {line.jami_draft !== undefined && (
+                            <Button type="button" size="sm" variant="outline" className="h-9 px-2 shrink-0"
+                              title="Narx = Jami / Miqdor" onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => handleLineChange(index, 'jami_calc', true)}>=</Button>
+                          )}
                         </div>
                         {line.has_delivery && line.delivery_price > 0 && (
                           <div className="text-xs text-blue-600 text-right mt-0.5">
@@ -1929,8 +1984,23 @@ export default function PurchaseOrders() {
                           </div>
                           <div className="flex-[1.5] min-w-0">
                             {index === 0 && <label className="text-xs text-slate-500 mb-1 block">{t('total')}</label>}
-                            <div className="h-9 flex items-center justify-end px-3 bg-white border rounded-md text-sm font-medium text-slate-700">
-                              {formatPriceInput(String((parseFloat(line.quantity || 0) * parseFloat(line.unit_price || 0)).toFixed(2)))}
+                            {/* Editable lot total — click to clear Narx, type total, = to derive. */}
+                            <div className="flex items-center gap-1">
+                              <Input
+                                type="text"
+                                inputMode="decimal"
+                                className="text-right font-medium"
+                                placeholder={t('total') || 'Total'}
+                                value={line.jami_draft !== undefined ? formatPriceInput(line.jami_draft) : formatPriceInput(String((parseFloat(line.quantity || 0) * parseFloat(line.unit_price || 0)).toFixed(2)))}
+                                onFocus={() => { if (line.jami_draft === undefined) handleEditLineChange(index, 'jami_focus', true); }}
+                                onChange={(e) => handleEditLineChange(index, 'jami_draft', parsePriceInput(e.target.value))}
+                                onBlur={() => handleEditLineChange(index, 'jami_calc', true)}
+                              />
+                              {line.jami_draft !== undefined && (
+                                <Button type="button" size="sm" variant="outline" className="h-9 px-2 shrink-0"
+                                  title="Narx = Jami / Miqdor" onMouseDown={(e) => e.preventDefault()}
+                                  onClick={() => handleEditLineChange(index, 'jami_calc', true)}>=</Button>
+                              )}
                             </div>
                           </div>
                           <div className="flex-shrink-0">
