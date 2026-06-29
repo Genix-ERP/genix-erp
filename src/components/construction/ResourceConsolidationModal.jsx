@@ -47,9 +47,19 @@ const T = {
   t_installed:     { uz: 'Uskuna',                            ru: 'Оборудование',                    en: 'Equipment' },
   t_equipment:     { uz: 'Mexanizm',                          ru: 'Машины/Механизмы',                en: 'Machinery' },
   t_labor:         { uz: 'Mehnat',                            ru: 'Трудозатраты',                    en: 'Labor' },
+  transport_pct:   { uz: 'Transport %',                       ru: 'Транспорт %',                     en: 'Transport %' },
+  transport_label: { uz: 'Transport xarajatlari',            ru: 'Транспортные расходы',            en: 'Transport costs' },
+  total_with_transport: { uz: 'JAMI (transport bilan)',       ru: 'ИТОГО (с транспортом)',           en: 'TOTAL (with transport)' },
 };
 const tt = (key, lang) => T[key]?.[lang] || T[key]?.uz || key;
 const RES_TYPES = ['material', 'cable', 'installed', 'equipment', 'labor'];
+// Default transport-overhead percentages by resource type. Materials 5%,
+// cable 1.5%, оборудование 2% (Госкомархитектстрой norms); machines & labour
+// carry no transport. Editable in the modal so projects with other rates fit.
+const DEFAULT_TRANSPORT_PCT = { material: 5, cable: 1.5, installed: 2, equipment: 0, labor: 0 };
+// Transport amount for a set of groups given a percentage map.
+const transportOf = (groups, pct) =>
+  (groups || []).reduce((s, g) => s + (Number(g.norma_amount) || 0) * ((Number(pct?.[g.type]) || 0) / 100), 0);
 const typeLabel = (type, lang) => tt(`t_${type}`, lang);
 
 const fmt = (v) => {
@@ -69,6 +79,9 @@ export default function ResourceConsolidationModal({ open, onClose, projectId, p
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
   const [saving, setSaving] = useState(false);
+  // Editable transport-overhead percentages (added to the totals, not to the
+  // resource rows themselves) so the modal matches the Excel Свод.
+  const [transportPct, setTransportPct] = useState(DEFAULT_TRANSPORT_PCT);
 
   const [selectedBlockIds, setSelectedBlockIds] = useState(() => new Set());
   const [selectedTypes, setSelectedTypes] = useState(() => new Set(RES_TYPES));
@@ -223,7 +236,33 @@ export default function ResourceConsolidationModal({ open, onClose, projectId, p
         ws.getCell(row, c).border = box();
         ws.getCell(row, c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9EAD3' } };
       }
-      row += 2;
+      row++;
+      // Transport overhead + grand total with transport (added to totals only).
+      const tAmount = transportOf(groups, transportPct);
+      if (tAmount > 0) {
+        ws.mergeCells(row, 1, row, NCOL - 1);
+        ws.getCell(row, 1).value = tt('transport_label', language);
+        ws.getCell(row, 1).alignment = { horizontal: 'right' };
+        ws.getCell(row, NCOL).value = Math.round(tAmount);
+        ws.getCell(row, NCOL).numFmt = '#,##0';
+        ws.getCell(row, NCOL).alignment = { horizontal: 'right' };
+        for (let c = 1; c <= NCOL; c++) ws.getCell(row, c).border = box();
+        row++;
+        ws.mergeCells(row, 1, row, NCOL - 1);
+        ws.getCell(row, 1).value = tt('total_with_transport', language);
+        ws.getCell(row, 1).font = { bold: true };
+        ws.getCell(row, 1).alignment = { horizontal: 'right' };
+        ws.getCell(row, NCOL).value = Math.round((Number(total) || 0) + tAmount);
+        ws.getCell(row, NCOL).font = { bold: true };
+        ws.getCell(row, NCOL).numFmt = '#,##0';
+        ws.getCell(row, NCOL).alignment = { horizontal: 'right' };
+        for (let c = 1; c <= NCOL; c++) {
+          ws.getCell(row, c).border = box();
+          ws.getCell(row, c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9EAD3' } };
+        }
+        row++;
+      }
+      row += 1;
     };
 
     if (allBlocksSelected) {
@@ -391,6 +430,22 @@ export default function ResourceConsolidationModal({ open, onClose, projectId, p
               )}
             </div>
 
+            {/* Transport overhead percentages — added to the totals only. */}
+            <div className="flex items-center gap-1.5 px-2 text-xs text-slate-600">
+              <span className="font-medium">{tt('transport_pct', language)}:</span>
+              {['material', 'cable', 'installed'].map((ty) => (
+                <span key={ty} className="inline-flex items-center gap-0.5" title={typeLabel(ty, language)}>
+                  <span className="text-[10px] text-slate-400">{typeLabel(ty, language).slice(0, 3)}</span>
+                  <input
+                    type="number" step="0.1" min="0"
+                    value={transportPct[ty]}
+                    onChange={(e) => setTransportPct((p) => ({ ...p, [ty]: Number(e.target.value) || 0 }))}
+                    className="w-12 px-1 py-0.5 rounded border border-slate-200 text-right text-xs"
+                  />
+                </span>
+              ))}
+            </div>
+
             <div className="flex-1" />
             <Button variant="outline" size="sm" onClick={handlePrint}><Printer className="w-4 h-4 mr-1" /> {tt('print_btn', language)}</Button>
             <Button variant="outline" size="sm" onClick={exportXlsx}><FileDown className="w-4 h-4 mr-1" /> Excel</Button>
@@ -427,7 +482,7 @@ export default function ResourceConsolidationModal({ open, onClose, projectId, p
                     <div className="text-center text-sm text-slate-500 py-8">{tt('no_rows', language)}</div>
                   ) : (
                     <ResBlockSection label={tt('total_project', language)} groups={totalGroups}
-                      totalAmount={projectTotal} language={language} totalLabel={tt('total_project', language)} isProjectTotal />
+                      totalAmount={projectTotal} language={language} totalLabel={tt('total_project', language)} transportPct={transportPct} isProjectTotal />
                   )
                 ) : (
                   <>
@@ -437,13 +492,13 @@ export default function ResourceConsolidationModal({ open, onClose, projectId, p
                       filteredBlocks.map((blk) => (
                         (blk.groups || []).length ? (
                           <ResBlockSection key={blk.id} label={`${tt('block_name', language)}: ${blk.name}`}
-                            groups={blk.groups} totalAmount={blk.total_amount} language={language} totalLabel={tt('total_block', language)} />
+                            groups={blk.groups} totalAmount={blk.total_amount} language={language} totalLabel={tt('total_block', language)} transportPct={transportPct} />
                         ) : null
                       ))
                     )}
                     {totalGroups.length > 0 && (
                       <ResBlockSection label={tt('total_project', language)} groups={totalGroups}
-                        totalAmount={projectTotal} language={language} totalLabel={tt('total_project', language)} isProjectTotal />
+                        totalAmount={projectTotal} language={language} totalLabel={tt('total_project', language)} transportPct={transportPct} isProjectTotal />
                     )}
                   </>
                 )}
@@ -456,9 +511,11 @@ export default function ResourceConsolidationModal({ open, onClose, projectId, p
   );
 }
 
-function ResBlockSection({ label, groups, totalAmount, language, totalLabel, isProjectTotal = false }) {
+function ResBlockSection({ label, groups, totalAmount, language, totalLabel, transportPct, isProjectTotal = false }) {
   const visibleGroups = (groups || []).filter((g) => (Number(g.norma_quantity) || 0) > 0);
   if (visibleGroups.length === 0 && !(Number(totalAmount) > 0)) return null;
+  const transportAmount = transportOf(groups, transportPct);
+  const totalWithTransport = (Number(totalAmount) || 0) + transportAmount;
 
   return (
     <div className="mb-6">
@@ -516,6 +573,18 @@ function ResBlockSection({ label, groups, totalAmount, language, totalLabel, isP
               <td colSpan={6} className="px-3 py-2 border-r border-slate-300 text-right">{totalLabel}</td>
               <td className="px-3 py-2 text-right font-mono">{fmt(totalAmount)}</td>
             </tr>
+            {transportAmount > 0 && (
+              <>
+                <tr className="border-t border-slate-200 text-slate-700">
+                  <td colSpan={6} className="px-3 py-1.5 border-r border-slate-200 text-right italic">{tt('transport_label', language)}</td>
+                  <td className="px-3 py-1.5 text-right font-mono">{fmt(transportAmount)}</td>
+                </tr>
+                <tr className={['font-bold border-t border-slate-300', isProjectTotal ? 'bg-emerald-100' : 'bg-[#D9EAD3]'].join(' ')}>
+                  <td colSpan={6} className="px-3 py-2 border-r border-slate-300 text-right">{tt('total_with_transport', language)}</td>
+                  <td className="px-3 py-2 text-right font-mono">{fmt(totalWithTransport)}</td>
+                </tr>
+              </>
+            )}
           </tfoot>
         </table>
       </div>
