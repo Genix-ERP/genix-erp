@@ -97,13 +97,17 @@ export default function MaterialConsolidationModal({
   // with no extra fetch.
   const [allBlocks, setAllBlocks] = useState(false);
 
-  // Per-block selection — Set of block ids included in the display/exports.
-  // Defaults to "all blocks selected" on each fresh load. The user can
-  // narrow it down via the Bloklar dropdown so the printed/Excel report
-  // only carries the subset they care about.
-  const [selectedBlockIds, setSelectedBlockIds] = useState(() => new Set());
-  const [blockPickerOpen, setBlockPickerOpen] = useState(false);
-  const blockPickerRef = useRef(null);
+  const IN_HOUSE_KEY = '__inhouse__';
+  // Combined scope selection. Each key is `${blockId}::${subKey}` where subKey
+  // is '__inhouse__' (project's own work) or a subcontractor name. Block and
+  // subcontractor are chosen TOGETHER because each subcontractor's materials
+  // live only in its own block's estimate — independent block/sub filters
+  // produced impossible combinations (e.g. Umumiy + a 1-Block subcontractor).
+  const [selectedScopes, setSelectedScopes] = useState(() => new Set());
+  const [scopePickerOpen, setScopePickerOpen] = useState(false);
+  const scopePickerRef = useRef(null);
+
+  const scopeKey = (blockId, subKey) => `${blockId}::${subKey}`;
 
   useEffect(() => {
     if (!open || !projectId) return;
@@ -116,11 +120,14 @@ export default function MaterialConsolidationModal({
         // Seed the selection with every block returned. Falls back to an
         // empty set if no blocks (then no per-block sections render and
         // the picker disables itself).
-        const ids = new Set();
+        const scopes = new Set();
         for (const b of (d?.blocks || [])) {
-          if (b?.id != null) ids.add(Number(b.id));
+          if (b?.id == null) continue;
+          for (const g of (b?.groups || [])) {
+            scopes.add(scopeKey(Number(b.id), g.subcontractor ? g.subcontractor : IN_HOUSE_KEY));
+          }
         }
-        setSelectedBlockIds(ids);
+        setSelectedScopes(scopes);
       })
       .catch((e) => {
         console.error('Failed to load material consolidation', e);
@@ -130,27 +137,59 @@ export default function MaterialConsolidationModal({
     return () => { cancelled = true; };
   }, [open, projectId, language]);
 
-  // Close the block picker on outside-click. Pointerdown so the close
-  // fires before any click inside the toolbar re-toggles state.
+  // Close the combined scope picker on outside-click. Pointerdown so the
+  // close fires before any click inside the toolbar re-toggles state.
   useEffect(() => {
-    if (!blockPickerOpen) return;
+    if (!scopePickerOpen) return;
     const handler = (e) => {
-      if (blockPickerRef.current && !blockPickerRef.current.contains(e.target)) {
-        setBlockPickerOpen(false);
+      if (scopePickerRef.current && !scopePickerRef.current.contains(e.target)) {
+        setScopePickerOpen(false);
       }
     };
     document.addEventListener('pointerdown', handler);
     return () => document.removeEventListener('pointerdown', handler);
-  }, [blockPickerOpen]);
+  }, [scopePickerOpen]);
 
-  // Blocks the user has actually opted-in to. When `selectedBlockIds` is
-  // empty (e.g. user deselected everything) we render nothing for the
-  // per-block sections but keep the toolbar usable — the empty-state
-  // message tells them to pick at least one.
+  // The real (block, source) leaves present in the report — each is a concrete
+  // estimate slice (a block's in-house work, or one subcontractor's work on
+  // that block). The combined picker lists these so the user can't form an
+  // impossible block×subcontractor combination.
+  const scopeLeaves = useMemo(() => {
+    const leaves = [];
+    for (const b of (data?.blocks || [])) {
+      if (b?.id == null) continue;
+      const seen = new Set();
+      for (const g of (b?.groups || [])) {
+        const subKey = g.subcontractor ? g.subcontractor : IN_HOUSE_KEY;
+        if (seen.has(subKey)) continue;
+        seen.add(subKey);
+        leaves.push({
+          key: scopeKey(Number(b.id), subKey),
+          blockId: Number(b.id),
+          blockName: b.name || `#${b.id}`,
+          subKey,
+          subName: g.subcontractor || '',
+        });
+      }
+    }
+    return leaves;
+  }, [data]);
+
+  // Blocks with only the selected (block, source) leaves kept; block totals are
+  // recomputed so BLOK JAMI / project total match the visible rows.
   const filteredBlocks = useMemo(() => {
     if (!data) return [];
-    return (data.blocks || []).filter((b) => selectedBlockIds.has(Number(b.id)));
-  }, [data, selectedBlockIds]);
+    return (data.blocks || [])
+      .map((b) => {
+        const groups = (b.groups || []).filter((g) =>
+          selectedScopes.has(scopeKey(Number(b.id), g.subcontractor ? g.subcontractor : IN_HOUSE_KEY)),
+        );
+        if (groups.length === 0) return null;
+        const total_amount = groups.reduce((s, g) => s + (Number(g.fakt_amount) || 0), 0);
+        return { ...b, groups, total_amount };
+      })
+      .filter(Boolean);
+  }, [data, selectedScopes]);
 
   // Re-aggregate the project-wide totals from the SELECTED blocks only.
   // Same grouping key the backend uses: (name, UOM, unit_rate). Top-ups
@@ -329,7 +368,7 @@ export default function MaterialConsolidationModal({
       groups.forEach((g, idx) => {
         const r = row;
         ws.getCell(r, 1).value = idx + 1;
-        ws.getCell(r, 2).value = g.name;
+        ws.getCell(r, 2).value = (g.subcontractor ? `[${g.subcontractor}] ` : '') + (g.name || '');
         ws.getCell(r, 3).value = g.uom;
         ws.getCell(r, 4).value = Number(g.fakt_quantity) || 0;
         ws.getCell(r, 5).value = Number(g.unit_rate) || 0;
@@ -475,20 +514,26 @@ export default function MaterialConsolidationModal({
   if (!open) return null;
 
   const blocks = data?.blocks || [];
-  // Per-block picker helpers — used by the dropdown in the toolbar.
-  const toggleBlock = (id) => {
-    setSelectedBlockIds((prev) => {
+  // Combined scope picker helpers.
+  const toggleScope = (key) => {
+    setSelectedScopes((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
+      if (next.has(key)) next.delete(key); else next.add(key);
       return next;
     });
   };
-  const selectAllBlocks = () => {
-    const ids = new Set();
-    for (const b of blocks) if (b?.id != null) ids.add(Number(b.id));
-    setSelectedBlockIds(ids);
-  };
-  const clearAllBlocks = () => setSelectedBlockIds(new Set());
+  const selectAllScopes = () => setSelectedScopes(new Set(scopeLeaves.map((l) => l.key)));
+  const clearAllScopes = () => setSelectedScopes(new Set());
+
+  // Group leaves by block for a tidy nested dropdown.
+  const leavesByBlock = (() => {
+    const m = new Map();
+    for (const l of scopeLeaves) {
+      if (!m.has(l.blockId)) m.set(l.blockId, { blockName: l.blockName, items: [] });
+      m.get(l.blockId).items.push(l);
+    }
+    return [...m.values()];
+  })();
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose?.(); }}>
@@ -521,61 +566,52 @@ export default function MaterialConsolidationModal({
               <X className="w-4 h-4 mr-1" /> {t('close') || 'Yopish'}
             </Button>
 
-            {/* Per-block selection — popover with checkboxes for each
-               block. Drives display + print + Excel + Save. Defaults to
-               every block checked; user can narrow down to publish a
-               single block's materials or any subset. */}
-            <div ref={blockPickerRef} className="relative ml-2">
+            {/* Combined scope picker — one dropdown listing each block and,
+               nested under it, that block's own work + each subcontractor on
+               it. Selecting (block, source) together avoids the impossible
+               cross-products the two separate dropdowns allowed. */}
+            <div ref={scopePickerRef} className="relative ml-2">
               <button
                 type="button"
-                onClick={() => setBlockPickerOpen((v) => !v)}
-                disabled={blocks.length === 0}
+                onClick={() => setScopePickerOpen((v) => !v)}
+                disabled={scopeLeaves.length === 0}
                 className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-slate-200 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
               >
-                <span>{tt('blocks_label', language)}</span>
+                <span>{({ uz: 'Bloklar / Subpudratchi', ru: 'Блоки / Субподрядчик', en: 'Blocks / Subcontractor' })[language] || 'Bloklar / Subpudratchi'}</span>
                 <span className="font-mono text-xs text-slate-500">
-                  {tt('blocks_count', language)
-                    .replace('{n}', String(selectedBlockIds.size))
-                    .replace('{m}', String(blocks.length))}
+                  {selectedScopes.size}/{scopeLeaves.length}
                 </span>
                 <ChevronDown className="w-3.5 h-3.5" />
               </button>
-              {blockPickerOpen && blocks.length > 0 && (
-                <div
-                  className="absolute left-0 top-full mt-1 z-20 bg-white border border-slate-200 rounded-md shadow-lg w-64 max-h-80 overflow-auto"
-                >
+              {scopePickerOpen && scopeLeaves.length > 0 && (
+                <div className="absolute left-0 top-full mt-1 z-20 bg-white border border-slate-200 rounded-md shadow-lg w-72 max-h-96 overflow-auto">
                   <div className="flex items-center justify-between px-3 py-2 border-b border-slate-100 sticky top-0 bg-white">
-                    <button
-                      type="button"
-                      onClick={selectAllBlocks}
-                      className="text-xs text-emerald-700 hover:text-emerald-800"
-                    >
+                    <button type="button" onClick={selectAllScopes} className="text-xs text-emerald-700 hover:text-emerald-800">
                       {tt('select_all', language)}
                     </button>
-                    <button
-                      type="button"
-                      onClick={clearAllBlocks}
-                      className="text-xs text-slate-500 hover:text-slate-700"
-                    >
+                    <button type="button" onClick={clearAllScopes} className="text-xs text-slate-500 hover:text-slate-700">
                       {tt('select_none', language)}
                     </button>
                   </div>
                   <ul className="py-1">
-                    {blocks.map((b) => {
-                      const id = Number(b.id);
-                      const checked = selectedBlockIds.has(id);
-                      return (
-                        <li key={id}>
-                          <label className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-slate-50 text-sm">
-                            <Checkbox
-                              checked={checked}
-                              onCheckedChange={() => toggleBlock(id)}
-                            />
-                            <span className="flex-1 truncate" title={b.name || ''}>{b.name || `#${id}`}</span>
+                    {leavesByBlock.map((blk) => (
+                      <li key={blk.blockName} className="py-0.5">
+                        <div className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{blk.blockName}</div>
+                        {blk.items.map((l) => (
+                          <label key={l.key} className="flex items-center gap-2 px-3 py-1.5 pl-5 cursor-pointer hover:bg-slate-50 text-sm">
+                            <Checkbox checked={selectedScopes.has(l.key)} onCheckedChange={() => toggleScope(l.key)} />
+                            <span className="flex-1 truncate" title={l.subName || ''}>
+                              {l.subKey === IN_HOUSE_KEY
+                                ? (({ uz: "Loyiha (o'z ishi)", ru: 'Проект (свои)', en: 'In-house' })[language] || 'In-house')
+                                : l.subName}
+                            </span>
+                            {l.subKey !== IN_HOUSE_KEY && (
+                              <span className="text-[9px] px-1 py-0.5 rounded bg-orange-100 text-orange-700">sub</span>
+                            )}
                           </label>
-                        </li>
-                      );
-                    })}
+                        ))}
+                      </li>
+                    ))}
                   </ul>
                 </div>
               )}
@@ -622,7 +658,7 @@ export default function MaterialConsolidationModal({
                     the user's block selection) + project total underneath.
                     When ON: render ONLY the project-wide consolidated table —
                     same name+UOM+price merged across the SELECTED blocks. */}
-                {selectedBlockIds.size === 0 ? (
+                {selectedScopes.size === 0 ? (
                   <div className="text-center text-sm text-slate-500 py-8">{tt('no_blocks_picked', language)}</div>
                 ) : allBlocks ? (
                   mergedTotalGroups.length === 0 ? (
