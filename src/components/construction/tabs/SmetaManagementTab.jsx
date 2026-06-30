@@ -2231,7 +2231,10 @@ export default function SmetaManagementTab({ project }) {
                     // Only the current (joriy) Forma 2 is deletable — and only
                     // when there's a frozen iteration before it to unfreeze,
                     // and the user has construction delete permission.
-                    const canDeleteThis = canDeleteConstruction && isOpen && hasFrozenIteration;
+                    // Owner-only: a subcontractor company can't roll back the
+                    // project's Forma 2 chain (backend also enforces this).
+                    const canDeleteThis = canDeleteConstruction && isOpen && hasFrozenIteration
+                      && project?.viewer_role !== 'subcontractor';
                     return (
                       <div
                         key={it.id}
@@ -3146,7 +3149,7 @@ export default function SmetaManagementTab({ project }) {
               subOptions={blockSubcontractors}
               onSubScopeChange={setSubFilter}
               onClose={() => setForm2Open(false)}
-              onSaveSnapshot={handleSaveSnapshot}
+              onSaveSnapshot={project?.viewer_role === 'subcontractor' ? undefined : handleSaveSnapshot}
             />
           </div>
         </DialogContent>

@@ -1,9 +1,10 @@
-import React, { useState, useCallback } from 'react';
+import React, { useCallback } from 'react';
+import ReactDOM from 'react-dom';
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Building2,
   Users,
@@ -64,20 +65,31 @@ const PROJECT_COLUMNS = [
   },
 ];
 
-// Draggable Project Card
-function ProjectCard({ project, onView, onEdit, onDragStart, formatCurrency, t }) {
-  const handleDragStart = (e) => {
-    e.dataTransfer.setData('projectId', project.id.toString());
-    e.dataTransfer.setData('currentStatus', project.status);
-    e.dataTransfer.effectAllowed = 'move';
-    onDragStart && onDragStart(project);
-  };
+// While dragging, render the card in a portal to <body> so its transform is
+// measured against the viewport — this keeps the drag preview locked under the
+// cursor (the old native-drag image drifted on high-DPI screens).
+const PortalAwareItem = ({ provided, snapshot, children }) => {
+  const child = (
+    <div
+      ref={provided.innerRef}
+      {...provided.draggableProps}
+      {...provided.dragHandleProps}
+      style={{ ...provided.draggableProps.style }}
+      className={snapshot.isDragging ? 'rounded-xl shadow-2xl' : ''}
+    >
+      {children}
+    </div>
+  );
+  if (!snapshot.isDragging) return child;
+  return ReactDOM.createPortal(child, document.body);
+};
 
+// Project Card (visual only — drag is handled by the Draggable wrapper)
+function ProjectCard({ project, onView, onEdit, formatCurrency, t }) {
   return (
     <Card
-      draggable
-      onDragStart={handleDragStart}
-      className="cursor-grab active:cursor-grabbing hover:shadow-lg transition-shadow bg-white"
+      onClick={() => onView(project)}
+      className="cursor-pointer hover:shadow-lg transition-shadow bg-white"
     >
       <CardContent className="p-4">
         <div className="flex items-start justify-between mb-2">
@@ -89,7 +101,13 @@ function ProjectCard({ project, onView, onEdit, onDragStart, formatCurrency, t }
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+              >
                 <MoreHorizontal className="w-4 h-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -146,42 +164,12 @@ function ProjectCard({ project, onView, onEdit, onDragStart, formatCurrency, t }
   );
 }
 
-// Kanban Column
-function KanbanColumn({ column, projects, onDrop, onView, onEdit, formatCurrency, t }) {
-  const [isDragOver, setIsDragOver] = useState(false);
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    setIsDragOver(true);
-  };
-
-  const handleDragLeave = () => {
-    setIsDragOver(false);
-  };
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    setIsDragOver(false);
-    const projectId = e.dataTransfer.getData('projectId');
-    const currentStatus = e.dataTransfer.getData('currentStatus');
-
-    if (projectId && currentStatus !== column.id) {
-      onDrop(parseInt(projectId, 10), column.id);
-    }
-  };
-
+// Kanban Column — a Droppable target for one status
+function KanbanColumn({ column, projects, onView, onEdit, formatCurrency, t }) {
   const columnProjects = projects.filter((p) => p.status === column.id);
 
   return (
-    <div
-      className={`flex-shrink-0 w-80 rounded-lg border-2 transition-colors ${
-        isDragOver ? 'border-blue-400 bg-blue-50' : column.color
-      }`}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-    >
+    <div className={`flex-shrink-0 w-80 rounded-lg border-2 ${column.color}`}>
       {/* Column Header */}
       <div className={`p-3 rounded-t-lg ${column.headerColor}`}>
         <div className="flex items-center justify-between">
@@ -190,28 +178,43 @@ function KanbanColumn({ column, projects, onDrop, onView, onEdit, formatCurrency
         </div>
       </div>
 
-      {/* Column Content */}
-      <ScrollArea className="h-[calc(100vh-300px)]">
-        <div className="p-3 space-y-3">
-          {columnProjects.length === 0 ? (
-            <div className="text-center py-8 text-slate-400 text-sm">
-              <Building2 className="w-8 h-8 mx-auto mb-2 opacity-50" />
-              <p>{t('no_projects') || "Loyihalar yo'q"}</p>
-            </div>
-          ) : (
-            columnProjects.map((project) => (
-              <ProjectCard
-                key={project.id}
-                project={project}
-                onView={onView}
-                onEdit={onEdit}
-                formatCurrency={formatCurrency}
-                t={t}
-              />
-            ))
-          )}
-        </div>
-      </ScrollArea>
+      {/* Column Content (droppable) */}
+      <Droppable droppableId={column.id}>
+        {(provided, snapshot) => (
+          <div
+            ref={provided.innerRef}
+            {...provided.droppableProps}
+            className={`p-3 space-y-3 max-h-[calc(100vh-300px)] overflow-y-auto transition-colors ${
+              snapshot.isDraggingOver ? 'bg-blue-50/60' : ''
+            }`}
+            style={{ minHeight: 120 }}
+          >
+            {columnProjects.length === 0 && !snapshot.isDraggingOver ? (
+              <div className="text-center py-8 text-slate-400 text-sm">
+                <Building2 className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                <p>{t('no_projects') || "Loyihalar yo'q"}</p>
+              </div>
+            ) : (
+              columnProjects.map((project, index) => (
+                <Draggable key={project.id} draggableId={String(project.id)} index={index}>
+                  {(dp, ds) => (
+                    <PortalAwareItem provided={dp} snapshot={ds}>
+                      <ProjectCard
+                        project={project}
+                        onView={onView}
+                        onEdit={onEdit}
+                        formatCurrency={formatCurrency}
+                        t={t}
+                      />
+                    </PortalAwareItem>
+                  )}
+                </Draggable>
+              ))
+            )}
+            {provided.placeholder}
+          </div>
+        )}
+      </Droppable>
     </div>
   );
 }
@@ -227,34 +230,36 @@ export function ProjectKanban({
   const { language } = useLanguage();
   const { t } = useTranslation(language);
 
-  const handleDrop = useCallback(
-    async (projectId, newStatus) => {
-      try {
-        await onStatusChange(projectId, newStatus);
-      } catch (error) {
-        console.error('Failed to update project status:', error);
-      }
+  const handleDragEnd = useCallback(
+    (result) => {
+      const { draggableId, source, destination } = result;
+      if (!destination) return; // dropped outside any column
+      if (destination.droppableId === source.droppableId) return; // same column
+      Promise.resolve(onStatusChange(parseInt(draggableId, 10), destination.droppableId)).catch(
+        (error) => console.error('Failed to update project status:', error),
+      );
     },
-    [onStatusChange]
+    [onStatusChange],
   );
 
   return (
-    <div className="overflow-x-auto pb-4">
-      <div className="flex gap-4 min-w-max p-2">
-        {PROJECT_COLUMNS.map((column) => (
-          <KanbanColumn
-            key={column.id}
-            column={column}
-            projects={projects}
-            onDrop={handleDrop}
-            onView={onViewProject}
-            onEdit={onEditProject}
-            formatCurrency={formatCurrency}
-            t={t}
-          />
-        ))}
+    <DragDropContext onDragEnd={handleDragEnd}>
+      <div className="overflow-x-auto pb-4">
+        <div className="flex gap-4 min-w-max p-2">
+          {PROJECT_COLUMNS.map((column) => (
+            <KanbanColumn
+              key={column.id}
+              column={column}
+              projects={projects}
+              onView={onViewProject}
+              onEdit={onEditProject}
+              formatCurrency={formatCurrency}
+              t={t}
+            />
+          ))}
+        </div>
       </div>
-    </div>
+    </DragDropContext>
   );
 }
 
