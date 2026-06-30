@@ -521,39 +521,6 @@ const SubcontractorsTab = ({ project, buildings = [], wbsItems = [] }) => {
               />
             </div>
 
-            {/* Optional: pick a tenant company as the subcontractor. That company
-                then sees the project (badged) and manages these works itself. */}
-            <div>
-              <Label>{language === 'ru' ? 'Компания-субподрядчик' : language === 'uz' ? 'Subpudratchi kompaniya' : 'Subcontractor company'}</Label>
-              <Select
-                value={form.subcontractor_organization_id || 'none'}
-                onValueChange={(v) => {
-                  const orgId = v === 'none' ? '' : v;
-                  const org = orgs.find((o) => String(o.id) === String(orgId));
-                  setForm((f) => ({
-                    ...f,
-                    subcontractor_organization_id: orgId,
-                    partner_name: (org && !f.partner_name) ? (org.name || f.partner_name) : f.partner_name,
-                  }));
-                }}
-              >
-                <SelectTrigger><SelectValue placeholder={language === 'ru' ? 'Внешний' : 'Tashqi'} /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">{language === 'ru' ? 'Внешний (не компания)' : language === 'uz' ? 'Tashqi (kompaniya emas)' : 'External'}</SelectItem>
-                  {orgs.map((o) => (
-                    <SelectItem key={o.id} value={String(o.id)}>{o.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {form.subcontractor_organization_id && (
-                <p className="text-xs text-slate-500 mt-1">
-                  {language === 'ru' ? 'Эта компания увидит только блоки, назначенные ей в карточке блока.'
-                    : language === 'uz' ? "Bu kompaniya faqat blok kartasida unga biriktirilgan bloklarni ko'radi."
-                    : 'This company sees only the blocks assigned to it on each block card.'}
-                </p>
-              )}
-            </div>
-
             <div>
               <Label>{t('partner') || 'Hamkor'}</Label>
               <Input

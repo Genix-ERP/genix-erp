@@ -45,6 +45,10 @@ const RejaFaktTab = ({ project }) => {
   // switch back to `'all'` via the Hammasi pill.
   const [buildingFilter, setBuildingFilter] = useState(null);
   const [buildings, setBuildings] = useState([]);
+  // Subcontractor scope: 'own' (in-house), 'all' (everything), or a
+  // subcontract id (that subcontractor only).
+  const [subFilter, setSubFilter] = useState('own');
+  const [subcontracts, setSubcontracts] = useState([]);
   const [stageFilter, setStageFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [onlyOverBudget, setOnlyOverBudget] = useState(false);
@@ -52,6 +56,11 @@ const RejaFaktTab = ({ project }) => {
 
   // Stages list for filter dropdown
   const [allStages, setAllStages] = useState([]);
+  // Stages actually present in the current (block + subcontractor) scope —
+  // drives the Bosqich dropdown so it doesn't list in-house stages while a
+  // subcontractor is selected. Refreshed from the loaded result whenever the
+  // stage filter itself is 'all' (so it stays the full scoped list).
+  const [scopedStages, setScopedStages] = useState([]);
   const [subStageFilter, setSubStageFilter] = useState('all');
 
   // Modals
@@ -126,16 +135,34 @@ const RejaFaktTab = ({ project }) => {
         buildingFilter === 'all' ? {} : { building_id: buildingFilter };
       if (stageFilter !== 'all') params.stage_id = stageFilter;
       if (statusFilter !== 'all') params.status = statusFilter;
+      // 'own' is the default in-house scope (no param); 'all' or a subcontract
+      // id is passed through to the backend.
+      if (subFilter && subFilter !== 'own') params.subcontract_id = subFilter;
       const result = await constructionService.getRejaFakt(project.id, params);
       setData(result);
+      // Keep the scoped-stage list current (only when not stage-filtered, so it
+      // remains the full set of stages available in this block+sub scope).
+      if (stageFilter === 'all') {
+        setScopedStages((result?.stages || []).map((s) => ({ id: s.id, name: s.name })));
+      }
     } catch (e) {
       console.error('Failed to load reja-fakt:', e);
     } finally {
       setLoading(false);
     }
-  }, [project?.id, buildingFilter, stageFilter, statusFilter]);
+  }, [project?.id, buildingFilter, stageFilter, statusFilter, subFilter]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Load the project's subcontractors for the scope dropdown.
+  useEffect(() => {
+    if (!project?.id) return;
+    let cancelled = false;
+    constructionService.listSubcontracts(project.id)
+      .then((rows) => { if (!cancelled) setSubcontracts(Array.isArray(rows) ? rows : []); })
+      .catch(() => { if (!cancelled) setSubcontracts([]); });
+    return () => { cancelled = true; };
+  }, [project?.id]);
 
   // Load buildings once per project — drives the tab row above the filters.
   useEffect(() => {
@@ -573,6 +600,25 @@ const RejaFaktTab = ({ project }) => {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 items-end">
+        {subcontracts.length > 0 && (
+          <div className="w-52">
+            <Label className="text-xs text-slate-500">{({ uz: 'Subpudratchi', ru: 'Субподрядчик', en: 'Subcontractor' })[language] || 'Subpudratchi'}</Label>
+            <Select value={subFilter} onValueChange={(val) => { setSubFilter(val); setStageFilter('all'); setCurrentPage(1); }}>
+              <SelectTrigger className="h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="own">{({ uz: 'Loyiha smetasi', ru: 'Смета проекта', en: 'Project estimate' })[language] || 'Loyiha smetasi'}</SelectItem>
+                <SelectItem value="all">{({ uz: 'Butun loyiha (barchasi)', ru: 'Весь проект (все)', en: 'Full project (all)' })[language] || 'Butun loyiha (barchasi)'}</SelectItem>
+                {subcontracts.map((s) => (
+                  <SelectItem key={s.id} value={String(s.id)}>
+                    {s.subcontractor_organization_name || s.partner_name || s.name || `#${s.id}`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
         <div className="w-48">
           <Label className="text-xs text-slate-500">{t('stage')}</Label>
           <Select value={stageFilter} onValueChange={(val) => { setStageFilter(val); setCurrentPage(1); }}>
@@ -581,7 +627,7 @@ const RejaFaktTab = ({ project }) => {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">{t('rf_all_stages')}</SelectItem>
-              {allStages.map(s => (
+              {scopedStages.map(s => (
                 <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
               ))}
             </SelectContent>
