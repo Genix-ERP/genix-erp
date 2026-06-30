@@ -801,7 +801,14 @@ const ProjectsTab = ({
                     <h3 className="font-semibold text-slate-900 text-base leading-snug line-clamp-2 flex-1">
                       {project.name}
                     </h3>
-                    {getStatusBadge(project.status)}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {project.viewer_role === 'subcontractor' && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-orange-100 text-orange-700">
+                          {t('subcontractor') || 'Subpudratchi'}
+                        </span>
+                      )}
+                      {getStatusBadge(project.status)}
+                    </div>
                   </div>
 
                   {/* Meta rows */}
@@ -1291,7 +1298,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
   const [buildingForm, setBuildingForm] = useState({
     name: '', code: '', description: '', building_type: '', building_purpose: '',
     floors_count: '', total_area: '', apartments_count: '', commercial_units_count: '',
-    estimated_cost: '', status: 'draft',
+    estimated_cost: '', status: 'draft', subcontractor_org_ids: [],
     // CRM link fields — only persisted via the separate setBuildingCRMLink
     // PUT after the main building save succeeds. crm_block_id can be null;
     // current_crm_stage defaults to 'foundation'; crm_auto_sync defaults true.
@@ -1303,6 +1310,9 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
     subcontract_id: '', building_id: ''
   });
   const [projectSubcontracts, setProjectSubcontracts] = useState([]);
+  // Tenant companies (organizations) — candidate internal subcontractors that
+  // the owner can assign to a block in the building modal.
+  const [orgs, setOrgs] = useState([]);
   const [inventoryProducts, setInventoryProducts] = useState([]);
   const [inventoryWarehouses, setInventoryWarehouses] = useState([]);
   const [variantsByProduct, setVariantsByProduct] = useState({});
@@ -1443,13 +1453,15 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
               // which blocks already have estimates to disable the
               // "clone INTO this" path and surface counts on candidate
               // sources inside the modal.
-              const [buildingsData, wbsData, allEstimates] = await Promise.all([
+              const [buildingsData, wbsData, allEstimates, orgsData] = await Promise.all([
                 constructionService.listBuildings(project.id),
                 constructionService.getWBSTree(project.id),
                 constructionService.listEstimates(project.id).catch(() => []),
+                constructionService.listOrganizations().catch(() => []),
               ]);
               setBuildings(sortBuildings(buildingsData));
               setWbsTree(wbsData || []);
+              setOrgs(Array.isArray(orgsData) ? orgsData : (orgsData?.items || []));
               const counts = {};
               for (const e of (allEstimates || [])) {
                 const bid = Number(e?.building_id || 0);
@@ -1650,12 +1662,16 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
       setBuildingForm({
         name: '', code: '', description: '', building_type: '', building_purpose: '',
         floors_count: '', total_area: '', apartments_count: '', commercial_units_count: '',
-        estimated_cost: '', status: 'draft',
+        estimated_cost: '', status: 'draft', subcontractor_org_ids: [],
         crm_block_id: null, current_crm_stage: 'foundation', crm_auto_sync: true,
       });
     } catch (error) {
       console.error('Error saving building:', error);
-      const msg = error?.response?.data?.message || t('error_occurred') || 'Xatolik yuz berdi';
+      // Backend errors live at response.data.error.message; keep the older
+      // .data.message as a fallback for any endpoint using the flat shape.
+      const msg = error?.response?.data?.error?.message
+        || error?.response?.data?.message
+        || t('error_occurred') || 'Xatolik yuz berdi';
       toast.error(msg);
     }
   };
@@ -2674,6 +2690,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                                     commercial_units_count: building.commercial_units_count || '',
                                     estimated_cost: building.estimated_cost || '',
                                     status: building.status || 'draft',
+                                    subcontractor_org_ids: (building.subcontractor_org_ids || []).map(String),
                                     crm_block_id: building.crm_block_id ?? null,
                                     current_crm_stage: building.current_crm_stage || 'foundation',
                                     crm_auto_sync: building.crm_auto_sync ?? true,
@@ -3637,6 +3654,65 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                 })()}
               </div>
             )}
+
+            {/* Subcontractor assignment — owner-controlled. The companies/partners
+                picked here are the only ones that will see and work this block.
+                A block may be assigned to several subcontractors. Hidden for
+                subcontractor viewers; the backend also rejects their writes. */}
+            <div className="border rounded-lg p-3 bg-slate-50 space-y-2" style={{ display: project?.viewer_role === 'subcontractor' ? 'none' : undefined }}>
+              <Label className="text-slate-700 font-semibold">
+                {language === 'ru' ? 'Субподрядчики блока (компании)' : language === 'uz' ? 'Blok subpudratchilari (kompaniyalar)' : 'Block subcontractors (companies)'}
+              </Label>
+              {(() => {
+                // Candidate companies = tenant orgs other than this project's
+                // owner company. Picking one auto-creates its subcontract.
+                const ownerOrgId = project?.organization_id ? String(project.organization_id) : null;
+                const candidates = (orgs || []).filter((o) => String(o.id) !== ownerOrgId);
+                if (candidates.length === 0) {
+                  return (
+                    <p className="text-xs text-slate-400">
+                      {language === 'ru' ? 'Нет других компаний в этом тенанте.'
+                        : language === 'uz' ? "Bu tenantda boshqa kompaniyalar yo'q."
+                        : 'No other companies in this tenant.'}
+                    </p>
+                  );
+                }
+                return (
+                  <>
+                    <div className="max-h-40 overflow-y-auto border rounded-md divide-y bg-white">
+                      {candidates.map((o) => {
+                        const oid = String(o.id);
+                        const checked = (buildingForm.subcontractor_org_ids || []).map(String).includes(oid);
+                        return (
+                          <label key={oid} className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-slate-50 text-sm">
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4"
+                              checked={checked}
+                              onChange={() => setBuildingForm((f) => {
+                                const cur = (f.subcontractor_org_ids || []).map(String);
+                                return {
+                                  ...f,
+                                  subcontractor_org_ids: cur.includes(oid)
+                                    ? cur.filter((x) => x !== oid)
+                                    : [...cur, oid],
+                                };
+                              })}
+                            />
+                            <span>{o.name}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1">
+                      {language === 'ru' ? 'Выбранная компания получит субподряд по этому блоку и увидит его в своих проектах.'
+                        : language === 'uz' ? "Tanlangan kompaniya shu blok bo'yicha subpudrat oladi va uni o'z loyihalarida ko'radi."
+                        : 'A picked company gets a subcontract for this block and sees it in its projects.'}
+                    </p>
+                  </>
+                );
+              })()}
+            </div>
 
             <DialogFooter className="flex-col-reverse sm:flex-row gap-2">
               <Button type="button" variant="outline" onClick={() => setShowBuildingModal(false)}>
