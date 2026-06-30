@@ -440,9 +440,30 @@ export default function SmetaManagementTab({ project }) {
   const activeEstimateIds = useMemo(() => {
     if (!activeBlock) return [];
     // null → project's own (subcontract_id NULL); number → that subcontractor.
-    const matchesSub = (e) => subFilter ? Number(e.subcontract_id) === Number(subFilter) : !e.subcontract_id;
+    // 'all' → full project: every estimate of the block (own + each
+    // subcontractor) merged. number → that subcontractor. null → own only.
+    const matchesSub = (e) => subFilter === 'all'
+      ? true
+      : (subFilter ? Number(e.subcontract_id) === Number(subFilter) : !e.subcontract_id);
     return activeBlock.edinich.filter(matchesSub).map((e) => Number(e.id));
   }, [activeBlock, subFilter]);
+
+  // estimate_id → subcontractor name, for tagging lines in the full-project
+  // ('all') Forma 2 so the renderer can colour + badge subcontractor rows.
+  const estSubMap = useMemo(() => {
+    const m = new Map();
+    (activeBlock?.edinich || []).forEach((e) => {
+      if (e.subcontract_id) m.set(Number(e.id), e.subcontract_name || `#${e.subcontract_id}`);
+    });
+    return m;
+  }, [activeBlock]);
+
+  // Lines handed to Form2Preview, each annotated with its source estimate's
+  // subcontractor name (only meaningful in the merged 'all' view).
+  const forma2Lines = useMemo(() => (lines || []).map((l) => {
+    const nm = estSubMap.get(Number(l.estimate_id));
+    return nm ? { ...l, _subcontract_name: nm } : l;
+  }), [lines, estSubMap]);
   // Sync estimateId to the latest едиinич of the selected block. This is
   // what the mutation handlers / Form 2 / audit / "+resurs" modal use as
   // a concrete single-estimate target.
@@ -2056,14 +2077,20 @@ export default function SmetaManagementTab({ project }) {
               estimates. Empty value = project's own (in-house) estimate. */}
           {blockSubcontractors.length > 0 && (
             <select
-              value={subFilter == null ? '' : String(subFilter)}
-              onChange={(e) => setSubFilter(e.target.value ? Number(e.target.value) : null)}
+              value={subFilter === 'all' ? 'all' : (subFilter == null ? '' : String(subFilter))}
+              onChange={(e) => {
+                const v = e.target.value;
+                setSubFilter(v === 'all' ? 'all' : (v ? Number(v) : null));
+              }}
               className="px-3 py-2 rounded-md text-xs outline-none cursor-pointer"
               style={{ background: C.inset, color: C.text, border: `1px solid ${C.border2}`, fontFamily: 'inherit', minWidth: 180 }}
               title={({ uz: 'Subpudratchi', ru: 'Субподрядчик', en: 'Subcontractor' })[language] || 'Subpudratchi'}
             >
               <option value="" style={{ background: C.card, color: C.text }}>
                 {({ uz: 'Loyiha smetasi', ru: 'Смета проекта', en: 'Project estimate' })[language] || 'Loyiha smetasi'}
+              </option>
+              <option value="all" style={{ background: C.card, color: C.text }}>
+                {({ uz: "Butun loyiha (barchasi)", ru: 'Весь проект (все)', en: 'Full project (all)' })[language] || 'Butun loyiha (barchasi)'}
               </option>
               {blockSubcontractors.map((s) => (
                 <option key={s.id} value={s.id} style={{ background: C.card, color: C.text }}>{s.name}</option>
@@ -3113,8 +3140,11 @@ export default function SmetaManagementTab({ project }) {
           <div className="flex-1 overflow-auto bg-stone-100">
             <Form2Preview
               estimate={selectedEstimate}
-              lines={lines}
+              lines={forma2Lines}
               project={project}
+              subScope={subFilter}
+              subOptions={blockSubcontractors}
+              onSubScopeChange={setSubFilter}
               onClose={() => setForm2Open(false)}
               onSaveSnapshot={handleSaveSnapshot}
             />

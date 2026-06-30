@@ -83,7 +83,12 @@ export default function ResourceConsolidationModal({ open, onClose, projectId, p
   // resource rows themselves) so the modal matches the Excel Свод.
   const [transportPct, setTransportPct] = useState(DEFAULT_TRANSPORT_PCT);
 
-  const [selectedBlockIds, setSelectedBlockIds] = useState(() => new Set());
+  // Combined (block, source) scope selection — key `${blockId}::${subKey}`,
+  // subKey is '__inhouse__' or a subcontractor name. Chosen together because a
+  // subcontractor's resources live only in its own block's estimate.
+  const IN_HOUSE_KEY = '__inhouse__';
+  const scopeKey = (blockId, subKey) => `${blockId}::${subKey}`;
+  const [selectedScopes, setSelectedScopes] = useState(() => new Set());
   const [selectedTypes, setSelectedTypes] = useState(() => new Set(RES_TYPES));
   const [blockPickerOpen, setBlockPickerOpen] = useState(false);
   const [typePickerOpen, setTypePickerOpen] = useState(false);
@@ -98,9 +103,14 @@ export default function ResourceConsolidationModal({ open, onClose, projectId, p
       .then((d) => {
         if (cancelled) return;
         setData(d);
-        const ids = new Set();
-        for (const b of (d?.blocks || [])) { if (b?.id != null) ids.add(Number(b.id)); }
-        setSelectedBlockIds(ids);
+        const scopes = new Set();
+        for (const b of (d?.blocks || [])) {
+          if (b?.id == null) continue;
+          for (const g of (b?.groups || [])) {
+            scopes.add(scopeKey(Number(b.id), g.subcontractor ? g.subcontractor : IN_HOUSE_KEY));
+          }
+        }
+        setSelectedScopes(scopes);
         setSelectedTypes(new Set(RES_TYPES));
       })
       .catch((e) => {
@@ -122,15 +132,42 @@ export default function ResourceConsolidationModal({ open, onClose, projectId, p
   }, [blockPickerOpen, typePickerOpen]);
 
   const typeOk = (g) => selectedTypes.has(g.type);
+  const scopeOkFor = (blockId) => (g) =>
+    selectedScopes.has(scopeKey(Number(blockId), g.subcontractor ? g.subcontractor : IN_HOUSE_KEY));
 
-  // Blocks the user opted into, each with rows filtered to the selected types.
+  // The real (block, source) leaves present in the report.
+  const scopeLeaves = useMemo(() => {
+    const leaves = [];
+    for (const b of (data?.blocks || [])) {
+      if (b?.id == null) continue;
+      const seen = new Set();
+      for (const g of (b?.groups || [])) {
+        const subKey = g.subcontractor ? g.subcontractor : IN_HOUSE_KEY;
+        if (seen.has(subKey)) continue;
+        seen.add(subKey);
+        leaves.push({ key: scopeKey(Number(b.id), subKey), blockId: Number(b.id), blockName: b.name || `#${b.id}`, subKey, subName: g.subcontractor || '' });
+      }
+    }
+    return leaves;
+  }, [data]);
+
+  const leavesByBlock = useMemo(() => {
+    const m = new Map();
+    for (const l of scopeLeaves) {
+      if (!m.has(l.blockId)) m.set(l.blockId, { blockName: l.blockName, items: [] });
+      m.get(l.blockId).items.push(l);
+    }
+    return [...m.values()];
+  }, [scopeLeaves]);
+
+  // Blocks with only the selected (block, source) leaves and types kept.
   const filteredBlocks = useMemo(() => {
     if (!data) return [];
     return (data.blocks || [])
-      .filter((b) => selectedBlockIds.has(Number(b.id)))
-      .map((b) => ({ ...b, groups: (b.groups || []).filter(typeOk) }))
+      .map((b) => ({ ...b, groups: (b.groups || []).filter((g) => typeOk(g) && scopeOkFor(b.id)(g)) }))
+      .filter((b) => (b.groups || []).length > 0)
       .map((b) => ({ ...b, total_amount: b.groups.reduce((s, g) => s + (Number(g.norma_amount) || 0), 0) }));
-  }, [data, selectedBlockIds, selectedTypes]);
+  }, [data, selectedScopes, selectedTypes]);
 
   // Project total re-aggregated across selected blocks on (type,name,uom,rate).
   const totalGroups = useMemo(() => {
@@ -158,8 +195,8 @@ export default function ResourceConsolidationModal({ open, onClose, projectId, p
 
   // When every block is selected, show ONE combined table instead of splitting
   // per block — the user wants the whole-project roll-up in that case.
-  const allBlocksSelected = (data?.blocks?.length || 0) > 0
-    && selectedBlockIds.size === (data?.blocks?.length || 0);
+  const allBlocksSelected = scopeLeaves.length > 0
+    && selectedScopes.size === scopeLeaves.length;
 
   // ─────────────── Exports ───────────────
   const handlePrint = () => {
@@ -212,7 +249,7 @@ export default function ResourceConsolidationModal({ open, onClose, projectId, p
         const r = row;
         ws.getCell(r, 1).value = idx + 1;
         ws.getCell(r, 2).value = typeLabel(g.type, language);
-        ws.getCell(r, 3).value = g.name;
+        ws.getCell(r, 3).value = (g.subcontractor ? `[${g.subcontractor}] ` : '') + (g.name || '');
         ws.getCell(r, 4).value = g.uom;
         ws.getCell(r, 5).value = Number(g.norma_quantity) || 0;
         ws.getCell(r, 6).value = Number(g.unit_rate) || 0;
@@ -333,13 +370,11 @@ export default function ResourceConsolidationModal({ open, onClose, projectId, p
   if (!open) return null;
 
   const blocks = data?.blocks || [];
-  const toggleBlock = (id) => setSelectedBlockIds((prev) => {
-    const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next;
+  const toggleScope = (key) => setSelectedScopes((prev) => {
+    const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next;
   });
-  const selectAllBlocks = () => {
-    const ids = new Set(); for (const b of blocks) if (b?.id != null) ids.add(Number(b.id)); setSelectedBlockIds(ids);
-  };
-  const clearAllBlocks = () => setSelectedBlockIds(new Set());
+  const selectAllScopes = () => setSelectedScopes(new Set(scopeLeaves.map((l) => l.key)));
+  const clearAllScopes = () => setSelectedScopes(new Set());
   const toggleType = (ty) => setSelectedTypes((prev) => {
     const next = new Set(prev); next.has(ty) ? next.delete(ty) : next.add(ty); return next;
   });
@@ -370,35 +405,42 @@ export default function ResourceConsolidationModal({ open, onClose, projectId, p
               <X className="w-4 h-4 mr-1" /> {t('close') || 'Yopish'}
             </Button>
 
-            {/* Block picker */}
+            {/* Combined block + subcontractor picker */}
             <div ref={blockPickerRef} className="relative ml-2">
               <button type="button" onClick={() => { setBlockPickerOpen((v) => !v); setTypePickerOpen(false); }}
-                disabled={blocks.length === 0}
+                disabled={scopeLeaves.length === 0}
                 className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-slate-200 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50">
-                <span>{tt('blocks_label', language)}</span>
+                <span>{({ uz: 'Bloklar / Subpudratchi', ru: 'Блоки / Субподрядчик', en: 'Blocks / Subcontractor' })[language] || 'Bloklar / Subpudratchi'}</span>
                 <span className="font-mono text-xs text-slate-500">
-                  {tt('count_fmt', language).replace('{n}', String(selectedBlockIds.size)).replace('{m}', String(blocks.length))}
+                  {selectedScopes.size}/{scopeLeaves.length}
                 </span>
                 <ChevronDown className="w-3.5 h-3.5" />
               </button>
-              {blockPickerOpen && blocks.length > 0 && (
-                <div className="absolute left-0 top-full mt-1 z-20 bg-white border border-slate-200 rounded-md shadow-lg w-64 max-h-80 overflow-auto">
+              {blockPickerOpen && scopeLeaves.length > 0 && (
+                <div className="absolute left-0 top-full mt-1 z-20 bg-white border border-slate-200 rounded-md shadow-lg w-72 max-h-96 overflow-auto">
                   <div className="flex items-center justify-between px-3 py-2 border-b border-slate-100 sticky top-0 bg-white">
-                    <button type="button" onClick={selectAllBlocks} className="text-xs text-emerald-700 hover:text-emerald-800">{tt('select_all', language)}</button>
-                    <button type="button" onClick={clearAllBlocks} className="text-xs text-slate-500 hover:text-slate-700">{tt('select_none', language)}</button>
+                    <button type="button" onClick={selectAllScopes} className="text-xs text-emerald-700 hover:text-emerald-800">{tt('select_all', language)}</button>
+                    <button type="button" onClick={clearAllScopes} className="text-xs text-slate-500 hover:text-slate-700">{tt('select_none', language)}</button>
                   </div>
                   <ul className="py-1">
-                    {blocks.map((b) => {
-                      const id = Number(b.id);
-                      return (
-                        <li key={id}>
-                          <label className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-slate-50 text-sm">
-                            <Checkbox checked={selectedBlockIds.has(id)} onCheckedChange={() => toggleBlock(id)} />
-                            <span className="flex-1 truncate" title={b.name || ''}>{b.name || `#${id}`}</span>
+                    {leavesByBlock.map((blk) => (
+                      <li key={blk.blockName} className="py-0.5">
+                        <div className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{blk.blockName}</div>
+                        {blk.items.map((l) => (
+                          <label key={l.key} className="flex items-center gap-2 px-3 py-1.5 pl-5 cursor-pointer hover:bg-slate-50 text-sm">
+                            <Checkbox checked={selectedScopes.has(l.key)} onCheckedChange={() => toggleScope(l.key)} />
+                            <span className="flex-1 truncate" title={l.subName || ''}>
+                              {l.subKey === IN_HOUSE_KEY
+                                ? (({ uz: "Loyiha (o'z ishi)", ru: 'Проект (свои)', en: 'In-house' })[language] || 'In-house')
+                                : l.subName}
+                            </span>
+                            {l.subKey !== IN_HOUSE_KEY && (
+                              <span className="text-[9px] px-1 py-0.5 rounded bg-orange-100 text-orange-700">sub</span>
+                            )}
                           </label>
-                        </li>
-                      );
-                    })}
+                        ))}
+                      </li>
+                    ))}
                   </ul>
                 </div>
               )}
@@ -472,7 +514,7 @@ export default function ResourceConsolidationModal({ open, onClose, projectId, p
                 )}
                 <div className="text-center text-xs text-slate-500 mb-4">{tt('subtitle', language)}</div>
 
-                {selectedBlockIds.size === 0 ? (
+                {selectedScopes.size === 0 ? (
                   <div className="text-center text-sm text-slate-500 py-8">{tt('no_blocks_picked', language)}</div>
                 ) : selectedTypes.size === 0 ? (
                   <div className="text-center text-sm text-slate-500 py-8">{tt('no_types_picked', language)}</div>
