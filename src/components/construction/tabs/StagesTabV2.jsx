@@ -1464,6 +1464,11 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
   // Permission helpers — based on viewRole (what the user is currently
   // simulating) for UI gating; the server independently enforces using
   // the real role on every action.
+  // Cross-company (Phase 3): when the active company is a subcontractor on
+  // this project, it works the project normally but the FINAL YAKUNIY
+  // (confirmed_engineer / lock) belongs to the hiring company. Hide the
+  // finalize action; the server also enforces this.
+  const isSubcontractorView = project?.viewer_role === 'subcontractor';
   const canSeeCost = viewRole !== 'foreman';
   const canEditQty = (w) =>
     !isFrozenView
@@ -1480,7 +1485,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
     && (w.approval_status === 'pending' || w.approval_status === 'in_progress');
   const canConfirmAsSupervisor = (w) => viewRole === 'supervisor' && w.approval_status === 'submitted';
   const canRejectAsSupervisor  = (w) => viewRole === 'supervisor' && w.approval_status === 'submitted';
-  const canConfirmAsEngineer   = (w) => viewRole === 'engineer'   && w.approval_status === 'confirmed_supervisor';
+  const canConfirmAsEngineer   = (w) => viewRole === 'engineer'   && w.approval_status === 'confirmed_supervisor' && !isSubcontractorView;
   const canRejectAsEngineer    = (w) => viewRole === 'engineer'   && w.approval_status === 'confirmed_supervisor';
 
   // ── Action handlers ──────────────────────────────────────────────
@@ -2067,6 +2072,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
                     <StageActions
                       stage={stage}
                       viewRole={viewRole}
+                      isSubcontractorView={isSubcontractorView}
                       onSubmitAll={submitAllInStage}
                       onConfirmAllSupervisor={confirmAllSupervisor}
                       onConfirmAllEngineer={confirmAllEngineer}
@@ -2446,7 +2452,7 @@ function StatCard({ label, value, sub, variant }) {
 // =====================================================================
 // STAGE ACTIONS
 // =====================================================================
-function StageActions({ stage, viewRole, onSubmitAll, onConfirmAllSupervisor, onConfirmAllEngineer, t }) {
+function StageActions({ stage, viewRole, isSubcontractorView, onSubmitAll, onConfirmAllSupervisor, onConfirmAllEngineer, t }) {
   const works = stage.works;
   const submittedCount   = works.filter((w) => w.approval_status === 'submitted').length;
   const supConfirmed     = works.filter((w) => w.approval_status === 'confirmed_supervisor').length;
@@ -2454,7 +2460,7 @@ function StageActions({ stage, viewRole, onSubmitAll, onConfirmAllSupervisor, on
 
   const canSubmitAny  = viewRole === 'foreman'    && works.some((w) => Number(w.done_quantity || 0) > 0 && (w.approval_status === 'pending' || w.approval_status === 'in_progress'));
   const canConfirmAny = viewRole === 'supervisor' && works.some((w) => w.approval_status === 'submitted');
-  const canFinalAny   = viewRole === 'engineer'   && works.some((w) => w.approval_status === 'confirmed_supervisor');
+  const canFinalAny   = viewRole === 'engineer'   && !isSubcontractorView && works.some((w) => w.approval_status === 'confirmed_supervisor');
 
   return (
     <div className="mt-4 pt-3.5 border-t border-dashed border-slate-200 flex items-center justify-between flex-wrap gap-2">

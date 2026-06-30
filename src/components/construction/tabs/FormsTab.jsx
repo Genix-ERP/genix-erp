@@ -196,6 +196,9 @@ const FormsTab = ({ project }) => {
 
   // Forms list filter — reuses the same dropdown UI as the generate dialogs
   const [filterBuildingId, setFilterBuildingId] = useState('');
+  // Subcontractor filter: '' / 'all' → all acts; 'own' → project's own (no
+  // subcontract); a numeric id → only that subcontractor's acts.
+  const [filterSubcontractId, setFilterSubcontractId] = useState('');
 
   // Detail view state
   const [selectedAct, setSelectedAct] = useState(null);
@@ -817,6 +820,13 @@ const FormsTab = ({ project }) => {
     if (typeof va === 'string') return sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
     return sortDir === 'asc' ? (va || 0) - (vb || 0) : (vb || 0) - (va || 0);
   });
+
+  // Client-side subcontractor filter applied on top of the sorted list.
+  const visibleActs = (!filterSubcontractId || filterSubcontractId === 'all')
+    ? sortedActs
+    : filterSubcontractId === 'own'
+      ? sortedActs.filter(a => !a.subcontract_id)
+      : sortedActs.filter(a => String(a.subcontract_id) === String(filterSubcontractId));
 
   // --- Signing status component ---
   const SignaturePanel = ({ act }) => {
@@ -1480,6 +1490,18 @@ const FormsTab = ({ project }) => {
                 ))}
               </SelectContent>
             </Select>
+            {/* Subcontractor filter — narrows the list to a single subcontractor's
+                acts, or the project's own (non-subcontracted) acts. */}
+            <Select value={filterSubcontractId || 'all'} onValueChange={v => { setFilterSubcontractId(v === 'all' ? '' : v); setCurrentPage(1); }}>
+              <SelectTrigger className="w-48"><SelectValue placeholder={t('subcontractor') || 'Subpudratchi'} /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{language === 'ru' ? 'Все субподрядчики' : language === 'uz' ? 'Barcha subpudratchilar' : 'All subcontractors'}</SelectItem>
+                <SelectItem value="own">{language === 'ru' ? 'Собственные (проект)' : language === 'uz' ? "O'z ishlari (loyiha)" : 'Own (project)'}</SelectItem>
+                {(subcontracts || []).map(s => (
+                  <SelectItem key={s.id} value={String(s.id)}>{s.name || s.partner_name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Select value={filters.state || 'all'} onValueChange={v => setFilters(f => ({ ...f, state: v === 'all' ? '' : v }))}>
               <SelectTrigger className="w-40"><SelectValue placeholder={t('all_states') || 'Barcha holatlar'} /></SelectTrigger>
               <SelectContent>
@@ -1536,9 +1558,9 @@ const FormsTab = ({ project }) => {
                 </thead>
                 <tbody>
                   {(() => {
-                    const totalCount = sortedActs.length;
+                    const totalCount = visibleActs.length;
                     const totalPages = Math.ceil(totalCount / pageSize);
-                    const paginatedItems = sortedActs.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+                    const paginatedItems = visibleActs.slice((currentPage - 1) * pageSize, currentPage * pageSize);
                     return paginatedItems.map(act => (
                     <tr key={act.id} className="border-b hover:bg-slate-50">
                       <td className="py-2 px-3 font-medium">{displayActName(act.name)}{act.act_number ? ` #${act.act_number}` : ''}</td>
@@ -1549,7 +1571,9 @@ const FormsTab = ({ project }) => {
                           : <span className="text-slate-400 italic">{language === 'ru' ? 'проект' : language === 'uz' ? 'loyiha' : 'project-wide'}</span>}
                       </td>
                       <td className="py-2 px-3 whitespace-nowrap">{act.period_from ? `${fmtDMY(act.period_from)} — ${fmtDMY(act.period_to)}` : (act.works_start_date ? `${fmtDMY(act.works_start_date)} — ${fmtDMY(act.works_end_date)}` : '—')}</td>
-                      <td className="py-2 px-3">{act.subcontract_name || '—'}</td>
+                      <td className="py-2 px-3">{act.subcontract_name
+                        ? <Badge className="bg-orange-100 text-orange-700">{act.subcontract_name}</Badge>
+                        : <span className="text-slate-400">—</span>}</td>
                       <td className="py-2 px-3 text-right font-medium whitespace-nowrap">{formatCurrency(act.amount_total_with_vat || act.amount_total || 0)}</td>
                       <td className="py-2 px-3"><Badge className={STATE_COLORS[act.state]}>{STATE_LABELS[act.state] || act.state}</Badge></td>
                       <td className="py-2 px-3 text-right">
@@ -1569,7 +1593,7 @@ const FormsTab = ({ project }) => {
                 </tbody>
               </table>
               {(() => {
-                const totalCount = sortedActs.length;
+                const totalCount = visibleActs.length;
                 const totalPages = Math.ceil(totalCount / pageSize);
                 return totalPages > 1 && (
                   <div className="flex items-center justify-between px-4 py-3 border-t">
