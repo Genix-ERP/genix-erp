@@ -18,16 +18,11 @@ export const aiService = {
   },
 
   // Agentic chat — the model reads real ERP data via tools and proposes writes.
-  // history: prior [{role, content, ...}] turns returned by previous calls.
-  async agentChat(message, history = []) {
-    const response = await apiClient.post('/ai/agent', { message, history });
+  // history: prior turns returned by the previous call. approved: a write the
+  // user just confirmed ({tool, args}) — the agent executes it then continues.
+  async agentChat(message, history = [], approved = null) {
+    const response = await apiClient.post('/ai/agent', { message, history, approved });
     return response.data.data; // { type, message?, history?, steps?, pending_action?, assistant_note? }
-  },
-
-  // Execute one write action the user approved in the confirmation card.
-  async agentExecute(tool, args) {
-    const response = await apiClient.post('/ai/agent/execute', { tool, args });
-    return response.data.data; // { ok, data, summary }
   },
 
   // Conversations

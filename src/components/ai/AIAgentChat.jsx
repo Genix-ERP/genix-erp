@@ -18,6 +18,7 @@ export default function AIAgentChat() {
 
   const [messages, setMessages] = useState([]); // {role:'user'|'assistant'|'system', content, steps?}
   const [history, setHistory] = useState([]);    // backend conversation history for continuity
+  const [pendingHistory, setPendingHistory] = useState([]); // resumable history for a confirm
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [pending, setPending] = useState(null);  // {tool, args, summary}
@@ -25,6 +26,21 @@ export default function AIAgentChat() {
   const endRef = useRef(null);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, pending]);
+
+  // Handle any /ai/agent response: a final message, or a write to confirm.
+  const applyResponse = (res) => {
+    if (res?.type === 'confirmation_required') {
+      if (res.assistant_note) setMessages(m => [...m, { role: 'assistant', content: res.assistant_note, steps: res.steps }]);
+      else if (res.steps?.length) setMessages(m => [...m, { role: 'assistant', content: '', steps: res.steps }]);
+      setPending(res.pending_action);
+      setPendingHistory(Array.isArray(res.history) ? res.history : []);
+    } else {
+      setMessages(m => [...m, { role: 'assistant', content: res?.message || '', steps: res?.steps }]);
+      if (Array.isArray(res?.history)) setHistory(res.history);
+      setPending(null);
+      setPendingHistory([]);
+    }
+  };
 
   const send = async () => {
     const text = input.trim();
@@ -34,15 +50,7 @@ export default function AIAgentChat() {
     setMessages(m => [...m, { role: 'user', content: text }]);
     setLoading(true);
     try {
-      const res = await aiService.agentChat(text, history);
-      if (res?.type === 'confirmation_required') {
-        if (res.assistant_note) setMessages(m => [...m, { role: 'assistant', content: res.assistant_note, steps: res.steps }]);
-        else if (res.steps?.length) setMessages(m => [...m, { role: 'assistant', content: '', steps: res.steps }]);
-        setPending(res.pending_action);
-      } else {
-        setMessages(m => [...m, { role: 'assistant', content: res?.message || '', steps: res?.steps }]);
-        if (Array.isArray(res?.history)) setHistory(res.history);
-      }
+      applyResponse(await aiService.agentChat(text, history));
     } catch (err) {
       toast.error(err?.response?.data?.error || err?.message || tr('Xatolik', 'Ошибка', 'Error'));
       setMessages(m => [...m, { role: 'system', content: tr("So'rov bajarilmadi", 'Запрос не выполнен', 'Request failed') }]);
@@ -51,23 +59,30 @@ export default function AIAgentChat() {
     }
   };
 
+  // Approve the proposed write → the agent executes it AND continues reasoning.
   const approve = async () => {
     if (!pending) return;
+    const p = pending;
+    const h = pendingHistory;
+    setPending(null);
     setApproving(true);
+    setLoading(true);
+    setMessages(m => [...m, { role: 'system', content: `✅ ${p.summary}` }]);
     try {
-      const res = await aiService.agentExecute(pending.tool, pending.args);
-      setMessages(m => [...m, { role: 'system', content: `✅ ${res?.summary || pending.summary}` }]);
-      setPending(null);
+      applyResponse(await aiService.agentChat('', h, { tool: p.tool, args: p.args }));
     } catch (err) {
       toast.error(err?.response?.data?.error || err?.message || tr('Bajarilmadi', 'Не выполнено', 'Failed'));
+      setPending(p);
     } finally {
       setApproving(false);
+      setLoading(false);
     }
   };
 
   const reject = () => {
     setMessages(m => [...m, { role: 'system', content: `✖ ${tr('Bekor qilindi', 'Отменено', 'Cancelled')}` }]);
     setPending(null);
+    setPendingHistory([]);
   };
 
   return (
