@@ -12,7 +12,7 @@ import { toast } from 'sonner';
 // automatically; write tools come back as a confirmation card) and
 // POST /ai/agent/execute (runs an approved write). Keeps its own message +
 // backend-history state so it doesn't depend on the large AIContext.
-export default function AIAgentChat() {
+export default function AIAgentChat({ title, onClose, className = "", onAction, emptyHint } = {}) {
   const { language } = useLanguage();
   const tr = useCallback((uz, ru, en) => (language === 'ru' ? ru : language === 'uz' ? uz : en), [language]);
 
@@ -70,6 +70,7 @@ export default function AIAgentChat() {
     setMessages(m => [...m, { role: 'system', content: `✅ ${p.summary}` }]);
     try {
       applyResponse(await aiService.agentChat('', h, { tool: p.tool, args: p.args }));
+      onAction?.(p.tool, p.args); // let the host page refresh after a confirmed write
     } catch (err) {
       toast.error(err?.response?.data?.error || err?.message || tr('Bajarilmadi', 'Не выполнено', 'Failed'));
       setPending(p);
@@ -86,14 +87,19 @@ export default function AIAgentChat() {
   };
 
   return (
-    <Card className="bg-white/90 backdrop-blur-sm border-slate-200/60 shadow-lg flex flex-col h-[560px]">
+    <Card className={`bg-white/90 backdrop-blur-sm border-slate-200/60 shadow-lg flex flex-col h-[560px] ${className}`}>
       <CardHeader className="border-b border-slate-100 py-3">
         <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
             <Bot className="w-4.5 h-4.5 text-white" />
           </div>
-          {tr('ERP Agent', 'ERP Агент', 'ERP Agent')}
+          {title || tr('ERP Agent', 'ERP Агент', 'ERP Agent')}
           <Badge className="bg-amber-100 text-amber-800 text-[10px]">beta</Badge>
+          {onClose && (
+            <Button variant="ghost" size="icon" onClick={onClose} className="ml-auto h-7 w-7 text-slate-400 hover:text-slate-700">
+              <X className="w-4 h-4" />
+            </Button>
+          )}
         </CardTitle>
       </CardHeader>
 
@@ -101,7 +107,7 @@ export default function AIAgentChat() {
         {messages.length === 0 && !loading && (
           <div className="text-center text-slate-400 text-sm py-10">
             <Bot className="w-10 h-10 mx-auto mb-2 opacity-40" />
-            <p>{tr("Menga savol bering yoki ish buyuring — masalan: “eng kam qolgan mahsulotlar”, “Alisher uchun mijoz oching”.",
+            <p>{emptyHint || tr("Menga savol bering yoki ish buyuring — masalan: “eng kam qolgan mahsulotlar”, “Alisher uchun mijoz oching”.",
                    'Спросите меня — например: «товары с наименьшим остатком», «создай клиента Alisher».',
                    'Ask me — e.g. “which products are low on stock”, “open a customer named Alisher”.')}</p>
           </div>
