@@ -32,14 +32,14 @@ const UOMS_BY_CATEGORY = {
 export default function AddSubWorkModal({
   open, onClose, projectId, estimateId,
   parent, nextSeq, onSaved,
-  // Sub-section mode — when `parentSection` is a non-empty string the
-  // modal switches semantics: instead of attaching the new line to a
-  // parent WORK via parent_line_id (the original use case), it creates
-  // a top-level work whose `parent_item_number` is
-  // "PARENT_SECTION › NEW_NAME". The grouping logic in
-  // StagesTabV2.deriveStages / SmetaManagementTab.sections renders
-  // that as a new sub-stage under PARENT_SECTION containing this one
-  // work. Callers pass either `parent` OR `parentSection`, never both.
+  // Section mode — when `parentSection` is a non-empty string the modal
+  // switches semantics: instead of attaching the new line to a parent WORK
+  // via parent_line_id (the original use case), it creates a top-level work
+  // whose `parent_item_number` is the section itself (`PARENT_SECTION`), so
+  // every work added under a section shares one path and groups into a single
+  // Bo'lim (like ФУНДАМЕНТЫ). (It used to fold the work name into the path —
+  // "PARENT_SECTION › NEW_NAME" — which spun each work into its own Bo'lim.)
+  // Callers pass either `parent` OR `parentSection`, never both.
   parentSection,
 }) {
   const { language } = useLanguage();
@@ -84,7 +84,12 @@ export default function AddSubWorkModal({
         const body = isSection
           ? {
               source_code: trimmedCode,
-              parent_item_number: `${parentSection} › ${name.trim()}`,
+              // Add the work DIRECTLY under the section so every work of a
+              // section shares one parent_item_number and collapses into a
+              // single Bo'lim (like ФУНДАМЕНТЫ). Previously this folded the
+              // work's own name into the path ("SECTION › NAME"), which made
+              // each work its own Bo'lim in Forma 2.
+              parent_item_number: parentSection,
               name: name.trim(),
               uom,
               code: trimmedCode,
@@ -122,13 +127,13 @@ export default function AddSubWorkModal({
           );
         }
       } else if (isSection) {
-        // Sub-section / sub-stage mode — top-level line under a section
-        // path. parent_item_number = "PARENT › NEW_NAME" so the
-        // hierarchical grouping treats this as a new sub-stage under
-        // the parent stage.
+        // Section mode — add the work as a top-level line whose
+        // parent_item_number is the section itself, so all works of the
+        // section group under one Bo'lim. (Was "PARENT › NEW_NAME", which
+        // made every added work its own Bo'lim.)
         await constructionService.createEstimateLine(estimateId, {
           parent_line_id: 0,
-          parent_item_number: `${parentSection} › ${name.trim()}`,
+          parent_item_number: parentSection,
           code: undefined,
           name: name.trim(),
           uom,

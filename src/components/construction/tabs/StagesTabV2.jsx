@@ -714,7 +714,10 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
   useEffect(() => {
     if (!project?.id) return;
     let cancelled = false;
-    constructionService.listForm2Iterations(project.id)
+    // Per-block strip (migration 451): scope to the active block so each block
+    // has its own iteration series. No block selected = whole-project bucket (0).
+    const bid = activeBuildingId ? Number(activeBuildingId) : 0;
+    constructionService.listForm2Iterations(project.id, bid)
       .then((rows) => {
         if (cancelled) return;
         const list = Array.isArray(rows) ? rows : [];
@@ -731,7 +734,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
       })
       .catch(() => { /* iterations load is non-blocking; bosqichlar still renders */ });
     return () => { cancelled = true; };
-  }, [project?.id, refreshTick]);
+  }, [project?.id, activeBuildingId, refreshTick]);
 
   // ── Load per-line period_fakt for the active iteration ───────────
   // Without this every BAJARILDI input would show the cumulative
