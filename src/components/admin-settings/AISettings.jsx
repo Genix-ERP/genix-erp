@@ -26,6 +26,7 @@ export default function AISettings() {
 
   const [provider, setProvider] = useState('openai');
   const [model, setModel] = useState('gpt-4o');
+  const [endpoint, setEndpoint] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [showKey, setShowKey] = useState(false);
   const [hasKey, setHasKey] = useState(false);
@@ -41,7 +42,8 @@ export default function AISettings() {
         if (cancelled) return;
         const p = (s?.provider === 'anthropic') ? 'anthropic' : 'openai';
         setProvider(p);
-        setModel(s?.model && MODELS[p].includes(s.model) ? s.model : MODELS[p][0]);
+        setModel(s?.model || MODELS[p][0]);
+        setEndpoint(s?.endpoint || '');
         setHasKey(!!s?.has_key);
         setKeyPreview(s?.key_preview || '');
       } catch {
@@ -53,17 +55,17 @@ export default function AISettings() {
     return () => { cancelled = true; };
   }, []);
 
-  // When the provider changes, keep the model valid for that provider.
+  // When the provider changes, suggest a default model if the field is empty.
   const onProviderChange = (p) => {
     setProvider(p);
-    if (!MODELS[p].includes(model)) setModel(MODELS[p][0]);
+    if (!model.trim()) setModel(MODELS[p][0]);
   };
 
   const handleSave = async () => {
     setSaving(true);
     try {
       // api_key blank → backend keeps the existing stored key.
-      await adminSettingsService.updateAISettings({ provider, model, api_key: apiKey.trim() });
+      await adminSettingsService.updateAISettings({ provider, model: model.trim(), endpoint: endpoint.trim(), api_key: apiKey.trim() });
       toast.success(t('ai_settings_saved') || 'AI sozlamalari saqlandi');
       if (apiKey.trim()) {
         setHasKey(true);
@@ -82,7 +84,7 @@ export default function AISettings() {
   const handleClearKey = async () => {
     setSaving(true);
     try {
-      await adminSettingsService.updateAISettings({ provider, model, clear_key: true });
+      await adminSettingsService.updateAISettings({ provider, model: model.trim(), endpoint: endpoint.trim(), clear_key: true });
       setHasKey(false);
       setKeyPreview('');
       setApiKey('');
@@ -120,16 +122,31 @@ export default function AISettings() {
               </SettingsField>
 
               <SettingsField label={t('ai_model') || 'Model'}>
-                <Select value={model} onValueChange={setModel}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {MODELS[provider].map((m) => (
-                      <SelectItem key={m} value={m}>{m}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Input
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  list="ai-model-suggestions"
+                  placeholder={MODELS[provider][0]}
+                />
+                <datalist id="ai-model-suggestions">
+                  {[...MODELS[provider], 'gemini-2.5-flash', 'gemini-2.5-pro'].map((m) => (
+                    <option key={m} value={m} />
+                  ))}
+                </datalist>
               </SettingsField>
             </SettingsRow>
+
+            <SettingsField
+              label={t('ai_endpoint') || 'Endpoint (ixtiyoriy)'}
+              description={t('ai_endpoint_hint') || "Bo'sh qoldirsangiz provayderning standart manzili ishlatiladi. OpenAI-mos endpoint (masalan Google Gemini yoki Azure) uchun to'liq URL kiriting."}
+            >
+              <Input
+                value={endpoint}
+                onChange={(e) => setEndpoint(e.target.value)}
+                placeholder="https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+                autoComplete="off"
+              />
+            </SettingsField>
 
             <SettingsField
               label={t('api_key') || 'API kalit'}
