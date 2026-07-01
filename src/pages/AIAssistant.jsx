@@ -14,6 +14,7 @@ import {
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import ReactMarkdown from 'react-markdown';
+import AIAgentChat from "@/components/ai/AIAgentChat";
 
 const TOOL_LABELS = {
   analyze_sales_data: { en: 'Sales analysis', uz: 'Savdo tahlili', ru: 'Анализ продаж' },
@@ -151,6 +152,10 @@ export default function AIAssistant() {
       </div>
 
       <div className="relative z-10 flex-1 flex flex-col min-h-0">
+        {/* Agentic ERP assistant (reads real data + can act with confirmation) */}
+        <div className="px-4 md:px-6 pt-4 w-full max-w-3xl mx-auto shrink-0">
+          <AIAgentChat />
+        </div>
         {!showChat ? (
           /* Landing View */
           <div className="flex flex-col items-center justify-center flex-1 px-6 py-10 animate-[fadeInUp_0.5s_ease-out]">
