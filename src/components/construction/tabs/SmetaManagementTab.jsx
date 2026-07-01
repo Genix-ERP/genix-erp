@@ -783,7 +783,11 @@ export default function SmetaManagementTab({ project }) {
   useEffect(() => {
     if (!project?.id) return;
     let cancelled = false;
-    constructionService.listForm2Iterations(project.id)
+    // Per-block strip (migration 451): scope to the selected block. '0'/unset =
+    // whole-project bucket. Changing the Блок dropdown reloads this so each
+    // block shows its own "#1, #2 (joriy)".
+    const bid = (buildingId && buildingId !== '0') ? Number(buildingId) : 0;
+    constructionService.listForm2Iterations(project.id, bid)
       .then((rows) => {
         if (cancelled) return;
         const list = Array.isArray(rows) ? rows : [];
@@ -797,7 +801,7 @@ export default function SmetaManagementTab({ project }) {
       })
       .catch(() => { /* iterations are non-blocking — page still renders */ });
     return () => { cancelled = true; };
-  }, [project?.id, iterRefreshTick]);
+  }, [project?.id, buildingId, iterRefreshTick]);
 
   const activeIteration = useMemo(
     () => iterations.find((it) => it.id === activeIterationId) || null,
@@ -856,7 +860,18 @@ export default function SmetaManagementTab({ project }) {
       // resolves its own estimate when caller pins one).
       await constructionService.createForm2Iteration(
         project?.id,
-        { ...payload, estimate_id: estimateId },
+        {
+          ...payload,
+          // MUST be numbers: the backend binds estimate_id/building_id into
+          // int64 fields. Sending estimateId as a string ('123') makes Go's
+          // ShouldBindJSON fail on the whole body, which silently drops
+          // snapshot_data (the frozen lines), estimate_id AND building_id —
+          // so the snapshot saved empty and the freeze hit the wrong block.
+          estimate_id: Number(estimateId) || 0,
+          // Per-block freeze (migration 451): pin the block so the snapshot and
+          // the frozen iteration land on THIS block, not the project's first.
+          building_id: (buildingId && buildingId !== '0') ? Number(buildingId) : 0,
+        },
       );
       toast.success(t('snapshot_saved') || 'Forma 2 saqlandi');
       // If the user is currently viewing the History tab refresh the list.
@@ -868,7 +883,7 @@ export default function SmetaManagementTab({ project }) {
       toast.error(formatApiError(e, t, 'Xatolik'));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [estimateId, page, project?.id]);
+  }, [estimateId, page, project?.id, buildingId]);
 
   const handleDeleteSnapshot = useCallback((snap) => {
     if (!snap?.id) return;

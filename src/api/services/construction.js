@@ -537,9 +537,13 @@ export const constructionService = {
   // (Σ period_fakt) so Bosqichlar progress %, Smetalar, reports are
   // unchanged.
 
-  async listForm2Iterations(projectId) {
+  // Iterations are per-block (migration 451): pass the block being viewed so
+  // the "#1, #2 (joriy)" strip is scoped to it. buildingId 0 / null = the
+  // whole-project bucket (estimates with no block).
+  async listForm2Iterations(projectId, buildingId = 0) {
     const response = await apiClient.get(
       `/construction/projects/${projectId}/form2-iterations`,
+      { params: { building_id: buildingId || 0 } },
     );
     return response.data.data || [];
   },
