@@ -9,15 +9,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Edit, Trash2, Users, Star, Play, CheckCircle, XCircle, FileSpreadsheet, Receipt } from 'lucide-react';
+import { Plus, Edit, Trash2, Users, Star, Play, CheckCircle, XCircle, Paperclip, Upload, FileText, Loader2 } from 'lucide-react';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { toast } from 'sonner';
-import EstimatesTab from './EstimatesTab';
-import ExpensesTab from './ExpensesTab';
 
 const STATE_COLORS = {
   draft: 'bg-slate-100 text-slate-700',
@@ -27,6 +24,8 @@ const STATE_COLORS = {
 };
 
 const EMPTY_FORM = {
+  contract_number: '',
+  subcontractor_organization_id: '',
   partner_name: '',
   work_description: '',
   amount: '',
@@ -51,6 +50,106 @@ const EMPTY_FORM = {
   chief_accountant_name: '',
 };
 
+// Per-subcontractor file attachments: upload + list + view + delete.
+function SubcontractFiles({ subId, language }) {
+  const tr = (m) => m[language] || m.uz;
+  const [files, setFiles] = React.useState([]);
+  const [busy, setBusy] = React.useState(false);
+  const inputRef = React.useRef(null);
+
+  const load = React.useCallback(async () => {
+    try {
+      const data = await constructionService.listSubcontractFiles(subId);
+      setFiles(Array.isArray(data) ? data : []);
+    } catch (e) { /* ignore */ }
+  }, [subId]);
+
+  React.useEffect(() => { load(); }, [load]);
+
+  const onPick = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setBusy(true);
+    try {
+      const up = await constructionService.uploadRawFile(file);
+      await constructionService.createSubcontractFile(subId, {
+        file_id: up.id,
+        file_url: up.url,
+        filename: up.filename || file.name,
+        file_size: up.size || file.size,
+        mime_type: up.mime_type || file.type,
+      });
+      toast.success(tr({ uz: 'Fayl yuklandi', ru: 'Файл загружен', en: 'File uploaded' }));
+      await load();
+    } catch (err) {
+      console.error('Subcontract file upload failed', err);
+      toast.error(tr({ uz: 'Faylni yuklab bo\'lmadi', ru: 'Не удалось загрузить файл', en: 'Upload failed' }));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onDelete = async (fileId) => {
+    try {
+      await constructionService.deleteSubcontractFile(subId, fileId);
+      await load();
+    } catch (err) {
+      toast.error(tr({ uz: 'O\'chirib bo\'lmadi', ru: 'Не удалось удалить', en: 'Delete failed' }));
+    }
+  };
+
+  return (
+    <div className="pt-2 border-t">
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-xs font-medium text-slate-500 flex items-center gap-1">
+          <Paperclip className="w-3 h-3" />
+          {tr({ uz: 'Hujjatlar', ru: 'Документы', en: 'Documents' })}
+          {files.length > 0 && <span className="text-slate-400">({files.length})</span>}
+        </span>
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={busy}
+          className="text-xs text-teal-600 hover:text-teal-700 flex items-center gap-1 disabled:opacity-50"
+        >
+          {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
+          {tr({ uz: 'Yuklash', ru: 'Загрузить', en: 'Upload' })}
+        </button>
+        <input ref={inputRef} type="file" className="hidden" onChange={onPick} />
+      </div>
+      {files.length === 0 ? (
+        <p className="text-xs text-slate-400">{tr({ uz: 'Fayl yo\'q', ru: 'Нет файлов', en: 'No files' })}</p>
+      ) : (
+        <div className="space-y-1">
+          {files.map((f) => (
+            <div key={f.id} className="flex items-center gap-2 text-xs">
+              <a
+                href={f.file_url}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1 text-slate-600 hover:text-teal-700 truncate flex-1"
+                title={f.filename}
+              >
+                <FileText className="w-3 h-3 shrink-0" />
+                <span className="truncate">{f.filename}</span>
+              </a>
+              <button
+                type="button"
+                onClick={() => onDelete(f.id)}
+                className="text-slate-400 hover:text-red-500 shrink-0"
+                title={tr({ uz: 'O\'chirish', ru: 'Удалить', en: 'Delete' })}
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const SubcontractorsTab = ({ project, buildings = [], wbsItems = [] }) => {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
@@ -63,10 +162,11 @@ const SubcontractorsTab = ({ project, buildings = [], wbsItems = [] }) => {
     terminated: t('terminated') || 'Bekor qilingan',
   };
 
-  const [activeSubTab, setActiveSubTab] = useState('list');
   const [subcontracts, setSubcontracts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [wbsList, setWbsList] = useState([]);
+  // Tenant companies that can be picked as the subcontractor.
+  const [orgs, setOrgs] = useState([]);
 
   // Modal
   const [showModal, setShowModal] = useState(false);
@@ -103,6 +203,13 @@ const SubcontractorsTab = ({ project, buildings = [], wbsItems = [] }) => {
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { loadOptions(); }, [loadOptions]);
+  useEffect(() => {
+    let cancelled = false;
+    constructionService.listOrganizations()
+      .then((list) => { if (!cancelled) setOrgs(Array.isArray(list) ? list : (list?.data || [])); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   // ── Modal helpers ─────────────────────────────────────────────
 
@@ -116,6 +223,8 @@ const SubcontractorsTab = ({ project, buildings = [], wbsItems = [] }) => {
   const openEdit = (item) => {
     setEditing(item);
     setForm({
+      contract_number: item.contract_number || '',
+      subcontractor_organization_id: item.subcontractor_organization_id || '',
       partner_name: item.partner_name || '',
       work_description: item.work_description || '',
       amount: item.amount ? String(item.amount) : '',
@@ -168,6 +277,8 @@ const SubcontractorsTab = ({ project, buildings = [], wbsItems = [] }) => {
     setError(null);
     try {
       const payload = {
+        contract_number: form.contract_number || '',
+        subcontractor_organization_id: form.subcontractor_organization_id || '',
         partner_name: form.partner_name.trim(),
         work_description: form.work_description || '',
         amount: form.amount ? parseFloat(parsePriceInput(form.amount)) : 0,
@@ -249,24 +360,9 @@ const SubcontractorsTab = ({ project, buildings = [], wbsItems = [] }) => {
 
   return (
     <div className="space-y-4">
-      <Tabs value={activeSubTab} onValueChange={setActiveSubTab}>
-        <TabsList>
-          <TabsTrigger value="list" className="flex items-center gap-1.5">
-            <Users className="w-4 h-4" />
-            {t('subcontractors') || 'Pudratchilar'}
-          </TabsTrigger>
-          <TabsTrigger value="estimates" className="flex items-center gap-1.5">
-            <FileSpreadsheet className="w-4 h-4" />
-            {t('estimates') || 'Smetalar'}
-          </TabsTrigger>
-          <TabsTrigger value="expenses" className="flex items-center gap-1.5">
-            <Receipt className="w-4 h-4" />
-            {t('expenses') || 'Xarajatlar'}
-          </TabsTrigger>
-        </TabsList>
-
-        {/* Subcontracts List Sub-Tab */}
-        <TabsContent value="list" className="mt-4 space-y-4">
+      {/* Subcontracts list (Smetalar / Xarajatlar sub-tabs removed — those
+          views are reachable from Smeta boshqaruvi and Moliya). */}
+      <div className="space-y-4">
           {/* Summary row */}
           <div className="grid grid-cols-3 gap-4">
             <Card><CardContent className="p-4">
@@ -314,7 +410,7 @@ const SubcontractorsTab = ({ project, buildings = [], wbsItems = [] }) => {
                         {/* Header */}
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
-                            <p className="font-semibold text-sm">{item.name}</p>
+                            <p className="font-semibold text-sm">{item.contract_number || item.name}</p>
                             <p className="text-xs text-slate-500">{item.partner_name}</p>
                           </div>
                           <Badge className={STATE_COLORS[item.state] || 'bg-slate-100 text-slate-700'}>
@@ -340,6 +436,9 @@ const SubcontractorsTab = ({ project, buildings = [], wbsItems = [] }) => {
                             {renderStars(item.rating)}
                           </div>
                         )}
+
+                        {/* Documents */}
+                        <SubcontractFiles subId={item.id} language={language} />
 
                         {/* Actions */}
                         <div className="flex items-center justify-between pt-2 border-t">
@@ -401,27 +500,7 @@ const SubcontractorsTab = ({ project, buildings = [], wbsItems = [] }) => {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
-
-        {/* Estimates Sub-Tab */}
-        <TabsContent value="estimates" className="mt-4">
-          <EstimatesTab
-            project={project}
-            wbsItems={wbsItems}
-            buildings={buildings}
-            scope="subcontract"
-            subcontracts={subcontracts}
-          />
-        </TabsContent>
-
-        {/* Expenses Sub-Tab */}
-        <TabsContent value="expenses" className="mt-4">
-          <ExpensesTab
-            project={project}
-            scope="subcontract"
-          />
-        </TabsContent>
-      </Tabs>
+      </div>
 
       {/* Create/Edit Modal */}
       <Dialog open={showModal} onOpenChange={setShowModal}>
@@ -433,12 +512,14 @@ const SubcontractorsTab = ({ project, buildings = [], wbsItems = [] }) => {
           <div className="space-y-4">
             {error && <p className="text-sm text-red-600 bg-red-50 p-2 rounded">{error}</p>}
 
-            {editing && editing.name && (
-              <div>
-                <Label>{t('name') || 'Nomi'}</Label>
-                <Input value={editing.name} disabled className="bg-slate-50" />
-              </div>
-            )}
+            <div>
+              <Label>{language === 'ru' ? 'Номер договора' : language === 'uz' ? 'Shartnoma raqami' : 'Contract number'}</Label>
+              <Input
+                value={form.contract_number || ''}
+                onChange={e => setForm(f => ({ ...f, contract_number: e.target.value }))}
+                placeholder="№ 12/2025"
+              />
+            </div>
 
             <div>
               <Label>{t('partner') || 'Hamkor'}</Label>
@@ -619,26 +700,6 @@ const SubcontractorsTab = ({ project, buildings = [], wbsItems = [] }) => {
                 </div>
               </div>
             </div>
-
-            {/* Buildings multi-select checkboxes */}
-            {buildings.length > 0 && (
-              <div>
-                <Label>{t('buildings') || 'Binolar'}</Label>
-                <div className="border rounded-md p-2 bg-slate-50 max-h-40 overflow-y-auto space-y-1">
-                  {buildings.map(bld => (
-                    <label key={bld.id} className="flex items-center gap-2 cursor-pointer hover:bg-white rounded px-2 py-1">
-                      <input
-                        type="checkbox"
-                        checked={(form.building_ids || []).includes(bld.id)}
-                        onChange={() => toggleBuilding(bld.id)}
-                        className="rounded border-slate-300"
-                      />
-                      <span className="text-sm">{bld.name}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
 
             {/* WBS multi-select checkboxes */}
             {wbsList.length > 0 && (

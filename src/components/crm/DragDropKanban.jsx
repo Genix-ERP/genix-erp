@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Kanban, DollarSign, Calendar, TrendingUp, Target, Percent, Loader2, AlertCircle, Pencil, Trash2, MoreVertical } from "lucide-react";
+import { Kanban, DollarSign, Calendar, TrendingUp, Target, Percent, Loader2, AlertCircle, Edit, Trash2, MoreVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -236,7 +236,7 @@ export default function DragDropKanban({ opportunities = [], leads = [], onUpdat
                     e.stopPropagation();
                     onEditOpportunity(opportunity);
                   }}>
-                    <Pencil className="w-4 h-4 mr-2" />
+                    <Edit className="w-4 h-4 mr-2" />
                     {t('edit')}
                   </DropdownMenuItem>
                 )}

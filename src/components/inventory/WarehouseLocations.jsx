@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
-  Plus, Search, Pencil, Trash2, MoreHorizontal, MapPin, Package,
+  Plus, Search, Edit, Trash2, MoreHorizontal, MapPin, Package,
   Check, X, Filter, ChevronDown, Settings2
 } from "lucide-react";
 import {
@@ -413,7 +413,7 @@ export default function WarehouseLocations() {
                           <DropdownMenuContent align="end">
                             {canUpdate(MODULES.INVENTORY) && (
                               <DropdownMenuItem onClick={() => openEditModal(loc)}>
-                                <Pencil className="w-4 h-4 mr-2" />
+                                <Edit className="w-4 h-4 mr-2" />
                                 {t('edit') || 'Tahrirlash'}
                               </DropdownMenuItem>
                             )}

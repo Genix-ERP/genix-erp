@@ -28,7 +28,7 @@ import {
   Search,
   ShoppingCart,
   Truck,
-  Edit2,
+  Edit,
   X,
   Eye,
   MessageSquareWarning,
@@ -45,6 +45,7 @@ import {
   Loader2,
   ChevronLeft,
   ChevronRight,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useSearchParams } from 'react-router-dom';
@@ -105,6 +106,35 @@ export default function PurchaseOrders() {
   const [activeTab, setActiveTab] = useState('orders');
   const [filteredOrders, setFilteredOrders] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Toggleable list columns (persisted per browser).
+  const PO_COLS = [
+    { key: 'po_number', label: t('po_number') || 'PO #' },
+    { key: 'supplier', label: t('supplier') || 'Supplier' },
+    { key: 'order_date', label: t('order_date') || 'Order Date' },
+    { key: 'delivery_date', label: t('delivery_date') || 'Delivery Date' },
+    { key: 'quantity', label: t('quantity') || 'Quantity' },
+    { key: 'amount', label: t('amount') || 'Amount' },
+    { key: 'payment_status', label: t('payment_status') || 'Payment' },
+    { key: 'status', label: t('status') || 'Status' },
+  ];
+  const [visibleCols, setVisibleCols] = useState(() => {
+    try { const s = JSON.parse(localStorage.getItem('po_visible_cols')); if (s && typeof s === 'object') return s; } catch { /* ignore */ }
+    return { po_number: true, supplier: true, order_date: true, delivery_date: true, quantity: true, amount: true, payment_status: true, status: true };
+  });
+  useEffect(() => { try { localStorage.setItem('po_visible_cols', JSON.stringify(visibleCols)); } catch { /* ignore */ } }, [visibleCols]);
+  const colOn = (k) => visibleCols[k] !== false;
+  const toggleCol = (k) => setVisibleCols(prev => ({ ...prev, [k]: !colOn(k) }));
+  const paymentStatusColor = (s) => ({
+    paid: 'bg-green-100 text-green-700',
+    partial: 'bg-amber-100 text-amber-700',
+    unpaid: 'bg-red-100 text-red-700',
+    pending: 'bg-slate-100 text-slate-600',
+  }[s] || 'bg-slate-100 text-slate-600');
+  const paymentStatusLabel = (s) => {
+    if (s === 'partial') return t('partially_paid') || 'Partially paid';
+    return t(s) || s || '-';
+  };
   const [statusFilter, setStatusFilter] = useState('all');
 
   // Server-side pagination
@@ -452,6 +482,27 @@ export default function PurchaseOrders() {
   const handleLineChange = async (index, field, value, productObj = null) => {
     const newLines = [...newPO.lines];
     newLines[index] = { ...newLines[index], [field]: value };
+
+    // "Jami" lot-entry mode (goods bought as a lot — total known, per-unit price
+    // unknown). Clicking the total clears Narx and opens a free-typing draft;
+    // the = button (or leaving the field) derives unit_price = total / quantity
+    // so it flows into inventory cost on receipt. Empty → the price is restored.
+    if (field === 'jami_focus') {
+      newLines[index] = { ...newLines[index], _prevNarx: newLines[index].unit_price, unit_price: '', jami_draft: '' };
+      setNewPO({ ...newPO, lines: newLines, total_amount: calculateOrderTotal(newLines) });
+      return;
+    }
+    if (field === 'jami_calc') {
+      const ln = newLines[index];
+      if (ln.jami_draft === undefined) return; // already committed
+      const qty = parseFloat(ln.quantity || 0);
+      const total = parseFloat(parsePriceInput(String(ln.jami_draft || '')) || 0);
+      const up = (total > 0 && qty > 0) ? total / qty : (ln._prevNarx ?? 0);
+      const { jami_draft, _prevNarx, jami_calc, ...rest } = ln;
+      newLines[index] = { ...rest, unit_price: up };
+      setNewPO({ ...newPO, lines: newLines, total_amount: calculateOrderTotal(newLines) });
+      return;
+    }
 
     if (field === 'product_id' && value) {
       // `productObj` fallback: a just-created product isn't in `products` yet
@@ -814,6 +865,24 @@ export default function PurchaseOrders() {
     if (!editPO) return;
     const newLines = [...editPO.lines];
     newLines[index] = { ...newLines[index], [field]: value };
+    // "Jami" lot-entry mode → clear Narx on focus, type the total, then derive
+    // unit_price = total / quantity on = / blur (restore price if left empty).
+    if (field === 'jami_focus') {
+      newLines[index] = { ...newLines[index], _prevNarx: newLines[index].unit_price, unit_price: '', jami_draft: '' };
+      setEditPO({ ...editPO, lines: newLines, total_amount: calculateOrderTotal(newLines) });
+      return;
+    }
+    if (field === 'jami_calc') {
+      const ln = newLines[index];
+      if (ln.jami_draft === undefined) return;
+      const qty = parseFloat(ln.quantity || 0);
+      const total = parseFloat(parsePriceInput(String(ln.jami_draft || '')) || 0);
+      const up = (total > 0 && qty > 0) ? total / qty : (ln._prevNarx ?? 0);
+      const { jami_draft, _prevNarx, jami_calc, ...rest } = ln;
+      newLines[index] = { ...rest, unit_price: up };
+      setEditPO({ ...editPO, lines: newLines, total_amount: calculateOrderTotal(newLines) });
+      return;
+    }
     if (field === 'product_id' && value) {
       const product = products.find(p => p.id === value) || productObj;
       if (product) {
@@ -1037,6 +1106,25 @@ export default function PurchaseOrders() {
                     <SelectItem value="received">{t('received') || 'Received'}</SelectItem>
                   </SelectContent>
                 </Select>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="gap-2 whitespace-nowrap">
+                      <SlidersHorizontal className="w-4 h-4" />
+                      {t('columns') || 'Columns'}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-56">
+                    <p className="text-xs font-semibold text-slate-500 mb-2">{t('visible_columns') || 'Visible columns'}</p>
+                    <div className="space-y-2">
+                      {PO_COLS.map(c => (
+                        <label key={c.key} className="flex items-center justify-between gap-3 text-sm cursor-pointer">
+                          <span>{c.label}</span>
+                          <Switch checked={colOn(c.key)} onCheckedChange={() => toggleCol(c.key)} />
+                        </label>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </div>
             </CardHeader>
             <CardContent className="p-0">
@@ -1057,37 +1145,57 @@ export default function PurchaseOrders() {
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-slate-50">
-                        <TableHead>{t('po_number') || 'PO #'}</TableHead>
-                        <TableHead>{t('supplier') || 'Supplier'}</TableHead>
-                        <TableHead>{t('order_date') || 'Order Date'}</TableHead>
-                        <TableHead>{t('delivery_date') || 'Delivery Date'}</TableHead>
-                        <TableHead>{t('amount') || 'Amount'}</TableHead>
-                        <TableHead>{t('status') || 'Status'}</TableHead>
+                        {colOn('po_number') && <TableHead>{t('po_number') || 'PO #'}</TableHead>}
+                        {colOn('supplier') && <TableHead>{t('supplier') || 'Supplier'}</TableHead>}
+                        {colOn('order_date') && <TableHead>{t('order_date') || 'Order Date'}</TableHead>}
+                        {colOn('delivery_date') && <TableHead>{t('delivery_date') || 'Delivery Date'}</TableHead>}
+                        {colOn('quantity') && <TableHead className="text-right">{t('quantity') || 'Quantity'}</TableHead>}
+                        {colOn('amount') && <TableHead>{t('amount') || 'Amount'}</TableHead>}
+                        {colOn('payment_status') && <TableHead>{t('payment_status') || 'Payment'}</TableHead>}
+                        {colOn('status') && <TableHead>{t('status') || 'Status'}</TableHead>}
                         <TableHead>{t('actions') || 'Actions'}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {filteredOrders.map((po) => (
                         <TableRow key={po.id} className="hover:bg-slate-50">
-                          <TableCell className="font-mono text-sm">
-                            <div className="flex items-center gap-2">
-                              {po.po_number}
-                              {orderHasReturns(po.id) && (
-                                <MessageSquareWarning className="w-4 h-4 text-red-500" title={t('has_returns') || 'Has Returns'} />
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell className="font-medium">{po.supplier_name || po.vendor_name}</TableCell>
-                          <TableCell className="text-sm">
-                            {po.order_date ? format(new Date(po.order_date), 'dd.MM.yyyy') : '-'}
-                          </TableCell>
-                          <TableCell className="text-sm">
-                            {(po.expected_delivery_date || po.expected_date) ? format(new Date(po.expected_delivery_date || po.expected_date), 'dd.MM.yyyy') : '-'}
-                          </TableCell>
-                          <TableCell className="font-semibold">{formatCurrency(po.total_amount || 0)}</TableCell>
-                          <TableCell>
-                            <Badge className={getStatusColor(po.status)}>{t(po.status) || po.status}</Badge>
-                          </TableCell>
+                          {colOn('po_number') && (
+                            <TableCell className="font-mono text-sm">
+                              <div className="flex items-center gap-2">
+                                {po.po_number}
+                                {orderHasReturns(po.id) && (
+                                  <MessageSquareWarning className="w-4 h-4 text-red-500" title={t('has_returns') || 'Has Returns'} />
+                                )}
+                              </div>
+                            </TableCell>
+                          )}
+                          {colOn('supplier') && <TableCell className="font-medium">{po.supplier_name || po.vendor_name}</TableCell>}
+                          {colOn('order_date') && (
+                            <TableCell className="text-sm">
+                              {po.order_date ? format(new Date(po.order_date), 'dd.MM.yyyy') : '-'}
+                            </TableCell>
+                          )}
+                          {colOn('delivery_date') && (
+                            <TableCell className="text-sm">
+                              {(po.expected_delivery_date || po.expected_date) ? format(new Date(po.expected_delivery_date || po.expected_date), 'dd.MM.yyyy') : '-'}
+                            </TableCell>
+                          )}
+                          {colOn('quantity') && (
+                            <TableCell className="text-right text-sm">
+                              {po.total_quantity != null ? Number(po.total_quantity).toLocaleString() : '-'}
+                            </TableCell>
+                          )}
+                          {colOn('amount') && <TableCell className="font-semibold">{formatCurrency(po.total_amount || 0)}</TableCell>}
+                          {colOn('payment_status') && (
+                            <TableCell>
+                              <Badge className={`${paymentStatusColor(po.payment_status)} capitalize`}>{paymentStatusLabel(po.payment_status)}</Badge>
+                            </TableCell>
+                          )}
+                          {colOn('status') && (
+                            <TableCell>
+                              <Badge className={getStatusColor(po.status)}>{t(po.status) || po.status}</Badge>
+                            </TableCell>
+                          )}
                           <TableCell>
                             <div className="flex gap-1">
                               <Button size="sm" variant="ghost" onClick={(e) => handleViewPO(po, e)} title={t('view_details') || 'View Details'}>
@@ -1095,7 +1203,7 @@ export default function PurchaseOrders() {
                               </Button>
                               {canUpdate(MODULES.PURCHASES) && (po.status === 'draft' || po.status === 'cancelled') && (
                                 <Button size="sm" variant="ghost" onClick={(e) => handleEditPO(po, e)} title={t('edit') || 'Edit'}>
-                                  <Edit2 className="w-4 h-4" />
+                                  <Edit className="w-4 h-4" />
                                 </Button>
                               )}
                               {canUpdate(MODULES.PURCHASES) && po.status === 'draft' && (
@@ -1473,8 +1581,24 @@ export default function PurchaseOrders() {
                       </div>
                       <div className="flex-[1.5] min-w-0">
                         {index === 0 && <label className="text-xs text-slate-500 mb-1 block">{t('total')}</label>}
-                        <div className="h-9 flex items-center justify-end px-3 bg-white border rounded-md text-sm font-medium text-slate-700">
-                          {formatPriceInput(String((parseFloat(line.quantity || 0) * parseFloat(line.unit_price || 0)).toFixed(2)))}
+                        {/* Editable lot total — click to clear Narx, type the total,
+                            then press = (or leave) to derive Narx = Jami ÷ Miqdor. */}
+                        <div className="flex items-center gap-1">
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            className="text-right font-medium"
+                            placeholder={t('total') || 'Total'}
+                            value={line.jami_draft !== undefined ? formatPriceInput(line.jami_draft) : formatPriceInput(String((parseFloat(line.quantity || 0) * parseFloat(line.unit_price || 0)).toFixed(2)))}
+                            onFocus={() => { if (line.jami_draft === undefined) handleLineChange(index, 'jami_focus', true); }}
+                            onChange={(e) => handleLineChange(index, 'jami_draft', parsePriceInput(e.target.value))}
+                            onBlur={() => handleLineChange(index, 'jami_calc', true)}
+                          />
+                          {line.jami_draft !== undefined && (
+                            <Button type="button" size="sm" variant="outline" className="h-9 px-2 shrink-0"
+                              title="Narx = Jami / Miqdor" onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => handleLineChange(index, 'jami_calc', true)}>=</Button>
+                          )}
                         </div>
                         {line.has_delivery && line.delivery_price > 0 && (
                           <div className="text-xs text-blue-600 text-right mt-0.5">
@@ -1860,8 +1984,23 @@ export default function PurchaseOrders() {
                           </div>
                           <div className="flex-[1.5] min-w-0">
                             {index === 0 && <label className="text-xs text-slate-500 mb-1 block">{t('total')}</label>}
-                            <div className="h-9 flex items-center justify-end px-3 bg-white border rounded-md text-sm font-medium text-slate-700">
-                              {formatPriceInput(String((parseFloat(line.quantity || 0) * parseFloat(line.unit_price || 0)).toFixed(2)))}
+                            {/* Editable lot total — click to clear Narx, type total, = to derive. */}
+                            <div className="flex items-center gap-1">
+                              <Input
+                                type="text"
+                                inputMode="decimal"
+                                className="text-right font-medium"
+                                placeholder={t('total') || 'Total'}
+                                value={line.jami_draft !== undefined ? formatPriceInput(line.jami_draft) : formatPriceInput(String((parseFloat(line.quantity || 0) * parseFloat(line.unit_price || 0)).toFixed(2)))}
+                                onFocus={() => { if (line.jami_draft === undefined) handleEditLineChange(index, 'jami_focus', true); }}
+                                onChange={(e) => handleEditLineChange(index, 'jami_draft', parsePriceInput(e.target.value))}
+                                onBlur={() => handleEditLineChange(index, 'jami_calc', true)}
+                              />
+                              {line.jami_draft !== undefined && (
+                                <Button type="button" size="sm" variant="outline" className="h-9 px-2 shrink-0"
+                                  title="Narx = Jami / Miqdor" onMouseDown={(e) => e.preventDefault()}
+                                  onClick={() => handleEditLineChange(index, 'jami_calc', true)}>=</Button>
+                              )}
                             </div>
                           </div>
                           <div className="flex-shrink-0">
@@ -2139,7 +2278,7 @@ export default function PurchaseOrders() {
                     onClick={(e) => { setShowDetailModal(false); handleEditPO(detailPO, e); }}
                     className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600"
                   >
-                    <Edit2 className="w-4 h-4 mr-2" />
+                    <Edit className="w-4 h-4 mr-2" />
                     {t('edit') || 'Edit'}
                   </Button>
                 )}

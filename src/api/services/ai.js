@@ -17,12 +17,15 @@ export const aiService = {
     return response.data.data;
   },
 
-  // Agentic chat — the model reads real ERP data via tools and proposes writes.
-  // history: prior turns returned by the previous call. approved: a write the
-  // user just confirmed ({tool, args}) — the agent executes it then continues.
-  async agentChat(message, history = [], approved = null) {
-    const response = await apiClient.post('/ai/agent', { message, history, approved });
-    return response.data.data; // { type, message?, history?, steps?, pending_action?, assistant_note? }
+  // Transcribe a recorded audio blob to text (server-side Whisper).
+  async transcribe(blob, language = '') {
+    const form = new FormData();
+    form.append('file', blob, 'audio.webm');
+    if (language) form.append('language', language);
+    const response = await apiClient.post('/ai/transcribe', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data.data;
   },
 
   // Conversations

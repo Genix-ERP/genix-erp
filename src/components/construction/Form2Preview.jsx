@@ -306,7 +306,7 @@ function buildSections(lines) {
   return Array.from(bySection.values());
 }
 
-export default function Form2Preview({ estimate, lines, project, onClose, onSaveSnapshot, snapshot }) {
+export default function Form2Preview({ estimate, lines, project, onClose, onSaveSnapshot, snapshot, subScope, subOptions = [], onSubScopeChange }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   // Active company → Заказчик. CompanyContext exposes the user's currently
@@ -599,7 +599,7 @@ ${linkParts.join('\n')}
         num++;
         const { work, qty, subs, brutto } = it;
         const pricePerUnit = qty > 0 ? brutto.base / qty : 0;
-        rows.push([num, work.code || '', work.name || '', sec.name, work.uom || '', qty, Math.round(pricePerUnit * 100) / 100, Math.round(brutto.base * 100) / 100]);
+        rows.push([num, work.code || '', (work._subcontract_name ? `[${work._subcontract_name}] ` : '') + (work.name || ''), sec.name, work.uom || '', qty, Math.round(pricePerUnit * 100) / 100, Math.round(brutto.base * 100) / 100]);
         for (const r of subs) {
           if (isSubStage(r)) {
             const stageTotal = Number(r.total_amount || 0);
@@ -812,7 +812,9 @@ ${linkParts.join('\n')}
       // Section banner — amber tint with thick orange left border.
       ws.mergeCells(`A${r}:${lastColLetter(LAST_COL)}${r}`);
       const banner = ws.getCell(`A${r}`);
-      banner.value = `${t('f2_section') || 'Раздел'} ${ROMAN[secIdx] || (secIdx + 1)}. ${sec.name}`;
+      const secSubNames = [...new Set((sec.items || []).map((it) => it.work && it.work._subcontract_name).filter(Boolean))];
+      banner.value = `${t('f2_section') || 'Раздел'} ${ROMAN[secIdx] || (secIdx + 1)}. ${sec.name}`
+        + (secSubNames.length ? `  [${secSubNames.join(', ')}]` : '');
       banner.font = { bold: true, size: 11, color: { argb: C.slate900 } };
       banner.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.amber50 } };
       banner.alignment = { vertical: 'middle' };
@@ -859,14 +861,15 @@ ${linkParts.join('\n')}
         const wRow = r;
         ws.getCell(wRow, 1).value = globalNum;
         ws.getCell(wRow, 2).value = work.code || '';
-        ws.getCell(wRow, 3).value = work.name || '';
+        ws.getCell(wRow, 3).value = (work._subcontract_name ? `[${work._subcontract_name}] ` : '') + (work.name || '');
         ws.getCell(wRow, 4).value = work.uom || '';
         ws.getCell(wRow, 5).value = Number(qty);
         ws.getCell(wRow, 6).value = Math.round(pricePerUnit * 100) / 100;
         ws.getCell(wRow, 7).value = Math.round(brutto.base * 100) / 100;
+        const workBgArgb = work._subcontract_name ? 'FCE3CC' : C.workBg;
         for (let c = 1; c <= LAST_COL; c++) {
           const cell = ws.getCell(wRow, c);
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.workBg } };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: workBgArgb } };
           cell.border = border;
           cell.font = { bold: true, size: 10, color: { argb: C.slate900 } };
           cell.alignment = { vertical: 'middle', wrapText: c === 3 };
@@ -1218,6 +1221,27 @@ ${linkParts.join('\n')}
             {t('vat_short') || 'НДС'} {VAT_PCT}%
           </label>
         </div>
+        {/* Scope selector — mirrors the Smeta-management dropdown so the user
+           can switch between the project's own works, the full merged project
+           (subcontractor works highlighted), or a single subcontractor without
+           leaving the modal. Only shown when the parent wires it up. */}
+        {onSubScopeChange && (
+          <select
+            value={subScope === 'all' ? 'all' : (subScope == null ? '' : String(subScope))}
+            onChange={(e) => {
+              const v = e.target.value;
+              onSubScopeChange(v === 'all' ? 'all' : (v ? Number(v) : null));
+            }}
+            className="h-8 px-2 rounded-md border border-slate-300 text-xs bg-white text-slate-700 outline-none cursor-pointer"
+            title={t('subcontractor') || 'Subpudratchi'}
+          >
+            <option value="">{({ uz: 'Loyiha smetasi', ru: 'Смета проекта', en: 'Project estimate' })[language] || 'Loyiha smetasi'}</option>
+            <option value="all">{({ uz: 'Butun loyiha (barchasi)', ru: 'Весь проект (все)', en: 'Full project (all)' })[language] || 'Butun loyiha (barchasi)'}</option>
+            {(subOptions || []).map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+        )}
         <Button variant="outline" size="sm" onClick={handlePrint}>
           <Printer className="w-4 h-4 mr-1" /> {t('print') || 'Chop etish'}
         </Button>
@@ -1373,6 +1397,13 @@ ${linkParts.join('\n')}
               <div key={sec.name} className="mt-5">
                 <div className="bg-amber-50 border-l-4 border-orange-700 px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-900 mb-0.5">
                   {t('f2_section') || 'Раздел'} {ROMAN[i] || (i + 1)}. {sec.name}
+                  {(() => {
+                    // Subcontractor(s) whose works appear in this section.
+                    const subNames = [...new Set((sec.items || []).map((it) => it.work && it.work._subcontract_name).filter(Boolean))];
+                    return subNames.map((nm) => (
+                      <span key={nm} className="ml-2 inline-block align-middle text-[9px] px-1.5 py-0.5 rounded bg-orange-600 text-white tracking-wide normal-case">{nm}</span>
+                    ));
+                  })()}
                 </div>
                 <table className="w-full border-collapse text-[11px]">
                   <thead>
@@ -1398,10 +1429,17 @@ ${linkParts.join('\n')}
                       const pricePerUnit = qty > 0 ? brutto.base / qty : 0;
                       return (
                         <React.Fragment key={work.id}>
-                          <tr style={{ background: '#F8F4E8', borderTop: '2px solid #999' }}>
+                          <tr style={{ background: work._subcontract_name ? '#FEF3E7' : '#F8F4E8', borderTop: '2px solid #999' }}>
                             <td className="border border-stone-300 px-1.5 py-1.5 text-center text-[12px] font-bold">{globalNum}</td>
                             <td className="border border-stone-300 px-1.5 py-1.5 font-mono text-[10px] font-semibold">{work.code || ''}</td>
-                            <td className="border border-stone-300 px-2 py-1.5 font-semibold text-slate-900">{work.name}</td>
+                            <td className="border border-stone-300 px-2 py-1.5 font-semibold text-slate-900">
+                              {work._subcontract_name && (
+                                <span className="inline-block mr-1.5 align-middle text-[9px] px-1.5 py-0.5 rounded bg-orange-600 text-white tracking-wide whitespace-nowrap">
+                                  {work._subcontract_name}
+                                </span>
+                              )}
+                              {work.name}
+                            </td>
                             <td className="border border-stone-300 px-1.5 py-1.5 text-center font-semibold">{work.uom || ''}</td>
                             <td className="border border-stone-300 px-1.5 py-1.5 text-right font-mono font-semibold">{fmtQty(qty)}</td>
                             <td className="border border-stone-300 px-1.5 py-1.5 text-right font-mono font-semibold">{fmtRu(Math.round(pricePerUnit * 100) / 100)}</td>

@@ -21,9 +21,15 @@ import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { useSales } from "@/components/contexts/SalesContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { contactsService } from "@/api/services";
+import financeService from "@/api/services/finance";
+import FinanceVendorBills from "@/components/finance/FinanceVendorBills";
 import { toast } from 'sonner';
 
-export default function Payments() {
+export default function Payments({ side } = {}) {
+  // When `side` is 'customer' or 'vendor', this instance renders ONLY that side
+  // (no top-level Customer/Vendor toggle) — used by the split Customer / Vendor
+  // top-level Financials tabs.
+  const forcedSide = (side === 'customer' || side === 'vendor') ? side : null;
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
@@ -43,7 +49,7 @@ export default function Payments() {
   const customerInvoices = salesInvoices || [];
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
 
-  const [activeTab, setActiveTab] = useState("customer");
+  const [activeTab, setActiveTab] = useState(forcedSide || "customer");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [methodFilter, setMethodFilter] = useState("all");
@@ -56,6 +62,8 @@ export default function Payments() {
   const [isSaving, setIsSaving] = useState(false);
   const [contacts, setContacts] = useState([]);
   const [contactsLoading, setContactsLoading] = useState(false);
+  // Inner view inside each Customer/Vendor tab: 'documents' (invoices/bills) | 'payments'
+  const [subTab, setSubTab] = useState('documents');
 
   const [newPayment, setNewPayment] = useState({
     payment_type: 'inbound',
@@ -194,9 +202,36 @@ export default function Payments() {
       const backendType = newPayment.payment_type === 'inbound' ? 'receipt' : 'payment';
       const selectedContact = contacts.find(c => c.id === newPayment.contact_id);
 
+      const paymentAmount = parseFloat(newPayment.amount) || 0;
+
+      // Odoo-style: no specific invoice/bill chosen → register a partner payment
+      // that auto-settles their open invoices/bills oldest-first; excess stays as
+      // a credit on the partner balance.
+      if (!newPayment.bill_id && !newPayment.invoice_id) {
+        const jr = bankCashJournals.find(j => j.id === newPayment.journal_id);
+        const res = await financeService.registerPartnerPayment({
+          contact_id: newPayment.contact_id,
+          amount: paymentAmount,
+          direction: isCustomerTab ? 'customer' : 'vendor',
+          method: jr?.type === 'cash' ? 'cash' : 'bank',
+          payment_date: newPayment.payment_date,
+          notes: newPayment.description,
+        });
+        const allocCount = (res?.allocated || []).length;
+        const credit = res?.credit_remaining || 0;
+        toast.success(
+          (allocCount > 0
+            ? (language === 'ru' ? `${allocCount} счёт(ов) закрыто` : language === 'uz' ? `${allocCount} ta hisob-faktura yopildi` : `${allocCount} invoice(s) settled`)
+            : (language === 'ru' ? 'Платёж принят' : language === 'uz' ? "To'lov qabul qilindi" : 'Payment recorded'))
+          + (credit > 0.001 ? ` · ${formatCurrency(credit)} ` + (language === 'ru' ? 'на баланс' : language === 'uz' ? 'balansda qoldi' : 'left as credit') : '')
+        );
+        try { await refreshSalesData(); } catch { /* ignore */ }
+        setShowCreateModal(false);
+        return;
+      }
+
       // Build allocations array if linked to an invoice/bill
       const allocations = [];
-      const paymentAmount = parseFloat(newPayment.amount) || 0;
       if (newPayment.bill_id) {
         allocations.push({
           document_type: 'purchase_invoice',
@@ -470,7 +505,7 @@ export default function Payments() {
     return labels[method] || method;
   };
 
-  const isCustomerTab = activeTab === 'customer';
+  const isCustomerTab = (forcedSide || activeTab) === 'customer';
 
   // Payment status helpers for invoices/bills
   const getPaymentStatus = (inv) => {
@@ -498,7 +533,12 @@ export default function Payments() {
 
   return (
     <div className="space-y-6">
-      <Tabs value={activeTab} onValueChange={(val) => { setActiveTab(val); setSearchQuery(''); setStatusFilter('all'); setMethodFilter('all'); setDateFrom(''); setDateTo(''); setCustomerFilter('all'); }}>
+      {forcedSide ? (
+        // Single side (Customer or Vendor) — no top-level toggle; the top-level
+        // Financials tab already chose the side.
+        <PaymentContent />
+      ) : (
+      <Tabs value={activeTab} onValueChange={(val) => { setActiveTab(val); setSubTab('documents'); setSearchQuery(''); setStatusFilter('all'); setMethodFilter('all'); setDateFrom(''); setDateTo(''); setCustomerFilter('all'); }}>
         <TabsList className="bg-white/60 p-1 rounded-lg border border-slate-200/60 shadow-sm mb-4">
           <TabsTrigger value="customer" className={subTabClass}>
             <ArrowDownLeft className="w-4 h-4" />
@@ -518,6 +558,7 @@ export default function Payments() {
           <PaymentContent />
         </TabsContent>
       </Tabs>
+      )}
 
       {/* Create Payment Modal */}
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
@@ -621,11 +662,14 @@ export default function Payments() {
               </Select>
             </div>
 
-            {/* Invoice Selector - Required for customer payments */}
+            {/* Invoice Selector - optional; if left empty the payment auto-settles oldest invoices first */}
             {isCustomerTab && (
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">
-                  {t('invoice') || 'Faktura'} *
+                  {t('invoice') || 'Faktura'}
+                  <span className="ml-2 text-xs font-normal text-slate-400">
+                    {language === 'ru' ? '(необязательно — иначе закроются старые)' : language === 'uz' ? "(ixtiyoriy — bo'sh qoldirilsa eng eskisidan yopiladi)" : '(optional — else settles oldest first)'}
+                  </span>
                 </label>
                 {unpaidInvoices.length > 0 ? (
                   <Select
@@ -676,11 +720,14 @@ export default function Payments() {
               </div>
             )}
 
-            {/* Bill Selector - Required for vendor payments */}
+            {/* Bill Selector - optional; if left empty the payment auto-settles oldest bills first */}
             {!isCustomerTab && (
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">
-                  {t('bill') || 'Hisob-faktura'} *
+                  {t('bill') || 'Hisob-faktura'}
+                  <span className="ml-2 text-xs font-normal text-slate-400">
+                    {language === 'ru' ? '(необязательно — иначе закроются старые)' : language === 'uz' ? "(ixtiyoriy — bo'sh qoldirilsa eng eskisidan yopiladi)" : '(optional — else settles oldest first)'}
+                  </span>
                 </label>
                 {unpaidBills.length > 0 ? (
                   <Select
@@ -824,7 +871,7 @@ export default function Payments() {
               <Button
                 onClick={handleCreatePayment}
                 className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-                disabled={isSaving || !newPayment.amount || !newPayment.contact_id || !newPayment.payment_date || !newPayment.journal_id || (isCustomerTab ? !newPayment.invoice_id : !newPayment.bill_id)}
+                disabled={isSaving || !newPayment.amount || !newPayment.contact_id || !newPayment.payment_date || !newPayment.journal_id}
               >
                 {isSaving ? t('saving') : t('create_payment')}
               </Button>
@@ -1018,8 +1065,22 @@ export default function Payments() {
           </Card>
         </div>
 
-        {/* Payments Table */}
-        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+        {/* Inner views: Invoices/Bills list and Payments — like Odoo (Customer > Invoices/Payments, Vendor > Bills/Payments) */}
+        <Tabs value={subTab} onValueChange={setSubTab} className="w-full">
+          <TabsList className="bg-white/60 p-1 rounded-lg border border-slate-200/60 shadow-sm mb-4">
+            <TabsTrigger value="documents" className={subTabClass}>
+              {isCustomerTab
+                ? (language === 'ru' ? 'Счета' : language === 'uz' ? 'Hisob-fakturalar' : 'Invoices')
+                : (language === 'ru' ? 'Счета поставщиков' : language === 'uz' ? 'Hisob-fakturalar' : 'Bills')}
+            </TabsTrigger>
+            <TabsTrigger value="payments" className={subTabClass}>
+              {language === 'ru' ? 'Платежи' : language === 'uz' ? "To'lovlar" : 'Payments'}
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="payments" className="mt-0">
+        {/* Payment history (transactions) */}
+        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-md">
           <CardHeader className="border-b border-slate-100 pb-6">
             <div className="flex flex-col gap-4">
               <div className="flex items-center gap-3">
@@ -1240,8 +1301,12 @@ export default function Payments() {
           </CardContent>
         </Card>
 
-        {/* Related Invoices / Bills */}
-        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
+          </TabsContent>
+
+          <TabsContent value="documents" className="mt-0">
+        {/* Customer → simple invoice list with Record Payment; Vendor → full Bills manager */}
+        {isCustomerTab ? (
+        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
           <CardHeader className="border-b border-slate-100 pb-4">
             <CardTitle className="text-lg font-bold text-slate-900">
               {isCustomerTab
@@ -1339,6 +1404,11 @@ export default function Payments() {
             })()}
           </CardContent>
         </Card>
+        ) : (
+          <FinanceVendorBills />
+        )}
+          </TabsContent>
+        </Tabs>
       </div>
     );
   }

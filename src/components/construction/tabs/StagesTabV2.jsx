@@ -98,6 +98,10 @@ const STATUS_META = {
   submitted:            { shortKey: 'work_status_submitted',            longKey: 'work_status_submitted_long',            bg: '#FEF3C7', fg: '#B45309', dot: '#B45309', border: 'transparent' },
   confirmed_supervisor: { shortKey: 'work_status_confirmed_supervisor', longKey: 'work_status_confirmed_supervisor_long', bg: '#FED7AA', fg: '#9A3412', dot: '#9A3412', border: '#FB923C' },
   confirmed_engineer:   { shortKey: 'work_status_confirmed_engineer',   longKey: 'work_status_confirmed_engineer_long',   bg: '#D1FAE5', fg: '#065F46', dot: '#10B981', border: '#10B981' },
+  // Physically 100% done but not (yet) engineer-confirmed. Same green
+  // "completed" look as confirmed_engineer, but a distinct value so it does
+  // NOT lock the stage (isLocked only triggers on real engineer confirmation).
+  completed:            { shortKey: 'work_status_confirmed_engineer',   longKey: 'work_status_confirmed_engineer_long',   bg: '#D1FAE5', fg: '#065F46', dot: '#10B981', border: '#10B981' },
 };
 
 // Up to 6 fractional digits with trailing zeros dropped, so imported
@@ -320,14 +324,25 @@ function deriveStages(lines) {
   }));
 }
 
-function stageStatus(stage) {
-  const ws = stage.works;
+function stageStatus(stage, resolveQty) {
+  // Include sub-stage works — a stage that keeps everything under sub-stages
+  // has an empty `stage.works`, which previously made it read "not started"
+  // even when its sub-stage works were done.
+  const ws = allStageWorks(stage);
   if (ws.length === 0) return 'pending';
+  // Formal approval workflow takes precedence once a stage enters it.
   if (ws.every((w) => w.approval_status === 'confirmed_engineer')) return 'confirmed_engineer';
   if (ws.every((w) => ['submitted', 'confirmed_supervisor', 'confirmed_engineer'].includes(w.approval_status))) {
     if (ws.every((w) => ['confirmed_supervisor', 'confirmed_engineer'].includes(w.approval_status))) return 'confirmed_supervisor';
     return 'submitted';
   }
+  // Otherwise drive the badge from physical progress (done vs reja qty).
+  const workDone = (w) => {
+    const qty = resolveQty ? Number(resolveQty(w) || 0) : Number(w.quantity || 0);
+    const dq = Number(w.done_quantity || 0);
+    return qty > 0 ? (dq / qty) >= 0.999 : dq > 0;
+  };
+  if (ws.every(workDone)) return 'completed';                        // every work fully done
   if (ws.some((w) => Number(w.done_quantity || 0) > 0)) return 'in_progress';
   return 'pending';
 }
@@ -493,6 +508,9 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
   const [buildings, setBuildings] = useState([]);    // act as v2's "blocks"
   const [estimates, setEstimates] = useState([]);    // current building → primary estimate
   const [activeBuildingId, setActiveBuildingId] = useState(null);
+  // Subcontractor filter for the active block. null = project's own (in-house)
+  // estimate; a number = that subcontractor's estimate for the block.
+  const [subFilter, setSubFilter] = useState(null);
   const [lines, setLines] = useState([]);            // works of the active estimate
   const [activeEstimateId, setActiveEstimateId] = useState(null); // edinich estimate id of active building
   const [loading, setLoading] = useState(false);
@@ -696,7 +714,10 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
   useEffect(() => {
     if (!project?.id) return;
     let cancelled = false;
-    constructionService.listForm2Iterations(project.id)
+    // Per-block strip (migration 451): scope to the active block so each block
+    // has its own iteration series. No block selected = whole-project bucket (0).
+    const bid = activeBuildingId ? Number(activeBuildingId) : 0;
+    constructionService.listForm2Iterations(project.id, bid)
       .then((rows) => {
         if (cancelled) return;
         const list = Array.isArray(rows) ? rows : [];
@@ -713,7 +734,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
       })
       .catch(() => { /* iterations load is non-blocking; bosqichlar still renders */ });
     return () => { cancelled = true; };
-  }, [project?.id, refreshTick]);
+  }, [project?.id, activeBuildingId, refreshTick]);
 
   // ── Load per-line period_fakt for the active iteration ───────────
   // Without this every BAJARILDI input would show the cumulative
@@ -748,11 +769,16 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
     setLines([]);
     setEstimates([]);
 
-    constructionService.listEstimates(project.id)
+    constructionService.listEstimates(project.id, { scope: 'all' })
       .then(async (rows) => {
         if (cancelled) return;
         const list = Array.isArray(rows) ? rows : [];
         setEstimates(list);
+        // Subcontractor scope: null → project's own (subcontract_id NULL);
+        // a number → that subcontractor's estimate for the block.
+        const matchesSub = (e) => subFilter
+          ? Number(e.subcontract_id) === Number(subFilter)
+          : !e.subcontract_id;
         // Pick the right estimate for this building. The Bosqichlar tab
         // is now driven EXCLUSIVELY by `edinich`-type estimates — the
         // ВОР flavour's "sections" are just block names and the Ресурс
@@ -774,6 +800,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
         // id makes the most recent import authoritative.
         const sortedEdinich = sameBuilding
           .filter((e) => String(e.source_type || '').toLowerCase() === 'edinich')
+          .filter(matchesSub)
           .sort((a, b) => Number(b.id || 0) - Number(a.id || 0));
         let matchedEst = sortedEdinich[0] || null;
         // ВОР side-fetch — same building. Used only to source the user-
@@ -784,6 +811,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
         // imports may not match the current єдинич's section structure.
         const sortedVor = sameBuilding
           .filter((e) => String(e.source_type || '').toLowerCase() === 'vor')
+          .filter(matchesSub)
           .sort((a, b) => Number(b.id || 0) - Number(a.id || 0));
         const vorEst = sortedVor[0] || null;
         if (!matchedEst) {
@@ -891,7 +919,24 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
 
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project?.id, activeBuildingId, refreshTick]);
+  }, [project?.id, activeBuildingId, subFilter, refreshTick]);
+
+  // Reset the subcontractor filter to "project's own" whenever the block
+  // changes, so a subcontractor that doesn't exist on the new block can't
+  // leave the view stuck on an empty selection.
+  useEffect(() => { setSubFilter(null); }, [activeBuildingId]);
+
+  // Subcontractors that have an estimate for the active block (for the filter
+  // dropdown). Derived from the loaded estimates.
+  const blockSubcontractors = useMemo(() => {
+    const map = new Map();
+    for (const e of estimates) {
+      if (activeBuildingId && Number(e.building_id) !== Number(activeBuildingId)) continue;
+      if (!e.subcontract_id) continue;
+      map.set(Number(e.subcontract_id), e.subcontract_name || `#${e.subcontract_id}`);
+    }
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+  }, [estimates, activeBuildingId]);
 
   // Per-building stage counts — fetched once per estimates list change so
   // each block button can show its own etap count instead of repeating the
@@ -1422,6 +1467,11 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
   // Permission helpers — based on viewRole (what the user is currently
   // simulating) for UI gating; the server independently enforces using
   // the real role on every action.
+  // Cross-company (Phase 3): when the active company is a subcontractor on
+  // this project, it works the project normally but the FINAL YAKUNIY
+  // (confirmed_engineer / lock) belongs to the hiring company. Hide the
+  // finalize action; the server also enforces this.
+  const isSubcontractorView = project?.viewer_role === 'subcontractor';
   const canSeeCost = viewRole !== 'foreman';
   const canEditQty = (w) =>
     !isFrozenView
@@ -1438,7 +1488,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
     && (w.approval_status === 'pending' || w.approval_status === 'in_progress');
   const canConfirmAsSupervisor = (w) => viewRole === 'supervisor' && w.approval_status === 'submitted';
   const canRejectAsSupervisor  = (w) => viewRole === 'supervisor' && w.approval_status === 'submitted';
-  const canConfirmAsEngineer   = (w) => viewRole === 'engineer'   && w.approval_status === 'confirmed_supervisor';
+  const canConfirmAsEngineer   = (w) => viewRole === 'engineer'   && w.approval_status === 'confirmed_supervisor' && !isSubcontractorView;
   const canRejectAsEngineer    = (w) => viewRole === 'engineer'   && w.approval_status === 'confirmed_supervisor';
 
   // ── Action handlers ──────────────────────────────────────────────
@@ -1792,6 +1842,26 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
             })
           )}
         </div>
+
+        {/* Subcontractor filter — only when the active block has subcontractor
+            estimates. "Loyiha smetasi" = the project's own (in-house) estimate. */}
+        {blockSubcontractors.length > 0 && (
+          <div className="mt-3 flex items-center gap-2">
+            <span className="text-[13px] text-slate-500">
+              {({ uz: 'Subpudratchi', ru: 'Субподрядчик', en: 'Subcontractor' })[language] || 'Subpudratchi'}:
+            </span>
+            <select
+              value={subFilter == null ? '' : String(subFilter)}
+              onChange={(e) => setSubFilter(e.target.value ? Number(e.target.value) : null)}
+              className="border border-slate-200 rounded-md px-3 py-1.5 text-sm"
+            >
+              <option value="">{({ uz: 'Loyiha smetasi', ru: 'Смета проекта', en: 'Project estimate' })[language] || 'Loyiha smetasi'}</option>
+              {blockSubcontractors.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* STAGES LIST */}
@@ -1818,12 +1888,14 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
           {visibleStages.map((stage) => {
             const stKey = stage.name;
             const expanded = expandedStages.has(stKey);
-            const status = stageStatus(stage);
+            const status = stageStatus(stage, resolveWorkQty);
             const stMeta = STATUS_META[status] || STATUS_META.pending;
             const pct = stageProgress(stage, resolveWorkQty);
-            const cost = stage.works.reduce((m, w) => m + Number(w.total_amount || 0), 0);
+            // Cost must include sub-stage works too, otherwise a stage whose
+            // works all live under sub-stages reports "0 so'm".
+            const cost = allStageWorks(stage).reduce((m, w) => m + Number(w.total_amount || 0), 0);
             const isLocked = status === 'confirmed_engineer';
-            const hasSubmitted = stage.works.some((w) => w.approval_status === 'submitted');
+            const hasSubmitted = allStageWorks(stage).some((w) => w.approval_status === 'submitted');
 
             return (
               <div
@@ -1984,6 +2056,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
                       onRejectEngineer={rejectAsEngineer}
                       viewRole={viewRole}
                       vorPlanByName={vorPlanByName}
+                      resolveWorkQty={resolveWorkQty}
                       expandedWorks={expandedWorks}
                       toggleWork={toggleWork}
                       subResourcesByWork={subResourcesByWork}
@@ -2002,6 +2075,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
                     <StageActions
                       stage={stage}
                       viewRole={viewRole}
+                      isSubcontractorView={isSubcontractorView}
                       onSubmitAll={submitAllInStage}
                       onConfirmAllSupervisor={confirmAllSupervisor}
                       onConfirmAllEngineer={confirmAllEngineer}
@@ -2311,18 +2385,11 @@ function StageBody(props) {
 
 function SubStageCard({ sub, ...props }) {
   const [open, setOpen] = useState(true);
-  const pct = (() => {
-    let plan = 0, done = 0;
-    for (const w of sub.works) {
-      const c = Number(w.total_amount || 0);
-      plan += c;
-      const ratio = Number(w.quantity || 0) > 0
-        ? Math.min(Number(w.done_quantity || 0) / Number(w.quantity || 0), 1)
-        : 0;
-      done += c * ratio;
-    }
-    return plan > 0 ? (done / plan) * 100 : 0;
-  })();
+  // Use the same progress helper as the stage/project rollups so the sub-stage
+  // bar matches its work rows: REJA via resolveWorkQty (original_quantity / ВОР,
+  // not the live `quantity` which is 0 for not-yet-started works), cost-weighted
+  // with a quantity-ratio fallback.
+  const pct = progressFromWorks(sub.works, props.resolveWorkQty);
   const cost = sub.works.reduce((m, w) => m + Number(w.total_amount || 0), 0);
   const finalised = sub.works.filter((w) => w.approval_status === 'confirmed_engineer').length;
 
@@ -2388,7 +2455,7 @@ function StatCard({ label, value, sub, variant }) {
 // =====================================================================
 // STAGE ACTIONS
 // =====================================================================
-function StageActions({ stage, viewRole, onSubmitAll, onConfirmAllSupervisor, onConfirmAllEngineer, t }) {
+function StageActions({ stage, viewRole, isSubcontractorView, onSubmitAll, onConfirmAllSupervisor, onConfirmAllEngineer, t }) {
   const works = stage.works;
   const submittedCount   = works.filter((w) => w.approval_status === 'submitted').length;
   const supConfirmed     = works.filter((w) => w.approval_status === 'confirmed_supervisor').length;
@@ -2396,7 +2463,7 @@ function StageActions({ stage, viewRole, onSubmitAll, onConfirmAllSupervisor, on
 
   const canSubmitAny  = viewRole === 'foreman'    && works.some((w) => Number(w.done_quantity || 0) > 0 && (w.approval_status === 'pending' || w.approval_status === 'in_progress'));
   const canConfirmAny = viewRole === 'supervisor' && works.some((w) => w.approval_status === 'submitted');
-  const canFinalAny   = viewRole === 'engineer'   && works.some((w) => w.approval_status === 'confirmed_supervisor');
+  const canFinalAny   = viewRole === 'engineer'   && !isSubcontractorView && works.some((w) => w.approval_status === 'confirmed_supervisor');
 
   return (
     <div className="mt-4 pt-3.5 border-t border-dashed border-slate-200 flex items-center justify-between flex-wrap gap-2">

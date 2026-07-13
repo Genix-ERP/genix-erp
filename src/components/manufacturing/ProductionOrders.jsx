@@ -37,7 +37,7 @@ const splitPieceFactor = (product) => {
 export default function ProductionOrders() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { canCreate, canUpdate, canDelete } = usePermissions();
+  const { canCreate, canUpdate, canDelete, isSuperAdmin } = usePermissions();
   const { formatCurrency } = useCurrencyFormatter();
 
   const {
@@ -62,6 +62,7 @@ export default function ProductionOrders() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [splitOutputs, setSplitOutputs] = useState([]); // packaged products produced from the viewed order
   const [products, setProducts] = useState([]);
   const [boms, setBoms] = useState([]);
 
@@ -378,6 +379,7 @@ export default function ProductionOrders() {
   };
 
   const handleViewOrder = async (order) => {
+    setSplitOutputs([]);
     try {
       // Fetch full order details including BOM operations
       const fullOrder = await productionOrdersService.get(order.id);
@@ -388,6 +390,13 @@ export default function ProductionOrders() {
       // Fallback to cached order if fetch fails
       setSelectedOrder(order);
       setShowViewModal(true);
+    }
+    // Load the packaged products this order was split into (empty if none)
+    try {
+      const outs = await productionOrdersService.getSplitOutputs(order.id);
+      setSplitOutputs(Array.isArray(outs) ? outs : []);
+    } catch (e) {
+      setSplitOutputs([]);
     }
   };
 
@@ -523,6 +532,13 @@ export default function ProductionOrders() {
     }, 0);
     return { used, remaining: splitBulkQty - used, over: used > splitBulkQty + 1e-6 };
   }, [splitItems, inventoryProducts, products, splitBulkQty]);
+
+  // Unit-of-measure label (Metr, kg, Dona…) of a selected split product,
+  // shown next to its quantity so the worker knows what unit they're entering.
+  const productUnitLabel = (productId) => {
+    const p = (inventoryProducts || products || []).find(x => x.id === productId);
+    return p?.unit_name || p?.unit_code || '';
+  };
 
   const handleSplitSubmit = async () => {
     const validItems = splitItems.filter(it => it.product_id && parseFloat(it.quantity) > 0);
@@ -817,7 +833,7 @@ export default function ProductionOrders() {
                                 <X className="w-4 h-4 text-red-500" />
                               </Button>
                             )}
-                            {canDelete(MODULES.MANUFACTURING) && ['draft', 'cancelled', 'completed'].includes(order.status) && (
+                            {isSuperAdmin && ['draft', 'cancelled', 'completed'].includes(order.status) && (
                               <Button size="sm" variant="ghost"
                                 onClick={() => {
                                   if (window.confirm(t('confirm_delete') || 'Delete this production order?')) {
@@ -1194,6 +1210,41 @@ export default function ProductionOrders() {
                   </div>
                 )}
               </div>
+
+              {/* Split Products — packaged products produced from this order */}
+              {splitOutputs.length > 0 && (
+                <div className="border-t pt-4">
+                  <h4 className="font-semibold mb-3">
+                    {language === 'uz' ? 'Bo\'lingan mahsulotlar' : language === 'ru' ? 'Разделённые продукты' : 'Split Products'}
+                  </h4>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-xs text-slate-500 border-b">
+                          <th className="py-1.5 pr-2">{language === 'uz' ? 'Mahsulot' : language === 'ru' ? 'Продукт' : 'Product'}</th>
+                          <th className="py-1.5 px-2 text-right">{language === 'uz' ? 'Miqdor' : language === 'ru' ? 'Кол-во' : 'Qty'}</th>
+                          <th className="py-1.5 px-2 text-right">{language === 'uz' ? 'Xom-ashyo' : language === 'ru' ? 'Сырьё' : 'Bulk used'}</th>
+                          <th className="py-1.5 px-2 text-right">{language === 'uz' ? 'Birlik narxi' : language === 'ru' ? 'Цена ед.' : 'Unit cost'}</th>
+                          <th className="py-1.5 px-2 text-right">{language === 'uz' ? 'Jami narx' : language === 'ru' ? 'Сумма' : 'Total'}</th>
+                          <th className="py-1.5 pl-2">{language === 'uz' ? 'Sana' : language === 'ru' ? 'Дата' : 'Date'}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {splitOutputs.map((o) => (
+                          <tr key={o.id} className="border-b border-slate-50">
+                            <td className="py-1.5 pr-2 font-medium text-slate-800">{o.product_name}</td>
+                            <td className="py-1.5 px-2 text-right whitespace-nowrap">{o.quantity} {productUnitLabel(o.product_id)}</td>
+                            <td className="py-1.5 px-2 text-right whitespace-nowrap text-slate-500">{(o.total_weight_kg ?? 0).toLocaleString()}</td>
+                            <td className="py-1.5 px-2 text-right whitespace-nowrap">{formatCurrency(o.unit_cost)}</td>
+                            <td className="py-1.5 px-2 text-right whitespace-nowrap">{formatCurrency(o.total_cost)}</td>
+                            <td className="py-1.5 pl-2 text-slate-500 whitespace-nowrap">{o.created_at ? format(new Date(o.created_at), 'dd.MM.yyyy') : ''}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </DialogContent>
@@ -1273,14 +1324,20 @@ export default function ProductionOrders() {
                   </div>
                   <div className="col-span-3 space-y-1">
                     <label className="text-xs font-medium">{language === 'uz' ? 'Miqdori' : language === 'ru' ? 'Кол-во' : 'Quantity'} *</label>
-                    <Input
-                      type="number"
-                      min="0.0001"
-                      step="any"
-                      value={item.quantity}
-                      onChange={(e) => updateSplitItem(idx, 'quantity', e.target.value)}
-                      placeholder="0"
-                    />
+                    <div className="flex items-center gap-1">
+                      <Input
+                        type="number"
+                        min="0.0001"
+                        step="any"
+                        value={item.quantity}
+                        onChange={(e) => updateSplitItem(idx, 'quantity', e.target.value)}
+                        placeholder="0"
+                        className="flex-1"
+                      />
+                      {productUnitLabel(item.product_id) && (
+                        <span className="text-xs text-slate-500 whitespace-nowrap">{productUnitLabel(item.product_id)}</span>
+                      )}
+                    </div>
                   </div>
                   <div className="col-span-3 space-y-1">
                     <label className="text-xs font-medium">{language === 'uz' ? 'Sklad' : language === 'ru' ? 'Склад' : 'Warehouse'}</label>

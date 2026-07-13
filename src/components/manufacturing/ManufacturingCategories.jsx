@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus, Pencil, Trash2, Tag } from 'lucide-react';
+import { Plus, Edit, Trash2, Tag } from 'lucide-react';
 import { useManufacturing } from '@/components/contexts/ManufacturingContext';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { toast } from 'sonner';
@@ -104,7 +104,7 @@ export default function ManufacturingCategories() {
                     <TableCell className="text-right">
                       <div className="flex gap-1 justify-end">
                         <Button size="sm" variant="ghost" onClick={() => openEdit(cat)}>
-                          <Pencil className="w-4 h-4 text-slate-500" />
+                          <Edit className="w-4 h-4 text-slate-500" />
                         </Button>
                         <Button size="sm" variant="ghost" onClick={() => handleDelete(cat)}>
                           <Trash2 className="w-4 h-4 text-red-500" />

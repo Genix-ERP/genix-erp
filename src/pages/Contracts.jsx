@@ -4,9 +4,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, FileText, AlertTriangle, CheckCircle, Clock, Bell, Eye, Edit2, Trash2, Building2 } from 'lucide-react';
+import { Textarea } from "@/components/ui/textarea";
+import { Plus, Search, FileText, AlertTriangle, CheckCircle, Clock, Brain, Bell, Target, Lightbulb, Eye, Edit, Trash2, Building2, User, Files, Upload, Download } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { ru, uz } from 'date-fns/locale';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -21,7 +22,12 @@ const getDateLocale = (lang) => {
 };
 import { usePermissions } from "@/hooks/usePermissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
-import { contactsService } from "@/api/services";
+import { contactsService, procurementService } from "@/api/services";
+import { Asset, Employee, EmployeeContract } from "@/api/entities";
+import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
+
+// Employee (HR) contract type options, kept consistent with the HR module.
+const EMP_CONTRACT_TYPES = ['permanent', 'fixed_term', 'probation', 'part_time', 'temporary', 'internship'];
 
 export default function Contracts() {
   const { language } = useLanguage();
@@ -46,44 +52,153 @@ export default function Contracts() {
   const [renewalData, setRenewalData] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [vendors, setVendors] = useState([]);
-  const [vendorsLoading, setVendorsLoading] = useState(false);
+  const [allContacts, setAllContacts] = useState([]);
+  const [assets, setAssets] = useState([]);
+  const [employees, setEmployees] = useState([]);
+  const [employeeContracts, setEmployeeContracts] = useState([]);
+  const [partiesLoading, setPartiesLoading] = useState(false);
+  // Contract documents modal
+  const [docsContract, setDocsContract] = useState(null);
+  const [attachments, setAttachments] = useState([]);
+  const [attachmentsLoading, setAttachmentsLoading] = useState(false);
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+  // Live document counts per contract (overrides backend count after up/download).
+  const [docCounts, setDocCounts] = useState({});
+
+  // Build a full URL to a stored file from the API base.
+  const fileUrl = (url) =>
+    `${(import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1').replace(/\/api\/v1\/?$/, '')}${url}`;
+
+  const loadAttachments = async (id) => {
+    setAttachmentsLoading(true);
+    try {
+      const list = await procurementService.listContractAttachments(id);
+      setAttachments(list);
+      setDocCounts(prev => ({ ...prev, [id]: list.length }));
+    } catch {
+      setAttachments([]);
+    } finally {
+      setAttachmentsLoading(false);
+    }
+  };
+
+  const openDocs = (contract) => {
+    setDocsContract(contract);
+    setAttachments([]);
+    loadAttachments(contract.id);
+  };
+
+  const handleUploadDoc = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !docsContract) return;
+    setUploadingDoc(true);
+    try {
+      await procurementService.uploadContractAttachment(docsContract.id, file);
+      await loadAttachments(docsContract.id);
+    } catch (err) {
+      console.error('Upload failed:', err);
+    } finally {
+      setUploadingDoc(false);
+    }
+  };
+
+  const handleDeleteAttachment = async (attachmentId) => {
+    if (!docsContract) return;
+    try {
+      await procurementService.deleteContractAttachment(docsContract.id, attachmentId);
+      await loadAttachments(docsContract.id);
+    } catch (err) {
+      console.error('Delete attachment failed:', err);
+    }
+  };
 
   const [newContract, setNewContract] = useState({
     contract_number: '',
     contract_name: '',
-    contract_type: 'vendor',
+    party_type: 'vendor',
     vendor_id: '',
+    asset_id: '',
     start_date: new Date().toISOString().split('T')[0],
     end_date: '',
     contract_value: 0,
     billing_cycle: 'monthly',
-    auto_renew: false
+    auto_renew: false,
+    // Employee (HR) contract fields
+    employee_id: '',
+    emp_contract_type: 'permanent',
+    salary: '',
+    currency: 'UZS',
+    working_hours: 40,
+    probation_period: 0,
+    notice_period: 30,
+    benefits: '',
   });
 
-  // Load vendors when create modal opens
-  useEffect(() => {
-    if (showCreateModal && vendors.length === 0) {
-      setVendorsLoading(true);
-      contactsService.list()
-        .then(data => {
-          // Filter to only vendors
-          const vendorContacts = (data || []).filter(c =>
-            c.contact_type === 'vendor' || c.type === 'vendor' || c.type === 'both'
-          );
-          setVendors(vendorContacts);
-        })
-        .catch(err => {
-          console.error('Failed to load vendors:', err);
-        })
-        .finally(() => {
-          setVendorsLoading(false);
-        });
+  // Load HR employee contracts (a separate backend) so they appear alongside
+  // procurement/customer/lease contracts on this single page.
+  const loadEmployeeContracts = async () => {
+    try {
+      const data = await EmployeeContract.list();
+      setEmployeeContracts(Array.isArray(data) ? data : []);
+    } catch {
+      setEmployeeContracts([]);
     }
-  }, [showCreateModal, vendors.length]);
+  };
 
   useEffect(() => {
-    let filtered = contracts.map(contract => {
+    loadEmployeeContracts();
+    Employee.list().then(d => setEmployees(Array.isArray(d) ? d : [])).catch(() => setEmployees([]));
+  }, []);
+
+  // Normalize an HR employee contract into the common card shape used here.
+  const normalizeEmployeeContract = (c) => ({
+    ...c,
+    __employee: true,
+    party_type: 'employee',
+    contract_number: c.contract_number || c.id,
+    contract_name: c.employee_name ? `${c.employee_name}${c.job_title ? ' — ' + c.job_title : ''}` : (c.id || ''),
+    party_name: c.employee_name || '',
+    contract_value: c.salary || 0,
+    value: c.salary || 0,
+    billing_cycle: 'monthly',
+  });
+
+  // Load contacts + assets when a contract modal opens (used as counterparties).
+  useEffect(() => {
+    if ((showCreateModal || showEditModal) && allContacts.length === 0 && assets.length === 0) {
+      setPartiesLoading(true);
+      Promise.all([
+        contactsService.list().catch(() => []),
+        Asset.list().catch(() => []),
+      ])
+        .then(([contactsData, assetsData]) => {
+          setAllContacts(contactsData || []);
+          setAssets(assetsData || []);
+        })
+        .finally(() => setPartiesLoading(false));
+    }
+  }, [showCreateModal, showEditModal]);
+
+  // Filter contacts to the kind the chosen party type expects.
+  const contactsForType = (partyType) => {
+    if (partyType === 'customer') {
+      return allContacts.filter(c => ['customer', 'both'].includes(c.contact_type || c.type));
+    }
+    if (partyType === 'vendor') {
+      return allContacts.filter(c => ['vendor', 'both'].includes(c.contact_type || c.type));
+    }
+    return allContacts; // partner: any contact
+  };
+
+  // Procurement/customer/lease contracts + HR employee contracts in one list.
+  const mergedContracts = useMemo(
+    () => [...contracts, ...employeeContracts.map(normalizeEmployeeContract)],
+    [contracts, employeeContracts]
+  );
+
+  useEffect(() => {
+    let filtered = mergedContracts.map(contract => {
       if (!contract.end_date) return contract;
 
       const today = new Date();
@@ -109,16 +224,49 @@ export default function Contracts() {
       );
     }
     setFilteredContracts(filtered);
-  }, [contracts, searchQuery, statusFilter]);
+  }, [mergedContracts, searchQuery, statusFilter]);
 
   const handleCreateContract = async () => {
     setIsSubmitting(true);
     try {
-      // Get selected vendor info for display purposes
-      const selectedVendor = vendors.find(v => v.id === newContract.vendor_id);
+      // Employee contracts go to the HR backend with their own fields.
+      if (newContract.party_type === 'employee') {
+        const employee = employees.find(e => e.id === newContract.employee_id);
+        await EmployeeContract.create({
+          employee_id: newContract.employee_id,
+          employee_name: employee?.full_name || employee?.name || '',
+          job_title: employee?.job_title || '',
+          department: employee?.department || '',
+          contract_type: newContract.emp_contract_type,
+          start_date: newContract.start_date,
+          end_date: newContract.end_date || null,
+          salary: parseFloat(newContract.salary) || 0,
+          currency: newContract.currency,
+          working_hours: parseInt(newContract.working_hours) || 40,
+          probation_period: parseInt(newContract.probation_period) || 0,
+          notice_period: parseInt(newContract.notice_period) || 30,
+          benefits: newContract.benefits,
+          status: 'active',
+        });
+        await loadEmployeeContracts();
+        setShowCreateModal(false);
+        resetNewContract();
+        return;
+      }
 
-      // Map billing_cycle to backend contract_type
-      // Backend expects: fixed, annual, monthly, project
+      const isLease = newContract.party_type === 'lease';
+
+      // Resolve the counterparty display name from the chosen contact or asset.
+      let partyName = '';
+      if (isLease) {
+        const asset = assets.find(a => a.id === newContract.asset_id);
+        partyName = asset?.name || asset?.asset_name || '';
+      } else {
+        const contact = contactsForType(newContract.party_type).find(c => c.id === newContract.vendor_id);
+        partyName = contact?.company_name || contact?.name || '';
+      }
+
+      // Billing cadence is stored separately (terms); contract_type stays a billing value.
       const billingToContractType = {
         'monthly': 'monthly',
         'quarterly': 'fixed',
@@ -128,7 +276,9 @@ export default function Contracts() {
 
       const contractData = {
         title: newContract.contract_name,
-        vendor_id: newContract.vendor_id,
+        party_type: newContract.party_type,
+        vendor_id: isLease ? '' : newContract.vendor_id,
+        asset_id: isLease ? newContract.asset_id : '',
         contract_type: billingToContractType[newContract.billing_cycle] || 'fixed',
         start_date: newContract.start_date,
         end_date: newContract.end_date || undefined,
@@ -136,30 +286,42 @@ export default function Contracts() {
         auto_renewal: newContract.auto_renew,
         // Keep frontend fields for UI display
         contract_name: newContract.contract_name,
-        party_name: selectedVendor?.company_name || selectedVendor?.name || '',
+        party_name: partyName,
         contract_value: parseFloat(newContract.contract_value) || 0,
         billing_cycle: newContract.billing_cycle,
       };
 
       await createContract(contractData);
       setShowCreateModal(false);
-
-      setNewContract({
-        contract_number: '',
-        contract_name: '',
-        contract_type: 'vendor',
-        vendor_id: '',
-        start_date: new Date().toISOString().split('T')[0],
-        end_date: '',
-        contract_value: 0,
-        billing_cycle: 'monthly',
-        auto_renew: false
-      });
+      resetNewContract();
     } catch (error) {
       console.error('Error creating contract:', error);
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const resetNewContract = () => {
+    setNewContract({
+      contract_number: '',
+      contract_name: '',
+      party_type: 'vendor',
+      vendor_id: '',
+      asset_id: '',
+      start_date: new Date().toISOString().split('T')[0],
+      end_date: '',
+      contract_value: 0,
+      billing_cycle: 'monthly',
+      auto_renew: false,
+      employee_id: '',
+      emp_contract_type: 'permanent',
+      salary: '',
+      currency: 'UZS',
+      working_hours: 40,
+      probation_period: 0,
+      notice_period: 30,
+      benefits: '',
+    });
   };
 
   const handleViewContract = (contract) => {
@@ -182,11 +344,39 @@ export default function Contracts() {
 
     setIsSubmitting(true);
     try {
+      // Employee contracts update against the HR backend.
+      if (editContract.__employee) {
+        await EmployeeContract.update(editContract.id, {
+          ...editContract,
+          salary: parseFloat(editContract.salary) || 0,
+          working_hours: parseInt(editContract.working_hours) || 40,
+          probation_period: parseInt(editContract.probation_period) || 0,
+          notice_period: parseInt(editContract.notice_period) || 30,
+        });
+        await loadEmployeeContracts();
+        setShowEditModal(false);
+        setEditContract(null);
+        return;
+      }
+
+      const isLease = editContract.party_type === 'lease';
+      let partyName = editContract.party_name;
+      if (isLease) {
+        const asset = assets.find(a => a.id === editContract.asset_id);
+        if (asset) partyName = asset.name || asset.asset_name || partyName;
+      } else {
+        const contact = contactsForType(editContract.party_type).find(c => c.id === editContract.vendor_id);
+        if (contact) partyName = contact.company_name || contact.name || partyName;
+      }
+
       updateContract(editContract.id, {
         contract_number: editContract.contract_number,
         contract_name: editContract.contract_name,
+        party_type: editContract.party_type,
+        vendor_id: isLease ? '' : editContract.vendor_id,
+        asset_id: isLease ? editContract.asset_id : '',
         contract_type: editContract.contract_type,
-        party_name: editContract.party_name,
+        party_name: partyName,
         start_date: editContract.start_date,
         end_date: editContract.end_date,
         contract_value: parseFloat(editContract.contract_value) || 0,
@@ -208,9 +398,14 @@ export default function Contracts() {
     setShowDeleteModal(true);
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (contractToDelete) {
-      deleteContract(contractToDelete.id);
+      if (contractToDelete.__employee) {
+        try { await EmployeeContract.delete(contractToDelete.id); } catch (e) { console.error(e); }
+        await loadEmployeeContracts();
+      } else {
+        deleteContract(contractToDelete.id);
+      }
       setShowDeleteModal(false);
       setContractToDelete(null);
     }
@@ -361,7 +556,7 @@ Provide only analysis results based on the numbers and specific contract data, n
   };
 
   const metrics = {
-    totalContracts: contracts.length,
+    totalContracts: mergedContracts.length,
     activeContracts: filteredContracts.filter(c => c.status === 'active').length,
     totalValue: filteredContracts.filter(c => c.status === 'active').reduce((sum, c) => sum + (c.contract_value || 0), 0),
     expiringSoon: filteredContracts.filter(c => c.daysUntilExpiry >= 0 && c.daysUntilExpiry <= 30).length
@@ -488,8 +683,8 @@ Provide only analysis results based on the numbers and specific contract data, n
                           <div className="flex items-center gap-3 mb-2">
                             <h3 className="font-bold text-lg">{contract.contract_name}</h3>
                             <Badge className={getStatusColor(contract.status)}>{t(contract.status)}</Badge>
-                            <Badge className={getTypeColor(contract.contract_type)} variant="outline">
-                              {t(contract.contract_type)}
+                            <Badge className={getTypeColor(contract.party_type)} variant="outline">
+                              {t(contract.party_type)}
                             </Badge>
                             {contract.auto_renew && (
                               <Badge variant="outline" className="bg-blue-50 text-blue-700">
@@ -543,9 +738,22 @@ Provide only analysis results based on the numbers and specific contract data, n
                           <Button size="sm" variant="ghost" onClick={() => handleViewContract(contract)} title={t('view_contract')}>
                             <Eye className="w-4 h-4" />
                           </Button>
+                          {!contract.__employee && (() => {
+                            const docCount = (docCounts[contract.id] ?? contract.attachment_count) || 0;
+                            return (
+                              <Button size="sm" variant="ghost" onClick={() => openDocs(contract)} title={t('documents') || 'Hujjatlar'} className="relative">
+                                <Files className="w-4 h-4" />
+                                {docCount > 0 && (
+                                  <span className="absolute -top-0.5 -right-0.5 bg-rose-600 text-white text-[10px] font-semibold leading-none rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center">
+                                    {docCount}
+                                  </span>
+                                )}
+                              </Button>
+                            );
+                          })()}
                           {canUpdate(MODULES.CONTRACTS) && (
                             <Button size="sm" variant="ghost" onClick={() => handleEditContract(contract)} title={t('edit_contract')}>
-                              <Edit2 className="w-4 h-4" />
+                              <Edit className="w-4 h-4" />
                             </Button>
                           )}
                           {canDelete(MODULES.CONTRACTS) && (
@@ -573,6 +781,66 @@ Provide only analysis results based on the numbers and specific contract data, n
           </CardContent>
         </Card>
 
+        {/* Contract Documents Modal */}
+        <Dialog open={!!docsContract} onOpenChange={(open) => { if (!open) { setDocsContract(null); setAttachments([]); } }}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Files className="w-5 h-5" />
+                {t('documents') || 'Hujjatlar'}{docsContract ? ` — ${docsContract.contract_name || docsContract.contract_number}` : ''}
+              </DialogTitle>
+            </DialogHeader>
+
+            {canUpdate(MODULES.CONTRACTS) && (
+              <label className={`flex flex-col items-center justify-center gap-2 py-6 rounded-xl border-2 border-dashed border-slate-300 text-slate-500 hover:border-rose-400 hover:text-rose-600 cursor-pointer transition-colors ${uploadingDoc ? 'opacity-60 pointer-events-none' : ''}`}>
+                <input type="file" className="hidden" onChange={handleUploadDoc} disabled={uploadingDoc} />
+                <Upload className="w-6 h-6" />
+                <span className="text-sm font-medium">{uploadingDoc ? (t('uploading') || 'Yuklanmoqda...') : (t('upload_document') || 'Hujjat yuklash')}</span>
+              </label>
+            )}
+
+            <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
+              {attachmentsLoading ? (
+                <div className="text-center py-6">
+                  <div className="w-6 h-6 border-2 border-rose-600 border-t-transparent rounded-full animate-spin mx-auto" />
+                </div>
+              ) : attachments.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-6">{t('no_documents') || 'Hujjatlar yo‘q'}</p>
+              ) : (
+                attachments.map((f) => (
+                  <div key={f.id} className="flex items-center gap-3 rounded-lg border border-slate-200 p-2.5">
+                    <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+                      <FileText className="w-4 h-4 text-slate-500" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium truncate">{f.original_name}</div>
+                      <div className="text-xs text-muted-foreground">{(f.file_size / 1024).toFixed(0)} KB</div>
+                    </div>
+                    <a
+                      href={fileUrl(f.url)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="h-8 w-8 flex items-center justify-center text-slate-400 hover:text-slate-700 rounded-md hover:bg-slate-100 shrink-0"
+                      title={t('download') || 'Download'}
+                    >
+                      <Download className="w-4 h-4" />
+                    </a>
+                    {canDelete(MODULES.CONTRACTS) && (
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-red-600 shrink-0" onClick={() => handleDeleteAttachment(f.id)}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDocsContract(null)}>{t('close') || 'Close'}</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         {/* Create Contract Modal */}
         <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
           <DialogContent className="max-w-2xl">
@@ -584,52 +852,97 @@ Provide only analysis results based on the numbers and specific contract data, n
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium mb-1 block">{t('contract_type')} *</label>
-                  <Select value={newContract.contract_type} onValueChange={(value) => setNewContract({...newContract, contract_type: value})}>
+                  <Select value={newContract.party_type} onValueChange={(value) => setNewContract({...newContract, party_type: value, vendor_id: '', asset_id: ''})}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="customer">{t('customer')}</SelectItem>
                       <SelectItem value="vendor">{t('vendor')}</SelectItem>
-                      <SelectItem value="employee">{t('employee')}</SelectItem>
                       <SelectItem value="partner">{t('partner')}</SelectItem>
                       <SelectItem value="lease">{t('lease')}</SelectItem>
+                      <SelectItem value="employee">{t('employee')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
 
-              <div>
-                <label className="text-sm font-medium mb-1 block">{t('contract_name')} *</label>
-                <Input
-                  placeholder={t('contract_name_placeholder')}
-                  value={newContract.contract_name}
-                  onChange={(e) => setNewContract({...newContract, contract_name: e.target.value})}
-                  required
-                />
-              </div>
+              {newContract.party_type !== 'employee' && (
+                <div>
+                  <label className="text-sm font-medium mb-1 block">{t('contract_name')} *</label>
+                  <Input
+                    placeholder={t('contract_name_placeholder')}
+                    value={newContract.contract_name}
+                    onChange={(e) => setNewContract({...newContract, contract_name: e.target.value})}
+                    required
+                  />
+                </div>
+              )}
 
-              <div>
-                <label className="text-sm font-medium mb-1 block">{t('vendor')} *</label>
-                <Select
-                  value={newContract.vendor_id}
-                  onValueChange={(value) => setNewContract({...newContract, vendor_id: value})}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={vendorsLoading ? t('loading') : t('select_vendor')} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {vendors.map(vendor => (
-                      <SelectItem key={vendor.id} value={vendor.id}>
-                        <div className="flex items-center gap-2">
-                          <Building2 className="w-4 h-4 text-orange-500" />
-                          {vendor.company_name || vendor.name}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {newContract.party_type === 'employee' ? (
+                <div>
+                  <label className="text-sm font-medium mb-1 block">{t('employee')} *</label>
+                  <Select
+                    value={newContract.employee_id}
+                    onValueChange={(value) => setNewContract({...newContract, employee_id: value})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('select_employee')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {employees.map(emp => (
+                        <SelectItem key={emp.id} value={emp.id}>
+                          <div className="flex items-center gap-2">
+                            <User className="w-4 h-4 text-blue-500" />
+                            {(emp.full_name || emp.name)}{emp.job_title ? ` — ${emp.job_title}` : ''}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : newContract.party_type === 'lease' ? (
+                <div>
+                  <label className="text-sm font-medium mb-1 block">{t('asset')} *</label>
+                  <Select
+                    value={newContract.asset_id}
+                    onValueChange={(value) => setNewContract({...newContract, asset_id: value})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={partiesLoading ? t('loading') : t('select_asset')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {assets.map(asset => (
+                        <SelectItem key={asset.id} value={asset.id}>
+                          {asset.name || asset.asset_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <div>
+                  <label className="text-sm font-medium mb-1 block">{t('counterparty')} *</label>
+                  <Select
+                    value={newContract.vendor_id}
+                    onValueChange={(value) => setNewContract({...newContract, vendor_id: value})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={partiesLoading ? t('loading') : t('select_party')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {contactsForType(newContract.party_type).map(contact => (
+                        <SelectItem key={contact.id} value={contact.id}>
+                          <div className="flex items-center gap-2">
+                            <Building2 className="w-4 h-4 text-orange-500" />
+                            {contact.company_name || contact.name}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -652,45 +965,88 @@ Provide only analysis results based on the numbers and specific contract data, n
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium mb-1 block">{t('contract_value')} *</label>
-                  <Input
-                    type="number"
-                    placeholder="0"
-                    value={newContract.contract_value}
-                    onChange={(e) => setNewContract({...newContract, contract_value: e.target.value})}
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium mb-1 block">{t('billing_cycle')}</label>
-                  <Select value={newContract.billing_cycle} onValueChange={(value) => setNewContract({...newContract, billing_cycle: value})}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="monthly">{t('monthly')}</SelectItem>
-                      <SelectItem value="quarterly">{t('quarterly')}</SelectItem>
-                      <SelectItem value="annually">{t('annually')}</SelectItem>
-                      <SelectItem value="one_time">{t('one_time')}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+              {newContract.party_type === 'employee' ? (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">{t('contract_type')} *</label>
+                      <Select value={newContract.emp_contract_type} onValueChange={(value) => setNewContract({...newContract, emp_contract_type: value})}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {EMP_CONTRACT_TYPES.map(k => (
+                            <SelectItem key={k} value={k}>{t(`${k}_contract`) || k}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">{t('salary')} *</label>
+                      <Input type="text" inputMode="decimal" placeholder="0" value={formatPriceInput(newContract.salary)}
+                        onChange={(e) => setNewContract({...newContract, salary: parsePriceInput(e.target.value)})} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">{t('working_hours')}</label>
+                      <Input type="number" value={newContract.working_hours}
+                        onChange={(e) => setNewContract({...newContract, working_hours: e.target.value})} />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">{t('probation_period')}</label>
+                      <Input type="number" value={newContract.probation_period}
+                        onChange={(e) => setNewContract({...newContract, probation_period: e.target.value})} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">{t('benefits')}</label>
+                    <Textarea rows={2} value={newContract.benefits}
+                      onChange={(e) => setNewContract({...newContract, benefits: e.target.value})} />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">{t('contract_value')} *</label>
+                      <Input
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0"
+                        value={formatPriceInput(newContract.contract_value)}
+                        onChange={(e) => setNewContract({...newContract, contract_value: parsePriceInput(e.target.value)})}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">{t('billing_cycle')}</label>
+                      <Select value={newContract.billing_cycle} onValueChange={(value) => setNewContract({...newContract, billing_cycle: value})}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="monthly">{t('monthly')}</SelectItem>
+                          <SelectItem value="quarterly">{t('quarterly')}</SelectItem>
+                          <SelectItem value="annually">{t('annually')}</SelectItem>
+                          <SelectItem value="one_time">{t('one_time')}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
 
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="auto_renew"
-                  checked={newContract.auto_renew}
-                  onChange={(e) => setNewContract({...newContract, auto_renew: e.target.checked})}
-                  className="w-4 h-4"
-                />
-                <label htmlFor="auto_renew" className="text-sm font-medium">
-                  {t('enable_auto_renewal')}
-                </label>
-              </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="auto_renew"
+                      checked={newContract.auto_renew}
+                      onChange={(e) => setNewContract({...newContract, auto_renew: e.target.checked})}
+                      className="w-4 h-4"
+                    />
+                    <label htmlFor="auto_renew" className="text-sm font-medium">
+                      {t('enable_auto_renewal')}
+                    </label>
+                  </div>
+                </>
+              )}
 
               <div className="flex gap-3 pt-4">
                 <Button variant="outline" onClick={() => setShowCreateModal(false)} className="flex-1">
@@ -699,7 +1055,12 @@ Provide only analysis results based on the numbers and specific contract data, n
                 <Button
                   onClick={handleCreateContract}
                   className="flex-1 bg-gradient-to-r from-rose-600 to-pink-600"
-                  disabled={!newContract.contract_name || !newContract.vendor_id || isSubmitting}
+                  disabled={
+                    (newContract.party_type === 'employee'
+                      ? (!newContract.employee_id || !newContract.salary)
+                      : (!newContract.contract_name || (newContract.party_type === 'lease' ? !newContract.asset_id : !newContract.vendor_id)))
+                    || isSubmitting
+                  }
                 >
                   {isSubmitting ? t('creating') : t('create_contract')}
                 </Button>
@@ -719,8 +1080,8 @@ Provide only analysis results based on the numbers and specific contract data, n
                 <div className="flex items-center gap-3">
                   <h3 className="text-xl font-bold">{selectedContract.contract_name}</h3>
                   <Badge className={getStatusColor(selectedContract.status)}>{t(selectedContract.status)}</Badge>
-                  <Badge className={getTypeColor(selectedContract.contract_type)} variant="outline">
-                    {t(selectedContract.contract_type) || selectedContract.contract_type}
+                  <Badge className={getTypeColor(selectedContract.party_type)} variant="outline">
+                    {t(selectedContract.party_type) || selectedContract.party_type}
                   </Badge>
                 </div>
 
@@ -797,6 +1158,62 @@ Provide only analysis results based on the numbers and specific contract data, n
             </DialogHeader>
             {editContract && (
               <div className="space-y-4 py-4">
+                {editContract.__employee ? (
+                  <>
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">{t('employee')}</label>
+                      <Input value={editContract.employee_name || editContract.party_name || ''} disabled />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm font-medium mb-1 block">{t('contract_type')}</label>
+                        <Select value={editContract.contract_type} onValueChange={(v) => setEditContract({...editContract, contract_type: v})}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {EMP_CONTRACT_TYPES.map(k => (<SelectItem key={k} value={k}>{t(`${k}_contract`) || k}</SelectItem>))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium mb-1 block">{t('salary')}</label>
+                        <Input type="text" inputMode="decimal" value={formatPriceInput(editContract.salary ?? editContract.contract_value ?? '')} onChange={(e) => setEditContract({...editContract, salary: parsePriceInput(e.target.value)})} />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm font-medium mb-1 block">{t('start_date')}</label>
+                        <Input type="date" value={editContract.start_date} onChange={(e) => setEditContract({...editContract, start_date: e.target.value})} />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium mb-1 block">{t('end_date')}</label>
+                        <Input type="date" value={editContract.end_date} onChange={(e) => setEditContract({...editContract, end_date: e.target.value})} />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm font-medium mb-1 block">{t('working_hours')}</label>
+                        <Input type="number" value={editContract.working_hours ?? 40} onChange={(e) => setEditContract({...editContract, working_hours: e.target.value})} />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium mb-1 block">{t('status')}</label>
+                        <Select value={editContract.status || 'active'} onValueChange={(v) => setEditContract({...editContract, status: v})}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="draft">{t('draft')}</SelectItem>
+                            <SelectItem value="active">{t('active')}</SelectItem>
+                            <SelectItem value="terminated">{t('terminated')}</SelectItem>
+                            <SelectItem value="expired">{t('expired')}</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">{t('benefits')}</label>
+                      <Textarea rows={2} value={editContract.benefits || ''} onChange={(e) => setEditContract({...editContract, benefits: e.target.value})} />
+                    </div>
+                  </>
+                ) : (
+                <>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="text-sm font-medium mb-1 block">{t('contract_number_label')}</label>
@@ -807,14 +1224,13 @@ Provide only analysis results based on the numbers and specific contract data, n
                   </div>
                   <div>
                     <label className="text-sm font-medium mb-1 block">{t('contract_type')} *</label>
-                    <Select value={editContract.contract_type} onValueChange={(value) => setEditContract({...editContract, contract_type: value})}>
+                    <Select value={editContract.party_type} onValueChange={(value) => setEditContract({...editContract, party_type: value, vendor_id: '', asset_id: ''})}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="customer">{t('customer')}</SelectItem>
                         <SelectItem value="vendor">{t('vendor')}</SelectItem>
-                        <SelectItem value="employee">{t('employee')}</SelectItem>
                         <SelectItem value="partner">{t('partner')}</SelectItem>
                         <SelectItem value="lease">{t('lease')}</SelectItem>
                       </SelectContent>
@@ -830,13 +1246,43 @@ Provide only analysis results based on the numbers and specific contract data, n
                   />
                 </div>
 
-                <div>
-                  <label className="text-sm font-medium mb-1 block">{t('party_name')} *</label>
-                  <Input
-                    value={editContract.party_name}
-                    onChange={(e) => setEditContract({...editContract, party_name: e.target.value})}
-                  />
-                </div>
+                {editContract.party_type === 'lease' ? (
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">{t('asset')} *</label>
+                    <Select
+                      value={editContract.asset_id}
+                      onValueChange={(value) => setEditContract({...editContract, asset_id: value})}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={partiesLoading ? t('loading') : (editContract.party_name || t('select_asset'))} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {assets.map(asset => (
+                          <SelectItem key={asset.id} value={asset.id}>{asset.name || asset.asset_name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">{t('counterparty')} *</label>
+                    <Select
+                      value={editContract.vendor_id}
+                      onValueChange={(value) => setEditContract({...editContract, vendor_id: value})}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={partiesLoading ? t('loading') : (editContract.party_name || t('select_party'))} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {contactsForType(editContract.party_type).map(contact => (
+                          <SelectItem key={contact.id} value={contact.id}>
+                            {contact.company_name || contact.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -861,9 +1307,10 @@ Provide only analysis results based on the numbers and specific contract data, n
                   <div>
                     <label className="text-sm font-medium mb-1 block">{t('contract_value')}</label>
                     <Input
-                      type="number"
-                      value={editContract.contract_value}
-                      onChange={(e) => setEditContract({...editContract, contract_value: e.target.value})}
+                      type="text"
+                      inputMode="decimal"
+                      value={formatPriceInput(editContract.contract_value)}
+                      onChange={(e) => setEditContract({...editContract, contract_value: parsePriceInput(e.target.value)})}
                     />
                   </div>
                   <div>
@@ -910,6 +1357,8 @@ Provide only analysis results based on the numbers and specific contract data, n
                     {t('enable_auto_renewal')}
                   </label>
                 </div>
+                </>
+                )}
 
                 <div className="flex gap-3 pt-4">
                   <Button variant="outline" onClick={() => { setShowEditModal(false); setEditContract(null); }} className="flex-1">
@@ -918,7 +1367,7 @@ Provide only analysis results based on the numbers and specific contract data, n
                   <Button
                     onClick={handleUpdateContract}
                     className="flex-1 bg-gradient-to-r from-rose-600 to-pink-600"
-                    disabled={!editContract.contract_name || !editContract.party_name || isSubmitting}
+                    disabled={(!editContract.__employee && (!editContract.contract_name || !editContract.party_name)) || isSubmitting}
                   >
                     {isSubmitting ? t('saving') : t('save_changes')}
                   </Button>

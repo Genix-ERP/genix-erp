@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Zap, Plus, Edit, Trash2, Play, Pause, Clock, AlertTriangle,
-  Package, FileText, Users, History, CheckCircle, XCircle
+  Package, FileText, Users, History, CheckCircle, XCircle, DollarSign, Flag
 } from 'lucide-react';
 import apiClient from '@/api/client';
 
@@ -21,12 +21,20 @@ const TRIGGER_EVENTS = [
   { value: 'inventory.adjusted', labelKey: 'evt_inventory_adjusted', descKey: 'evt_inventory_adjusted_desc', category: 'inventory', icon: Package },
   { value: 'invoice.overdue', labelKey: 'evt_invoice_overdue', descKey: 'evt_invoice_overdue_desc', category: 'sales', icon: FileText },
   { value: 'lead.created', labelKey: 'evt_lead_created', descKey: 'evt_lead_created_desc', category: 'crm', icon: Users },
+  // Project automation events
+  { value: 'project.task.assigned', labelKey: 'evt_proj_task_assigned', descKey: 'evt_proj_task_assigned_desc', category: 'project', icon: Users },
+  { value: 'project.task.overdue', labelKey: 'evt_proj_task_overdue', descKey: 'evt_proj_task_overdue_desc', category: 'project', icon: AlertTriangle },
+  { value: 'project.task.status_changed', labelKey: 'evt_proj_task_status', descKey: 'evt_proj_task_status_desc', category: 'project', icon: Clock },
+  { value: 'project.milestone.completed', labelKey: 'evt_proj_milestone', descKey: 'evt_proj_milestone_desc', category: 'project', icon: Flag },
+  { value: 'project.over_budget', labelKey: 'evt_proj_over_budget', descKey: 'evt_proj_over_budget_desc', category: 'project', icon: DollarSign },
 ];
 
 const ACTION_TYPES = [
   { value: 'create_notification', labelKey: 'act_create_notification' },
   { value: 'update_status', labelKey: 'act_update_status' },
   { value: 'create_record', labelKey: 'act_create_record' },
+  { value: 'update_task_priority', labelKey: 'act_update_task_priority' },
+  { value: 'create_followup_task', labelKey: 'act_create_followup_task' },
 ];
 
 const EMPTY_RULE = {
@@ -393,6 +401,7 @@ export default function WorkflowSettings() {
                     <SelectItem value="crm">{t('crm') || 'CRM'}</SelectItem>
                     <SelectItem value="hr">{t('hr') || 'HR'}</SelectItem>
                     <SelectItem value="finance">{t('finance') || 'Finance'}</SelectItem>
+                    <SelectItem value="project">{t('project') || 'Project'}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -484,6 +493,30 @@ export default function WorkflowSettings() {
                       value={action.config?.message || ''}
                       onChange={(e) => updateAction(index, 'message', e.target.value)}
                       placeholder={t('notification_msg_placeholder') || 'Notification message. Use {product_name}, {available} etc.'}
+                      className="text-sm"
+                    />
+                  )}
+
+                  {action.type === 'update_task_priority' && (
+                    <Select
+                      value={action.config?.priority || 'high'}
+                      onValueChange={(val) => updateAction(index, 'priority', val)}
+                    >
+                      <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="low">{t('low') || 'Low'}</SelectItem>
+                        <SelectItem value="medium">{t('medium') || 'Medium'}</SelectItem>
+                        <SelectItem value="high">{t('high') || 'High'}</SelectItem>
+                        <SelectItem value="urgent">{t('urgent') || 'Urgent'}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+
+                  {action.type === 'create_followup_task' && (
+                    <Input
+                      value={action.config?.title || ''}
+                      onChange={(e) => updateAction(index, 'title', e.target.value)}
+                      placeholder={t('followup_title_placeholder') || '{milestone_title} — keyingi qadamlar'}
                       className="text-sm"
                     />
                   )}

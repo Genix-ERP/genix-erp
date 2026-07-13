@@ -223,6 +223,24 @@ export const procurementService = {
     return response.data.data;
   },
 
+  // Contract documents (attachments)
+  async listContractAttachments(id) {
+    const response = await apiClient.get(`/contracts/${id}/attachments`);
+    return response.data.data || [];
+  },
+  async uploadContractAttachment(id, file, description) {
+    const form = new FormData();
+    form.append('file', file);
+    if (description) form.append('description', description);
+    const response = await apiClient.post(`/contracts/${id}/attachments`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data.data;
+  },
+  async deleteContractAttachment(id, attachmentId) {
+    await apiClient.delete(`/contracts/${id}/attachments/${attachmentId}`);
+  },
+
   // Purchase Requisitions
   async listRequisitions(params = {}) {
     const response = await apiClient.get('/purchase-requisitions', { params });

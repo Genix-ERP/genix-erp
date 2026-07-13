@@ -34,7 +34,7 @@ import {
   Filter,
   Eye,
   Plus,
-  Pencil,
+  Edit,
   Trash2,
   FileText,
   ArrowRight,
@@ -45,7 +45,7 @@ import { format } from "date-fns";
 // Audit action types
 export const AUDIT_ACTIONS = {
   create: { label: "Yaratildi", color: "bg-green-100 text-green-800", icon: Plus },
-  update: { label: "Yangilandi", color: "bg-blue-100 text-blue-800", icon: Pencil },
+  update: { label: "Yangilandi", color: "bg-blue-100 text-blue-800", icon: Edit },
   delete: { label: "O'chirildi", color: "bg-red-100 text-red-800", icon: Trash2 },
   view: { label: "Ko'rildi", color: "bg-slate-100 text-slate-800", icon: Eye },
   status_change: { label: "Holat o'zgardi", color: "bg-purple-100 text-purple-800", icon: ArrowRight },

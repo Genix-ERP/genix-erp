@@ -40,7 +40,7 @@ import {
   CheckCircle,
   MoreVertical,
   Eye,
-  Pencil,
+  Edit,
   Trash2,
   DollarSign,
   Calendar,
@@ -110,7 +110,7 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
   } = useSales();
 
   const { customers } = useCustomers();
-  const { canCreate } = usePermissions();
+  const { canCreate, isSuperAdmin } = usePermissions();
 
   const [products, setProducts] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -458,6 +458,18 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
       await fetchInvoices();
     } catch (err) {
       console.error("Failed to send invoice:", err);
+    }
+  };
+
+  // Un-post a sent/posted invoice back to draft so it can be edited or deleted.
+  const handleResetToDraft = async (invoice) => {
+    try {
+      await salesService.resetInvoiceToDraft(invoice.id);
+      await fetchInvoices();
+    } catch (err) {
+      const msg = err?.response?.data?.error?.message || err?.message || "Failed to reset invoice";
+      window.alert(msg);
+      console.error("Failed to reset invoice:", err);
     }
   };
 
@@ -1065,11 +1077,17 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                                   {t('confirm_credit_note')}
                                 </DropdownMenuItem>
                               )}
+                              {invoice.status !== "draft" && isSuperAdmin && (invoice.amount_paid || 0) === 0 && (
+                                <DropdownMenuItem onClick={() => handleResetToDraft(invoice)}>
+                                  <RotateCcw className="w-4 h-4 mr-2 text-blue-600" />
+                                  {t('reset_to_draft') || 'Qoralamaga qaytarish'}
+                                </DropdownMenuItem>
+                              )}
                               {invoice.status === "draft" && (
                                 <>
                                   {(invoice.invoice_type || "invoice") === "invoice" && (
                                     <DropdownMenuItem onClick={() => handleEdit(invoice)}>
-                                      <Pencil className="w-4 h-4 mr-2" />
+                                      <Edit className="w-4 h-4 mr-2" />
                                       {t('edit')}
                                     </DropdownMenuItem>
                                   )}
@@ -1079,13 +1097,15 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                                       {t('send')}
                                     </DropdownMenuItem>
                                   )}
-                                  <DropdownMenuItem
-                                    onClick={() => handleDelete(invoice)}
-                                    className="text-red-600"
-                                  >
-                                    <Trash2 className="w-4 h-4 mr-2" />
-                                    {t('delete')}
-                                  </DropdownMenuItem>
+                                  {isSuperAdmin && (
+                                    <DropdownMenuItem
+                                      onClick={() => handleDelete(invoice)}
+                                      className="text-red-600"
+                                    >
+                                      <Trash2 className="w-4 h-4 mr-2" />
+                                      {t('delete')}
+                                    </DropdownMenuItem>
+                                  )}
                                 </>
                               )}
                             </DropdownMenuContent>

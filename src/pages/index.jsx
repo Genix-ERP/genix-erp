@@ -222,7 +222,8 @@ function PagesContent() {
                 <Route path="hr" element={<ModuleRoute moduleId="hr"><HR /></ModuleRoute>} />
                 <Route path="leave-management" element={<ModuleRoute moduleId="hr"><LeaveManagement /></ModuleRoute>} />
                 <Route path="attendance" element={<ModuleRoute moduleId="hr"><Attendance /></ModuleRoute>} />
-                <Route path="employee-contracts" element={<ModuleRoute moduleId="hr"><EmployeeContracts /></ModuleRoute>} />
+                {/* Employee contracts are now managed on the unified Contracts page */}
+                <Route path="employee-contracts" element={<Navigate to="/contracts" replace />} />
                 <Route path="cargo" element={<ModuleRoute moduleId="cargo"><Cargo /></ModuleRoute>} />
                 <Route path="construction" element={<ModuleRoute moduleId="construction"><Construction /></ModuleRoute>} />
                 <Route path="directordashboard" element={<ModuleRoute moduleId="director_dashboard"><DirectorDashboard /></ModuleRoute>} />

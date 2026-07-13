@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { useToast } from "@/components/ui/use-toast";
 import apiClient from '@/api/client';
 import { hrService } from "@/api/services/hr";
-import { Calendar, Receipt, Clock, MapPin, Wallet, Building2, Users, Plus, Check, X as XIcon, Search, Pencil, Trash2, FolderTree, Shield, Eye } from 'lucide-react';
+import { Calendar, Receipt, Clock, MapPin, Wallet, Building2, Users, Plus, Check, X as XIcon, Search, Edit, Trash2, FolderTree, Shield, Eye } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
 import { AVAILABLE_MODULES } from '@/components/contexts/EmployeePermissionsContext';

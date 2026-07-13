@@ -46,6 +46,85 @@ export const projectsService = {
     await apiClient.delete(`/projects/${projectId}/tasks/${taskId}`);
   },
 
+  // Task Stages (kanban columns)
+  async listProjectStages(projectId) {
+    const response = await apiClient.get(`/projects/${projectId}/stages`);
+    return response.data.data;
+  },
+
+  async createProjectStage(projectId, data) {
+    const response = await apiClient.post(`/projects/${projectId}/stages`, data);
+    return response.data.data;
+  },
+
+  async updateProjectStage(projectId, stageId, data) {
+    const response = await apiClient.put(`/projects/${projectId}/stages/${stageId}`, data);
+    return response.data;
+  },
+
+  async deleteProjectStage(projectId, stageId) {
+    await apiClient.delete(`/projects/${projectId}/stages/${stageId}`);
+  },
+
+  // Expense categories (tenant-wide)
+  async listExpenseCategories() {
+    const response = await apiClient.get(`/expense-categories`);
+    return response.data.data;
+  },
+  async createExpenseCategory(name) {
+    const response = await apiClient.post(`/expense-categories`, { name });
+    return response.data.data;
+  },
+  async deleteExpenseCategory(id) {
+    await apiClient.delete(`/expense-categories/${id}`);
+  },
+
+  // Task Notes
+  async listTaskNotes(projectId, taskId) {
+    const response = await apiClient.get(`/projects/${projectId}/tasks/${taskId}/notes`);
+    return response.data.data;
+  },
+
+  async createTaskNote(projectId, taskId, data) {
+    const response = await apiClient.post(`/projects/${projectId}/tasks/${taskId}/notes`, data);
+    return response.data.data;
+  },
+
+  // Milestone substages
+  async listMilestoneSubstages(projectId, milestoneId) {
+    const response = await apiClient.get(`/projects/${projectId}/milestones/${milestoneId}/substages`);
+    return response.data.data;
+  },
+  async createMilestoneSubstage(projectId, milestoneId, data) {
+    const response = await apiClient.post(`/projects/${projectId}/milestones/${milestoneId}/substages`, data);
+    return response.data.data;
+  },
+  async updateMilestoneSubstage(projectId, milestoneId, substageId, data) {
+    const response = await apiClient.put(`/projects/${projectId}/milestones/${milestoneId}/substages/${substageId}`, data);
+    return response.data;
+  },
+  async deleteMilestoneSubstage(projectId, milestoneId, substageId) {
+    await apiClient.delete(`/projects/${projectId}/milestones/${milestoneId}/substages/${substageId}`);
+  },
+
+  // Milestone attachments (files)
+  async listMilestoneAttachments(projectId, milestoneId) {
+    const response = await apiClient.get(`/projects/${projectId}/milestones/${milestoneId}/attachments`);
+    return response.data.data;
+  },
+  async uploadMilestoneAttachment(projectId, milestoneId, file, description) {
+    const form = new FormData();
+    form.append('file', file);
+    if (description) form.append('description', description);
+    const response = await apiClient.post(`/projects/${projectId}/milestones/${milestoneId}/attachments`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data.data;
+  },
+  async deleteMilestoneAttachment(projectId, milestoneId, attachmentId) {
+    await apiClient.delete(`/projects/${projectId}/milestones/${milestoneId}/attachments/${attachmentId}`);
+  },
+
   // Milestones
   async listProjectMilestones(projectId) {
     const response = await apiClient.get(`/projects/${projectId}/milestones`);

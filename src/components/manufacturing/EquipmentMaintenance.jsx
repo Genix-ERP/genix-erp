@@ -21,7 +21,7 @@ import {
   TrendingUp,
   Settings as SettingsIcon,
   Eye,
-  Pencil,
+  Edit,
   Trash2,
   MoreHorizontal,
   Activity,
@@ -664,7 +664,7 @@ export default function EquipmentMaintenance() {
                                     setShowEditTaskModal(true);
                                   }}
                                 >
-                                  <Pencil className="w-4 h-4" />
+                                  <Edit className="w-4 h-4" />
                                 </Button>
                               )}
                               {status !== 'completed' && canUpdate(MODULES.MANUFACTURING) && (

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
-  Plus, Search, Layers, Pencil, Trash2, Package, Palette,
+  Plus, Search, Layers, Edit, Trash2, Package, Palette,
   RefreshCw, ChevronDown, ChevronLeft, ChevronRight, Settings, Barcode, DollarSign, Eye, PackagePlus
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
@@ -1105,7 +1105,7 @@ export default function ProductVariants() {
             </Button>
             {canUpdate(MODULES.INVENTORY) && (
               <Button onClick={() => handleOpenEditVariant(selectedVariant)}>
-                <Pencil className="w-4 h-4 mr-2" />
+                <Edit className="w-4 h-4 mr-2" />
                 {t('edit_variant')}
               </Button>
             )}
@@ -1249,7 +1249,7 @@ export default function ProductVariants() {
             </Button>
             {canUpdate(MODULES.INVENTORY) && (
               <Button onClick={() => handleOpenEditAttribute(selectedAttribute)}>
-                <Pencil className="w-4 h-4 mr-2" />
+                <Edit className="w-4 h-4 mr-2" />
                 {t('edit_attribute')}
               </Button>
             )}

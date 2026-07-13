@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import {
-  Plus, Search, Package, Pencil, Trash2, Box, Barcode, Scale, Ruler, RefreshCw
+  Plus, Search, Package, Edit, Trash2, Box, Barcode, Scale, Ruler, RefreshCw
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -297,7 +297,7 @@ export default function PackageTypes() {
                       <div className="flex justify-end gap-1">
                         {canUpdate(MODULES.INVENTORY) && (
                           <Button size="sm" variant="ghost" onClick={() => handleOpenModal(pt)}>
-                            <Pencil className="w-4 h-4 text-slate-500" />
+                            <Edit className="w-4 h-4 text-slate-500" />
                           </Button>
                         )}
                         {canDelete(MODULES.INVENTORY) && (

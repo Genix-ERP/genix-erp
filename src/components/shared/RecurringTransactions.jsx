@@ -35,7 +35,7 @@ import {
   AlertCircle,
   CheckCircle,
   Trash2,
-  Edit2,
+  Edit,
   Plus,
   RefreshCw,
   History,
@@ -569,7 +569,7 @@ export function RecurringTemplatesList({
                         size="sm"
                         onClick={() => onEdit(template)}
                       >
-                        <Edit2 className="w-4 h-4" />
+                        <Edit className="w-4 h-4" />
                       </Button>
                     )}
                     {onDelete && (

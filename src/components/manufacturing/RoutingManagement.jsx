@@ -13,7 +13,7 @@ import {
   Plus,
   Search,
   Eye,
-  Pencil,
+  Edit,
   Trash2,
   MoreHorizontal,
   GitBranch,
@@ -362,7 +362,7 @@ export default function RoutingManagement() {
                                     className="h-5 w-5 p-0"
                                     onClick={() => openEditModal(bom, op)}
                                   >
-                                    <Pencil className="w-3 h-3" />
+                                    <Edit className="w-3 h-3" />
                                   </Button>
                                 )}
                                 {canDelete(MODULES.MANUFACTURING) && (
