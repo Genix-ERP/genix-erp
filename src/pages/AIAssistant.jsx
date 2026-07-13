@@ -9,10 +9,12 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import {
   Bot, Send, Sparkles, Loader2, Search, Zap, TrendingUp,
-  Users, Package, DollarSign, ArrowRight, Copy, Check
+  Users, Package, DollarSign, ArrowRight, Copy, Check,
+  Mic, MicOff, Volume2, VolumeX, Square, Trash2
 } from "lucide-react";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
+import { aiService } from "@/api/services/ai";
 import ReactMarkdown from 'react-markdown';
 import AIAgentChat from "@/components/ai/AIAgentChat";
 
@@ -86,14 +88,17 @@ export default function AIAssistant() {
     scrollToBottom();
   }, [messages]);
 
+  // Start a conversation only when none is active AND there's no restored
+  // history. This keeps the page and the floating widget on the same thread
+  // (both read `messages` from the shared AI context) instead of resetting it.
   useEffect(() => {
-    if (!activeConversation) {
+    if (!activeConversation && messages.length === 0) {
       createConversation({
         name: "Business AI Copilot Session",
         description: "Intelligent assistant for business operations"
       });
     }
-  }, []);
+  }, [activeConversation, messages.length]);
 
   const getUserInitials = () => {
     if (user?.first_name && user?.last_name) {
@@ -109,7 +114,7 @@ export default function AIAssistant() {
   const formatMessageTime = (isoString) => {
     if (!isoString) return '';
     const date = new Date(isoString);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
   };
 
   useEffect(() => {
@@ -143,6 +148,180 @@ export default function AIAssistant() {
       handleSendMessage();
     }
   };
+
+  // ===== Voice: record audio → transcribe (Whisper) → send; + spoken replies (TTS) =====
+  const speechLang = language === 'uz' ? 'uz-UZ' : language === 'ru' ? 'ru-RU' : 'en-US';
+  const langHint = language === 'uz' ? 'uz' : language === 'ru' ? 'ru' : 'en';
+  const ttsSupported = typeof window !== 'undefined' && 'speechSynthesis' in window;
+  const recordingSupported = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia
+    && typeof window !== 'undefined' && !!window.MediaRecorder;
+  const sttSupported = recordingSupported; // controls mic button visibility
+
+  const mediaRecorderRef = useRef(null);
+  const mediaChunksRef = useRef([]);
+  const mediaStreamRef = useRef(null);
+  const cancelRecRef = useRef(false);
+  const recordTimerRef = useRef(null);
+  const [isListening, setIsListening] = useState(false);     // recording
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [recordSeconds, setRecordSeconds] = useState(0);
+  const [speakingId, setSpeakingId] = useState(null);
+  const lastSpokenRef = useRef(null);
+  const [ttsEnabled, setTtsEnabled] = useState(() => {
+    // Off by default; key bumped to _v2 so previously-enabled users reset to off.
+    try { return localStorage.getItem('ai_tts_enabled_v2') === '1'; } catch { return false; }
+  });
+  useEffect(() => { try { localStorage.setItem('ai_tts_enabled_v2', ttsEnabled ? '1' : '0'); } catch { /* ignore */ } }, [ttsEnabled]);
+
+  // Visible voice status / errors (so failures aren't silent).
+  const [voiceMsg, setVoiceMsg] = useState(null); // { text, type: 'info' | 'error' } | null
+  const voiceMsgTimer = useRef(null);
+  const showVoiceMsg = (text, type = 'info', autoHideMs = 0) => {
+    if (voiceMsgTimer.current) clearTimeout(voiceMsgTimer.current);
+    setVoiceMsg(text ? { text, type } : null);
+    if (text && autoHideMs) voiceMsgTimer.current = setTimeout(() => setVoiceMsg(null), autoHideMs);
+  };
+  const VT = {
+    transcribing: language === 'ru' ? 'Распознавание речи…' : language === 'en' ? 'Transcribing…' : 'Nutq matnga o‘girilmoqda…',
+    permission: language === 'ru' ? 'Нет доступа к микрофону. Разрешите доступ в настройках браузера.' : language === 'en' ? 'Microphone access denied. Allow it in your browser.' : 'Mikrofonga ruxsat berilmadi. Brauzerda ruxsat bering.',
+    noAudio: language === 'ru' ? 'Звук не записан, попробуйте ещё раз.' : language === 'en' ? 'No audio captured, try again.' : 'Ovoz yozilmadi, qayta urinib ko‘ring.',
+    fail: language === 'ru' ? 'Распознавание недоступно. Убедитесь, что сервер обновлён.' : language === 'en' ? 'Transcription unavailable. Make sure the backend is rebuilt.' : 'Transkripsiya ishlamadi. Server yangilanganini tekshiring.',
+    slideHint: language === 'ru' ? 'Запись… нажмите ↑ чтобы отправить' : language === 'en' ? 'Recording… tap send when done' : 'Yozilmoqda… tugagach yuboring',
+  };
+
+  const stopMicTracks = () => {
+    try { mediaStreamRef.current?.getTracks().forEach(t => t.stop()); } catch { /* ignore */ }
+    mediaStreamRef.current = null;
+  };
+  const clearRecordTimer = () => {
+    if (recordTimerRef.current) { clearInterval(recordTimerRef.current); recordTimerRef.current = null; }
+  };
+  const fmtRecTime = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+
+  const startListening = async () => {
+    if (!recordingSupported || isTranscribing || isListening) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      const rec = new MediaRecorder(stream);
+      mediaChunksRef.current = [];
+      cancelRecRef.current = false;
+      rec.ondataavailable = (e) => { if (e.data && e.data.size > 0) mediaChunksRef.current.push(e.data); };
+      rec.onstop = async () => {
+        stopMicTracks();
+        clearRecordTimer();
+        const blob = new Blob(mediaChunksRef.current, { type: rec.mimeType || 'audio/webm' });
+        mediaChunksRef.current = [];
+        setIsListening(false);
+        setRecordSeconds(0);
+        if (cancelRecRef.current) { showVoiceMsg(null); return; } // discarded
+        if (!blob.size) { showVoiceMsg(VT.noAudio, 'error', 5000); return; }
+        setIsTranscribing(true);
+        showVoiceMsg(VT.transcribing, 'info');
+        try {
+          const res = await aiService.transcribe(blob, langHint);
+          const text = (res?.text || '').trim();
+          showVoiceMsg(null);
+          if (text) { setInput(text); handleSendMessage(text); }
+          else showVoiceMsg(VT.noAudio, 'error', 5000);
+        } catch (err) {
+          console.error('Transcription failed', err);
+          const detail = err?.response?.data?.error?.message || err?.response?.data?.message || '';
+          showVoiceMsg(detail ? `${VT.fail} (${detail})` : VT.fail, 'error', 9000);
+        } finally {
+          setIsTranscribing(false);
+        }
+      };
+      mediaRecorderRef.current = rec;
+      rec.start();
+      setIsListening(true);
+      setRecordSeconds(0);
+      showVoiceMsg(null);
+      clearRecordTimer();
+      recordTimerRef.current = setInterval(() => setRecordSeconds(s => s + 1), 1000);
+    } catch (err) {
+      console.error('Microphone access failed', err);
+      setIsListening(false);
+      stopMicTracks();
+      clearRecordTimer();
+      showVoiceMsg(VT.permission, 'error', 8000);
+    }
+  };
+  // Stop recording and transcribe (Telegram-style send button).
+  const sendRecording = () => {
+    cancelRecRef.current = false;
+    try { if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') mediaRecorderRef.current.stop(); } catch { /* ignore */ }
+  };
+  // Stop recording and throw the audio away (Telegram-style trash button).
+  const cancelRecording = () => {
+    cancelRecRef.current = true;
+    try { if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') mediaRecorderRef.current.stop(); } catch { /* ignore */ }
+    setIsListening(false);
+    clearRecordTimer();
+    setRecordSeconds(0);
+    showVoiceMsg(null);
+  };
+
+  // Telegram-style recording bar shared by both input areas.
+  const renderRecordingBar = () => (
+    <div className="flex items-center gap-3 w-full px-2 py-1">
+      <button type="button" onClick={cancelRecording} title={language === 'ru' ? 'Отменить' : language === 'en' ? 'Cancel' : 'Bekor qilish'}
+        className="flex items-center justify-center h-9 w-9 rounded-full text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors">
+        <Trash2 className="w-5 h-5" />
+      </button>
+      <span className="relative flex h-3 w-3 flex-shrink-0">
+        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+        <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+      </span>
+      <span className="font-mono text-sm text-slate-700 tabular-nums">{fmtRecTime(recordSeconds)}</span>
+      <span className="flex-1 text-xs text-slate-400 truncate">{VT.slideHint}</span>
+      <Button type="button" onClick={sendRecording} size="icon"
+        className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 h-10 w-10 rounded-full shadow-md flex-shrink-0">
+        <Send className="w-4 h-4" />
+      </Button>
+    </div>
+  );
+
+  const stopSpeaking = () => {
+    try { window.speechSynthesis.cancel(); } catch { /* ignore */ }
+    setSpeakingId(null);
+  };
+  const speak = (text, id) => {
+    if (!ttsSupported || !text) return;
+    try {
+      window.speechSynthesis.cancel();
+      // Strip markdown so it reads cleanly.
+      const clean = String(text).replace(/[#*_`>|]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 4000);
+      const u = new SpeechSynthesisUtterance(clean);
+      u.lang = speechLang;
+      u.onend = () => setSpeakingId(null);
+      u.onerror = () => setSpeakingId(null);
+      setSpeakingId(id);
+      window.speechSynthesis.speak(u);
+    } catch (err) { console.error('TTS error', err); setSpeakingId(null); }
+  };
+  const toggleSpeak = (text, id) => { speakingId === id ? stopSpeaking() : speak(text, id); };
+
+  // Auto-read newly arrived assistant replies when enabled.
+  useEffect(() => {
+    if (!ttsEnabled || !ttsSupported || isLoading) return;
+    const last = messages[messages.length - 1];
+    if (last && last.role === 'assistant' && last.id && last.id !== lastSpokenRef.current) {
+      lastSpokenRef.current = last.id;
+      speak(last.content, last.id);
+    }
+  }, [messages, ttsEnabled, isLoading]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Stop any audio/recording when leaving the page.
+  useEffect(() => () => {
+    try {
+      window.speechSynthesis?.cancel();
+      cancelRecRef.current = true;
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') mediaRecorderRef.current.stop();
+      mediaStreamRef.current?.getTracks().forEach(t => t.stop());
+      if (recordTimerRef.current) clearInterval(recordTimerRef.current);
+    } catch { /* ignore */ }
+  }, []);
 
   return (
     <div className="h-full flex flex-col bg-slate-50/50 relative overflow-hidden">
@@ -179,6 +358,11 @@ export default function AIAssistant() {
               {/* Search Box */}
               <div className="animate-[fadeInUp_0.5s_ease-out_0.3s_both]">
                 <div className="relative bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md focus-within:shadow-md focus-within:border-blue-300 transition-all duration-200 p-1.5">
+                  {isListening && (
+                    <div className="absolute inset-0 z-10 bg-white rounded-2xl flex items-center px-2">
+                      {renderRecordingBar()}
+                    </div>
+                  )}
                   <div className="flex items-center gap-2">
                     <div className="pl-3.5 text-slate-400">
                       <Search className="w-5 h-5" />
@@ -192,6 +376,20 @@ export default function AIAssistant() {
                       className="border-0 text-base h-12 focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-slate-400 px-2"
                       disabled={isLoading}
                     />
+                    {ttsSupported && (
+                      <Button type="button" size="icon" variant="ghost" onClick={() => setTtsEnabled(v => !v)}
+                        title={t('read_aloud') || 'Javoblarni ovoz bilan o\'qish'}
+                        className={`h-10 w-10 rounded-xl ${ttsEnabled ? 'text-blue-600' : 'text-slate-400'}`}>
+                        {ttsEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+                      </Button>
+                    )}
+                    {sttSupported && (
+                      <Button type="button" size="icon" variant="ghost" onClick={startListening} disabled={isTranscribing}
+                        title={t('voice_input') || 'Ovozli kiritish'}
+                        className="h-10 w-10 rounded-xl text-slate-500 hover:text-blue-600">
+                        {isTranscribing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Mic className="w-5 h-5" />}
+                      </Button>
+                    )}
                     <Button
                       onClick={() => handleSendMessage()}
                       disabled={!input.trim() || isLoading}
@@ -210,6 +408,12 @@ export default function AIAssistant() {
                   </div>
                 </div>
               </div>
+
+              {voiceMsg && (
+                <div className={`mt-2 text-xs text-center flex items-center justify-center gap-1.5 ${voiceMsg.type === 'error' ? 'text-red-600' : 'text-slate-500'}`}>
+                  {voiceMsg.text}
+                </div>
+              )}
 
               {/* Suggested Queries */}
               <div className="space-y-3">
@@ -385,6 +589,23 @@ export default function AIAssistant() {
                                 </Tooltip>
                               </TooltipProvider>
                             )}
+                            {message.role === 'assistant' && ttsSupported && (
+                              <TooltipProvider delayDuration={300}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <button
+                                      onClick={() => toggleSpeak(message.content, message.id)}
+                                      className={`transition-colors p-0.5 rounded ${speakingId === message.id ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
+                                    >
+                                      {speakingId === message.id ? <Square className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+                                    </button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>{speakingId === message.id ? (t('stop') || 'To‘xtatish') : (t('read_aloud') || 'Ovoz bilan o‘qish')}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -413,13 +634,18 @@ export default function AIAssistant() {
                 {/* Input Area */}
                 <div className="border-t border-slate-200/60 p-4 flex-shrink-0">
                   <div className="relative">
+                    {isListening && (
+                      <div className="absolute inset-0 z-10 bg-white rounded-xl border border-slate-200 flex items-center px-2">
+                        {renderRecordingBar()}
+                      </div>
+                    )}
                     <Textarea
                       ref={textareaRef}
                       value={input}
                       onChange={(e) => setInput(e.target.value)}
                       onKeyDown={handleKeyDown}
                       placeholder={t('ask_anything') || "Savolingizni yozing..."}
-                      className="min-h-[48px] max-h-[160px] resize-none pr-14 rounded-xl border-slate-200 focus:border-blue-400 focus:ring-blue-400/20"
+                      className="min-h-[48px] max-h-[160px] resize-none pr-32 rounded-xl border-slate-200 focus:border-blue-400 focus:ring-blue-400/20"
                       disabled={isLoading}
                       rows={1}
                       onInput={(e) => {
@@ -427,6 +653,20 @@ export default function AIAssistant() {
                         e.target.style.height = Math.min(e.target.scrollHeight, 160) + 'px';
                       }}
                     />
+                    {ttsSupported && (
+                      <Button type="button" size="icon" variant="ghost" onClick={() => setTtsEnabled(v => !v)}
+                        title={t('read_aloud') || 'Javoblarni ovoz bilan o\'qish'}
+                        className={`absolute right-[5.5rem] bottom-2 h-9 w-9 rounded-lg ${ttsEnabled ? 'text-blue-600' : 'text-slate-400'}`}>
+                        {ttsEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+                      </Button>
+                    )}
+                    {sttSupported && (
+                      <Button type="button" size="icon" variant="ghost" onClick={startListening} disabled={isTranscribing}
+                        title={t('voice_input') || 'Ovozli kiritish'}
+                        className="absolute right-12 bottom-2 h-9 w-9 rounded-lg text-slate-500 hover:text-blue-600">
+                        {isTranscribing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mic className="w-4 h-4" />}
+                      </Button>
+                    )}
                     <Button
                       onClick={() => handleSendMessage()}
                       disabled={!input.trim() || isLoading}
@@ -440,6 +680,11 @@ export default function AIAssistant() {
                       )}
                     </Button>
                   </div>
+                  {voiceMsg && (
+                    <div className={`mt-2 px-1 text-xs flex items-center gap-1.5 ${voiceMsg.type === 'error' ? 'text-red-600' : 'text-slate-500'}`}>
+                      {voiceMsg.text}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

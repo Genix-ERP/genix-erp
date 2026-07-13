@@ -43,7 +43,7 @@ import {
   Shield,
   Search,
   Plus,
-  Edit2,
+  Edit,
   Trash2,
   Eye,
   CheckCircle2,
@@ -514,7 +514,7 @@ export default function ProcurementRules({ users = [] }) {
                             size="icon"
                             onClick={() => handleEdit(rule)}
                           >
-                            <Edit2 className="h-4 w-4" />
+                            <Edit className="h-4 w-4" />
                           </Button>
                           <Button
                             variant="ghost"

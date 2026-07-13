@@ -248,6 +248,8 @@ export default function SalesOrders() {
         { label: t('shipping'), value: formatCurrency(order.shipping_amount || order.shipping_cost || 0) },
         { label: t('total'), value: formatCurrency(order.total_amount || 0), bold: true },
       ],
+      // Show the order comment/note on the printout (TZ #1).
+      notes: order.notes || order.comment || order.internal_notes || '',
       customCompany: activeCompany ? {
         name: activeCompany.company_name || localStorage.getItem("company_name") || "Yuksalish ERP",
         address: localStorage.getItem("company_address") || "Toshkent, O'zbekiston",
@@ -796,6 +798,7 @@ export default function SalesOrders() {
       status: 'draft',
       payment_status: 'unpaid',
       payment_journal_id: newOrder.payment_journal_id || undefined,
+      notes: newOrder.notes || undefined,
       lines: validLines.length > 0 ? validLines : undefined, // Only send lines if valid
     };
 
@@ -1834,6 +1837,16 @@ export default function SalesOrders() {
                 </div>
               </div>
 
+              {/* Comment / note — shown on the printed order */}
+              <div>
+                <Label>{t('notes') || (language === 'ru' ? 'Комментарий' : 'Izoh')}</Label>
+                <textarea
+                  className="w-full min-h-[70px] rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--genix-purple)]/20"
+                  placeholder={language === 'ru' ? 'Комментарий к заказу (печатается на документе)' : "Buyurtma izohi (chekda chiqadi)"}
+                  value={newOrder.notes || ''}
+                  onChange={(e) => setNewOrder({...newOrder, notes: e.target.value})}
+                />
+              </div>
 
               {/* Order Lines */}
               <div className="border-t pt-4">

@@ -326,7 +326,9 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
     if (!project?.id) return;
     setLoading(true);
     try {
-      const data = await constructionService.listEstimates(project.id, scope ? { scope } : {});
+      // Default (Smetalar) view loads BOTH in-house and subcontractor
+      // estimates so subcontractor smetas appear here with their badge.
+      const data = await constructionService.listEstimates(project.id, { scope: scope || 'all' });
       setEstimates(data || []);
     } catch (error) {
       console.error('Error loading estimates:', error);
@@ -1839,7 +1841,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
         onImportSvod={handleImportSvod}
         buildings={buildings}
         project={project}
-        subcontracts={scope === 'subcontract' ? subcontracts : []}
+        subcontracts={subcontracts}
         scope={scope}
       />
 

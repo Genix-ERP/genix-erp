@@ -681,6 +681,13 @@ export default function ShopFloorControl({ isActive }) {
     return { used, remaining, over: used > splitBulkQty + 1e-6 };
   }, [splitItems, products, splitBulkQty]);
 
+  // Unit-of-measure label (Metr, kg, Dona…) of a selected split product,
+  // shown next to its quantity so the worker knows what unit they're entering.
+  const productUnitLabel = (productId) => {
+    const p = (products || []).find(x => x.id === productId);
+    return p?.unit_name || p?.unit_code || '';
+  };
+
   // Materials handlers
   const handleOpenMaterials = async (workOrder) => {
     setMaterialsWorkOrder(workOrder);
@@ -1706,14 +1713,20 @@ export default function ShopFloorControl({ isActive }) {
                   </div>
                   <div className="col-span-3 space-y-1">
                     <Label className="text-xs">{language === 'uz' ? 'Dona soni' : language === 'ru' ? 'Кол-во шт.' : 'Quantity (pcs)'} *</Label>
-                    <Input
-                      type="number"
-                      min="0.0001"
-                      step="any"
-                      value={item.quantity}
-                      onChange={(e) => updateSplitItem(idx, 'quantity', e.target.value)}
-                      placeholder="0"
-                    />
+                    <div className="flex items-center gap-1">
+                      <Input
+                        type="number"
+                        min="0.0001"
+                        step="any"
+                        value={item.quantity}
+                        onChange={(e) => updateSplitItem(idx, 'quantity', e.target.value)}
+                        placeholder="0"
+                        className="flex-1"
+                      />
+                      {productUnitLabel(item.product_id) && (
+                        <span className="text-xs text-slate-500 whitespace-nowrap">{productUnitLabel(item.product_id)}</span>
+                      )}
+                    </div>
                   </div>
                   <div className="col-span-3 space-y-1">
                     <Label className="text-xs">{language === 'uz' ? 'Sklad' : language === 'ru' ? 'Склад' : 'Warehouse'}</Label>

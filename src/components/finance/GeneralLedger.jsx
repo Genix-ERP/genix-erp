@@ -1,10 +1,10 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, FileText, Calendar, DollarSign, CheckCircle, Clock, AlertCircle, Trash2, Pencil, Download, Loader2, ChevronLeft, ChevronRight, RotateCcw, XCircle, Send, ArrowLeftRight, Filter, X, FileSpreadsheet } from "lucide-react";
+import { Plus, Search, FileText, Calendar, DollarSign, CheckCircle, Clock, AlertCircle, Trash2, Edit, Pencil, Download, Loader2, ChevronLeft, ChevronRight, RotateCcw, XCircle, Send, ArrowLeftRight, Filter, X, FileSpreadsheet } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
@@ -218,12 +218,13 @@ export default function GeneralLedger() {
     cancelJournalEntry,
     postJournalEntry,
     reverseJournalEntry,
+    resetJournalEntryToDraft,
     getJournalLines,
     accounts,
     journals,
     isLoading
   } = useFinancials();
-  const { canCreate } = usePermissions();
+  const { canCreate, isSuperAdmin } = usePermissions();
   const { formatCurrency } = useCurrencyFormatter();
   const { modal, showAlert, showError, showSuccess, close } = useAlertModal();
 
@@ -436,7 +437,40 @@ export default function GeneralLedger() {
     }));
   };
 
+  // ---- Account-correspondence (шахматка) dropdown filtering ----
+  // When an account is chosen on a line, restrict the OTHER lines' account
+  // dropdowns to the accounts it validly pairs with. Accounts not in the matrix
+  // impose no restriction.
+  const cpCache = useRef({}); // accountId -> { inMatrix, ids:Set, loading? }
+  const [, setCpVersion] = useState(0);
+  const fetchCounterparts = useCallback((accountId) => {
+    if (!accountId || cpCache.current[accountId]) return;
+    cpCache.current[accountId] = { inMatrix: false, ids: new Set(), loading: true };
+    financeService.getAccountCorrespondenceCounterparts(accountId)
+      .then(res => { cpCache.current[accountId] = { inMatrix: !!res?.in_matrix, ids: new Set(res?.account_ids || []) }; })
+      .catch(() => { cpCache.current[accountId] = { inMatrix: false, ids: new Set() }; })
+      .finally(() => setCpVersion(v => v + 1));
+  }, []);
+
+  // The accounts allowed in line `index`'s dropdown, given the other lines'
+  // chosen in-matrix accounts (intersection of their counterpart sets).
+  const accountsForLine = (index) => {
+    const constraints = (newEntry.lines || [])
+      .filter((_, i) => i !== index)
+      .map(l => l.account_id).filter(Boolean)
+      .map(id => cpCache.current[id])
+      .filter(cp => cp && cp.inMatrix && !cp.loading);
+    if (constraints.length === 0) return accounts;
+    let allowed = null;
+    for (const cp of constraints) {
+      allowed = allowed === null ? new Set(cp.ids) : new Set([...allowed].filter(x => cp.ids.has(x)));
+    }
+    const own = newEntry.lines[index]?.account_id;
+    return (accounts || []).filter(a => allowed.has(a.id) || a.id === own);
+  };
+
   const updateLine = (index, field, value) => {
+    if (field === 'account_id' && value) fetchCounterparts(value);
     setNewEntry(prev => ({
       ...prev,
       lines: prev.lines.map((line, i) => {
@@ -497,6 +531,21 @@ export default function GeneralLedger() {
           ? t('insufficient_account_balance').replace('{name}', name).replace('{code}', code).replace('{balance}', balance)
           : `Insufficient funds in ${name} (${code}). Current balance: ${balance} so'm`;
       }
+      showError(msg);
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleResetToDraft = async () => {
+    if (!selectedEntry || selectedEntry.status !== 'posted') return;
+    setIsActionLoading(true);
+    try {
+      await resetJournalEntryToDraft(selectedEntry.id);
+      setSelectedEntry(prev => prev ? { ...prev, status: 'draft', posted_at: null } : prev);
+      showSuccess(t('entry_reset_to_draft') || 'Yozuv qoralamaga qaytarildi — endi tahrirlash mumkin');
+    } catch (error) {
+      const msg = error?.response?.data?.error?.message || error?.message || 'Failed to reset entry';
       showError(msg);
     } finally {
       setIsActionLoading(false);
@@ -1203,7 +1252,7 @@ export default function GeneralLedger() {
                           onClick={handleEditEntry}
                           disabled={isActionLoading}
                         >
-                          <Pencil className="w-3.5 h-3.5 mr-1.5" />
+                          <Edit className="w-3.5 h-3.5 mr-1.5" />
                           {t('edit')}
                         </Button>
                       </div>
@@ -1240,6 +1289,18 @@ export default function GeneralLedger() {
                     >
                       <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
                       {t('reverse_entry') || 'Teskari yozuv'}
+                    </Button>
+                  )}
+                  {/* Reset to draft (super admins only) — un-post to edit + re-post */}
+                  {selectedEntry.status === 'posted' && !selectedEntry.reversed_entry_id && isSuperAdmin && (
+                    <Button
+                      variant="outline"
+                      className="w-full text-sm text-blue-600 border-blue-200 hover:bg-blue-50"
+                      onClick={handleResetToDraft}
+                      disabled={isActionLoading}
+                    >
+                      <Pencil className="w-3.5 h-3.5 mr-1.5" />
+                      {t('reset_to_draft') || 'Qoralamaga qaytarish'}
                     </Button>
                   )}
                   {/* Always show PDF */}
@@ -1430,7 +1491,7 @@ export default function GeneralLedger() {
                       <TableRow key={index}>
                         <TableCell className="p-2">
                           <AccountCombobox
-                            accounts={accounts}
+                            accounts={accountsForLine(index)}
                             value={line.account_id}
                             onValueChange={(value) => updateLine(index, 'account_id', value)}
                             placeholder={t('select_account')}

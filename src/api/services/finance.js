@@ -245,6 +245,18 @@ export const financeService = {
     return response.data.data;
   },
 
+  async resetJournalEntryToDraft(id) {
+    const response = await apiClient.post(`/journal-entries/${id}/reset-to-draft`);
+    return response.data.data;
+  },
+
+  // Valid correspondence counterpart accounts for a given account (шахматка).
+  // Returns { in_matrix, account_ids }. Empty account_ids => no restriction.
+  async getAccountCorrespondenceCounterparts(accountId) {
+    const response = await apiClient.get('/account-correspondences/counterparts', { params: { account_id: accountId } });
+    return response.data.data;
+  },
+
   async lockFiscalPeriod(id) {
     const response = await apiClient.post(`/fiscal-periods/${id}/lock`);
     return response.data.data;
@@ -271,8 +283,33 @@ export const financeService = {
     return response.data.data;
   },
 
+  // Odoo-style: register a payment for a partner (no invoice picked).
+  // data: { contact_id, amount, direction: 'customer'|'vendor', method, payment_date, notes }
+  async registerPartnerPayment(data) {
+    const response = await apiClient.post('/payments/register', data);
+    return response.data.data;
+  },
+
   async confirmPayment(id) {
     const response = await apiClient.post(`/payments/${id}/confirm`);
+    return response.data.data;
+  },
+
+  // Odoo-style reconciliation
+  // List each partner's invoiced/paid/due totals + unallocated credit.
+  async getPartnerBalances(direction = 'customer') {
+    const response = await apiClient.get('/payments/partner-balances', { params: { direction } });
+    return response.data.data;
+  },
+  // One partner's open docs, available credit, and the payments behind it.
+  async getPartnerLedger(contactId, direction = 'customer') {
+    const response = await apiClient.get('/payments/partner-ledger', { params: { contact_id: contactId, direction } });
+    return response.data.data;
+  },
+  // Apply a partner's unallocated payment credit to one of their open docs.
+  // data: { contact_id, direction, document_id, amount }
+  async reconcilePartnerCredit(data) {
+    const response = await apiClient.post('/payments/reconcile', data);
     return response.data.data;
   },
 
@@ -449,6 +486,32 @@ export const financeService = {
   },
   async listBankStatementImports() {
     const response = await apiClient.get('/bank-statement-imports');
+    return response.data.data;
+  },
+
+  // Bank vipiska (Excel) import — parse + auto-classify + review (Phase 1)
+  async importBankVipiska(file) {
+    const form = new FormData();
+    form.append('file', file);
+    const response = await apiClient.post('/bank-statement-imports/vipiska', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data.data;
+  },
+  async getBankVipiskaTransactions(importId) {
+    const response = await apiClient.get(`/bank-statement-imports/${importId}/transactions`);
+    return response.data.data;
+  },
+  async updateBankVipiskaLineAccounts(lineId, data) {
+    const response = await apiClient.put(`/bank-statement-imports/lines/${lineId}/accounts`, data);
+    return response.data.data;
+  },
+  async confirmBankVipiskaLine(lineId) {
+    const response = await apiClient.post(`/bank-statement-imports/lines/${lineId}/confirm`);
+    return response.data.data;
+  },
+  async rejectBankVipiskaLine(lineId) {
+    const response = await apiClient.post(`/bank-statement-imports/lines/${lineId}/reject`);
     return response.data.data;
   },
 
@@ -698,6 +761,11 @@ export const financeService = {
 
   async confirmPurchaseInvoice(id) {
     const response = await apiClient.post(`/purchase-invoices/${id}/confirm`);
+    return response.data.data;
+  },
+
+  async resetPurchaseInvoiceToDraft(id) {
+    const response = await apiClient.post(`/purchase-invoices/${id}/reset-to-draft`);
     return response.data.data;
   },
 

@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Search, DollarSign, Users, Calculator, TrendingUp, Download, AlertTriangle, Edit2, Trash2, CreditCard, UserCircle, Printer, Settings as SettingsIcon, History, FileDown, Loader2, X, RotateCcw, Percent, ChevronRight, ChevronDown, Wallet, FileMinus } from 'lucide-react';
+import { Plus, Search, DollarSign, Users, Calculator, TrendingUp, Brain, Download, AlertTriangle, CheckCircle, Target, Lightbulb, Edit, Trash2, CreditCard, UserCircle, Printer, Settings as SettingsIcon, History, FileDown, Loader2, X, RotateCcw, Percent, ChevronRight, ChevronDown, Wallet, FileMinus } from 'lucide-react';
 import { hrService } from '@/api/services/hr';
 import { employeeTaxesService } from '@/api/services/employeeTaxes';
 import { toast } from 'sonner';
@@ -1514,7 +1514,7 @@ export default function Payroll() {
                               )}
                               {(payroll.status === 'draft' || payroll.status === 'calculated') && canUpdate(MODULES.PAYROLL) || canUpdate(MODULES.HR) && (
                                 <Button size="sm" variant="ghost" onClick={() => handleEditPayroll(payroll)} title={t('edit')}>
-                                  <Edit2 className="w-4 h-4" />
+                                  <Edit className="w-4 h-4" />
                                 </Button>
                               )}
                               <Button size="sm" variant="ghost" onClick={() => handleDownloadPayslip(payroll)} title={t('download')}>
@@ -2746,7 +2746,7 @@ function PayrollEmployeesTab({ t, formatCurrency }) {
                         </div>
                       ) : (
                         <Button size="sm" variant="ghost" onClick={() => startEdit(e)}>
-                          <Edit2 className="w-4 h-4 mr-1" />
+                          <Edit className="w-4 h-4 mr-1" />
                           {t('edit_salary') || 'Oylikni tahrirlash'}
                         </Button>
                       )}

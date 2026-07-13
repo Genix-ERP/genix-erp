@@ -193,6 +193,8 @@ export default function SmetaManagementTab({ project }) {
     }
   }, [blockStorageKey]);
   const [estimateId, setEstimateId] = useState('');
+  // Subcontractor filter for the active block. null = project's own (in-house).
+  const [subFilter, setSubFilter] = useState(null);
   const [lines, setLines] = useState([]);
   const [loadingEstimates, setLoadingEstimates] = useState(false);
   const [loadingLines, setLoadingLines] = useState(false);
@@ -235,6 +237,9 @@ export default function SmetaManagementTab({ project }) {
   const [editLineTarget, setEditLineTarget] = useState(null);
 
   const [form2Open, setForm2Open] = useState(false);
+  // Forma 3 (КС-3) generator modal. Builds the certificate from
+  // engineer-confirmed (YAKUNIY) works, split into the three КС-3 windows by
+  // confirmation date relative to the chosen reporting month.
   // Material consolidation modal — toggled by the "Material yig'indisi"
   // button in the topbar next to "Forma 2 ni yaratish".
   const [matConsOpen, setMatConsOpen] = useState(false);
@@ -278,6 +283,7 @@ export default function SmetaManagementTab({ project }) {
   const [auditPage, setAuditPage] = useState(1);
   const [auditTotal, setAuditTotal] = useState(0);
   const [auditHasMore, setAuditHasMore] = useState(false);
+  const [auditLoadError, setAuditLoadError] = useState(false);
   const auditMoreRef = React.useRef(null);
 
   // Generic confirmation modal — replaces window.confirm() calls for
@@ -355,7 +361,7 @@ export default function SmetaManagementTab({ project }) {
     if (!project?.id) return;
     let cancelled = false;
     setLoadingEstimates(true);
-    constructionService.listEstimates(project.id)
+    constructionService.listEstimates(project.id, { scope: 'all' })
       .then((rows) => {
         if (cancelled) return;
         const list = Array.isArray(rows) ? rows : [];
@@ -420,10 +426,44 @@ export default function SmetaManagementTab({ project }) {
     () => blockOptions.find((b) => String(b.id) === String(buildingId)) || null,
     [blockOptions, buildingId],
   );
-  const activeEstimateIds = useMemo(
-    () => (activeBlock ? activeBlock.edinich.map((e) => Number(e.id)) : []),
-    [activeBlock],
-  );
+  // Subcontractors that have an edinich estimate for the active block.
+  const blockSubcontractors = useMemo(() => {
+    if (!activeBlock) return [];
+    const map = new Map();
+    for (const e of activeBlock.edinich) {
+      if (e.subcontract_id) map.set(Number(e.subcontract_id), e.subcontract_name || `#${e.subcontract_id}`);
+    }
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+  }, [activeBlock]);
+  // Reset the subcontractor filter when the block changes.
+  useEffect(() => { setSubFilter(null); }, [buildingId]);
+  const activeEstimateIds = useMemo(() => {
+    if (!activeBlock) return [];
+    // null → project's own (subcontract_id NULL); number → that subcontractor.
+    // 'all' → full project: every estimate of the block (own + each
+    // subcontractor) merged. number → that subcontractor. null → own only.
+    const matchesSub = (e) => subFilter === 'all'
+      ? true
+      : (subFilter ? Number(e.subcontract_id) === Number(subFilter) : !e.subcontract_id);
+    return activeBlock.edinich.filter(matchesSub).map((e) => Number(e.id));
+  }, [activeBlock, subFilter]);
+
+  // estimate_id → subcontractor name, for tagging lines in the full-project
+  // ('all') Forma 2 so the renderer can colour + badge subcontractor rows.
+  const estSubMap = useMemo(() => {
+    const m = new Map();
+    (activeBlock?.edinich || []).forEach((e) => {
+      if (e.subcontract_id) m.set(Number(e.id), e.subcontract_name || `#${e.subcontract_id}`);
+    });
+    return m;
+  }, [activeBlock]);
+
+  // Lines handed to Form2Preview, each annotated with its source estimate's
+  // subcontractor name (only meaningful in the merged 'all' view).
+  const forma2Lines = useMemo(() => (lines || []).map((l) => {
+    const nm = estSubMap.get(Number(l.estimate_id));
+    return nm ? { ...l, _subcontract_name: nm } : l;
+  }), [lines, estSubMap]);
   // Sync estimateId to the latest едиinич of the selected block. This is
   // what the mutation handlers / Form 2 / audit / "+resurs" modal use as
   // a concrete single-estimate target.
@@ -638,6 +678,7 @@ export default function SmetaManagementTab({ project }) {
   const loadAudit = useCallback(async (projId, action) => {
     if (!projId) { setAuditEntries([]); setAuditTotal(0); setAuditHasMore(false); return; }
     setLoadingAudit(true);
+    setAuditLoadError(false);
     try {
       const { data, meta } = await constructionService.listProjectSmetaAudit(projId, {
         page: 1, page_size: AUDIT_PAGE_SIZE, action: action || undefined,
@@ -660,6 +701,7 @@ export default function SmetaManagementTab({ project }) {
   const loadMoreAudit = useCallback(async () => {
     if (loadingMoreAudit || !auditHasMore || !project?.id) return;
     setLoadingMoreAudit(true);
+    setAuditLoadError(false);
     const next = auditPage + 1;
     try {
       const { data, meta } = await constructionService.listProjectSmetaAudit(project.id, {
@@ -669,8 +711,11 @@ export default function SmetaManagementTab({ project }) {
       setAuditEntries((prev) => [...prev, ...rows]);
       setAuditPage(next);
       setAuditHasMore(meta?.has_next ?? (rows.length >= AUDIT_PAGE_SIZE));
-    } catch {
-      /* keep what we have; the sentinel will retry on next scroll */
+    } catch (err) {
+      // Flag the error so the IntersectionObserver stops auto-retrying (which
+      // otherwise spins forever); the user can retry via the explicit button.
+      console.error('Failed to load more audit', err);
+      setAuditLoadError(true);
     } finally {
       setLoadingMoreAudit(false);
     }
@@ -691,6 +736,7 @@ export default function SmetaManagementTab({ project }) {
   // at the bottom of the list scrolls into view.
   useEffect(() => {
     if (page !== 'audit') return undefined;
+    if (auditLoadError) return undefined; // don't auto-retry a failed page
     const el = auditMoreRef.current;
     if (!el || !auditHasMore) return undefined;
     const io = new IntersectionObserver((entries) => {
@@ -698,7 +744,7 @@ export default function SmetaManagementTab({ project }) {
     }, { rootMargin: '300px 0px' });
     io.observe(el);
     return () => io.disconnect();
-  }, [page, auditHasMore, loadMoreAudit]);
+  }, [page, auditHasMore, auditLoadError, loadMoreAudit]);
 
   // Background prefetch of snapshot + audit counts so the inner-tab badges
   // ("Formalar tarixi 2", "O'zgarishlar jurnali 13" in v23) show real
@@ -737,7 +783,11 @@ export default function SmetaManagementTab({ project }) {
   useEffect(() => {
     if (!project?.id) return;
     let cancelled = false;
-    constructionService.listForm2Iterations(project.id)
+    // Per-block strip (migration 451): scope to the selected block. '0'/unset =
+    // whole-project bucket. Changing the Блок dropdown reloads this so each
+    // block shows its own "#1, #2 (joriy)".
+    const bid = (buildingId && buildingId !== '0') ? Number(buildingId) : 0;
+    constructionService.listForm2Iterations(project.id, bid)
       .then((rows) => {
         if (cancelled) return;
         const list = Array.isArray(rows) ? rows : [];
@@ -751,7 +801,7 @@ export default function SmetaManagementTab({ project }) {
       })
       .catch(() => { /* iterations are non-blocking — page still renders */ });
     return () => { cancelled = true; };
-  }, [project?.id, iterRefreshTick]);
+  }, [project?.id, buildingId, iterRefreshTick]);
 
   const activeIteration = useMemo(
     () => iterations.find((it) => it.id === activeIterationId) || null,
@@ -810,7 +860,18 @@ export default function SmetaManagementTab({ project }) {
       // resolves its own estimate when caller pins one).
       await constructionService.createForm2Iteration(
         project?.id,
-        { ...payload, estimate_id: estimateId },
+        {
+          ...payload,
+          // MUST be numbers: the backend binds estimate_id/building_id into
+          // int64 fields. Sending estimateId as a string ('123') makes Go's
+          // ShouldBindJSON fail on the whole body, which silently drops
+          // snapshot_data (the frozen lines), estimate_id AND building_id —
+          // so the snapshot saved empty and the freeze hit the wrong block.
+          estimate_id: Number(estimateId) || 0,
+          // Per-block freeze (migration 451): pin the block so the snapshot and
+          // the frozen iteration land on THIS block, not the project's first.
+          building_id: (buildingId && buildingId !== '0') ? Number(buildingId) : 0,
+        },
       );
       toast.success(t('snapshot_saved') || 'Forma 2 saqlandi');
       // If the user is currently viewing the History tab refresh the list.
@@ -822,7 +883,7 @@ export default function SmetaManagementTab({ project }) {
       toast.error(formatApiError(e, t, 'Xatolik'));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [estimateId, page, project?.id]);
+  }, [estimateId, page, project?.id, buildingId]);
 
   const handleDeleteSnapshot = useCallback((snap) => {
     if (!snap?.id) return;
@@ -2027,6 +2088,30 @@ export default function SmetaManagementTab({ project }) {
               </option>
             ))}
           </select>
+          {/* Subcontractor filter — only when the block has subcontractor
+              estimates. Empty value = project's own (in-house) estimate. */}
+          {blockSubcontractors.length > 0 && (
+            <select
+              value={subFilter === 'all' ? 'all' : (subFilter == null ? '' : String(subFilter))}
+              onChange={(e) => {
+                const v = e.target.value;
+                setSubFilter(v === 'all' ? 'all' : (v ? Number(v) : null));
+              }}
+              className="px-3 py-2 rounded-md text-xs outline-none cursor-pointer"
+              style={{ background: C.inset, color: C.text, border: `1px solid ${C.border2}`, fontFamily: 'inherit', minWidth: 180 }}
+              title={({ uz: 'Subpudratchi', ru: 'Субподрядчик', en: 'Subcontractor' })[language] || 'Subpudratchi'}
+            >
+              <option value="" style={{ background: C.card, color: C.text }}>
+                {({ uz: 'Loyiha smetasi', ru: 'Смета проекта', en: 'Project estimate' })[language] || 'Loyiha smetasi'}
+              </option>
+              <option value="all" style={{ background: C.card, color: C.text }}>
+                {({ uz: "Butun loyiha (barchasi)", ru: 'Весь проект (все)', en: 'Full project (all)' })[language] || 'Butun loyiha (barchasi)'}
+              </option>
+              {blockSubcontractors.map((s) => (
+                <option key={s.id} value={s.id} style={{ background: C.card, color: C.text }}>{s.name}</option>
+              ))}
+            </select>
+          )}
           <button
             onClick={() => loadLines(activeEstimateIds, { force: true })}
             disabled={activeEstimateIds.length === 0 || loadingLines}
@@ -2161,7 +2246,10 @@ export default function SmetaManagementTab({ project }) {
                     // Only the current (joriy) Forma 2 is deletable — and only
                     // when there's a frozen iteration before it to unfreeze,
                     // and the user has construction delete permission.
-                    const canDeleteThis = canDeleteConstruction && isOpen && hasFrozenIteration;
+                    // Owner-only: a subcontractor company can't roll back the
+                    // project's Forma 2 chain (backend also enforces this).
+                    const canDeleteThis = canDeleteConstruction && isOpen && hasFrozenIteration
+                      && project?.viewer_role !== 'subcontractor';
                     return (
                       <div
                         key={it.id}
@@ -2996,6 +3084,8 @@ export default function SmetaManagementTab({ project }) {
             hasMore={auditHasMore}
             loadingMore={loadingMoreAudit}
             loadMoreRef={auditMoreRef}
+            loadError={auditLoadError}
+            onLoadMore={loadMoreAudit}
           />
         </div>
       )}
@@ -3046,6 +3136,7 @@ export default function SmetaManagementTab({ project }) {
         projectName={project?.name}
       />
 
+
       {/* Generic estimate-line edit modal — opened from the pencil icon
          on any work card or any resource sub-line. Routes the save to the
          line's own estimate_id so multi-єдинич blocks edit the right row.
@@ -3067,10 +3158,13 @@ export default function SmetaManagementTab({ project }) {
           <div className="flex-1 overflow-auto bg-stone-100">
             <Form2Preview
               estimate={selectedEstimate}
-              lines={lines}
+              lines={forma2Lines}
               project={project}
+              subScope={subFilter}
+              subOptions={blockSubcontractors}
+              onSubScopeChange={setSubFilter}
               onClose={() => setForm2Open(false)}
-              onSaveSnapshot={handleSaveSnapshot}
+              onSaveSnapshot={project?.viewer_role === 'subcontractor' ? undefined : handleSaveSnapshot}
             />
           </div>
         </DialogContent>
@@ -4680,7 +4774,7 @@ function localizeAuditValue(t, raw) {
   return t(`work_status_${s}_long`) || raw;
 }
 
-function AuditPage({ t, language, loading, entries, filter, onFilterChange, onRefresh, hasMore, loadingMore, loadMoreRef }) {
+function AuditPage({ t, language, loading, entries, filter, onFilterChange, onRefresh, hasMore, loadingMore, loadMoreRef, loadError, onLoadMore }) {
   const fmtDate = (s) => {
     if (!s) return '—';
     try {
@@ -4788,16 +4882,38 @@ function AuditPage({ t, language, loading, entries, filter, onFilterChange, onRe
               })}
             </tbody>
           </table>
-          {/* Infinite-scroll sentinel — pulls the next 20 entries when it
-              scrolls into view. */}
-          {hasMore && (
-            <div ref={loadMoreRef} className="py-4 flex items-center justify-center">
+          {/* Load-more footer. The sentinel auto-fetches the next page on
+              scroll; the button is an explicit fallback (and the only path
+              after an error, since auto-retry is disabled then). */}
+          {loadingMore ? (
+            <div className="py-4 flex items-center justify-center">
               <Loader className="py-0" size="w-4 h-4" />
             </div>
-          )}
-          {loadingMore && !hasMore && (
-            <div className="py-3 text-center text-[14px]" style={{ color: C.muted }}>…</div>
-          )}
+          ) : loadError ? (
+            <div className="py-4 flex flex-col items-center justify-center gap-2">
+              <span className="text-[13px]" style={{ color: C.muted }}>
+                {({ uz: "Yuklab bo'lmadi", ru: 'Не удалось загрузить', en: 'Failed to load' })[language]}
+              </span>
+              <button
+                onClick={onLoadMore}
+                className="text-[14px] px-3 py-1.5 rounded-[6px] flex items-center gap-1.5"
+                style={{ background: C.inset, border: `1px solid ${C.border2}`, color: C.text }}
+              >
+                <RefreshCw className="w-3 h-3" />
+                {({ uz: 'Qayta urinish', ru: 'Повторить', en: 'Retry' })[language]}
+              </button>
+            </div>
+          ) : hasMore ? (
+            <div ref={loadMoreRef} className="py-4 flex items-center justify-center">
+              <button
+                onClick={onLoadMore}
+                className="text-[14px] px-3 py-1.5 rounded-[6px]"
+                style={{ background: C.inset, border: `1px solid ${C.border2}`, color: C.dim }}
+              >
+                {({ uz: "Ko'proq yuklash", ru: 'Загрузить ещё', en: 'Load more' })[language]}
+              </button>
+            </div>
+          ) : null}
         </div>
       )}
     </div>

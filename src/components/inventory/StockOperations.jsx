@@ -14,7 +14,7 @@ import {
   Plus, PackagePlus, Truck, ArrowRightLeft, Trash2, ChevronLeft, ChevronRight,
   CheckCircle2, Clock, XCircle, Search, RefreshCw,
   ArrowLeft, Eye, Play, AlertTriangle, FileText, Loader2,
-  ClipboardList, Package, Pencil, Save, Copy, Calendar, Printer
+  ClipboardList, Package, Edit, Save, Copy, Calendar, Printer
 } from "lucide-react";
 import { PickingListPrint, PackingSlipPrint, DeliveryNotePrint, printDocument } from './StockOperationPrint';
 import { useLanguage } from "@/components/contexts/LanguageContext";

@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Search, Landmark, ChevronRight, ChevronDown, Edit2, Trash2, DollarSign, TrendingUp, TrendingDown, Scale, Banknote, CreditCard, Building2, Wallet, Receipt, FileText, PiggyBank, Coins, AlertTriangle, ListTree, BookOpen } from "lucide-react";
+import { Plus, Search, Landmark, ChevronRight, ChevronDown, Edit, Trash2, DollarSign, TrendingUp, TrendingDown, Scale, Banknote, CreditCard, Building2, Wallet, Receipt, FileText, PiggyBank, Coins, AlertTriangle, ListTree, BookOpen } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -483,7 +483,7 @@ export default function ChartOfAccounts() {
             <div className="flex items-center gap-1">
               {canUpdate(MODULES.FINANCIALS) && account.is_leaf !== false && (
                 <Button variant="ghost" size="sm" onClick={() => openEditModal(account)}>
-                  <Edit2 className="w-4 h-4 text-slate-500" />
+                  <Edit className="w-4 h-4 text-slate-500" />
                 </Button>
               )}
               {canDelete(MODULES.FINANCIALS) && account.is_leaf !== false && (
@@ -830,7 +830,7 @@ export default function ChartOfAccounts() {
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
-              <Edit2 className="w-5 h-5 text-[var(--genix-blue)]" />
+              <Edit className="w-5 h-5 text-[var(--genix-blue)]" />
               {t('edit_account') || 'Edit Account'}
             </DialogTitle>
             <DialogDescription>

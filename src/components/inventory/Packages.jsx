@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
-  Plus, Search, Package, Pencil, Trash2, Box, Eye, MapPin, Scale, Calendar, Layers
+  Plus, Search, Package, Edit, Trash2, Box, Eye, MapPin, Scale, Calendar, Layers
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";

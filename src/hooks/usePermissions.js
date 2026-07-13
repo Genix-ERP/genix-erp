@@ -29,6 +29,15 @@ export const usePermissions = () => {
     return user?.permission || 'learner';
   }, [user, isSiteAdmin, isOwner, isAdmin]);
 
+  // Super admin = tenant owner / site admin / system admin. Used to gate
+  // destructive actions (e.g. deleting posted sales/manufacturing documents)
+  // that should never be available to regular employees, regardless of their
+  // granular module permissions.
+  const isSuperAdmin = useMemo(
+    () => !!(isSiteAdmin?.() || isOwner?.() || isAdmin),
+    [isSiteAdmin, isOwner, isAdmin]
+  );
+
   // Check if user can perform an operation on a module
   const can = useCallback((module, operation) => {
     // Site admins and owners can do everything
@@ -90,6 +99,7 @@ export const usePermissions = () => {
 
   return {
     userPermission,
+    isSuperAdmin,
     can,
     canAccess,
     allowedOps,

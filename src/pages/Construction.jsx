@@ -117,8 +117,8 @@ const SmetaVsFactTab = lazy(() => import('@/components/construction/tabs/SmetaVs
 const PhotoReportsTab = lazy(() => import('@/components/construction/tabs/PhotoReportsTab'));
 const TeamTab = lazy(() => import('@/components/construction/tabs/TeamTab'));
 import { ImportModal, ExportModal, ImportExportButtons } from '@/components/shared';
-import { ReportGenerator } from '@/components/construction/ReportGenerator';
 import { ProjectKanban } from '@/components/construction/ProjectKanban';
+import MaterialConsolidationModal from '@/components/construction/MaterialConsolidationModal';
 import { UZ_REGIONS, citiesForRegion } from '@/components/construction/uzRegions';
 import CRMLinkPanel from '@/components/construction/CRMLinkPanel';
 import {
@@ -199,16 +199,14 @@ const ProgressTrackingTab = ({ project, sections, t, formatCurrency, onRefresh }
   // Value-based: completedValue / totalValue. Quantity-based: derived from
   // per-item ratios so partial completion is represented correctly (not binary).
   const calculateProgress = useCallback((items) => {
-    if (!items || items.length === 0) {
-      return {
-        percent: 0,
-        byQty: 0,
-        completed: 0,
-        total: 0,
-        byValue: 0,
-        completedValue: 0,
-        totalValue: 0,
-      };
+    // Only top-level work lines count — exclude resource sub-lines
+    // (resource_type set or parent_line_id present) so we don't double-count
+    // a work's materials/labor as separate "items".
+    const works = (items || []).filter(
+      (it) => String(it.resource_type || '') === '' && !Number(it.parent_line_id || 0),
+    );
+    if (works.length === 0) {
+      return { percent: 0, byQty: 0, completed: 0, total: 0, byValue: 0, completedValue: 0, totalValue: 0 };
     }
 
     let totalQty = 0;
@@ -216,16 +214,22 @@ const ProgressTrackingTab = ({ project, sections, t, formatCurrency, onRefresh }
     let totalValue = 0;
     let completedValue = 0;
 
-    for (const item of items) {
-      const qty = Number(item.quantity) || 0;
+    for (const item of works) {
+      // REJA quantity: prefer the smeta plan anchors over the live `quantity`
+      // (which is 0 for works not yet started), matching the Bosqichlar view.
+      const qty = Number(item.imported_quantity) || Number(item.original_quantity) || Number(item.quantity) || 0;
       const total = Number(item.total_amount) || 0;
-      const actual = Math.max(0, Math.min(Number(item.actual_amount) || 0, total || Infinity));
-      const ratio = total > 0 ? actual / total : 0;
+      // Physical progress from done_quantity; fall back to billed actual_amount
+      // for legacy items that track completion by money rather than quantity.
+      const doneQ = Number(item.done_quantity) || 0;
+      const ratio = qty > 0
+        ? Math.min(doneQ / qty, 1)
+        : (total > 0 ? Math.max(0, Math.min(Number(item.actual_amount) || 0, total)) / total : 0);
 
       totalQty += qty;
       doneQty += qty * ratio;
       totalValue += total;
-      completedValue += actual;
+      completedValue += total * ratio;
     }
 
     const byValue = totalValue > 0 ? Math.round((completedValue / totalValue) * 100) : 0;
@@ -797,7 +801,14 @@ const ProjectsTab = ({
                     <h3 className="font-semibold text-slate-900 text-base leading-snug line-clamp-2 flex-1">
                       {project.name}
                     </h3>
-                    {getStatusBadge(project.status)}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {project.viewer_role === 'subcontractor' && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-orange-100 text-orange-700">
+                          {t('subcontractor') || 'Subpudratchi'}
+                        </span>
+                      )}
+                      {getStatusBadge(project.status)}
+                    </div>
                   </div>
 
                   {/* Meta rows */}
@@ -928,13 +939,18 @@ const OverviewTabContent = React.memo(function OverviewTabContent({
   const locationParts = [project.region, project.city, project.address].filter(Boolean);
   const locationStr = locationParts.join(', '); // still used by other call sites for tooltips
 
+  // Forma 19 == Material yig'indisi (materials consolidation) modal.
+  const [matConsOpen, setMatConsOpen] = useState(false);
+
   const quickActions = [
     {
       id: 'forma19',
       label: 'Forma 19',
       icon: FileText,
       hint: t('forma_19_hint') || "Material sarflangani bo'yicha rasmiy hisobot",
-      go: () => { setActiveGroup('materiallar'); setActiveTab('forms'); },
+      // Forma 19 IS the material consolidation (Material yig'indisi). Open that
+      // modal directly so the user can review and Save it to project files.
+      go: () => { setMatConsOpen(true); },
     },
     {
       // Forma 3 (KS-3) lives in the same forms tab alongside Forma 2 /
@@ -944,7 +960,7 @@ const OverviewTabContent = React.memo(function OverviewTabContent({
       label: 'Forma 3',
       icon: FileSpreadsheet,
       hint: t('forma_3_hint') || "Bajarilgan ish qiymati to'g'risidagi ma'lumotnoma",
-      go: () => { setActiveGroup('materiallar'); setActiveTab('forms'); },
+      go: () => { setActiveGroup('hujjatlar'); setActiveTab('forms'); },
     },
     {
       // Foto hisobot replaces the old Material shortcut — the
@@ -1102,6 +1118,15 @@ const OverviewTabContent = React.memo(function OverviewTabContent({
         vendors={vendors}
         acts={acts}
       />
+
+      {/* Forma 19 == Material yig'indisi. Opened from the Tez amallar
+         "Forma 19" quick action; Saqlash writes it to project documents. */}
+      <MaterialConsolidationModal
+        open={matConsOpen}
+        onClose={() => setMatConsOpen(false)}
+        projectId={project?.id}
+        projectName={project?.name}
+      />
     </div>
   );
 });
@@ -1194,6 +1219,7 @@ const ProjectDetailView = ({
     //   { key: 'material_usage', label: t('nav_material_usage') || 'Material sarfi' },
     // ]},
     { key: 'hujjatlar', label: t('nav_documents') || 'Hujjatlar', icon: FileText, subs: [
+      { key: 'forms', label: t('nav_forms') || 'Formalar' },
       { key: 'acts', label: t('nav_acts') || 'Aktlar' },
       { key: 'daily_logs', label: t('nav_daily_log') || 'Kunlik jurnal' },
       { key: 'subcontractors', label: t('nav_subcontractors') || 'Subpudratchilar' },
@@ -1272,7 +1298,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
   const [buildingForm, setBuildingForm] = useState({
     name: '', code: '', description: '', building_type: '', building_purpose: '',
     floors_count: '', total_area: '', apartments_count: '', commercial_units_count: '',
-    estimated_cost: '', status: 'draft',
+    estimated_cost: '', status: 'draft', subcontractor_org_ids: [],
     // CRM link fields — only persisted via the separate setBuildingCRMLink
     // PUT after the main building save succeeds. crm_block_id can be null;
     // current_crm_stage defaults to 'foundation'; crm_auto_sync defaults true.
@@ -1284,6 +1310,9 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
     subcontract_id: '', building_id: ''
   });
   const [projectSubcontracts, setProjectSubcontracts] = useState([]);
+  // Tenant companies (organizations) — candidate internal subcontractors that
+  // the owner can assign to a block in the building modal.
+  const [orgs, setOrgs] = useState([]);
   const [inventoryProducts, setInventoryProducts] = useState([]);
   const [inventoryWarehouses, setInventoryWarehouses] = useState([]);
   const [variantsByProduct, setVariantsByProduct] = useState({});
@@ -1424,13 +1453,15 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
               // which blocks already have estimates to disable the
               // "clone INTO this" path and surface counts on candidate
               // sources inside the modal.
-              const [buildingsData, wbsData, allEstimates] = await Promise.all([
+              const [buildingsData, wbsData, allEstimates, orgsData] = await Promise.all([
                 constructionService.listBuildings(project.id),
                 constructionService.getWBSTree(project.id),
                 constructionService.listEstimates(project.id).catch(() => []),
+                constructionService.listOrganizations().catch(() => []),
               ]);
               setBuildings(sortBuildings(buildingsData));
               setWbsTree(wbsData || []);
+              setOrgs(Array.isArray(orgsData) ? orgsData : (orgsData?.items || []));
               const counts = {};
               for (const e of (allEstimates || [])) {
                 const bid = Number(e?.building_id || 0);
@@ -1631,12 +1662,16 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
       setBuildingForm({
         name: '', code: '', description: '', building_type: '', building_purpose: '',
         floors_count: '', total_area: '', apartments_count: '', commercial_units_count: '',
-        estimated_cost: '', status: 'draft',
+        estimated_cost: '', status: 'draft', subcontractor_org_ids: [],
         crm_block_id: null, current_crm_stage: 'foundation', crm_auto_sync: true,
       });
     } catch (error) {
       console.error('Error saving building:', error);
-      const msg = error?.response?.data?.message || t('error_occurred') || 'Xatolik yuz berdi';
+      // Backend errors live at response.data.error.message; keep the older
+      // .data.message as a fallback for any endpoint using the flat shape.
+      const msg = error?.response?.data?.error?.message
+        || error?.response?.data?.message
+        || t('error_occurred') || 'Xatolik yuz berdi';
       toast.error(msg);
     }
   };
@@ -2447,12 +2482,6 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
              tab — the portal mounts and unmounts automatically with
              the StagesTabV2 component. */}
           <div id="stages-tab-topbar-slot" className="contents" />
-          <ReportGenerator
-            project={project}
-            sections={sections}
-            items={[]}
-            buildings={buildings}
-          />
         </div>
       </div>
 
@@ -2661,6 +2690,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                                     commercial_units_count: building.commercial_units_count || '',
                                     estimated_cost: building.estimated_cost || '',
                                     status: building.status || 'draft',
+                                    subcontractor_org_ids: (building.subcontractor_org_ids || []).map(String),
                                     crm_block_id: building.crm_block_id ?? null,
                                     current_crm_stage: building.current_crm_stage || 'foundation',
                                     crm_auto_sync: building.crm_auto_sync ?? true,
@@ -3625,6 +3655,65 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
               </div>
             )}
 
+            {/* Subcontractor assignment — owner-controlled. The companies/partners
+                picked here are the only ones that will see and work this block.
+                A block may be assigned to several subcontractors. Hidden for
+                subcontractor viewers; the backend also rejects their writes. */}
+            <div className="border rounded-lg p-3 bg-slate-50 space-y-2" style={{ display: project?.viewer_role === 'subcontractor' ? 'none' : undefined }}>
+              <Label className="text-slate-700 font-semibold">
+                {language === 'ru' ? 'Субподрядчики блока (компании)' : language === 'uz' ? 'Blok subpudratchilari (kompaniyalar)' : 'Block subcontractors (companies)'}
+              </Label>
+              {(() => {
+                // Candidate companies = tenant orgs other than this project's
+                // owner company. Picking one auto-creates its subcontract.
+                const ownerOrgId = project?.organization_id ? String(project.organization_id) : null;
+                const candidates = (orgs || []).filter((o) => String(o.id) !== ownerOrgId);
+                if (candidates.length === 0) {
+                  return (
+                    <p className="text-xs text-slate-400">
+                      {language === 'ru' ? 'Нет других компаний в этом тенанте.'
+                        : language === 'uz' ? "Bu tenantda boshqa kompaniyalar yo'q."
+                        : 'No other companies in this tenant.'}
+                    </p>
+                  );
+                }
+                return (
+                  <>
+                    <div className="max-h-40 overflow-y-auto border rounded-md divide-y bg-white">
+                      {candidates.map((o) => {
+                        const oid = String(o.id);
+                        const checked = (buildingForm.subcontractor_org_ids || []).map(String).includes(oid);
+                        return (
+                          <label key={oid} className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-slate-50 text-sm">
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4"
+                              checked={checked}
+                              onChange={() => setBuildingForm((f) => {
+                                const cur = (f.subcontractor_org_ids || []).map(String);
+                                return {
+                                  ...f,
+                                  subcontractor_org_ids: cur.includes(oid)
+                                    ? cur.filter((x) => x !== oid)
+                                    : [...cur, oid],
+                                };
+                              })}
+                            />
+                            <span>{o.name}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1">
+                      {language === 'ru' ? 'Выбранная компания получит субподряд по этому блоку и увидит его в своих проектах.'
+                        : language === 'uz' ? "Tanlangan kompaniya shu blok bo'yicha subpudrat oladi va uni o'z loyihalarida ko'radi."
+                        : 'A picked company gets a subcontract for this block and sees it in its projects.'}
+                    </p>
+                  </>
+                );
+              })()}
+            </div>
+
             <DialogFooter className="flex-col-reverse sm:flex-row gap-2">
               <Button type="button" variant="outline" onClick={() => setShowBuildingModal(false)}>
                 {t('cancel') || 'Bekor qilish'}
@@ -3905,6 +3994,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
         entityName={t('buildings') || 'Binolar'}
         title={`${project.name} - ${t('buildings') || 'Binolar'}`}
       />
+
 
 
       {/* Team Member Modal */}

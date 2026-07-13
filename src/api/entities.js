@@ -174,6 +174,9 @@ export const PurchaseOrder = createGenericEntity('/purchase-orders');
 // Workflows - use Go backend
 export const Workflow = createGenericEntity('/workflows');
 
+// Workflow automation rules (the real engine: trigger_event -> conditions -> actions)
+export const WorkflowRule = createGenericEntity('/workflow-rules');
+
 // Notifications - use Go backend
 export const Notification = createGenericEntity('/notifications');
 

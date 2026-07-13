@@ -20,10 +20,12 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Switch } from "@/components/ui/switch";
 import {
   Plus, Search, ShoppingBag, Package, Truck,
   CheckCircle, FileText, Receipt, RotateCcw, Upload, Download, Eye, Printer, X,
-  ClipboardList, MessageSquareWarning, CreditCard, ChevronLeft, ChevronRight, Pencil
+  ClipboardList, MessageSquareWarning, CreditCard, ChevronLeft, ChevronRight, Edit, SlidersHorizontal
 } from 'lucide-react';
 import apiClient from '@/api/client';
 import { format } from 'date-fns';
@@ -62,7 +64,7 @@ export default function Orders({
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { formatCurrency } = useCurrencyFormatter();
-  const { canCreate, canUpdate, canDelete } = usePermissions();
+  const { canCreate, canUpdate, canDelete, isSuperAdmin } = usePermissions();
   const { salesOrders = [], isLoading: ordersLoading } = useModules();
   const {
     invoices = [],
@@ -73,6 +75,31 @@ export default function Orders({
   const [filteredOrders, setFilteredOrders] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+
+  // Toggleable list columns (persisted per browser).
+  const SO_COLS = [
+    { key: 'order_number', label: t('order_number') || 'Order #' },
+    { key: 'customer', label: t('customer') || 'Customer' },
+    { key: 'date', label: t('date') || 'Date' },
+    { key: 'quantity', label: t('quantity') || 'Quantity' },
+    { key: 'amount', label: t('amount') || 'Amount' },
+    { key: 'payment_status', label: t('payment_status') || 'Payment' },
+    { key: 'status', label: t('status') || 'Status' },
+  ];
+  const [visibleCols, setVisibleCols] = useState(() => {
+    try { const s = JSON.parse(localStorage.getItem('so_visible_cols')); if (s && typeof s === 'object') return s; } catch { /* ignore */ }
+    return { order_number: true, customer: true, date: true, quantity: true, amount: true, payment_status: true, status: true };
+  });
+  useEffect(() => { try { localStorage.setItem('so_visible_cols', JSON.stringify(visibleCols)); } catch { /* ignore */ } }, [visibleCols]);
+  const colOn = (k) => visibleCols[k] !== false;
+  const toggleCol = (k) => setVisibleCols(prev => ({ ...prev, [k]: !colOn(k) }));
+  const paymentStatusColor = (s) => ({
+    paid: 'bg-green-100 text-green-700',
+    partial: 'bg-amber-100 text-amber-700',
+    unpaid: 'bg-red-100 text-red-700',
+    pending: 'bg-slate-100 text-slate-600',
+  }[s] || 'bg-slate-100 text-slate-600');
+  const paymentStatusLabel = (s) => (s === 'partial' ? (t('partially_paid') || 'Partially paid') : (t(s) || s || '-'));
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [orderToDelete, setOrderToDelete] = useState(null);
 
@@ -225,6 +252,25 @@ export default function Orders({
                     <SelectItem value="delivered">{t('delivered') || 'Delivered'}</SelectItem>
                   </SelectContent>
                 </Select>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="gap-2 whitespace-nowrap">
+                      <SlidersHorizontal className="w-4 h-4" />
+                      {t('columns') || 'Columns'}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-56">
+                    <p className="text-xs font-semibold text-slate-500 mb-2">{t('visible_columns') || 'Visible columns'}</p>
+                    <div className="space-y-2">
+                      {SO_COLS.map(c => (
+                        <label key={c.key} className="flex items-center justify-between gap-3 text-sm cursor-pointer">
+                          <span>{c.label}</span>
+                          <Switch checked={colOn(c.key)} onCheckedChange={() => toggleCol(c.key)} />
+                        </label>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </div>
             </CardHeader>
             <CardContent className="p-0">
@@ -245,33 +291,51 @@ export default function Orders({
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-slate-50">
-                        <TableHead>{t('order_number') || 'Order #'}</TableHead>
-                        <TableHead>{t('customer') || 'Customer'}</TableHead>
-                        <TableHead>{t('date') || 'Date'}</TableHead>
-                        <TableHead>{t('amount') || 'Amount'}</TableHead>
-                        <TableHead>{t('status') || 'Status'}</TableHead>
+                        {colOn('order_number') && <TableHead>{t('order_number') || 'Order #'}</TableHead>}
+                        {colOn('customer') && <TableHead>{t('customer') || 'Customer'}</TableHead>}
+                        {colOn('date') && <TableHead>{t('date') || 'Date'}</TableHead>}
+                        {colOn('quantity') && <TableHead className="text-right">{t('quantity') || 'Quantity'}</TableHead>}
+                        {colOn('amount') && <TableHead>{t('amount') || 'Amount'}</TableHead>}
+                        {colOn('payment_status') && <TableHead>{t('payment_status') || 'Payment'}</TableHead>}
+                        {colOn('status') && <TableHead>{t('status') || 'Status'}</TableHead>}
                         <TableHead>{t('actions') || 'Actions'}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {filteredOrders.map((order) => (
                         <TableRow key={order.id} className="hover:bg-slate-50">
-                          <TableCell className="font-mono text-sm">
-                            <div className="flex items-center gap-2">
-                              {order.order_number}
-                              {orderHasReturns(order.id) && (
-                                <MessageSquareWarning className="w-4 h-4 text-red-500" title={t('has_returns') || 'Has Returns'} />
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell className="font-medium">{order.customer_name}</TableCell>
-                          <TableCell className="text-sm">
-                            {order.order_date ? format(new Date(order.order_date), 'dd.MM.yyyy') : '-'}
-                          </TableCell>
-                          <TableCell className="font-semibold">{formatCurrency(order.total_amount)}</TableCell>
-                          <TableCell>
-                            <Badge className={getStatusColor(order.status)}>{t(order.status) || order.status}</Badge>
-                          </TableCell>
+                          {colOn('order_number') && (
+                            <TableCell className="font-mono text-sm">
+                              <div className="flex items-center gap-2">
+                                {order.order_number}
+                                {orderHasReturns(order.id) && (
+                                  <MessageSquareWarning className="w-4 h-4 text-red-500" title={t('has_returns') || 'Has Returns'} />
+                                )}
+                              </div>
+                            </TableCell>
+                          )}
+                          {colOn('customer') && <TableCell className="font-medium">{order.customer_name}</TableCell>}
+                          {colOn('date') && (
+                            <TableCell className="text-sm">
+                              {order.order_date ? format(new Date(order.order_date), 'dd.MM.yyyy') : '-'}
+                            </TableCell>
+                          )}
+                          {colOn('quantity') && (
+                            <TableCell className="text-right text-sm">
+                              {order.total_quantity != null ? Number(order.total_quantity).toLocaleString() : '-'}
+                            </TableCell>
+                          )}
+                          {colOn('amount') && <TableCell className="font-semibold">{formatCurrency(order.total_amount)}</TableCell>}
+                          {colOn('payment_status') && (
+                            <TableCell>
+                              <Badge className={`${paymentStatusColor(order.payment_status)} capitalize`}>{paymentStatusLabel(order.payment_status)}</Badge>
+                            </TableCell>
+                          )}
+                          {colOn('status') && (
+                            <TableCell>
+                              <Badge className={getStatusColor(order.status)}>{t(order.status) || order.status}</Badge>
+                            </TableCell>
+                          )}
                           <TableCell>
                             <div className="flex gap-1 flex-wrap">
                               {canUpdate(MODULES.SALES) && (order.status === 'draft' || order.status === 'quotation') && onUpdateStatus && (
@@ -316,10 +380,10 @@ export default function Orders({
                                   onClick={() => onEditOrder(order)}
                                   title={t('edit') || 'Edit'}
                                 >
-                                  <Pencil className="w-4 h-4" />
+                                  <Edit className="w-4 h-4" />
                                 </Button>
                               )}
-                              {canDelete(MODULES.SALES) && !['cancelled', 'shipped', 'delivered'].includes(order.status) && (
+                              {isSuperAdmin && !['cancelled', 'shipped', 'delivered'].includes(order.status) && (
                                 <Button
                                   size="sm"
                                   variant="ghost"

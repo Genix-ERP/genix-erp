@@ -7,7 +7,7 @@ import {
   Plus, Search, Building2, CreditCard, CheckCircle, Clock, AlertCircle,
   ArrowUpRight, ArrowDownLeft, RefreshCw, FileText, Upload, Download,
   MoreHorizontal, Eye, Check, X, Landmark, Wallet, TrendingUp, TrendingDown, Globe,
-  Calendar, Target, Scale, Trash2, Pencil, Lock, FileSpreadsheet
+  Calendar, Target, Scale, Trash2, Edit, Lock, FileSpreadsheet
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -25,6 +25,7 @@ import AccountingPeriods from "./AccountingPeriods";
 import BudgetManagement from "./BudgetManagement";
 import ReconciliationWorkflow from "./ReconciliationWorkflow";
 import BankStatementImport from "./BankStatementImport";
+import BankVipiskaImport from "./BankVipiskaImport";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 
@@ -338,6 +339,13 @@ export default function BankReconciliation() {
             {t('bank_accounts') || 'Bank Accounts'}
           </TabsTrigger>
           <TabsTrigger
+            value="vipiska"
+            className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            {language === 'ru' ? 'Выписка' : 'Vipiska'}
+          </TabsTrigger>
+          <TabsTrigger
             value="cash"
             className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
           >
@@ -373,6 +381,10 @@ export default function BankReconciliation() {
             Hisob davrlari
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="vipiska" className="mt-4">
+          <BankVipiskaImport />
+        </TabsContent>
 
         <TabsContent value="bank" className="mt-4 space-y-6">
           {/* Summary Cards */}
@@ -566,7 +578,7 @@ export default function BankReconciliation() {
                                 setEditAccount({ ...account });
                               }}
                             >
-                              <Pencil className="w-4 h-4 text-amber-600" />
+                              <Edit className="w-4 h-4 text-amber-600" />
                             </Button>
                           )}
                           {canDelete(MODULES.FINANCIALS) && (

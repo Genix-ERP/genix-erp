@@ -17,7 +17,8 @@ import {
   Clock,
   Receipt,
   TrendingUp,
-  Calculator
+  Calculator,
+  Scale
 } from "lucide-react";
 
 import FinanceDashboard from "@/components/finance/FinanceDashboard";
@@ -26,6 +27,7 @@ import AccountsPayable from "@/components/finance/AccountsPayable";
 import AccountsReceivable from "@/components/finance/AccountsReceivable";
 import ChartOfAccounts from "@/components/finance/ChartOfAccounts";
 import Payments from "@/components/finance/Payments";
+import Reconcile from "@/components/finance/Reconcile";
 import BankReconciliation from "@/components/finance/BankReconciliation";
 import RecurringJournalEntries from "@/components/finance/RecurringJournalEntries";
 import FinancialReports from "@/components/finance/FinancialReports";
@@ -101,16 +103,22 @@ export default function Financials() {
               <span className="hidden sm:inline">{language === 'ru' ? 'Карточка счёта' : language === 'uz' ? 'Kartochka' : 'Account Card'}</span>
             </TabsTrigger>
 
-            {/* 4. To'lovlar */}
+            {/* 4. Customer (invoices + payments) */}
             <TabsTrigger value="payments" className={tabTriggerClass}>
-              <CreditCard className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('payments') || "To'lovlar"}</span>
+              <ArrowDownCircle className="w-4 h-4" />
+              <span className="hidden sm:inline">{language === 'ru' ? 'Клиент' : language === 'uz' ? 'Mijoz' : 'Customer'}</span>
             </TabsTrigger>
 
-            {/* 5. Vendor Bills */}
+            {/* 5. Vendor (bills + payments) */}
             <TabsTrigger value="vendor-bills" className={tabTriggerClass}>
-              <Receipt className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('vendor_bills') || 'Vendor Bills'}</span>
+              <ArrowUpCircle className="w-4 h-4" />
+              <span className="hidden sm:inline">{language === 'ru' ? 'Поставщик' : language === 'uz' ? 'Yetkazib beruvchi' : 'Vendor'}</span>
+            </TabsTrigger>
+
+            {/* 5b. Reconcile (Odoo-style) */}
+            <TabsTrigger value="reconcile" className={tabTriggerClass}>
+              <Scale className="w-4 h-4" />
+              <span className="hidden sm:inline">{language === 'ru' ? 'Сопоставление' : language === 'uz' ? 'Solishtirish' : 'Reconcile'}</span>
             </TabsTrigger>
 
             {/* 6. Akt sverka */}
@@ -162,10 +170,13 @@ export default function Financials() {
             <AccountCard />
           </TabsContent>
           <TabsContent value="payments" className="mt-6">
-            <Payments />
+            <Payments side="customer" />
           </TabsContent>
           <TabsContent value="vendor-bills" className="mt-6">
-            <FinanceVendorBills />
+            <Payments side="vendor" />
+          </TabsContent>
+          <TabsContent value="reconcile" className="mt-6">
+            <Reconcile />
           </TabsContent>
           <TabsContent value="reconciliation" className="mt-6">
             <ActSverka />
