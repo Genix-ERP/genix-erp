@@ -33,7 +33,8 @@ import {
   HardHat,
   Receipt,
   Image as ImageIcon,
-  Sparkles
+  Sparkles,
+  Smartphone
 } from 'lucide-react';
 
 // Import settings components
@@ -50,6 +51,7 @@ import ExpensesSettings from '@/components/admin-settings/ExpensesSettings';
 import ProjectSettings from '@/components/admin-settings/ProjectSettings';
 import ConstructionSettings from '@/components/admin-settings/ConstructionSettings';
 import AISettings from '@/components/admin-settings/AISettings';
+import MobileAppSettings from '@/components/admin-settings/MobileAppSettings';
 import CompanySettings from '@/components/settings/CompanySettings';
 import SubscriptionSettings from '@/components/settings/SubscriptionSettings';
 
@@ -71,7 +73,10 @@ const SECTIONS = [
   { id: 'projects', icon: FolderKanban, label: 'project_settings', component: ProjectSettings, appIds: ['projects'] },
   { id: 'construction', icon: HardHat, label: 'construction_settings', component: ConstructionSettings, appIds: ['construction'] },
   // Workflow automation rules moved to the dedicated Workflows module (sidebar → Ish jarayonlari)
-  { id: 'ai', icon: Sparkles, label: 'ai_settings', component: AISettings, appIds: null }
+  { id: 'ai', icon: Sparkles, label: 'ai_settings', component: AISettings, appIds: null },
+  // Global mobile-app update gate — one app for all tenants, so it's only
+  // shown to (and editable by) the platform system admin.
+  { id: 'mobile', icon: Smartphone, label: 'mobile_app_settings', component: MobileAppSettings, appIds: null, systemAdminOnly: true }
 ];
 
 export default function AdminSettings() {
@@ -109,12 +114,14 @@ export default function AdminSettings() {
   // Filter sections based on installed apps
   const visibleSections = useMemo(() => {
     return SECTIONS.filter(section => {
+      // Global platform config (e.g. mobile updater) is system-admin only.
+      if (section.systemAdminOnly && !(isSiteAdmin?.())) return false;
       // Always show sections with null appIds (like general)
       if (section.appIds === null) return true;
       // Show section if any of its related apps are installed
       return section.appIds.some(appId => isAppInstalled(appId));
     });
-  }, [isAppInstalled, installedApps]);
+  }, [isAppInstalled, installedApps, isSiteAdmin]);
 
   // Permission check
   useEffect(() => {

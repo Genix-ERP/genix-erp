@@ -122,6 +122,22 @@ export const adminSettingsService = {
   async updateAISettings(payload) {
     const response = await apiClient.put('/admin/ai-settings', payload);
     return response.data.data || response.data;
+  },
+
+  // --- Mobile app version gate (global; system-admin only) ---
+
+  // Returns [{ platform, latest_version, min_version, update_url,
+  //            release_notes, force_update, is_active, updated_at }]
+  async getMobileVersions() {
+    const response = await apiClient.get('/admin/mobile-versions');
+    return response.data.data || response.data;
+  },
+
+  // platform: 'android' | 'ios'
+  // payload: { latest_version, min_version, update_url, release_notes, force_update, is_active }
+  async updateMobileVersion(platform, payload) {
+    const response = await apiClient.put(`/admin/mobile-versions/${platform}`, payload);
+    return response.data.data || response.data;
   }
 };
 
