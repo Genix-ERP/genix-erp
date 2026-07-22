@@ -14,6 +14,7 @@ import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import financeService from '@/api/services/finance';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import DiagnosticsPanel from '@/components/finance/DiagnosticsPanel';
 
 // Helper to get date range for period filter
 const getDateParams = (period) => {
@@ -445,9 +446,12 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
 
       {/* Reports Tabs */}
       <Tabs defaultValue={defaultTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6 bg-white/80">
+        <TabsList className="grid w-full grid-cols-3 sm:grid-cols-7 bg-white/80">
           <TabsTrigger value="trial-balance">
             {language === 'uz' ? 'Sinov Balansi' : 'Trial Balance'}
+          </TabsTrigger>
+          <TabsTrigger value="diagnostics">
+            {language === 'uz' ? 'Diagnostika' : language === 'ru' ? 'Диагностика' : 'Diagnostics'}
           </TabsTrigger>
           <TabsTrigger value="profit-loss">
             {language === 'uz' ? 'Foyda va Zarar' : 'Profit & Loss'}
@@ -465,6 +469,11 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
             {language === 'uz' ? 'Valyuta Qarzi' : 'Currency Debt'}
           </TabsTrigger>
         </TabsList>
+
+        {/* Diagnostics tab (genix_diagnostika §2.4) — anomaly scan over the ОСВ */}
+        <TabsContent value="diagnostics">
+          <DiagnosticsPanel />
+        </TabsContent>
 
         {/* Trial Balance Tab */}
         <TabsContent value="trial-balance">
