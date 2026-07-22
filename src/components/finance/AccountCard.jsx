@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,6 +41,19 @@ export default function AccountCard() {
   const [report, setReport] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  // Drill-down entry: the diagnostics panel links here with ?account_id=…&from=…&to=…
+  // (genix_diagnostika §1: any figure → account → проводка → document).
+  const [searchParams] = useSearchParams();
+  useEffect(() => {
+    const acc = searchParams.get('account_id');
+    if (acc) setSelectedAccountId(acc);
+    const f = searchParams.get('from');
+    const t2 = searchParams.get('to');
+    if (f) setDateFrom(f);
+    if (t2) setDateTo(t2);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   // Pagination (client-side for print compatibility)
   const [currentPage, setCurrentPage] = useState(1);

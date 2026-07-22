@@ -410,6 +410,12 @@ export const financeService = {
     return response.data;
   },
 
+  // Diagnostics (genix_diagnostika §2.4) — anomaly scan over the trial balance.
+  async getTrialBalanceAnomalies(params = {}) {
+    const response = await apiClient.get('/reports/trial-balance/anomalies', { params });
+    return response.data.data; // { balance_broken, totals, counts, anomalies[] }
+  },
+
   async getGeneralLedger(params = {}) {
     const response = await apiClient.get('/reports/general-ledger', { params });
     return response.data.data;
