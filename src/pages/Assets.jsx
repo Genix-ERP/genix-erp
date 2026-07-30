@@ -17,6 +17,7 @@ import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { format } from 'date-fns';
+import FixedAssetsV2Panel from '@/components/finance/FixedAssetsV2Panel';
 
 const COLORS = ['#0ea5e9', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444'];
 
@@ -32,6 +33,7 @@ export default function Assets() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
 
+  const [assetsView, setAssetsView] = useState('v2'); // 'v2' = new fixed-assets module, 'classic' = legacy
   const [filteredAssets, setFilteredAssets] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -386,9 +388,38 @@ export default function Assets() {
     URL.revokeObjectURL(url);
   };
 
+  const assetsTabBar = (
+    <div className="inline-flex rounded-lg bg-slate-100 p-1 mb-2">
+      <button
+        onClick={() => setAssetsView('v2')}
+        className={`px-3 py-1.5 text-sm rounded-md transition-colors ${assetsView === 'v2' ? 'bg-white shadow text-slate-900' : 'text-slate-500'}`}
+      >
+        {t('depreciation') || 'Amortizatsiya'}
+      </button>
+      <button
+        onClick={() => setAssetsView('classic')}
+        className={`px-3 py-1.5 text-sm rounded-md transition-colors ${assetsView === 'classic' ? 'bg-white shadow text-slate-900' : 'text-slate-500'}`}
+      >
+        {t('classic') || 'Klassik'}
+      </button>
+    </div>
+  );
+
+  // New Fixed Assets v2 module (register + auto-depreciation). Default view;
+  // the legacy screen stays available under the "Klassik" tab.
+  if (assetsView === 'v2') {
+    return (
+      <div className="p-4 md:p-6 lg:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
+        {assetsTabBar}
+        <FixedAssetsV2Panel />
+      </div>
+    );
+  }
+
   return (
     <div className="p-4 md:p-6 lg:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
       <div className="space-y-6">
+        {assetsTabBar}
 
         {/* Metrics */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">

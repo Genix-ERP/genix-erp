@@ -34,7 +34,8 @@ import {
   Receipt,
   Image as ImageIcon,
   Sparkles,
-  Smartphone
+  Smartphone,
+  Landmark
 } from 'lucide-react';
 
 // Import settings components
@@ -52,6 +53,7 @@ import ProjectSettings from '@/components/admin-settings/ProjectSettings';
 import ConstructionSettings from '@/components/admin-settings/ConstructionSettings';
 import AISettings from '@/components/admin-settings/AISettings';
 import MobileAppSettings from '@/components/admin-settings/MobileAppSettings';
+import FixedAssetsMappingSettings from '@/components/admin-settings/FixedAssetsMappingSettings';
 import CompanySettings from '@/components/settings/CompanySettings';
 import SubscriptionSettings from '@/components/settings/SubscriptionSettings';
 
@@ -69,6 +71,7 @@ const SECTIONS = [
   { id: 'manufacturing', icon: Factory, label: 'manufacturing_settings', component: ManufacturingSettings, appIds: ['manufacturing'] },
   { id: 'hr', icon: Briefcase, label: 'hr_settings', component: HRSettings, appIds: ['hr', 'payroll', 'expenses'] },
   { id: 'finance', icon: DollarSign, label: 'finance_settings', component: FinanceSettings, appIds: ['finance', 'assets', 'expenses'] },
+  { id: 'asset-mapping', icon: Landmark, label: 'asset_mapping_settings', component: FixedAssetsMappingSettings, appIds: ['finance', 'assets'] },
   { id: 'expenses', icon: Receipt, label: 'expenses_settings', component: ExpensesSettings, appIds: ['expenses'] },
   { id: 'projects', icon: FolderKanban, label: 'project_settings', component: ProjectSettings, appIds: ['projects'] },
   { id: 'construction', icon: HardHat, label: 'construction_settings', component: ConstructionSettings, appIds: ['construction'] },
