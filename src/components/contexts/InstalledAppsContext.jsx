@@ -14,7 +14,7 @@ const getStorageKey = (baseKey, companyId) => {
 };
 
 export function InstalledAppsProvider({ children }) {
-  const { activeCompany, companies, refreshCompanies } = useCompany();
+  const { activeCompany, companies, refreshCompanies, isLoading: companiesLoading } = useCompany();
 
   // Initialize from localStorage cache immediately to avoid delay
   const [installedApps, setInstalledApps] = useState(() => {
@@ -35,8 +35,12 @@ export function InstalledAppsProvider({ children }) {
   // Load installed apps from backend or localStorage
   const loadInstalledApps = useCallback(async () => {
     if (!activeCompany) {
-      setInstalledApps([]);
-      setIsLoading(false);
+      // Companies may still be hydrating/fetching — don't wipe the
+      // cache-hydrated list until we know there's really no company.
+      if (!companiesLoading) {
+        setInstalledApps([]);
+        setIsLoading(false);
+      }
       return;
     }
 
@@ -82,7 +86,7 @@ export function InstalledAppsProvider({ children }) {
     }
 
     setIsLoading(false);
-  }, [activeCompany]);
+  }, [activeCompany, companiesLoading]);
 
   useEffect(() => {
     loadInstalledApps();

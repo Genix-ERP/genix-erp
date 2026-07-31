@@ -3,6 +3,7 @@ import apiClient from '@/api/client';
 import { useEmployeePermissions } from './EmployeePermissionsContext';
 
 const ACTIVE_COMPANY_KEY = 'genix_active_company';
+const COMPANIES_CACHE_KEY = 'genix_companies_cache';
 
 const CompanyContext = createContext();
 
@@ -26,9 +27,26 @@ const getUserStorageKey = (baseKey) => {
   return `${baseKey}_user_${userId}`;
 };
 
+// Read the cached companies list for the current user synchronously.
+// Lets the provider hydrate `companies`/`activeCompany` on the first render
+// so the sidebar and company switcher don't wait for /organizations.
+const readCachedCompanies = () => {
+  try {
+    const raw = localStorage.getItem(getUserStorageKey(COMPANIES_CACHE_KEY));
+    const list = raw ? JSON.parse(raw) : null;
+    if (Array.isArray(list)) return list;
+  } catch (e) { /* ignore corrupt cache */ }
+  return [];
+};
+
 export function CompanyProvider({ children }) {
-  const [companies, setCompanies] = useState([]);
-  const [activeCompany, setActiveCompanyState] = useState(null);
+  const [companies, setCompanies] = useState(readCachedCompanies);
+  const [activeCompany, setActiveCompanyState] = useState(() => {
+    const cached = readCachedCompanies();
+    if (cached.length === 0) return null;
+    const activeId = localStorage.getItem(getUserStorageKey(ACTIVE_COMPANY_KEY));
+    return cached.find(c => c.id === activeId) || cached[0];
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState(null);
 
@@ -131,6 +149,13 @@ export function CompanyProvider({ children }) {
 
       setCompanies(companiesList);
 
+      // Persist for synchronous hydration on the next page load. `_backend`
+      // is stripped: nothing reads it after mapping and it bloats the cache.
+      try {
+        const cachePayload = companiesList.map(({ _backend, ...rest }) => rest);
+        localStorage.setItem(getUserStorageKey(COMPANIES_CACHE_KEY), JSON.stringify(cachePayload));
+      } catch (e) { /* best-effort cache */ }
+
       // Load active company from localStorage (user preference)
       const activeKey = getUserStorageKey(ACTIVE_COMPANY_KEY);
       const activeId = localStorage.getItem(activeKey);
@@ -144,9 +169,12 @@ export function CompanyProvider({ children }) {
       }
     } catch (error) {
       console.error('Error loading companies from API:', error);
-      // Fallback: If API fails and user is not authenticated, set empty state
-      setCompanies([]);
-      setActiveCompanyState(null);
+      // Don't clobber cache-hydrated state on transient failures — only
+      // reset when there was nothing cached (e.g. unauthenticated first load).
+      if (readCachedCompanies().length === 0) {
+        setCompanies([]);
+        setActiveCompanyState(null);
+      }
     } finally {
       setIsLoading(false);
     }

@@ -33,12 +33,50 @@ export const AVAILABLE_MODULES = [
   { id: 'organization', nameKey: 'organization', isCore: true },
 ];
 
+const PERMISSIONS_CACHE_KEY = 'genix_permissions_cache';
+
+// Current user id from localStorage — readable synchronously at mount,
+// before AuthContext finishes its backend fetch.
+const getCachedUserId = () => {
+  try {
+    const raw = localStorage.getItem('genixerp_user') || localStorage.getItem('user');
+    if (raw) {
+      const u = JSON.parse(raw);
+      return u.id || u.email;
+    }
+  } catch (e) { /* ignore */ }
+  return 'default';
+};
+
+// Read the cached (already converted) permission state for the current user.
+// Lets the sidebar render the full module list on the first paint instead of
+// waiting for the permissions request. The backend remains the enforcement
+// point — this only affects what the UI shows while fresh data loads.
+const readCachedPermissions = () => {
+  try {
+    const raw = localStorage.getItem(`${PERMISSIONS_CACHE_KEY}_user_${getCachedUserId()}`);
+    if (raw) return JSON.parse(raw);
+  } catch (e) { /* ignore corrupt cache */ }
+  return null;
+};
+
+const persistPermissionsCache = (payload) => {
+  try {
+    localStorage.setItem(`${PERMISSIONS_CACHE_KEY}_user_${getCachedUserId()}`, JSON.stringify(payload));
+  } catch (e) { /* best-effort cache */ }
+};
+
 export function EmployeePermissionsProvider({ children }) {
   const { user, isAuthenticated, isSiteAdmin, isOwner, backendAvailable } = useAuth();
-  const [permissions, setPermissions] = useState({});
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [employeeId, setEmployeeId] = useState(null);
-  const [organizationIds, setOrganizationIds] = useState([]); // Organizations this employee can access
+  // Hydrate synchronously from the per-user cache so consumers (sidebar,
+  // company filtering) don't flicker from "no access" to "access" on reload.
+  const [cachedState] = useState(readCachedPermissions);
+  const [permissions, setPermissions] = useState(cachedState?.permissions || {});
+  const [isAdmin, setIsAdmin] = useState(cachedState?.isAdmin === true);
+  const [employeeId, setEmployeeId] = useState(cachedState?.employeeId || null);
+  const [organizationIds, setOrganizationIds] = useState(
+    Array.isArray(cachedState?.organizationIds) ? cachedState.organizationIds : []
+  ); // Organizations this employee can access
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -60,6 +98,7 @@ export function EmployeePermissionsProvider({ children }) {
         setPermissions({});
         setEmployeeId(null);
         setOrganizationIds([]); // Admins have access to all organizations
+        persistPermissionsCache({ isAdmin: true, employeeId: null, organizationIds: [], permissions: {} });
       } else {
         setIsAdmin(false);
         setEmployeeId(result.employee_id || null);
@@ -78,6 +117,12 @@ export function EmployeePermissionsProvider({ children }) {
           });
         }
         setPermissions(perms);
+        persistPermissionsCache({
+          isAdmin: false,
+          employeeId: result.employee_id || null,
+          organizationIds: result.organization_ids || [],
+          permissions: perms,
+        });
       }
     } catch (err) {
       console.error('Failed to load user permissions:', err);
