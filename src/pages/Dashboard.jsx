@@ -35,7 +35,6 @@ import {
   analyzeInventory,
   analyzeFinancials,
   analyzeHR,
-  analyzeProjects,
   analyzeBusinessHealth,
 } from "@/api/services/aiAnalytics";
 
@@ -56,7 +55,7 @@ export default function Dashboard() {
   const { items: inventory, stockMovements, refreshData: refreshInventory } = useInventory();
   const { financialTransactions, customerInvoices, vendorBills, refreshData: refreshFinancials } = useFinancials();
   const { customers, leads, opportunities, refreshData: refreshCustomers } = useCustomers();
-  const { employees, salesOrders, projects, expenses, payrolls, refreshData: refreshModules } = useModules();
+  const { employees, salesOrders, expenses, payrolls, refreshData: refreshModules } = useModules();
 
   const [isLoading, setIsLoading] = useState(true);
 
@@ -142,11 +141,10 @@ export default function Dashboard() {
   const inventoryAnalysis = useMemo(() => analyzeInventory(inventory, stockMovements, language), [inventory, stockMovements, language]);
   const financialAnalysis = useMemo(() => analyzeFinancials(financialTransactions, [], [], language), [financialTransactions, language]);
   const hrAnalysis = useMemo(() => analyzeHR(employees, payrolls, language), [employees, payrolls, language]);
-  const projectAnalysis = useMemo(() => analyzeProjects(projects, language), [projects, language]);
 
   const businessHealth = useMemo(() => analyzeBusinessHealth({
-    salesOrders, inventory, transactions: financialTransactions, employees, projects, language,
-  }), [salesOrders, inventory, financialTransactions, employees, projects, language]);
+    salesOrders, inventory, transactions: financialTransactions, employees, projects: [], language,
+  }), [salesOrders, inventory, financialTransactions, employees, language]);
 
   // Metrics
   const metrics = useMemo(() => {

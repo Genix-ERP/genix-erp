@@ -499,7 +499,7 @@ export default function LeaveManagement() {
                           </TableCell>
                           <TableCell>
                             <span className="text-sm">
-                              {format(parseISO(request.start_date), 'dd MMM')} - {format(parseISO(request.end_date), 'dd MMM yyyy')}
+                              {format(parseISO(request.start_date), 'dd.MM')} - {format(parseISO(request.end_date), 'dd.MM.yyyy')}
                             </span>
                           </TableCell>
                           <TableCell>{request.days} {t('days') || "kun"}</TableCell>
@@ -509,7 +509,7 @@ export default function LeaveManagement() {
                             </Badge>
                           </TableCell>
                           <TableCell className="text-sm text-slate-500">
-                            {format(parseISO(request.created_at), 'dd MMM yyyy')}
+                            {format(parseISO(request.created_at), 'dd.MM.yyyy')}
                           </TableCell>
                           <TableCell className="text-right">
                             <DropdownMenu>
@@ -755,7 +755,7 @@ export default function LeaveManagement() {
                   <div>
                     <p className="text-sm text-slate-500">{t('period') || "Davr"}</p>
                     <p className="font-medium">
-                      {format(parseISO(selectedRequest.start_date), 'dd MMM yyyy')} - {format(parseISO(selectedRequest.end_date), 'dd MMM yyyy')}
+                      {format(parseISO(selectedRequest.start_date), 'dd.MM.yyyy')} - {format(parseISO(selectedRequest.end_date), 'dd.MM.yyyy')}
                     </p>
                   </div>
                   <div>

@@ -738,13 +738,13 @@ export default function Dropshipping() {
                   {selectedOrder.shipped_date && (
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">{t('shipped_date')}</span>
-                      <span>{format(new Date(selectedOrder.shipped_date), 'PPp')}</span>
+                      <span>{format(new Date(selectedOrder.shipped_date), 'dd.MM.yyyy HH:mm')}</span>
                     </div>
                   )}
                   {selectedOrder.delivered_date && (
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">{t('delivered_date')}</span>
-                      <span>{format(new Date(selectedOrder.delivered_date), 'PPp')}</span>
+                      <span>{format(new Date(selectedOrder.delivered_date), 'dd.MM.yyyy HH:mm')}</span>
                     </div>
                   )}
                 </div>

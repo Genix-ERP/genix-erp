@@ -19,6 +19,7 @@ import {
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { inventoryService } from '@/api/services';
+import { formatDate } from '@/utils/formatDate';
 
 const getOperationIcon = (type, className = "w-5 h-5") => {
   switch (type) {
@@ -119,9 +120,7 @@ export default function OperationTypeDetail() {
     const d = new Date(dateStr);
     const now = new Date();
     const isLate = d < now;
-    const formatted = d.toLocaleDateString(language === 'uz' ? 'uz-UZ' : language === 'ru' ? 'ru-RU' : 'en-US', {
-      day: '2-digit', month: '2-digit', year: 'numeric'
-    });
+    const formatted = formatDate(d);
     return { formatted, isLate };
   };
 

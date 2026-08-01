@@ -15,6 +15,7 @@ import { useTranslation } from '@/components/utils/translations';
 import financeService from '@/api/services/finance';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import DiagnosticsPanel from '@/components/finance/DiagnosticsPanel';
+import { formatDate, formatDateTime } from '@/utils/formatDate';
 
 // Helper to get date range for period filter
 const getDateParams = (period) => {
@@ -320,7 +321,7 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
 
         ${balanceSheet ? `
         <h2>${language === 'uz' ? 'Buxgalteriya Balansi' : 'Balance Sheet'}</h2>
-        <p style="color:#64748b;font-size:12px">${language === 'uz' ? 'Sana' : 'As of'}: ${balanceSheet.as_of_date}</p>
+        <p style="color:#64748b;font-size:12px">${language === 'uz' ? 'Sana' : 'As of'}: ${formatDate(balanceSheet.as_of_date)}</p>
         <table>
           <tr><th></th><th class="amount">${language === 'uz' ? 'Balans' : 'Balance'}</th></tr>
           <tr class="total-row"><td><strong>${language === 'uz' ? 'Aktivlar' : 'Assets'}</strong></td><td class="amount"><strong>${formatCurrency(balanceSheet.total_assets)}</strong></td></tr>
@@ -355,7 +356,7 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
         ` : ''}
 
         <div class="footer">
-          ${language === 'uz' ? 'Hisobot sanasi' : 'Generated'}: ${new Date().toLocaleString()} | Genix ERP
+          ${language === 'uz' ? 'Hisobot sanasi' : 'Generated'}: ${formatDateTime()} | Genix ERP
         </div>
       </body>
       </html>
@@ -1001,7 +1002,7 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
                       <TableBody>
                         {exchangeDiffs.items.slice((currentPageExchange - 1) * pageSize, currentPageExchange * pageSize).map((item) => (
                           <TableRow key={item.id}>
-                            <TableCell>{item.date}</TableCell>
+                            <TableCell>{formatDate(item.date)}</TableCell>
                             <TableCell className="font-mono text-sm">{item.document_number || '—'}</TableCell>
                             <TableCell className="text-sm">{item.counterparty || '—'}</TableCell>
                             <TableCell>

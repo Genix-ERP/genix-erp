@@ -1,3 +1,4 @@
+import { formatDate } from '@/utils/formatDate';
 import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -273,7 +274,7 @@ export default function ReconciliationWorkflow({ bankAccount, onClose }) {
                 <TableBody>
                   {reconciliations.map(rec => (
                     <TableRow key={rec.id} className="cursor-pointer hover:bg-slate-50" onClick={() => loadReconciliation(rec.id)}>
-                      <TableCell>{rec.statement_date}</TableCell>
+                      <TableCell>{formatDate(rec.statement_date)}</TableCell>
                       <TableCell className="text-right font-mono">{formatCurrency(rec.statement_ending_balance, bankAccount?.currency)}</TableCell>
                       <TableCell className="text-right font-mono">{formatCurrency(rec.book_balance, bankAccount?.currency)}</TableCell>
                       <TableCell className="text-right font-mono">
@@ -364,7 +365,7 @@ export default function ReconciliationWorkflow({ bankAccount, onClose }) {
           </Button>
           <div>
             <h2 className="text-xl font-bold text-slate-800">
-              {language === 'uz' ? 'Solishtirish' : 'Reconciliation'} - {activeReconciliation.statement_date}
+              {language === 'uz' ? 'Solishtirish' : 'Reconciliation'} - {formatDate(activeReconciliation.statement_date)}
             </h2>
             <p className="text-sm text-slate-500">{bankAccount?.name}</p>
           </div>
@@ -456,7 +457,7 @@ export default function ReconciliationWorkflow({ bankAccount, onClose }) {
                             tx.is_reconciled && <Check className="w-4 h-4 text-green-600" />
                           )}
                         </TableCell>
-                        <TableCell className="text-sm">{tx.transaction_date}</TableCell>
+                        <TableCell className="text-sm">{formatDate(tx.transaction_date)}</TableCell>
                         <TableCell className="text-sm max-w-[200px] truncate">{tx.description || tx.reference || '-'}</TableCell>
                         <TableCell className={`text-right font-mono ${tx.transaction_type === 'credit' ? 'text-green-600' : 'text-red-600'}`}>
                           {tx.transaction_type === 'credit' ? '+' : '-'}{formatCurrency(tx.amount, bankAccount?.currency)}
@@ -504,7 +505,7 @@ export default function ReconciliationWorkflow({ bankAccount, onClose }) {
                             je.is_reconciled && <Check className="w-4 h-4 text-green-600" />
                           )}
                         </TableCell>
-                        <TableCell className="text-sm">{je.entry_date}</TableCell>
+                        <TableCell className="text-sm">{formatDate(je.entry_date)}</TableCell>
                         <TableCell className="text-sm">{je.entry_number}</TableCell>
                         <TableCell className={`text-right font-mono ${je.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                           {formatCurrency(je.amount, bankAccount?.currency)}

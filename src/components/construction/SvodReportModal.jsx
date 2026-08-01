@@ -9,6 +9,7 @@ import { useTranslation } from '@/components/utils/translations';
 import { constructionService } from '@/api/services/construction';
 import { UploadFile } from '@/api/integrations';
 import Loader from '@/components/ui/loader';
+import { formatDate } from '@/utils/formatDate';
 
 // SvodReportModal renders the FAKT side of the Uzbek "Сводная сметная"
 // 12-line consolidated estimate (the "Жилдом Саттепо Авеню Свод.xlsx"
@@ -301,7 +302,7 @@ export default function SvodReportModal({
     // Period line (only if at least one bound is set).
     if (periodFrom || periodTo) {
       ws.mergeCells(nextRow, 1, nextRow, totalCols);
-      const fmtDate = (d) => d ? new Date(d).toLocaleDateString('ru-RU') : '—';
+      const fmtDate = (d) => d ? formatDate(d) : '—';
       ws.getCell(nextRow, 1).value = `${tt('period_label', language)}: ${fmtDate(periodFrom)} — ${fmtDate(periodTo)}`;
       ws.getCell(nextRow, 1).alignment = { horizontal: 'center', vertical: 'middle' };
       ws.getCell(nextRow, 1).font = { italic: true, size: 10, color: { argb: 'FF64748B' } };
@@ -673,9 +674,9 @@ export default function SvodReportModal({
                 )}
                 {(periodFrom || periodTo) && (
                   <div className="text-center text-xs text-slate-600 mb-1">
-                    {tt('period_label', language)}: {periodFrom ? new Date(periodFrom).toLocaleDateString('ru-RU') : '—'}
+                    {tt('period_label', language)}: {periodFrom ? formatDate(periodFrom) : '—'}
                     {' — '}
-                    {periodTo ? new Date(periodTo).toLocaleDateString('ru-RU') : '—'}
+                    {periodTo ? formatDate(periodTo) : '—'}
                   </div>
                 )}
                 <div className="text-center text-xs text-slate-500 mb-4">

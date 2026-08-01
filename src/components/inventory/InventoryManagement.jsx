@@ -876,7 +876,7 @@ export default function InventoryManagement() {
                             </TableCell>
                             <TableCell className="text-slate-700">
                               {movementDate
-                                ? format(new Date(movementDate), 'MMM dd, yyyy HH:mm')
+                                ? format(new Date(movementDate), 'dd.MM.yyyy HH:mm')
                                 : '-'}
                             </TableCell>
                             <TableCell>

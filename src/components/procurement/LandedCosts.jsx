@@ -1,3 +1,4 @@
+import { formatDate } from '@/utils/formatDate';
 import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -330,7 +331,7 @@ export default function LandedCosts() {
                     <TableCell className="font-medium">{lc.landed_cost_number}</TableCell>
                     <TableCell>{lc.gr_number}</TableCell>
                     <TableCell>{lc.supplier_name}</TableCell>
-                    <TableCell>{lc.cost_date}</TableCell>
+                    <TableCell>{formatDate(lc.cost_date)}</TableCell>
                     <TableCell className="text-right">{formatCurrency(lc.product_value)}</TableCell>
                     <TableCell className="text-right text-orange-600 font-medium">
                       +{formatCurrency(lc.total_landed_cost)}
@@ -699,7 +700,7 @@ export default function LandedCosts() {
                   <div className="space-y-3">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">{t('cost_date')}</span>
-                      <span>{selectedLC.cost_date}</span>
+                      <span>{formatDate(selectedLC.cost_date)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">{t('allocation_method')}</span>
@@ -708,7 +709,7 @@ export default function LandedCosts() {
                     {selectedLC.validated_at && (
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">{t('validated_at')}</span>
-                        <span>{format(new Date(selectedLC.validated_at), 'PPp')}</span>
+                        <span>{format(new Date(selectedLC.validated_at), 'dd.MM.yyyy HH:mm')}</span>
                       </div>
                     )}
                   </div>

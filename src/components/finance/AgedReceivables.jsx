@@ -1,3 +1,4 @@
+import { formatDate } from '@/utils/formatDate';
 import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -306,7 +307,7 @@ export default function AgedReceivables() {
                               ) : (
                                 <>
                                   <span className="text-xs text-slate-400">
-                                    {t('due') || 'Due'}: {inv.due_date}
+                                    {t('due') || 'Due'}: {formatDate(inv.due_date)}
                                   </span>
                                   {inv.days_overdue > 0 && (
                                     <Badge variant="outline" className="text-xs px-1.5 py-0 text-red-600 border-red-200">

@@ -1,1517 +1,629 @@
-import React, { useState, useEffect } from 'react';
-import { useModules } from '@/components/contexts/ModulesContext';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { Plus, Search, FileText, AlertTriangle, CheckCircle, Clock, Brain, Bell, Target, Lightbulb, Eye, Edit, Trash2, Building2, User, Files, Upload, Download } from 'lucide-react';
-import { format, differenceInDays } from 'date-fns';
-import { ru, uz } from 'date-fns/locale';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { toast } from 'sonner';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from '@/components/ui/table';
+import {
+  FileText, CheckCircle, AlertTriangle, Banknote, Plus, Search,
+  Sparkles, ChevronLeft, ChevronRight, ArrowUpDown, Users, Bell,
+} from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
-
-const getDateLocale = (lang) => {
-  switch (lang) {
-    case 'ru': return ru;
-    case 'uz': return uz;
-    default: return undefined;
-  }
-};
-import { usePermissions } from "@/hooks/usePermissions";
+import { usePermissions } from '@/hooks/usePermissions';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
-import { contactsService, procurementService } from "@/api/services";
-import { Asset, Employee, EmployeeContract } from "@/api/entities";
+import { useAuth } from '@/components/contexts/AuthContext';
+import contractsService from '@/api/services/contracts';
+import { contactsService } from '@/api/services';
+import { Employee } from '@/api/entities';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
+import { formatDate } from '@/utils/formatDate';
+import { CONTRACT_STATUSES, CONTRACT_DIRECTIONS } from '@/components/contracts/constants';
 
-// Employee (HR) contract type options, kept consistent with the HR module.
-const EMP_CONTRACT_TYPES = ['permanent', 'fixed_term', 'probation', 'part_time', 'temporary', 'internship'];
+const EMPTY_FORM = {
+  contract_number: '',
+  title: '',
+  vendor_id: '',
+  direction: 'expense',
+  start_date: new Date().toISOString().split('T')[0],
+  end_date: '',
+  signed_date: '',
+  value: '',
+  currency: 'UZS',
+  responsible_employee_id: '',
+  description: '',
+};
+
+// Saved views — each maps to server-side list params.
+const VIEWS = [
+  { key: 'all', labelKey: 'view_all_contracts', params: {} },
+  { key: 'active', labelKey: 'view_active_contracts', params: { status: 'active' } },
+  { key: 'expiring', labelKey: 'view_expiring_contracts', params: { expiring_within: 30 } },
+  { key: 'mine', labelKey: 'view_my_contracts', params: {} }, // responsible added at runtime
+  { key: 'archived', labelKey: 'view_archived_contracts', params: { archived: 'true' } },
+];
 
 export default function Contracts() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { contracts, createContract, updateContract, deleteContract, isLoading } = useModules();
-  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { canCreate, MODULES } = usePermissions();
   const { formatCurrency } = useCurrencyFormatter();
+  const { user } = useAuth();
 
-  const [filteredContracts, setFilteredContracts] = useState([]);
+  const [stats, setStats] = useState(null);
+  const [rows, setRows] = useState([]);
+  const [meta, setMeta] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [view, setView] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showViewModal, setShowViewModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [showRenewalConfirmModal, setShowRenewalConfirmModal] = useState(false);
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [showNoExpiringModal, setShowNoExpiringModal] = useState(false);
-  const [selectedContract, setSelectedContract] = useState(null);
-  const [editContract, setEditContract] = useState(null);
-  const [contractToDelete, setContractToDelete] = useState(null);
-  const [renewalData, setRenewalData] = useState(null);
-  const [successMessage, setSuccessMessage] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [allContacts, setAllContacts] = useState([]);
-  const [assets, setAssets] = useState([]);
+  const [directionFilter, setDirectionFilter] = useState('all');
+  const [responsibleFilter, setResponsibleFilter] = useState('all');
+  const [page, setPage] = useState(1);
+  const [sortBy, setSortBy] = useState('created_at');
+  const [sortOrder, setSortOrder] = useState('desc');
+
+  const [contacts, setContacts] = useState([]);
   const [employees, setEmployees] = useState([]);
-  const [employeeContracts, setEmployeeContracts] = useState([]);
-  const [partiesLoading, setPartiesLoading] = useState(false);
-  // Contract documents modal
-  const [docsContract, setDocsContract] = useState(null);
-  const [attachments, setAttachments] = useState([]);
-  const [attachmentsLoading, setAttachmentsLoading] = useState(false);
-  const [uploadingDoc, setUploadingDoc] = useState(false);
-  // Live document counts per contract (overrides backend count after up/download).
-  const [docCounts, setDocCounts] = useState({});
 
-  // Build a full URL to a stored file from the API base.
-  const fileUrl = (url) =>
-    `${(import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1').replace(/\/api\/v1\/?$/, '')}${url}`;
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pendingDealLink, setPendingDealLink] = useState(null);
+  // AI extraction state
+  const [aiFile, setAiFile] = useState(null); // { file_id, file_name }
+  const [aiExtracting, setAiExtracting] = useState(false);
+  const [aiFields, setAiFields] = useState(null); // suggestions for the hint chip
+  const aiInputRef = useRef(null);
 
-  const loadAttachments = async (id) => {
-    setAttachmentsLoading(true);
+  const myEmployeeId = useMemo(() => {
+    const me = employees.find((e) => e.user_id && user?.id && e.user_id === user.id);
+    return me?.id || null;
+  }, [employees, user]);
+
+  const debounceRef = useRef(null);
+
+  const loadStats = useCallback(async () => {
     try {
-      const list = await procurementService.listContractAttachments(id);
-      setAttachments(list);
-      setDocCounts(prev => ({ ...prev, [id]: list.length }));
-    } catch {
-      setAttachments([]);
-    } finally {
-      setAttachmentsLoading(false);
+      setStats(await contractsService.getStats());
+    } catch (e) {
+      console.error('Failed to load contract stats:', e);
     }
-  };
-
-  const openDocs = (contract) => {
-    setDocsContract(contract);
-    setAttachments([]);
-    loadAttachments(contract.id);
-  };
-
-  const handleUploadDoc = async (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file || !docsContract) return;
-    setUploadingDoc(true);
-    try {
-      await procurementService.uploadContractAttachment(docsContract.id, file);
-      await loadAttachments(docsContract.id);
-    } catch (err) {
-      console.error('Upload failed:', err);
-    } finally {
-      setUploadingDoc(false);
-    }
-  };
-
-  const handleDeleteAttachment = async (attachmentId) => {
-    if (!docsContract) return;
-    try {
-      await procurementService.deleteContractAttachment(docsContract.id, attachmentId);
-      await loadAttachments(docsContract.id);
-    } catch (err) {
-      console.error('Delete attachment failed:', err);
-    }
-  };
-
-  const [newContract, setNewContract] = useState({
-    contract_number: '',
-    contract_name: '',
-    party_type: 'vendor',
-    vendor_id: '',
-    asset_id: '',
-    start_date: new Date().toISOString().split('T')[0],
-    end_date: '',
-    contract_value: 0,
-    billing_cycle: 'monthly',
-    auto_renew: false,
-    // Employee (HR) contract fields
-    employee_id: '',
-    emp_contract_type: 'permanent',
-    salary: '',
-    currency: 'UZS',
-    working_hours: 40,
-    probation_period: 0,
-    notice_period: 30,
-    benefits: '',
-  });
-
-  // Load HR employee contracts (a separate backend) so they appear alongside
-  // procurement/customer/lease contracts on this single page.
-  const loadEmployeeContracts = async () => {
-    try {
-      const data = await EmployeeContract.list();
-      setEmployeeContracts(Array.isArray(data) ? data : []);
-    } catch {
-      setEmployeeContracts([]);
-    }
-  };
-
-  useEffect(() => {
-    loadEmployeeContracts();
-    Employee.list().then(d => setEmployees(Array.isArray(d) ? d : [])).catch(() => setEmployees([]));
   }, []);
 
-  // Normalize an HR employee contract into the common card shape used here.
-  const normalizeEmployeeContract = (c) => ({
-    ...c,
-    __employee: true,
-    party_type: 'employee',
-    contract_number: c.contract_number || c.id,
-    contract_name: c.employee_name ? `${c.employee_name}${c.job_title ? ' — ' + c.job_title : ''}` : (c.id || ''),
-    party_name: c.employee_name || '',
-    contract_value: c.salary || 0,
-    value: c.salary || 0,
-    billing_cycle: 'monthly',
-  });
+  const loadList = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const params = { page, limit: 20, sort_by: sortBy, sort_order: sortOrder };
+      const viewDef = VIEWS.find((v) => v.key === view) || VIEWS[0];
+      Object.assign(params, viewDef.params);
+      if (view === 'mine' && myEmployeeId) params.responsible_employee_id = myEmployeeId;
+      if (searchQuery.trim()) params.search = searchQuery.trim();
+      if (statusFilter !== 'all' && !params.status) params.status = statusFilter;
+      if (directionFilter !== 'all') params.direction = directionFilter;
+      if (responsibleFilter !== 'all' && view !== 'mine') params.responsible_employee_id = responsibleFilter;
+      const { items, meta: m } = await contractsService.list(params);
+      setRows(items);
+      setMeta(m);
+    } catch (e) {
+      console.error('Failed to load contracts:', e);
+      toast.error(t('loading_error'));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [page, sortBy, sortOrder, view, searchQuery, statusFilter, directionFilter, responsibleFilter, myEmployeeId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Load contacts + assets when a contract modal opens (used as counterparties).
+  useEffect(() => { loadStats(); }, [loadStats]);
   useEffect(() => {
-    if ((showCreateModal || showEditModal) && allContacts.length === 0 && assets.length === 0) {
-      setPartiesLoading(true);
-      Promise.all([
-        contactsService.list().catch(() => []),
-        Asset.list().catch(() => []),
-      ])
-        .then(([contactsData, assetsData]) => {
-          setAllContacts(contactsData || []);
-          setAssets(assetsData || []);
-        })
-        .finally(() => setPartiesLoading(false));
-    }
-  }, [showCreateModal, showEditModal]);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(loadList, searchQuery ? 300 : 0);
+    return () => clearTimeout(debounceRef.current);
+  }, [loadList, searchQuery]);
 
-  // Filter contacts to the kind the chosen party type expects.
-  const contactsForType = (partyType) => {
-    if (partyType === 'customer') {
-      return allContacts.filter(c => ['customer', 'both'].includes(c.contact_type || c.type));
+  useEffect(() => {
+    contactsService.list().then((d) => setContacts(Array.isArray(d) ? d : [])).catch(() => setContacts([]));
+    Employee.list().then((d) => setEmployees(Array.isArray(d) ? d : [])).catch(() => setEmployees([]));
+  }, []);
+
+  // CRM "Bitim yutildi" entry: /contracts?create=1&counterparty_id=..&title=..&value=..&deal_id=..
+  useEffect(() => {
+    if (searchParams.get('create') === '1') {
+      setForm((f) => ({
+        ...f,
+        title: searchParams.get('title') || f.title,
+        vendor_id: searchParams.get('counterparty_id') || f.vendor_id,
+        value: searchParams.get('value') || f.value,
+        direction: searchParams.get('direction') || 'income',
+      }));
+      if (searchParams.get('deal_id')) setPendingDealLink(searchParams.get('deal_id'));
+      setShowCreateModal(true);
+      setSearchParams({}, { replace: true });
     }
-    if (partyType === 'vendor') {
-      return allContacts.filter(c => ['vendor', 'both'].includes(c.contact_type || c.type));
-    }
-    return allContacts; // partner: any contact
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const openCreate = async () => {
+    setForm(EMPTY_FORM);
+    setAiFile(null);
+    setAiFields(null);
+    setShowCreateModal(true);
+    try {
+      const { contract_number } = await contractsService.getNextNumber();
+      setForm((f) => (f.contract_number ? f : { ...f, contract_number }));
+    } catch { /* suggestion only */ }
   };
 
-  // Procurement/customer/lease contracts + HR employee contracts in one list.
-  const mergedContracts = useMemo(
-    () => [...contracts, ...employeeContracts.map(normalizeEmployeeContract)],
-    [contracts, employeeContracts]
-  );
-
-  useEffect(() => {
-    let filtered = mergedContracts.map(contract => {
-      if (!contract.end_date) return contract;
-
-      const today = new Date();
-      const endDate = new Date(contract.end_date);
-      const daysUntilExpiry = differenceInDays(endDate, today);
-
-      let status = contract.status;
-      if (daysUntilExpiry < 0 && status === 'active') {
-        status = 'expired';
+  const handleAiExtract = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setAiExtracting(true);
+    try {
+      const res = await contractsService.aiExtract(file);
+      setAiFile({ file_id: res.file_id, file_name: res.file_name });
+      const s = res.suggestions;
+      if (!s) {
+        toast.info(t('ai_extract_unavailable'));
+        return;
       }
-
-      return { ...contract, status, daysUntilExpiry };
-    });
-
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(c => c.status === statusFilter);
+      const val = (k) => s[k]?.value ?? null;
+      const matchedContact = val('counterparty_name')
+        ? contacts.find((c) => (c.name || '').toLowerCase().includes(String(val('counterparty_name')).toLowerCase())
+          || String(val('counterparty_name')).toLowerCase().includes((c.name || '').toLowerCase()))
+        : null;
+      setForm((f) => ({
+        ...f,
+        contract_number: val('contract_number') || f.contract_number,
+        title: val('title') || val('subject') || f.title,
+        vendor_id: matchedContact?.id || f.vendor_id,
+        value: val('value') != null ? String(val('value')) : f.value,
+        currency: val('currency') || f.currency,
+        start_date: val('start_date') || f.start_date,
+        end_date: val('end_date') || f.end_date,
+        signed_date: val('signed_date') || f.signed_date,
+        description: val('subject') || f.description,
+      }));
+      setAiFields(s);
+      toast.success(t('ai_extract_done'));
+    } catch (err) {
+      console.error('AI extract failed:', err);
+      toast.error(t('ai_extract_failed'));
+    } finally {
+      setAiExtracting(false);
     }
-    if (searchQuery) {
-      filtered = filtered.filter(c =>
-        c.contract_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.contract_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.party_name?.toLowerCase().includes(searchQuery.toLowerCase())
+  };
+
+  const handleCreate = async () => {
+    if (!form.title || !form.vendor_id || !form.start_date) return;
+    setIsSubmitting(true);
+    try {
+      const created = await contractsService.create({
+        contract_number: form.contract_number || undefined,
+        title: form.title,
+        vendor_id: form.vendor_id,
+        direction: form.direction,
+        start_date: form.start_date,
+        end_date: form.end_date || undefined,
+        signed_date: form.signed_date || undefined,
+        value: parseFloat(form.value) || 0,
+        currency: form.currency,
+        responsible_employee_id: form.responsible_employee_id || undefined,
+        description: form.description || undefined,
+      });
+      // Attach the AI-extracted document as file version 1.
+      if (aiFile?.file_id && created?.id) {
+        try { await contractsService.attachFile(created.id, aiFile.file_id); } catch (e) { console.error(e); }
+      }
+      if (pendingDealLink && created?.id) {
+        try { await contractsService.createLink(created.id, 'crm_deal', pendingDealLink); } catch (e) { console.error(e); }
+        setPendingDealLink(null);
+      }
+      toast.success(t('contract_created'));
+      setShowCreateModal(false);
+      setForm(EMPTY_FORM);
+      setAiFile(null);
+      setAiFields(null);
+      loadStats();
+      if (created?.id) navigate(`/contracts/${created.id}`);
+      else loadList();
+    } catch (err) {
+      console.error('Failed to create contract:', err);
+      const msg = err?.response?.status === 409 ? t('contract_number_taken') : t('contract_create_failed');
+      toast.error(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const toggleSort = (col) => {
+    if (sortBy === col) {
+      setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortBy(col);
+      setSortOrder(col === 'created_at' ? 'desc' : 'asc');
+    }
+    setPage(1);
+  };
+
+  const selectView = (key) => {
+    setView(key);
+    setPage(1);
+    if (key !== 'all') {
+      setStatusFilter('all');
+    }
+  };
+
+  const statusChip = (status) => {
+    const cfg = CONTRACT_STATUSES[status] || CONTRACT_STATUSES.draft;
+    return <Badge variant="outline" className={cfg.chip}>{t(cfg.labelKey)}</Badge>;
+  };
+
+  const expiryCell = (row) => {
+    if (!row.end_date) return <span className="text-slate-400">{t('contract_open_ended')}</span>;
+    const dateStr = formatDate(row.end_date);
+    const d = row.days_to_expiry;
+    if (row.status === 'active' && d != null && d >= 0 && d <= 30) {
+      return (
+        <span className="flex items-center gap-1.5 text-amber-600 font-medium">
+          <Bell className="w-3.5 h-3.5" />
+          {dateStr}
+          <span className="text-xs">({d} {t('days')})</span>
+        </span>
       );
     }
-    setFilteredContracts(filtered);
-  }, [mergedContracts, searchQuery, statusFilter]);
-
-  const handleCreateContract = async () => {
-    setIsSubmitting(true);
-    try {
-      // Employee contracts go to the HR backend with their own fields.
-      if (newContract.party_type === 'employee') {
-        const employee = employees.find(e => e.id === newContract.employee_id);
-        await EmployeeContract.create({
-          employee_id: newContract.employee_id,
-          employee_name: employee?.full_name || employee?.name || '',
-          job_title: employee?.job_title || '',
-          department: employee?.department || '',
-          contract_type: newContract.emp_contract_type,
-          start_date: newContract.start_date,
-          end_date: newContract.end_date || null,
-          salary: parseFloat(newContract.salary) || 0,
-          currency: newContract.currency,
-          working_hours: parseInt(newContract.working_hours) || 40,
-          probation_period: parseInt(newContract.probation_period) || 0,
-          notice_period: parseInt(newContract.notice_period) || 30,
-          benefits: newContract.benefits,
-          status: 'active',
-        });
-        await loadEmployeeContracts();
-        setShowCreateModal(false);
-        resetNewContract();
-        return;
-      }
-
-      const isLease = newContract.party_type === 'lease';
-
-      // Resolve the counterparty display name from the chosen contact or asset.
-      let partyName = '';
-      if (isLease) {
-        const asset = assets.find(a => a.id === newContract.asset_id);
-        partyName = asset?.name || asset?.asset_name || '';
-      } else {
-        const contact = contactsForType(newContract.party_type).find(c => c.id === newContract.vendor_id);
-        partyName = contact?.company_name || contact?.name || '';
-      }
-
-      // Billing cadence is stored separately (terms); contract_type stays a billing value.
-      const billingToContractType = {
-        'monthly': 'monthly',
-        'quarterly': 'fixed',
-        'annually': 'annual',
-        'one_time': 'fixed',
-      };
-
-      const contractData = {
-        title: newContract.contract_name,
-        party_type: newContract.party_type,
-        vendor_id: isLease ? '' : newContract.vendor_id,
-        asset_id: isLease ? newContract.asset_id : '',
-        contract_type: billingToContractType[newContract.billing_cycle] || 'fixed',
-        start_date: newContract.start_date,
-        end_date: newContract.end_date || undefined,
-        value: parseFloat(newContract.contract_value) || 0,
-        auto_renewal: newContract.auto_renew,
-        // Keep frontend fields for UI display
-        contract_name: newContract.contract_name,
-        party_name: partyName,
-        contract_value: parseFloat(newContract.contract_value) || 0,
-        billing_cycle: newContract.billing_cycle,
-      };
-
-      await createContract(contractData);
-      setShowCreateModal(false);
-      resetNewContract();
-    } catch (error) {
-      console.error('Error creating contract:', error);
-    } finally {
-      setIsSubmitting(false);
-    }
+    return <span>{dateStr}</span>;
   };
 
-  const resetNewContract = () => {
-    setNewContract({
-      contract_number: '',
-      contract_name: '',
-      party_type: 'vendor',
-      vendor_id: '',
-      asset_id: '',
-      start_date: new Date().toISOString().split('T')[0],
-      end_date: '',
-      contract_value: 0,
-      billing_cycle: 'monthly',
-      auto_renew: false,
-      employee_id: '',
-      emp_contract_type: 'permanent',
-      salary: '',
-      currency: 'UZS',
-      working_hours: 40,
-      probation_period: 0,
-      notice_period: 30,
-      benefits: '',
-    });
-  };
-
-  const handleViewContract = (contract) => {
-    setSelectedContract(contract);
-    setShowViewModal(true);
-  };
-
-  const handleEditContract = (contract) => {
-    setEditContract({
-      ...contract,
-      contract_value: contract.contract_value || 0,
-      start_date: contract.start_date?.split('T')[0] || '',
-      end_date: contract.end_date?.split('T')[0] || ''
-    });
-    setShowEditModal(true);
-  };
-
-  const handleUpdateContract = async () => {
-    if (!editContract) return;
-
-    setIsSubmitting(true);
-    try {
-      // Employee contracts update against the HR backend.
-      if (editContract.__employee) {
-        await EmployeeContract.update(editContract.id, {
-          ...editContract,
-          salary: parseFloat(editContract.salary) || 0,
-          working_hours: parseInt(editContract.working_hours) || 40,
-          probation_period: parseInt(editContract.probation_period) || 0,
-          notice_period: parseInt(editContract.notice_period) || 30,
-        });
-        await loadEmployeeContracts();
-        setShowEditModal(false);
-        setEditContract(null);
-        return;
-      }
-
-      const isLease = editContract.party_type === 'lease';
-      let partyName = editContract.party_name;
-      if (isLease) {
-        const asset = assets.find(a => a.id === editContract.asset_id);
-        if (asset) partyName = asset.name || asset.asset_name || partyName;
-      } else {
-        const contact = contactsForType(editContract.party_type).find(c => c.id === editContract.vendor_id);
-        if (contact) partyName = contact.company_name || contact.name || partyName;
-      }
-
-      updateContract(editContract.id, {
-        contract_number: editContract.contract_number,
-        contract_name: editContract.contract_name,
-        party_type: editContract.party_type,
-        vendor_id: isLease ? '' : editContract.vendor_id,
-        asset_id: isLease ? editContract.asset_id : '',
-        contract_type: editContract.contract_type,
-        party_name: partyName,
-        start_date: editContract.start_date,
-        end_date: editContract.end_date,
-        contract_value: parseFloat(editContract.contract_value) || 0,
-        billing_cycle: editContract.billing_cycle,
-        auto_renew: editContract.auto_renew,
-        status: editContract.status
-      });
-      setShowEditModal(false);
-      setEditContract(null);
-    } catch (error) {
-      console.error('Error updating contract:', error);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleDeleteContract = (contract) => {
-    setContractToDelete(contract);
-    setShowDeleteModal(true);
-  };
-
-  const confirmDelete = async () => {
-    if (contractToDelete) {
-      if (contractToDelete.__employee) {
-        try { await EmployeeContract.delete(contractToDelete.id); } catch (e) { console.error(e); }
-        await loadEmployeeContracts();
-      } else {
-        deleteContract(contractToDelete.id);
-      }
-      setShowDeleteModal(false);
-      setContractToDelete(null);
-    }
-  };
-
-  const updateContractStatus = (contractId, newStatus) => {
-    updateContract(contractId, { status: newStatus });
-  };
-
-  // Handle renewal action
-  const handleInitiateRenewals = () => {
-    // Find expiring contracts from ALL contracts (not just filtered ones)
-    const allContractsWithExpiry = contracts.map(contract => {
-      if (!contract.end_date) return contract;
-
-      const today = new Date();
-      const endDate = new Date(contract.end_date);
-      const daysUntilExpiry = differenceInDays(endDate, today);
-
-      return { ...contract, daysUntilExpiry };
-    });
-
-    const expiringContracts = allContractsWithExpiry.filter(c =>
-      c.status === 'active' && c.daysUntilExpiry >= 0 && c.daysUntilExpiry <= 30
-    );
-
-    if (expiringContracts.length === 0) {
-      setShowNoExpiringModal(true);
-      return;
-    }
-
-    setRenewalData(expiringContracts);
-    setShowRenewalConfirmModal(true);
-  };
-
-  const confirmRenewal = () => {
-    if (renewalData) {
-      // Bulk renew expiring contracts
-      renewalData.forEach(contract => {
-        updateContractStatus(contract.id, 'renewed');
-      });
-
-      const successMsg = language === 'uz'
-        ? `${renewalData.length} ta shartnoma muvaffaqiyatli yangilandi`
-        : `${renewalData.length} contracts successfully renewed`;
-
-      setSuccessMessage(successMsg);
-      setShowRenewalConfirmModal(false);
-      setRenewalData(null);
-      setShowSuccessModal(true);
-    }
-  };
-
-  // Handle contract review action - Trigger AI chatbox
-  const handleContractReview = () => {
-    // Reset filters to show all contracts
-    setStatusFilter('all');
-    setSearchQuery('');
-
-    // Prepare contract data summary
-    const activeCount = contracts.filter(c => c.status === 'active').length;
-    const expiringCount = contracts.filter(c => {
-      if (!c.end_date || c.status !== 'active') return false;
-      const daysUntil = differenceInDays(new Date(c.end_date), new Date());
-      return daysUntil >= 0 && daysUntil <= 30;
-    }).length;
-    const totalValue = contracts.reduce((sum, c) => sum + (c.contract_value || 0), 0);
-
-    // Get detailed contract information for expiring contracts
-    const expiringDetails = contracts
-      .filter(c => {
-        if (!c.end_date || c.status !== 'active') return false;
-        const daysUntil = differenceInDays(new Date(c.end_date), new Date());
-        return daysUntil >= 0 && daysUntil <= 30;
-      })
-      .map(c => {
-        const daysUntil = differenceInDays(new Date(c.end_date), new Date());
-        const formattedValue = formatCurrency(c.contract_value || 0);
-        return language === 'uz'
-          ? `  - ${c.contract_number}: "${c.contract_name}" (${daysUntil} kun qoldi, qiymat: ${formattedValue})`
-          : `  - ${c.contract_number}: "${c.contract_name}" (${daysUntil} days left, value: ${formattedValue})`;
-      })
-      .join('\n');
-
-    // Create AI prompt with more explicit instructions
-    const prompt = language === 'uz'
-      ? `Siz biznes tahlilchisi sifatida ishlayapsiz. Quyidagi shartnoma ma'lumotlarini tahlil qiling va aniq tavsiyalar bering:
-
-UMUMIY MA'LUMOTLAR:
-- Jami shartnomalar: ${contracts.length} ta
-- Faol shartnomalar: ${activeCount} ta
-- Tez orada tugaydi: ${expiringCount} ta
-- Jami qiymat: ${formatCurrency(totalValue)}
-
-${expiringCount > 0 ? `TUGAYOTGAN SHARTNOMALAR:\n${expiringDetails}\n` : ''}
-
-Iltimos, quyidagilarni tahlil qiling:
-1. Tugayotgan shartnomalar xavfi va ta'siri
-2. Shartnoma portfelining umumiy salomatligi
-3. Aniq harakatlar va tavsiyalar
-4. Oldini olish choralari
-
-Faqat tahlil natijalarini bering, umumiy ma'lumot emas. Raqamlar va aniq shartnoma ma'lumotlariga asoslaning.`
-      : `You are acting as a business analyst. Analyze the following contract data and provide specific recommendations:
-
-SUMMARY:
-- Total contracts: ${contracts.length}
-- Active contracts: ${activeCount}
-- Expiring soon: ${expiringCount}
-- Total value: ${formatCurrency(totalValue)}
-
-${expiringCount > 0 ? `EXPIRING CONTRACTS:\n${expiringDetails}\n` : ''}
-
-Please analyze:
-1. Risk and impact of expiring contracts
-2. Overall contract portfolio health
-3. Specific actions and recommendations
-4. Preventive measures
-
-Provide only analysis results based on the numbers and specific contract data, not general information.`;
-
-    // Open AI chatbox with the prompt
-    if (window.openAIChat) {
-      window.openAIChat(prompt);
-    }
-  };
-
-  const getStatusColor = (status) => {
-    const colors = {
-      draft: 'bg-gray-100 text-gray-800',
-      active: 'bg-green-100 text-green-800',
-      expired: 'bg-red-100 text-red-800',
-      terminated: 'bg-orange-100 text-orange-800',
-      renewed: 'bg-blue-100 text-blue-800'
-    };
-    return colors[status] || colors.draft;
-  };
-
-  const getTypeColor = (type) => {
-    const colors = {
-      customer: 'bg-blue-100 text-blue-800',
-      vendor: 'bg-purple-100 text-purple-800',
-      employee: 'bg-green-100 text-green-800',
-      partner: 'bg-orange-100 text-orange-800',
-      lease: 'bg-pink-100 text-pink-800'
-    };
-    return colors[type] || colors.customer;
-  };
-
-  const metrics = {
-    totalContracts: mergedContracts.length,
-    activeContracts: filteredContracts.filter(c => c.status === 'active').length,
-    totalValue: filteredContracts.filter(c => c.status === 'active').reduce((sum, c) => sum + (c.contract_value || 0), 0),
-    expiringSoon: filteredContracts.filter(c => c.daysUntilExpiry >= 0 && c.daysUntilExpiry <= 30).length
-  };
+  const statCards = [
+    { icon: FileText, tint: 'bg-blue-100 text-blue-600', label: t('total_contracts'), value: stats?.total ?? '—' },
+    { icon: CheckCircle, tint: 'bg-green-100 text-green-600', label: t('active_contracts'), value: stats?.active ?? '—' },
+    {
+      icon: AlertTriangle,
+      tint: (stats?.expiring_soon ?? 0) > 0 ? 'bg-amber-100 text-amber-600' : 'bg-slate-100 text-slate-500',
+      label: t('expiring_30_days'),
+      value: stats?.expiring_soon ?? '—',
+      valueClass: (stats?.expiring_soon ?? 0) > 0 ? 'text-amber-600' : '',
+    },
+    { icon: Banknote, tint: 'bg-violet-100 text-violet-600', label: t('active_contracts_value'), value: stats ? formatCurrency(stats.active_total_value) : '—' },
+  ];
 
   return (
     <div className="p-4 md:p-6 lg:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
       <div className="max-w-7xl mx-auto space-y-6">
 
-        {/* Metrics */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <FileText className="w-5 h-5 text-blue-600" />
+        {/* Stats row */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {statCards.map((c, i) => (
+            <Card key={i} className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${c.tint}`}>
+                    <c.icon className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs text-slate-600 truncate">{c.label}</p>
+                    <p className={`text-xl font-bold text-slate-900 truncate ${c.valueClass || ''}`}>{c.value}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-xs text-slate-600">{t('total_contracts')}</p>
-                  <p className="text-2xl font-bold text-slate-900">{metrics.totalContracts}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                  <CheckCircle className="w-5 h-5 text-green-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-slate-600">{t('active_contracts')}</p>
-                  <p className="text-2xl font-bold text-slate-900">{metrics.activeContracts}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                  <Clock className="w-5 h-5 text-purple-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-slate-600">{t('total_value')}</p>
-                  <p className="text-2xl font-bold text-slate-900">{formatCurrency(metrics.totalValue)}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
-                  <AlertTriangle className="w-5 h-5 text-orange-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-slate-600">{t('expiring_soon')}</p>
-                  <p className="text-2xl font-bold text-slate-900">{metrics.expiringSoon}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          ))}
         </div>
 
-        {/* Contracts List */}
+        {/* Registry */}
         <Card className="bg-white/80 backdrop-blur-sm">
-          <CardHeader className="border-b">
-            <div className="flex items-center justify-between">
-              <CardTitle>{t('contracts')}</CardTitle>
+          <CardContent className="p-4 md:p-6 space-y-4">
+            {/* Saved views + actions */}
+            <div className="flex flex-wrap items-center gap-2">
+              {VIEWS.filter((v) => v.key !== 'mine' || myEmployeeId).map((v) => (
+                <Button
+                  key={v.key}
+                  size="sm"
+                  variant={view === v.key ? 'default' : 'outline'}
+                  onClick={() => selectView(v.key)}
+                >
+                  {t(v.labelKey)}
+                </Button>
+              ))}
+              <Button size="sm" variant="ghost" className="text-slate-500" onClick={() => navigate('/employee-contracts')}>
+                <Users className="w-4 h-4 mr-1.5" />
+                {t('employee_contracts_link')}
+              </Button>
+              <div className="flex-1" />
               {canCreate(MODULES.CONTRACTS) && (
-                <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-rose-600 to-pink-600">
-                  <Plus className="w-4 h-4 mr-2" /> {t('new_contract')}
+                <Button onClick={openCreate}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  {t('new_contract')}
                 </Button>
               )}
             </div>
-            <div className="flex gap-3 mt-4">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
+
+            {/* Filters */}
+            <div className="flex flex-wrap gap-3">
+              <div className="relative flex-1 min-w-[220px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <Input
                   placeholder={t('search_contracts')}
                   className="pl-9"
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
                 />
               </div>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-[150px]">
-                  <SelectValue />
-                </SelectTrigger>
+              {view === 'all' && (
+                <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
+                  <SelectTrigger className="w-[170px]"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t('all_status')}</SelectItem>
+                    {Object.entries(CONTRACT_STATUSES).map(([k, cfg]) => (
+                      <SelectItem key={k} value={k}>{t(cfg.labelKey)}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              <Select value={directionFilter} onValueChange={(v) => { setDirectionFilter(v); setPage(1); }}>
+                <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">{t('all_status')}</SelectItem>
-                  <SelectItem value="draft">{t('draft')}</SelectItem>
-                  <SelectItem value="active">{t('active')}</SelectItem>
-                  <SelectItem value="expired">{t('expired')}</SelectItem>
-                  <SelectItem value="renewed">{t('renewed')}</SelectItem>
+                  <SelectItem value="all">{t('all_directions')}</SelectItem>
+                  <SelectItem value="income">{t('direction_income')}</SelectItem>
+                  <SelectItem value="expense">{t('direction_expense')}</SelectItem>
                 </SelectContent>
               </Select>
+              {view !== 'mine' && (
+                <Select value={responsibleFilter} onValueChange={(v) => { setResponsibleFilter(v); setPage(1); }}>
+                  <SelectTrigger className="w-[190px]"><SelectValue placeholder={t('responsible')} /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t('all_responsibles')}</SelectItem>
+                    {employees.map((emp) => (
+                      <SelectItem key={emp.id} value={emp.id}>{emp.full_name || emp.name || `${emp.first_name || ''} ${emp.last_name || ''}`}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
-          </CardHeader>
-          <CardContent className="p-6">
+
+            {/* Table */}
             {isLoading ? (
               <div className="flex items-center justify-center py-16">
-                <div className="w-8 h-8 border-4 border-rose-600 border-t-transparent rounded-full animate-spin"></div>
+                <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
               </div>
-            ) : filteredContracts.length === 0 ? (
+            ) : rows.length === 0 ? (
               <div className="text-center py-16">
                 <FileText className="w-16 h-16 text-slate-300 mx-auto mb-4" />
                 <p className="text-slate-500">{t('no_contracts_yet')}</p>
-                {canCreate(MODULES.CONTRACTS) && (
-                  <Button onClick={() => setShowCreateModal(true)} className="mt-4">{t('create_first_contract')}</Button>
+                {canCreate(MODULES.CONTRACTS) && view === 'all' && !searchQuery && (
+                  <Button onClick={openCreate} className="mt-4">{t('create_first_contract')}</Button>
                 )}
               </div>
             ) : (
-              <div className="space-y-4">
-                {filteredContracts.map((contract) => (
-                  <Card key={contract.id} className="bg-white border-slate-200 hover:shadow-md transition-shadow">
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            <h3 className="font-bold text-lg">{contract.contract_name}</h3>
-                            <Badge className={getStatusColor(contract.status)}>{t(contract.status)}</Badge>
-                            <Badge className={getTypeColor(contract.party_type)} variant="outline">
-                              {t(contract.party_type)}
-                            </Badge>
-                            {contract.auto_renew && (
-                              <Badge variant="outline" className="bg-blue-50 text-blue-700">
-                                {t('auto_renew')}
-                              </Badge>
-                            )}
-                          </div>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('contract_number')}>
+                        <span className="flex items-center gap-1">{t('contract_number')} <ArrowUpDown className="w-3 h-3" /></span>
+                      </TableHead>
+                      <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('title')}>
+                        <span className="flex items-center gap-1">{t('contract_name')} <ArrowUpDown className="w-3 h-3" /></span>
+                      </TableHead>
+                      <TableHead>{t('counterparty')}</TableHead>
+                      <TableHead>{t('direction')}</TableHead>
+                      <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleSort('value')}>
+                        <span className="flex items-center gap-1 justify-end">{t('contract_amount_col')} <ArrowUpDown className="w-3 h-3" /></span>
+                      </TableHead>
+                      <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('end_date')}>
+                        <span className="flex items-center gap-1">{t('end_date')} <ArrowUpDown className="w-3 h-3" /></span>
+                      </TableHead>
+                      <TableHead>{t('responsible')}</TableHead>
+                      <TableHead>{t('status')}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {rows.map((row) => (
+                      <TableRow
+                        key={row.id}
+                        className="cursor-pointer hover:bg-slate-50"
+                        onClick={() => navigate(`/contracts/${row.id}`)}
+                      >
+                        <TableCell className="font-mono font-medium whitespace-nowrap">{row.contract_number}</TableCell>
+                        <TableCell className="max-w-[260px]">
+                          <span className="font-medium text-slate-900 line-clamp-1">{row.title}</span>
+                        </TableCell>
+                        <TableCell className="max-w-[200px]"><span className="line-clamp-1">{row.vendor_name}</span></TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={(CONTRACT_DIRECTIONS[row.direction] || CONTRACT_DIRECTIONS.expense).chip}>
+                            {t((CONTRACT_DIRECTIONS[row.direction] || CONTRACT_DIRECTIONS.expense).labelKey)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right whitespace-nowrap">
+                          <div className="font-semibold">{formatCurrency(row.effective_amount)}</div>
+                          {row.paid_total > 0 && (
+                            <div className="text-xs text-slate-500">
+                              {t('paid_short')}: {formatCurrency(row.paid_total)}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">{expiryCell(row)}</TableCell>
+                        <TableCell className="max-w-[160px]"><span className="line-clamp-1">{row.responsible_employee_name || '—'}</span></TableCell>
+                        <TableCell>{statusChip(row.status)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
 
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 text-sm">
-                            <div>
-                              <p className="text-slate-500">{t('contract_number')}</p>
-                              <p className="font-mono font-semibold">{contract.contract_number}</p>
-                            </div>
-                            <div>
-                              <p className="text-slate-500">{t('party')}</p>
-                              <p className="font-medium">{contract.party_name}</p>
-                            </div>
-                            <div>
-                              <p className="text-slate-500">{t('value')}</p>
-                              <p className="font-semibold">{formatCurrency(contract.contract_value || 0)}</p>
-                            </div>
-                            <div>
-                              <p className="text-slate-500">{t('billing')}</p>
-                              <p className="font-medium">{t(contract.billing_cycle) || contract.billing_cycle}</p>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-6 mt-4 text-sm">
-                            <div>
-                              <span className="text-slate-500">{t('start')}: </span>
-                              <span className="font-medium">
-                                {contract.start_date ? format(new Date(contract.start_date), 'MMM dd, yyyy', { locale: getDateLocale(language) }) : '-'}
-                              </span>
-                            </div>
-                            <div>
-                              <span className="text-slate-500">{t('end')}: </span>
-                              <span className="font-medium">
-                                {contract.end_date ? format(new Date(contract.end_date), 'MMM dd, yyyy', { locale: getDateLocale(language) }) : '-'}
-                              </span>
-                            </div>
-                            {contract.daysUntilExpiry !== undefined && contract.daysUntilExpiry >= 0 && contract.daysUntilExpiry <= 30 && (
-                              <div className="flex items-center gap-2 text-orange-600">
-                                <Bell className="w-4 h-4" />
-                                <span className="font-medium">{t('expires_in_days').replace('{days}', contract.daysUntilExpiry)}</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="flex gap-2 ml-4">
-                          <Button size="sm" variant="ghost" onClick={() => handleViewContract(contract)} title={t('view_contract')}>
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                          {!contract.__employee && (() => {
-                            const docCount = (docCounts[contract.id] ?? contract.attachment_count) || 0;
-                            return (
-                              <Button size="sm" variant="ghost" onClick={() => openDocs(contract)} title={t('documents') || 'Hujjatlar'} className="relative">
-                                <Files className="w-4 h-4" />
-                                {docCount > 0 && (
-                                  <span className="absolute -top-0.5 -right-0.5 bg-rose-600 text-white text-[10px] font-semibold leading-none rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center">
-                                    {docCount}
-                                  </span>
-                                )}
-                              </Button>
-                            );
-                          })()}
-                          {canUpdate(MODULES.CONTRACTS) && (
-                            <Button size="sm" variant="ghost" onClick={() => handleEditContract(contract)} title={t('edit_contract')}>
-                              <Edit className="w-4 h-4" />
-                            </Button>
-                          )}
-                          {canDelete(MODULES.CONTRACTS) && (
-                            <Button size="sm" variant="ghost" onClick={() => handleDeleteContract(contract)} title={t('delete_contract')} className="text-red-600 hover:text-red-700 hover:bg-red-50">
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          )}
-                          {canUpdate(MODULES.CONTRACTS) && contract.status === 'active' && contract.daysUntilExpiry <= 30 && (
-                            <Button size="sm" variant="outline" onClick={() => updateContractStatus(contract.id, 'renewed')}>
-                              {t('renew')}
-                            </Button>
-                          )}
-                          {canUpdate(MODULES.CONTRACTS) && contract.status === 'active' && (
-                            <Button size="sm" variant="outline" onClick={() => updateContractStatus(contract.id, 'terminated')}>
-                              {t('terminate')}
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+            {/* Pagination */}
+            {meta && meta.total_pages > 1 && (
+              <div className="flex items-center justify-between pt-2">
+                <p className="text-sm text-slate-500">
+                  {t('total')}: {meta.total}
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="outline" disabled={!meta.has_prev} onClick={() => setPage((p) => p - 1)}>
+                    <ChevronLeft className="w-4 h-4" />
+                  </Button>
+                  <span className="text-sm text-slate-600">{meta.page} / {meta.total_pages}</span>
+                  <Button size="sm" variant="outline" disabled={!meta.has_next} onClick={() => setPage((p) => p + 1)}>
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                </div>
               </div>
             )}
           </CardContent>
         </Card>
 
-        {/* Contract Documents Modal */}
-        <Dialog open={!!docsContract} onOpenChange={(open) => { if (!open) { setDocsContract(null); setAttachments([]); } }}>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Files className="w-5 h-5" />
-                {t('documents') || 'Hujjatlar'}{docsContract ? ` — ${docsContract.contract_name || docsContract.contract_number}` : ''}
-              </DialogTitle>
-            </DialogHeader>
-
-            {canUpdate(MODULES.CONTRACTS) && (
-              <label className={`flex flex-col items-center justify-center gap-2 py-6 rounded-xl border-2 border-dashed border-slate-300 text-slate-500 hover:border-rose-400 hover:text-rose-600 cursor-pointer transition-colors ${uploadingDoc ? 'opacity-60 pointer-events-none' : ''}`}>
-                <input type="file" className="hidden" onChange={handleUploadDoc} disabled={uploadingDoc} />
-                <Upload className="w-6 h-6" />
-                <span className="text-sm font-medium">{uploadingDoc ? (t('uploading') || 'Yuklanmoqda...') : (t('upload_document') || 'Hujjat yuklash')}</span>
-              </label>
-            )}
-
-            <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
-              {attachmentsLoading ? (
-                <div className="text-center py-6">
-                  <div className="w-6 h-6 border-2 border-rose-600 border-t-transparent rounded-full animate-spin mx-auto" />
-                </div>
-              ) : attachments.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-6">{t('no_documents') || 'Hujjatlar yo‘q'}</p>
-              ) : (
-                attachments.map((f) => (
-                  <div key={f.id} className="flex items-center gap-3 rounded-lg border border-slate-200 p-2.5">
-                    <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
-                      <FileText className="w-4 h-4 text-slate-500" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium truncate">{f.original_name}</div>
-                      <div className="text-xs text-muted-foreground">{(f.file_size / 1024).toFixed(0)} KB</div>
-                    </div>
-                    <a
-                      href={fileUrl(f.url)}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="h-8 w-8 flex items-center justify-center text-slate-400 hover:text-slate-700 rounded-md hover:bg-slate-100 shrink-0"
-                      title={t('download') || 'Download'}
-                    >
-                      <Download className="w-4 h-4" />
-                    </a>
-                    {canDelete(MODULES.CONTRACTS) && (
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-red-600 shrink-0" onClick={() => handleDeleteAttachment(f.id)}>
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
-
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setDocsContract(null)}>{t('close') || 'Close'}</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Create Contract Modal */}
-        <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-          <DialogContent className="max-w-2xl">
+        {/* Create modal */}
+        <Dialog open={showCreateModal} onOpenChange={(open) => { if (!open) { setShowCreateModal(false); setPendingDealLink(null); } }}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{t('create_contract')}</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4 py-4">
+            <div className="space-y-4 py-2">
+
+              {/* AI prefill */}
+              <div className="rounded-xl border border-dashed border-indigo-200 bg-indigo-50/50 p-3 flex items-center gap-3">
+                <Sparkles className="w-5 h-5 text-indigo-500 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-indigo-900">{t('ai_fill_from_document')}</p>
+                  <p className="text-xs text-indigo-600 truncate">
+                    {aiFile ? aiFile.file_name : t('ai_fill_hint')}
+                  </p>
+                </div>
+                <input ref={aiInputRef} type="file" accept=".pdf,.docx,.txt" className="hidden" onChange={handleAiExtract} />
+                <Button size="sm" variant="outline" disabled={aiExtracting} onClick={() => aiInputRef.current?.click()}>
+                  {aiExtracting ? t('ai_extracting') : t('upload_document')}
+                </Button>
+              </div>
+              {aiFields && (
+                <p className="text-xs text-slate-500">
+                  {t('ai_review_hint')}
+                </p>
+              )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium mb-1 block">{t('contract_type')} *</label>
-                  <Select value={newContract.party_type} onValueChange={(value) => setNewContract({...newContract, party_type: value, vendor_id: '', asset_id: ''})}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
+                  <Label className="mb-1 block">{t('contract_number_label')}</Label>
+                  <Input
+                    value={form.contract_number}
+                    placeholder="CNT-2026-0001"
+                    onChange={(e) => setForm({ ...form, contract_number: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label className="mb-1 block">{t('direction')} *</Label>
+                  <Select value={form.direction} onValueChange={(v) => setForm({ ...form, direction: v })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="customer">{t('customer')}</SelectItem>
-                      <SelectItem value="vendor">{t('vendor')}</SelectItem>
-                      <SelectItem value="partner">{t('partner')}</SelectItem>
-                      <SelectItem value="lease">{t('lease')}</SelectItem>
-                      <SelectItem value="employee">{t('employee')}</SelectItem>
+                      <SelectItem value="income">{t('direction_income')}</SelectItem>
+                      <SelectItem value="expense">{t('direction_expense')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
 
-              {newContract.party_type !== 'employee' && (
-                <div>
-                  <label className="text-sm font-medium mb-1 block">{t('contract_name')} *</label>
-                  <Input
-                    placeholder={t('contract_name_placeholder')}
-                    value={newContract.contract_name}
-                    onChange={(e) => setNewContract({...newContract, contract_name: e.target.value})}
-                    required
-                  />
-                </div>
-              )}
+              <div>
+                <Label className="mb-1 block">{t('contract_name')} *</Label>
+                <Input
+                  placeholder={t('contract_name_placeholder')}
+                  value={form.title}
+                  onChange={(e) => setForm({ ...form, title: e.target.value })}
+                />
+              </div>
 
-              {newContract.party_type === 'employee' ? (
-                <div>
-                  <label className="text-sm font-medium mb-1 block">{t('employee')} *</label>
-                  <Select
-                    value={newContract.employee_id}
-                    onValueChange={(value) => setNewContract({...newContract, employee_id: value})}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={t('select_employee')} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {employees.map(emp => (
-                        <SelectItem key={emp.id} value={emp.id}>
-                          <div className="flex items-center gap-2">
-                            <User className="w-4 h-4 text-blue-500" />
-                            {(emp.full_name || emp.name)}{emp.job_title ? ` — ${emp.job_title}` : ''}
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ) : newContract.party_type === 'lease' ? (
-                <div>
-                  <label className="text-sm font-medium mb-1 block">{t('asset')} *</label>
-                  <Select
-                    value={newContract.asset_id}
-                    onValueChange={(value) => setNewContract({...newContract, asset_id: value})}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={partiesLoading ? t('loading') : t('select_asset')} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {assets.map(asset => (
-                        <SelectItem key={asset.id} value={asset.id}>
-                          {asset.name || asset.asset_name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ) : (
-                <div>
-                  <label className="text-sm font-medium mb-1 block">{t('counterparty')} *</label>
-                  <Select
-                    value={newContract.vendor_id}
-                    onValueChange={(value) => setNewContract({...newContract, vendor_id: value})}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={partiesLoading ? t('loading') : t('select_party')} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {contactsForType(newContract.party_type).map(contact => (
-                        <SelectItem key={contact.id} value={contact.id}>
-                          <div className="flex items-center gap-2">
-                            <Building2 className="w-4 h-4 text-orange-500" />
-                            {contact.company_name || contact.name}
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
+              <div>
+                <Label className="mb-1 block">{t('counterparty')} *</Label>
+                <Select value={form.vendor_id} onValueChange={(v) => setForm({ ...form, vendor_id: v })}>
+                  <SelectTrigger><SelectValue placeholder={t('select_party')} /></SelectTrigger>
+                  <SelectContent>
+                    {contacts.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>{c.company_name || c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="text-sm font-medium mb-1 block">{t('start_date')} *</label>
-                  <Input
-                    type="date"
-                    value={newContract.start_date}
-                    onChange={(e) => setNewContract({...newContract, start_date: e.target.value})}
-                    required
-                  />
+                  <Label className="mb-1 block">{t('start_date')} *</Label>
+                  <Input type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} />
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">{t('end_date')} *</label>
-                  <Input
-                    type="date"
-                    value={newContract.end_date}
-                    onChange={(e) => setNewContract({...newContract, end_date: e.target.value})}
-                    required
-                  />
+                  <Label className="mb-1 block">{t('end_date')}</Label>
+                  <Input type="date" value={form.end_date} onChange={(e) => setForm({ ...form, end_date: e.target.value })} />
+                  <p className="text-xs text-slate-400 mt-1">{t('open_ended_hint')}</p>
+                </div>
+                <div>
+                  <Label className="mb-1 block">{t('signed_date')}</Label>
+                  <Input type="date" value={form.signed_date} onChange={(e) => setForm({ ...form, signed_date: e.target.value })} />
                 </div>
               </div>
 
-              {newContract.party_type === 'employee' ? (
-                <>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-sm font-medium mb-1 block">{t('contract_type')} *</label>
-                      <Select value={newContract.emp_contract_type} onValueChange={(value) => setNewContract({...newContract, emp_contract_type: value})}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {EMP_CONTRACT_TYPES.map(k => (
-                            <SelectItem key={k} value={k}>{t(`${k}_contract`) || k}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium mb-1 block">{t('salary')} *</label>
-                      <Input type="text" inputMode="decimal" placeholder="0" value={formatPriceInput(newContract.salary)}
-                        onChange={(e) => setNewContract({...newContract, salary: parsePriceInput(e.target.value)})} />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-sm font-medium mb-1 block">{t('working_hours')}</label>
-                      <Input type="number" value={newContract.working_hours}
-                        onChange={(e) => setNewContract({...newContract, working_hours: e.target.value})} />
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium mb-1 block">{t('probation_period')}</label>
-                      <Input type="number" value={newContract.probation_period}
-                        onChange={(e) => setNewContract({...newContract, probation_period: e.target.value})} />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium mb-1 block">{t('benefits')}</label>
-                    <Textarea rows={2} value={newContract.benefits}
-                      onChange={(e) => setNewContract({...newContract, benefits: e.target.value})} />
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-sm font-medium mb-1 block">{t('contract_value')} *</label>
-                      <Input
-                        type="text"
-                        inputMode="decimal"
-                        placeholder="0"
-                        value={formatPriceInput(newContract.contract_value)}
-                        onChange={(e) => setNewContract({...newContract, contract_value: parsePriceInput(e.target.value)})}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium mb-1 block">{t('billing_cycle')}</label>
-                      <Select value={newContract.billing_cycle} onValueChange={(value) => setNewContract({...newContract, billing_cycle: value})}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="monthly">{t('monthly')}</SelectItem>
-                          <SelectItem value="quarterly">{t('quarterly')}</SelectItem>
-                          <SelectItem value="annually">{t('annually')}</SelectItem>
-                          <SelectItem value="one_time">{t('one_time')}</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="mb-1 block">{t('contract_value')}</Label>
+                  <Input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0"
+                    value={formatPriceInput(form.value)}
+                    onChange={(e) => setForm({ ...form, value: parsePriceInput(e.target.value) })}
+                  />
+                </div>
+                <div>
+                  <Label className="mb-1 block">{t('currency')}</Label>
+                  <Select value={form.currency} onValueChange={(v) => setForm({ ...form, currency: v })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {['UZS', 'USD', 'EUR', 'RUB'].map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
 
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id="auto_renew"
-                      checked={newContract.auto_renew}
-                      onChange={(e) => setNewContract({...newContract, auto_renew: e.target.checked})}
-                      className="w-4 h-4"
-                    />
-                    <label htmlFor="auto_renew" className="text-sm font-medium">
-                      {t('enable_auto_renewal')}
-                    </label>
-                  </div>
-                </>
-              )}
+              <div>
+                <Label className="mb-1 block">{t('responsible')}</Label>
+                <Select value={form.responsible_employee_id} onValueChange={(v) => setForm({ ...form, responsible_employee_id: v })}>
+                  <SelectTrigger><SelectValue placeholder={t('select_employee')} /></SelectTrigger>
+                  <SelectContent>
+                    {employees.map((emp) => (
+                      <SelectItem key={emp.id} value={emp.id}>
+                        {emp.full_name || emp.name || `${emp.first_name || ''} ${emp.last_name || ''}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-              <div className="flex gap-3 pt-4">
-                <Button variant="outline" onClick={() => setShowCreateModal(false)} className="flex-1">
+              <div>
+                <Label className="mb-1 block">{t('description')}</Label>
+                <Textarea rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <Button variant="outline" className="flex-1" onClick={() => setShowCreateModal(false)}>
                   {t('cancel')}
                 </Button>
                 <Button
-                  onClick={handleCreateContract}
-                  className="flex-1 bg-gradient-to-r from-rose-600 to-pink-600"
-                  disabled={
-                    (newContract.party_type === 'employee'
-                      ? (!newContract.employee_id || !newContract.salary)
-                      : (!newContract.contract_name || (newContract.party_type === 'lease' ? !newContract.asset_id : !newContract.vendor_id)))
-                    || isSubmitting
-                  }
+                  className="flex-1"
+                  onClick={handleCreate}
+                  disabled={!form.title || !form.vendor_id || !form.start_date || isSubmitting}
                 >
                   {isSubmitting ? t('creating') : t('create_contract')}
                 </Button>
               </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-
-        {/* View Contract Modal */}
-        <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>{t('contract_details')}</DialogTitle>
-            </DialogHeader>
-            {selectedContract && (
-              <div className="space-y-6 py-4">
-                <div className="flex items-center gap-3">
-                  <h3 className="text-xl font-bold">{selectedContract.contract_name}</h3>
-                  <Badge className={getStatusColor(selectedContract.status)}>{t(selectedContract.status)}</Badge>
-                  <Badge className={getTypeColor(selectedContract.party_type)} variant="outline">
-                    {t(selectedContract.party_type) || selectedContract.party_type}
-                  </Badge>
-                </div>
-
-                <div className="grid grid-cols-2 gap-6">
-                  <div className="space-y-4">
-                    <div>
-                      <p className="text-sm text-slate-500">{t('contract_number_label')}</p>
-                      <p className="font-mono font-semibold">{selectedContract.contract_number}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-slate-500">{t('party_name')}</p>
-                      <p className="font-medium">{selectedContract.party_name}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-slate-500">{t('contract_value')}</p>
-                      <p className="text-xl font-bold text-rose-600">{formatCurrency(selectedContract.contract_value || 0)}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-slate-500">{t('billing_cycle')}</p>
-                      <p className="font-medium capitalize">{t(selectedContract.billing_cycle) || selectedContract.billing_cycle}</p>
-                    </div>
-                  </div>
-                  <div className="space-y-4">
-                    <div>
-                      <p className="text-sm text-slate-500">{t('start_date')}</p>
-                      <p className="font-medium">
-                        {selectedContract.start_date ? format(new Date(selectedContract.start_date), 'MMM dd, yyyy', { locale: getDateLocale(language) }) : '-'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-slate-500">{t('end_date')}</p>
-                      <p className="font-medium">
-                        {selectedContract.end_date ? format(new Date(selectedContract.end_date), 'MMM dd, yyyy', { locale: getDateLocale(language) }) : '-'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-slate-500">{t('auto_renewal')}</p>
-                      <p className="font-medium">{selectedContract.auto_renew ? t('enabled') : t('disabled')}</p>
-                    </div>
-                    {selectedContract.daysUntilExpiry !== undefined && selectedContract.daysUntilExpiry >= 0 && (
-                      <div>
-                        <p className="text-sm text-slate-500">{t('days_until_expiry')}</p>
-                        <p className={`font-bold ${selectedContract.daysUntilExpiry <= 30 ? 'text-orange-600' : 'text-green-600'}`}>
-                          {selectedContract.daysUntilExpiry} {t('days') || 'days'}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex gap-3 pt-4 border-t">
-                  <Button variant="outline" onClick={() => setShowViewModal(false)} className="flex-1">
-                    {t('close')}
-                  </Button>
-                  {canUpdate(MODULES.CONTRACTS) && (
-                    <Button
-                      onClick={() => { setShowViewModal(false); handleEditContract(selectedContract); }}
-                      className="flex-1 bg-gradient-to-r from-rose-600 to-pink-600"
-                    >
-                      {t('edit_contract')}
-                    </Button>
-                  )}
-                </div>
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
-
-        {/* Edit Contract Modal */}
-        <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>{t('edit_contract')}</DialogTitle>
-            </DialogHeader>
-            {editContract && (
-              <div className="space-y-4 py-4">
-                {editContract.__employee ? (
-                  <>
-                    <div>
-                      <label className="text-sm font-medium mb-1 block">{t('employee')}</label>
-                      <Input value={editContract.employee_name || editContract.party_name || ''} disabled />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-sm font-medium mb-1 block">{t('contract_type')}</label>
-                        <Select value={editContract.contract_type} onValueChange={(v) => setEditContract({...editContract, contract_type: v})}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {EMP_CONTRACT_TYPES.map(k => (<SelectItem key={k} value={k}>{t(`${k}_contract`) || k}</SelectItem>))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <label className="text-sm font-medium mb-1 block">{t('salary')}</label>
-                        <Input type="text" inputMode="decimal" value={formatPriceInput(editContract.salary ?? editContract.contract_value ?? '')} onChange={(e) => setEditContract({...editContract, salary: parsePriceInput(e.target.value)})} />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-sm font-medium mb-1 block">{t('start_date')}</label>
-                        <Input type="date" value={editContract.start_date} onChange={(e) => setEditContract({...editContract, start_date: e.target.value})} />
-                      </div>
-                      <div>
-                        <label className="text-sm font-medium mb-1 block">{t('end_date')}</label>
-                        <Input type="date" value={editContract.end_date} onChange={(e) => setEditContract({...editContract, end_date: e.target.value})} />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-sm font-medium mb-1 block">{t('working_hours')}</label>
-                        <Input type="number" value={editContract.working_hours ?? 40} onChange={(e) => setEditContract({...editContract, working_hours: e.target.value})} />
-                      </div>
-                      <div>
-                        <label className="text-sm font-medium mb-1 block">{t('status')}</label>
-                        <Select value={editContract.status || 'active'} onValueChange={(v) => setEditContract({...editContract, status: v})}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="draft">{t('draft')}</SelectItem>
-                            <SelectItem value="active">{t('active')}</SelectItem>
-                            <SelectItem value="terminated">{t('terminated')}</SelectItem>
-                            <SelectItem value="expired">{t('expired')}</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium mb-1 block">{t('benefits')}</label>
-                      <Textarea rows={2} value={editContract.benefits || ''} onChange={(e) => setEditContract({...editContract, benefits: e.target.value})} />
-                    </div>
-                  </>
-                ) : (
-                <>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium mb-1 block">{t('contract_number_label')}</label>
-                    <Input
-                      value={editContract.contract_number}
-                      onChange={(e) => setEditContract({...editContract, contract_number: e.target.value})}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium mb-1 block">{t('contract_type')} *</label>
-                    <Select value={editContract.party_type} onValueChange={(value) => setEditContract({...editContract, party_type: value, vendor_id: '', asset_id: ''})}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="customer">{t('customer')}</SelectItem>
-                        <SelectItem value="vendor">{t('vendor')}</SelectItem>
-                        <SelectItem value="partner">{t('partner')}</SelectItem>
-                        <SelectItem value="lease">{t('lease')}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium mb-1 block">{t('contract_name')} *</label>
-                  <Input
-                    value={editContract.contract_name}
-                    onChange={(e) => setEditContract({...editContract, contract_name: e.target.value})}
-                  />
-                </div>
-
-                {editContract.party_type === 'lease' ? (
-                  <div>
-                    <label className="text-sm font-medium mb-1 block">{t('asset')} *</label>
-                    <Select
-                      value={editContract.asset_id}
-                      onValueChange={(value) => setEditContract({...editContract, asset_id: value})}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={partiesLoading ? t('loading') : (editContract.party_name || t('select_asset'))} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {assets.map(asset => (
-                          <SelectItem key={asset.id} value={asset.id}>{asset.name || asset.asset_name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ) : (
-                  <div>
-                    <label className="text-sm font-medium mb-1 block">{t('counterparty')} *</label>
-                    <Select
-                      value={editContract.vendor_id}
-                      onValueChange={(value) => setEditContract({...editContract, vendor_id: value})}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={partiesLoading ? t('loading') : (editContract.party_name || t('select_party'))} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {contactsForType(editContract.party_type).map(contact => (
-                          <SelectItem key={contact.id} value={contact.id}>
-                            {contact.company_name || contact.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium mb-1 block">{t('start_date')}</label>
-                    <Input
-                      type="date"
-                      value={editContract.start_date}
-                      onChange={(e) => setEditContract({...editContract, start_date: e.target.value})}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium mb-1 block">{t('end_date')}</label>
-                    <Input
-                      type="date"
-                      value={editContract.end_date}
-                      onChange={(e) => setEditContract({...editContract, end_date: e.target.value})}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium mb-1 block">{t('contract_value')}</label>
-                    <Input
-                      type="text"
-                      inputMode="decimal"
-                      value={formatPriceInput(editContract.contract_value)}
-                      onChange={(e) => setEditContract({...editContract, contract_value: parsePriceInput(e.target.value)})}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium mb-1 block">{t('billing_cycle')}</label>
-                    <Select value={editContract.billing_cycle} onValueChange={(value) => setEditContract({...editContract, billing_cycle: value})}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="monthly">{t('monthly')}</SelectItem>
-                        <SelectItem value="quarterly">{t('quarterly')}</SelectItem>
-                        <SelectItem value="annually">{t('annually')}</SelectItem>
-                        <SelectItem value="one_time">{t('one_time')}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium mb-1 block">{t('status')}</label>
-                  <Select value={editContract.status || 'active'} onValueChange={(value) => setEditContract({...editContract, status: value})}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="draft">{t('draft')}</SelectItem>
-                      <SelectItem value="active">{t('active')}</SelectItem>
-                      <SelectItem value="expired">{t('expired')}</SelectItem>
-                      <SelectItem value="terminated">{t('terminated')}</SelectItem>
-                      <SelectItem value="renewed">{t('renewed')}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="edit_auto_renew"
-                    checked={editContract.auto_renew}
-                    onChange={(e) => setEditContract({...editContract, auto_renew: e.target.checked})}
-                    className="w-4 h-4"
-                  />
-                  <label htmlFor="edit_auto_renew" className="text-sm font-medium">
-                    {t('enable_auto_renewal')}
-                  </label>
-                </div>
-                </>
-                )}
-
-                <div className="flex gap-3 pt-4">
-                  <Button variant="outline" onClick={() => { setShowEditModal(false); setEditContract(null); }} className="flex-1">
-                    {t('cancel')}
-                  </Button>
-                  <Button
-                    onClick={handleUpdateContract}
-                    className="flex-1 bg-gradient-to-r from-rose-600 to-pink-600"
-                    disabled={(!editContract.__employee && (!editContract.contract_name || !editContract.party_name)) || isSubmitting}
-                  >
-                    {isSubmitting ? t('saving') : t('save_changes')}
-                  </Button>
-                </div>
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
-
-        {/* Delete Confirmation Modal */}
-        <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-red-600">
-                <AlertTriangle className="w-5 h-5" />
-                {language === 'uz' ? 'Shartnomani o\'chirish' : 'Delete Contract'}
-              </DialogTitle>
-            </DialogHeader>
-            {contractToDelete && (
-              <div className="space-y-4 py-4">
-                <p className="text-slate-600">
-                  {t('delete_contract_confirm_message')?.replace('{name}', contractToDelete.contract_name) || `Are you sure you want to delete "${contractToDelete.contract_name}"? This action cannot be undone.`}
-                </p>
-                <div className="bg-slate-50 p-3 rounded-lg text-sm space-y-1">
-                  <p><strong>{t('contract_number_label')}:</strong> {contractToDelete.contract_number}</p>
-                  <p><strong>{t('party_name')}:</strong> {contractToDelete.party_name}</p>
-                  <p><strong>{t('value')}:</strong> {formatCurrency(contractToDelete.contract_value || 0)}</p>
-                </div>
-                <div className="flex gap-3 pt-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setShowDeleteModal(false);
-                      setContractToDelete(null);
-                    }}
-                    className="flex-1"
-                  >
-                    {language === 'uz' ? 'Bekor qilish' : 'Cancel'}
-                  </Button>
-                  <Button
-                    onClick={confirmDelete}
-                    className="flex-1 bg-red-600 hover:bg-red-700 text-white"
-                  >
-                    {language === 'uz' ? 'O\'chirish' : 'Delete'}
-                  </Button>
-                </div>
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
-
-        {/* Renewal Confirmation Modal */}
-        <Dialog open={showRenewalConfirmModal} onOpenChange={setShowRenewalConfirmModal}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-blue-600">
-                <CheckCircle className="w-5 h-5" />
-                {language === 'uz' ? 'Shartnomalarni yangilash' : 'Renew Contracts'}
-              </DialogTitle>
-            </DialogHeader>
-            {renewalData && (
-              <div className="space-y-4 py-4">
-                <p className="text-slate-600">
-                  {language === 'uz'
-                    ? `${renewalData.length} ta muddati tugayotgan shartnomani yangilamoqchimisiz?`
-                    : `Do you want to renew ${renewalData.length} expiring contracts?`}
-                </p>
-                <div className="bg-blue-50 p-3 rounded-lg text-sm max-h-48 overflow-y-auto">
-                  {renewalData.map((contract, idx) => (
-                    <div key={idx} className="py-1 border-b border-blue-100 last:border-0">
-                      <p className="font-medium">{contract.contract_name}</p>
-                      <p className="text-xs text-slate-600">
-                        {contract.contract_number} • {contract.daysUntilExpiry} {language === 'uz' ? 'kun qoldi' : 'days left'}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex gap-3 pt-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setShowRenewalConfirmModal(false);
-                      setRenewalData(null);
-                    }}
-                    className="flex-1"
-                  >
-                    {t('cancel')}
-                  </Button>
-                  <Button
-                    onClick={confirmRenewal}
-                    className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white"
-                  >
-                    {language === 'uz' ? 'Yangilash' : 'Renew'}
-                  </Button>
-                </div>
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
-
-        {/* Success Modal */}
-        <Dialog open={showSuccessModal} onOpenChange={setShowSuccessModal}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-green-600">
-                <CheckCircle className="w-5 h-5" />
-                {language === 'uz' ? 'Muvaffaqiyatli' : 'Success'}
-              </DialogTitle>
-            </DialogHeader>
-            <div className="py-4">
-              <p className="text-slate-600 flex items-center gap-2">
-                <CheckCircle className="w-5 h-5 text-green-500" />
-                {successMessage}
-              </p>
-              <Button
-                onClick={() => setShowSuccessModal(false)}
-                className="w-full mt-4 bg-gradient-to-r from-green-600 to-emerald-600"
-              >
-                {t('close')}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-
-        {/* No Expiring Contracts Modal */}
-        <Dialog open={showNoExpiringModal} onOpenChange={setShowNoExpiringModal}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-slate-600">
-                <CheckCircle className="w-5 h-5 text-green-500" />
-                {language === 'uz' ? 'Hech qanday shartnoma tugamaydi' : 'No Expiring Contracts'}
-              </DialogTitle>
-            </DialogHeader>
-            <div className="py-4">
-              <p className="text-slate-600">
-                {t('no_expiring_contracts')}
-              </p>
-              <Button
-                onClick={() => setShowNoExpiringModal(false)}
-                className="w-full mt-4"
-                variant="outline"
-              >
-                {t('close')}
-              </Button>
             </div>
           </DialogContent>
         </Dialog>

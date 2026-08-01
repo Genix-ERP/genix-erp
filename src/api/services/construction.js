@@ -71,13 +71,6 @@ export const constructionService = {
     return response.data.data;
   },
 
-  // Manual re-sync of a photo report (for "Re-send to CRM" buttons after
-  // a failure or link change).
-  async resyncPhotoReportToCRM(reportId) {
-    const response = await apiClient.post(`/construction/photo-reports/${reportId}/resync-crm`);
-    return response.data.data;
-  },
-
   async getProjectDashboard(id) {
     const response = await apiClient.get(`/construction/projects/${id}/dashboard`);
     return response.data.data;
@@ -219,40 +212,6 @@ export const constructionService = {
 
   async createResource(itemId, data) {
     const response = await apiClient.post(`/construction/smeta-items/${itemId}/resources`, data);
-    return response.data.data;
-  },
-
-  // =====================================================
-  // PHOTO REPORTS (Future)
-  // =====================================================
-
-  async listPhotoReports(projectId, params = {}) {
-    const response = await apiClient.get(`/construction/projects/${projectId}/photo-reports`, { params });
-    return response.data.data;
-  },
-
-  async createPhotoReport(projectId, data) {
-    const response = await apiClient.post(`/construction/projects/${projectId}/photo-reports`, data);
-    return response.data.data;
-  },
-
-  async getPhotoReport(id) {
-    const response = await apiClient.get(`/construction/photo-reports/${id}`);
-    return response.data.data;
-  },
-
-  async updatePhotoReport(id, data) {
-    const response = await apiClient.put(`/construction/photo-reports/${id}`, data);
-    return response.data.data;
-  },
-
-  async deletePhotoReport(id) {
-    const response = await apiClient.delete(`/construction/photo-reports/${id}`);
-    return response.data;
-  },
-
-  async reviewPhotoReport(id, data) {
-    const response = await apiClient.put(`/construction/photo-reports/${id}/review`, data);
     return response.data.data;
   },
 

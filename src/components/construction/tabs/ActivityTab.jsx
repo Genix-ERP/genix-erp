@@ -1,3 +1,4 @@
+import { formatDateTime } from '@/utils/formatDate';
 import React, { useState, useEffect, useCallback } from 'react';
 import { constructionService } from '@/api/services/construction';
 import { Card, CardContent } from '@/components/ui/card';
@@ -127,7 +128,7 @@ const ActivityTab = ({ projectId, t }) => {
     if (diffMins < 60) return `${diffMins} ${t('minutes_ago') || 'daqiqa oldin'}`;
     if (diffHours < 24) return `${diffHours} ${t('hours_ago') || 'soat oldin'}`;
     if (diffDays < 7) return `${diffDays} ${t('days_ago') || 'kun oldin'}`;
-    return date.toLocaleDateString('uz-UZ', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return formatDateTime(date);
   };
 
   return (

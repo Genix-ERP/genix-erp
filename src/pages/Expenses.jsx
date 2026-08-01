@@ -1,913 +1,531 @@
-import React, { useState, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useModules } from '@/components/contexts/ModulesContext';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Receipt, Upload, CheckCircle, XCircle, Clock, DollarSign, Brain, AlertTriangle, Target, Lightbulb, Edit, Download, Trash2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Plus, Search, Receipt, Download, CheckCircle2 } from 'lucide-react';
 import { format } from 'date-fns';
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
+import { toast } from 'sonner';
+import * as XLSX from 'xlsx';
 import { financeService } from '@/api/services/finance';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
-import { usePermissions } from "@/hooks/usePermissions";
+import { usePermissions } from '@/hooks/usePermissions';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
-import { Link } from 'react-router-dom';
-import * as XLSX from 'xlsx';
+import { STATUS_META, EXPENSE_STATUSES, categoryColor } from '@/components/expenses/constants';
+import ExpenseStatsCards from '@/components/expenses/ExpenseStatsCards';
+import ExpenseCharts from '@/components/expenses/ExpenseCharts';
+import ExpenseFormModal from '@/components/expenses/ExpenseFormModal';
+import ExpenseDetailSheet from '@/components/expenses/ExpenseDetailSheet';
+import PayExpenseDialog from '@/components/expenses/PayExpenseDialog';
 
-const COLORS = ['#0ea5e9', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444'];
+// Date-range presets driving stats + charts + table together.
+const RANGES = ['this_month', 'last_month', 'quarter', 'year', 'all'];
 
-// Money input helpers — keep the underlying state as a raw numeric string
-// (no separators) so parseFloat() at submit time stays correct, but
-// render the input with thin-space thousands grouping so a user typing
-// 120000 sees "120 000" while typing. Decimal point/comma both accepted.
-const formatAmountForInput = (val) => {
-  if (val === '' || val === null || val === undefined) return '';
-  const cleaned = String(val).replace(/\s/g, '').replace(',', '.');
-  const [intPart, decPart] = cleaned.split('.');
-  const grouped = (intPart || '').replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
-  return decPart !== undefined ? `${grouped}.${decPart}` : grouped;
-};
-const stripAmountInput = (val) => {
-  if (val === '' || val === null || val === undefined) return '';
-  // Strip everything that isn't a digit or a single decimal point.
-  const cleaned = String(val).replace(/\s/g, '').replace(',', '.').replace(/[^\d.]/g, '');
-  // Keep only the first dot — collapse anything after it.
-  const firstDot = cleaned.indexOf('.');
-  if (firstDot === -1) return cleaned;
-  return cleaned.slice(0, firstDot + 1) + cleaned.slice(firstDot + 1).replace(/\./g, '');
-};
+function rangeToDates(key) {
+  const now = new Date();
+  const iso = (d) => d.toISOString().split('T')[0];
+  const startOfMonth = (y, m) => new Date(y, m, 1);
+  switch (key) {
+    case 'this_month':
+      return { date_from: iso(startOfMonth(now.getFullYear(), now.getMonth())), date_to: iso(now) };
+    case 'last_month': {
+      const from = startOfMonth(now.getFullYear(), now.getMonth() - 1);
+      const to = new Date(now.getFullYear(), now.getMonth(), 0);
+      return { date_from: iso(from), date_to: iso(to) };
+    }
+    case 'quarter': {
+      const qStart = startOfMonth(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3);
+      return { date_from: iso(qStart), date_to: iso(now) };
+    }
+    case 'year':
+      return { date_from: iso(new Date(now.getFullYear(), 0, 1)), date_to: iso(now) };
+    default:
+      return {};
+  }
+}
 
 export default function Expenses() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { expenses, createExpense, updateExpense, recognizeExpense, isLoading, employees, refreshData } = useModules();
+  const { employees } = useModules();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
-
-  // Refresh data when navigating to this page
-  useEffect(() => {
-    refreshData();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
 
-  const [filteredClaims, setFilteredClaims] = useState([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  // Profit-tax recognition filter: 'all' | 'recognized' | 'unrecognized'.
-  // See §6 of ТЗ_Ish_Haqi_Soliq_Tolik.docx — lets accountants review the
-  // unrecognized ("тан олинмаган") list in isolation when closing a period.
-  const [recognitionFilter, setRecognitionFilter] = useState('all');
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [editClaim, setEditClaim] = useState(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [claimToDelete, setClaimToDelete] = useState(null);
+  // Module gating: the route is the `expenses` module, but finance staff
+  // (FINANCIALS) traditionally manage this page too — accept either.
+  const mayCreate = canCreate(MODULES.EXPENSES) || canCreate(MODULES.FINANCIALS);
+  const mayEdit = canUpdate(MODULES.EXPENSES) || canUpdate(MODULES.FINANCIALS);
+  const mayDelete = canDelete(MODULES.EXPENSES) || canDelete(MODULES.FINANCIALS);
+  // Approve/reject/pay are finance actions (backend: finance:expense:approve,
+  // granted through can_update on the finance/expenses module).
+  const mayApprove = canUpdate(MODULES.FINANCIALS) || canUpdate(MODULES.EXPENSES);
 
-  // Categories are now driven by the `expense_categories` table —
-  // managed in Settings → Expenses. The page loads them on mount and
-  // both the create and edit modals render their dropdowns from this
-  // list. `category_id` (UUID) is the canonical reference to the
-  // selected row; we still pass `category` (the name) for the legacy
-  // text column the backend keeps for backwards-compatibility.
+  const [rangeKey, setRangeKey] = useState('this_month');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [employeeFilter, setEmployeeFilter] = useState('all');
+
+  const [expenses, setExpenses] = useState([]);
+  const [listLoading, setListLoading] = useState(true);
+  const [stats, setStats] = useState(null);
+  const [statsLoading, setStatsLoading] = useState(true);
   const [categories, setCategories] = useState([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
 
+  const [selected, setSelected] = useState(null); // detail sheet
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [payTarget, setPayTarget] = useState(null);
+  const [paying, setPaying] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [busyAction, setBusyAction] = useState(null);
+  const [checkedIds, setCheckedIds] = useState(() => new Set());
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const rangeDates = useMemo(() => rangeToDates(rangeKey), [rangeKey]);
+
+  const loadStats = useCallback(async () => {
+    setStatsLoading(true);
+    try {
+      setStats(await financeService.getExpenseStats(rangeDates));
+    } catch {
+      setStats(null);
+    } finally {
+      setStatsLoading(false);
+    }
+  }, [rangeDates]);
+
+  const loadExpenses = useCallback(async () => {
+    setListLoading(true);
+    try {
+      const params = { limit: 500, ...rangeDates };
+      if (debouncedSearch) params.q = debouncedSearch;
+      if (statusFilter !== 'all') params.status = statusFilter;
+      if (categoryFilter !== 'all') params.category_id = categoryFilter;
+      if (employeeFilter !== 'all') params.employee_id = employeeFilter;
+      const rows = await financeService.listExpenses(params);
+      setExpenses(Array.isArray(rows) ? rows : rows?.items || []);
+    } catch {
+      setExpenses([]);
+    } finally {
+      setListLoading(false);
+    }
+  }, [rangeDates, debouncedSearch, statusFilter, categoryFilter, employeeFilter]);
+
+  useEffect(() => { loadStats(); }, [loadStats]);
+  useEffect(() => { loadExpenses(); }, [loadExpenses]);
+
   useEffect(() => {
     let cancelled = false;
-    setCategoriesLoading(true);
     financeService.listExpenseCategories()
-      .then((rows) => {
-        if (cancelled) return;
-        setCategories(Array.isArray(rows) ? rows : []);
-      })
-      .catch(() => { /* silent — empty state already covers this */ })
+      .then((rows) => { if (!cancelled) setCategories(Array.isArray(rows) ? rows : []); })
+      .catch(() => {})
       .finally(() => { if (!cancelled) setCategoriesLoading(false); });
     return () => { cancelled = true; };
   }, []);
 
-  const [newClaim, setNewClaim] = useState({
-    employee_name: '',
-    expense_date: new Date().toISOString().split('T')[0],
-    category_id: '',
-    category: '',
-    amount: 0,
-    // Matches the DB default from migration 336. Accountants flip this
-    // to false for fines, undocumented costs, personal items, etc. —
-    // see the "YO'Q" list in §6.3 of ТЗ_Ish_Haqi_Soliq_Tolik.docx.
-    is_recognized: true,
-    description: ''
+  const refreshAll = useCallback(async (updatedRecord) => {
+    if (updatedRecord) {
+      setExpenses((prev) => prev.map((e) => (e.id === updatedRecord.id ? updatedRecord : e)));
+      setSelected((prev) => (prev && prev.id === updatedRecord.id ? updatedRecord : prev));
+    }
+    await Promise.all([loadStats(), loadExpenses()]);
+  }, [loadStats, loadExpenses]);
+
+  const apiError = (err) =>
+    err?.response?.data?.error?.message || err?.response?.data?.message || t('exp_error_generic');
+
+  // ── Lifecycle actions (shared by table buttons and the detail sheet) ──
+  const runAction = async (name, expense, payload) => {
+    if (name === 'edit') { setEditing(expense); setFormOpen(true); return; }
+    if (name === 'delete') { setDeleteTarget(expense); return; }
+    if (name === 'pay') { setPayTarget(expense); return; }
+
+    setBusyAction(name);
+    try {
+      let updated;
+      if (name === 'submit') updated = await financeService.submitExpense(expense.id);
+      else if (name === 'approve') updated = await financeService.approveExpense(expense.id);
+      else if (name === 'reject') updated = await financeService.rejectExpense(expense.id, payload);
+      else if (name === 'recognize') updated = await financeService.recognizeExpense(expense.id, payload);
+      await refreshAll(updated);
+      toast.success(t(`exp_toast_${name}`));
+    } catch (err) {
+      toast.error(apiError(err));
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const handleSave = async (payload) => {
+    setSaving(true);
+    try {
+      if (editing?.id) {
+        const updated = await financeService.updateExpense(editing.id, payload);
+        await refreshAll(updated);
+        toast.success(t('exp_toast_saved'));
+      } else {
+        await financeService.createExpense(payload);
+        await refreshAll();
+        toast.success(payload.status === 'draft' ? t('exp_toast_draft') : t('exp_toast_submit'));
+      }
+      setFormOpen(false);
+      setEditing(null);
+    } catch (err) {
+      toast.error(apiError(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handlePay = async (payload) => {
+    if (!payTarget) return;
+    setPaying(true);
+    try {
+      const updated = await financeService.payExpense(payTarget.id, payload);
+      await refreshAll(updated);
+      toast.success(t('exp_toast_pay'));
+      setPayTarget(null);
+    } catch (err) {
+      toast.error(apiError(err));
+    } finally {
+      setPaying(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await financeService.deleteExpense(deleteTarget.id);
+      setSelected((prev) => (prev && prev.id === deleteTarget.id ? null : prev));
+      await refreshAll();
+      toast.success(t('exp_toast_deleted'));
+    } catch (err) {
+      toast.error(apiError(err));
+    } finally {
+      setDeleteTarget(null);
+    }
+  };
+
+  // ── Bulk approve (managers) ──
+  const submittedIds = useMemo(
+    () => new Set(expenses.filter((e) => e.status === 'submitted').map((e) => e.id)),
+    [expenses]
+  );
+  const toggleChecked = (id) => setCheckedIds((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
   });
-
-  useEffect(() => {
-    let filtered = expenses;
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(c => c.status === statusFilter);
+  const bulkApprove = async () => {
+    const ids = [...checkedIds].filter((id) => submittedIds.has(id));
+    if (!ids.length) return;
+    setBusyAction('bulk');
+    let ok = 0;
+    for (const id of ids) {
+      try { await financeService.approveExpense(id); ok += 1; } catch { /* per-row failure reported below */ }
     }
-    if (recognitionFilter !== 'all') {
-      // `is_recognized` defaults to true for any row the backend hasn't
-      // populated yet — we coerce undefined to true to match the column
-      // default in migration 336.
-      const want = recognitionFilter === 'recognized';
-      filtered = filtered.filter(c => (c.is_recognized !== false) === want);
-    }
-    if (searchQuery) {
-      filtered = filtered.filter(c =>
-        c.claim_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.employee_name?.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-    setFilteredClaims(filtered);
-  }, [expenses, searchQuery, statusFilter, recognitionFilter]);
-
-  const handleCreateClaim = async () => {
-    setIsSubmitting(true);
-    try {
-      const claimData = {
-        ...newClaim,
-        amount: parseFloat(newClaim.amount),
-        status: 'draft',
-        claim_date: new Date().toISOString().split('T')[0]
-      };
-
-      await createExpense(claimData);
-      setShowCreateModal(false);
-
-      setNewClaim({
-        employee_name: '',
-        expense_date: new Date().toISOString().split('T')[0],
-        category_id: '',
-        category: '',
-        amount: 0,
-        description: '',
-        is_recognized: true,
-      });
-    } catch (error) {
-      console.error('Error creating claim:', error);
-    } finally {
-      setIsSubmitting(false);
-    }
+    setCheckedIds(new Set());
+    await refreshAll();
+    setBusyAction(null);
+    if (ok > 0) toast.success(`${ok} ${t('exp_toast_bulk_approved')}`);
+    if (ok < ids.length) toast.error(`${ids.length - ok} ${t('exp_toast_bulk_failed')}`);
   };
 
-  const handleEditClaim = (claim) => {
-    // Legacy rows may carry only the text `category` column without a
-    // category_id. Resolve it by name from the loaded list so the edit
-    // dropdown opens with the right row pre-selected.
-    let categoryId = claim.category_id || '';
-    if (!categoryId && claim.category && categories.length > 0) {
-      const match = categories.find(
-        (c) => String(c.name).toLowerCase() === String(claim.category).toLowerCase()
-            || String(c.code).toLowerCase() === String(claim.category).toLowerCase(),
-      );
-      if (match) categoryId = match.id;
-    }
-    setEditClaim({
-      ...claim,
-      category_id: categoryId,
-      amount: claim.amount || 0,
-    });
-    setShowEditModal(true);
-  };
-
-  const handleUpdateClaim = async () => {
-    if (!editClaim) return;
-
-    setIsSubmitting(true);
-    try {
-      updateExpense(editClaim.id, {
-        employee_name: editClaim.employee_name,
-        expense_date: editClaim.expense_date,
-        // Send the canonical category_id (UUID) so the backend can join
-        // through to expense_categories; `category` keeps the legacy
-        // text column populated for backwards-compatibility.
-        category_id: editClaim.category_id,
-        category: editClaim.category,
-        amount: parseFloat(editClaim.amount) || 0,
-        description: editClaim.description,
-        status: editClaim.status,
-        is_recognized: editClaim.is_recognized,
-      });
-      setShowEditModal(false);
-      setEditClaim(null);
-    } catch (error) {
-      console.error('Error updating claim:', error);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const updateClaimStatus = (claimId, newStatus) => {
-    const updates = { status: newStatus };
-    if (newStatus === 'approved') {
-      updates.approval_date = new Date().toISOString().split('T')[0];
-    }
-    if (newStatus === 'paid') {
-      updates.payment_date = new Date().toISOString().split('T')[0];
-    }
-    updateExpense(claimId, updates);
-  };
-
-  const handleDeleteClick = (claim) => {
-    setClaimToDelete(claim);
-    setShowDeleteDialog(true);
-  };
-
-  const handleDeleteClaim = () => {
-    if (claimToDelete) {
-      // For demo purposes, we'll update status to 'cancelled' instead of actually deleting
-      updateExpense(claimToDelete.id, { status: 'cancelled' });
-      setShowDeleteDialog(false);
-      setClaimToDelete(null);
-    }
-  };
-
-  const handleExportToExcel = () => {
-    // Prepare data for export
-    const exportData = filteredClaims.map(claim => ({
-      [t('claim_number')]: claim.claim_number,
-      [t('employee')]: claim.employee_name,
-      [t('expense_date')]: claim.expense_date ? format(new Date(claim.expense_date), 'dd.MM.yyyy') : '',
-      [t('category')]: t(claim.category),
-      [t('amount')]: claim.amount,
-      [t('description')]: claim.description,
-      [t('status')]: t(claim.status),
-      [t('submission_date')]: claim.submission_date ? format(new Date(claim.submission_date), 'dd.MM.yyyy') : '',
-      [t('approval_date')]: claim.approval_date ? format(new Date(claim.approval_date), 'dd.MM.yyyy') : '',
-      [t('payment_date')]: claim.payment_date ? format(new Date(claim.payment_date), 'dd.MM.yyyy') : ''
+  // ── Export ──
+  const handleExport = () => {
+    const rows = expenses.map((e) => ({
+      [t('exp_col_number')]: e.expense_number,
+      [t('exp_col_date')]: e.date ? format(new Date(e.date), 'dd.MM.yyyy') : '',
+      [t('employee')]: e.employee_name || '',
+      [t('category')]: e.category || '',
+      [t('exp_description')]: e.description || '',
+      [t('exp_amount')]: e.total_amount ?? e.amount ?? 0,
+      [t('exp_currency')]: e.currency || 'UZS',
+      [t('status')]: t(STATUS_META[e.status]?.tKey || e.status),
+      [t('exp_recognized_label')]: e.is_recognized !== false ? t('yes') : t('no'),
+      [t('exp_paid_date')]: e.paid_at ? format(new Date(e.paid_at), 'dd.MM.yyyy') : '',
     }));
-
-    // Create worksheet
-    const worksheet = XLSX.utils.json_to_sheet(exportData);
-
-    // Set column widths
-    const columnWidths = [
-      { wch: 15 }, // Claim Number
-      { wch: 20 }, // Employee
-      { wch: 12 }, // Expense Date
-      { wch: 15 }, // Category
-      { wch: 12 }, // Amount
-      { wch: 30 }, // Description
-      { wch: 12 }, // Status
-      { wch: 12 }, // Submission Date
-      { wch: 12 }, // Approval Date
-      { wch: 12 }  // Payment Date
-    ];
-    worksheet['!cols'] = columnWidths;
-
-    // Create workbook
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, t('expense_claims'));
-
-    // Generate filename with current date
-    const filename = `expense_claims_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
-
-    // Download
-    XLSX.writeFile(workbook, filename);
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [{ wch: 15 }, { wch: 11 }, { wch: 22 }, { wch: 16 }, { wch: 36 }, { wch: 14 }, { wch: 8 }, { wch: 14 }, { wch: 12 }, { wch: 12 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, t('expenses'));
+    XLSX.writeFile(wb, `xarajatlar_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
 
-  const getStatusColor = (status) => {
-    const colors = {
-      draft: 'bg-gray-100 text-gray-800',
-      pending: 'bg-yellow-100 text-yellow-800',
-      submitted: 'bg-blue-100 text-blue-800',
-      approved: 'bg-green-100 text-green-800',
-      rejected: 'bg-red-100 text-red-800',
-      paid: 'bg-purple-100 text-purple-800',
-      cancelled: 'bg-slate-100 text-slate-800'
-    };
-    return colors[status] || colors.draft;
-  };
-
-  const metrics = {
-    totalClaims: expenses.length,
-    totalAmount: expenses.reduce((sum, c) => sum + (c.amount || 0), 0),
-    pendingApproval: expenses.filter(c => c.status === 'submitted').length,
-    pendingPayment: expenses.filter(c => c.status === 'approved').length
-  };
-
-  const categoryData = {};
-  expenses.forEach(c => {
-    categoryData[c.category] = (categoryData[c.category] || 0) + (c.amount || 0);
-  });
-  const chartData = Object.entries(categoryData).map(([name, value]) => ({ name: t(name), value }));
+  const hasFilters = debouncedSearch || statusFilter !== 'all' || categoryFilter !== 'all' || employeeFilter !== 'all';
+  const showBulkBar = mayApprove && checkedIds.size > 0;
 
   return (
-    <div className="p-4 md:p-6 lg:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
-      <div className="space-y-6">
+    <div className="p-4 sm:p-6 space-y-5 max-w-[1400px] mx-auto">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">{t('expenses')}</h1>
+          <p className="text-sm text-slate-500 mt-0.5">{t('exp_page_subtitle')}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={handleExport} disabled={!expenses.length}>
+            <Download className="w-4 h-4 mr-2" />
+            {t('export')}
+          </Button>
+          {mayCreate && (
+            <Button onClick={() => { setEditing(null); setFormOpen(true); }}>
+              <Plus className="w-4 h-4 mr-2" />
+              {t('exp_add_button')}
+            </Button>
+          )}
+        </div>
+      </div>
 
-        {/* Metrics */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <Receipt className="w-5 h-5 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-slate-600">{t('total_claims')}</p>
-                  <p className="text-2xl font-bold text-slate-900">{metrics.totalClaims}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+      {/* Date-range pills — drive stats, charts and table together */}
+      <div className="flex flex-wrap gap-1.5">
+        {RANGES.map((key) => (
+          <button
+            key={key}
+            onClick={() => setRangeKey(key)}
+            className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
+              rangeKey === key
+                ? 'bg-slate-900 text-white'
+                : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            {t(`exp_range_${key}`)}
+          </button>
+        ))}
+      </div>
 
-          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                  <DollarSign className="w-5 h-5 text-green-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-slate-600">{t('total_amount')}</p>
-                  <p className="text-2xl font-bold text-slate-900">{formatCurrencyCompact(metrics.totalAmount)}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+      <ExpenseStatsCards stats={stats} loading={statsLoading} formatCompact={formatCurrencyCompact} t={t} />
 
-          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
-                  <Clock className="w-5 h-5 text-yellow-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-slate-600">{t('pending_approval')}</p>
-                  <p className="text-2xl font-bold text-slate-900">{metrics.pendingApproval}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+      <ExpenseCharts stats={stats} loading={statsLoading} formatCompact={formatCurrencyCompact} t={t} language={language} />
 
-          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                  <DollarSign className="w-5 h-5 text-purple-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-slate-600">{t('pending_payment')}</p>
-                  <p className="text-2xl font-bold text-slate-900">{metrics.pendingPayment}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+      {/* Table card */}
+      <div className="glass-card rounded-2xl border border-slate-200/60 bg-white/80 shadow-sm">
+        <div className="p-4 sm:p-5 border-b border-slate-100 space-y-3">
+          <div className="flex flex-col lg:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Input
+                className="pl-9"
+                placeholder={t('exp_search_placeholder')}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t('all_status')}</SelectItem>
+                  {EXPENSE_STATUSES.map((s) => (
+                    <SelectItem key={s} value={s}>{t(STATUS_META[s].tKey)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                <SelectTrigger className="w-[170px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t('exp_all_categories')}</SelectItem>
+                  {categories.map((c, i) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      <span className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full" style={{ background: categoryColor(c, i) }} />
+                        {c.name}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={employeeFilter} onValueChange={setEmployeeFilter}>
+                <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t('exp_all_employees')}</SelectItem>
+                  {employees.map((e) => (
+                    <SelectItem key={e.id} value={e.id}>
+                      {`${e.first_name || ''} ${e.last_name || ''}`.trim() || e.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {showBulkBar && (
+            <div className="flex items-center justify-between rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2">
+              <span className="text-sm text-emerald-700">
+                {checkedIds.size} {t('exp_selected_count')}
+              </span>
+              <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={bulkApprove} disabled={busyAction === 'bulk'}>
+                <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                {t('exp_bulk_approve')}
+              </Button>
+            </div>
+          )}
         </div>
 
-        {/* Category Breakdown */}
-        {chartData.length > 0 && (
-          <Card className="bg-white/80 backdrop-blur-sm">
-            <CardHeader>
-              <CardTitle>{t('expense_claims_by_category')}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={280}>
-                <PieChart>
-                  <Pie
-                    data={chartData}
-                    cx="50%"
-                    cy="45%"
-                    innerRadius={40}
-                    outerRadius={70}
-                    fill="#8884d8"
-                    dataKey="value"
-                    paddingAngle={2}
-                  >
-                    {chartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value) => formatCurrency(value)} />
-                  <Legend
-                    layout="horizontal"
-                    align="center"
-                    verticalAlign="bottom"
-                    wrapperStyle={{ paddingTop: '10px' }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Claims Table */}
-        <Card className="bg-white/80 backdrop-blur-sm">
-            <CardHeader className="border-b">
-              <div className="flex items-center justify-between">
-                <CardTitle>{t('expense_claims')}</CardTitle>
-                <div className="flex gap-2">
-                  <Button
-                    onClick={handleExportToExcel}
-                    variant="outline"
-                    className="border-blue-200 text-blue-700 hover:bg-blue-50"
-                  >
-                    <Download className="w-4 h-4 mr-2" /> {t('export')}
-                  </Button>
-                  {canCreate(MODULES.FINANCIALS) && (
-                    <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]">
-                      <Plus className="w-4 h-4 mr-2" /> {t('new_claim')}
-                    </Button>
-                  )}
-                </div>
-              </div>
-              <div className="flex gap-3 mt-4">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <Input
-                    placeholder={t('search_claims')}
-                    className="pl-9"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-                </div>
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="w-[150px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">{t('all_status')}</SelectItem>
-                    <SelectItem value="draft">{t('draft')}</SelectItem>
-                    <SelectItem value="submitted">{t('submitted')}</SelectItem>
-                    <SelectItem value="approved">{t('approved')}</SelectItem>
-                    <SelectItem value="rejected">{t('rejected')}</SelectItem>
-                    <SelectItem value="paid">{t('paid')}</SelectItem>
-                    <SelectItem value="cancelled">{t('cancelled')}</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                {/* Profit-tax recognition filter — mirrors §8.2 of the TZ. */}
-                <Select value={recognitionFilter} onValueChange={setRecognitionFilter}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">{t('recognition_all') || 'Barchasi (tan olish)'}</SelectItem>
-                    <SelectItem value="recognized">{t('recognition_recognized') || 'Tan olingan'}</SelectItem>
-                    <SelectItem value="unrecognized">{t('recognition_unrecognized') || 'Tan olinmagan'}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              {isLoading ? (
-                <div className="flex items-center justify-center py-16">
-                  <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                </div>
-              ) : filteredClaims.length === 0 ? (
-                <div className="text-center py-16">
-                  <Receipt className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                  <p className="text-slate-500">{t('no_expense_claims_yet')}</p>
-                  {canCreate(MODULES.FINANCIALS) && (
-                    <Button onClick={() => setShowCreateModal(true)} className="mt-4">{t('submit_first_claim')}</Button>
-                  )}
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-slate-50">
-                        <TableHead>{t('claim_number')}</TableHead>
-                        <TableHead>{t('employee')}</TableHead>
-                        <TableHead>{t('date')}</TableHead>
-                        <TableHead>{t('category')}</TableHead>
-                        <TableHead>{t('amount')}</TableHead>
-                        <TableHead>{t('recognition') || 'Tan olinadi?'}</TableHead>
-                        <TableHead>{t('status')}</TableHead>
-                        <TableHead>{t('actions')}</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredClaims.map((claim) => {
-                        // Treat missing flag as recognized (matches DB
-                        // default from migration 336). Row tint follows
-                        // the colour standard from §8.3 of the TZ:
-                        // light-green for recognized, light-red otherwise.
-                        const isRecognized = claim.is_recognized !== false;
-                        const rowTint = isRecognized
-                          ? 'hover:bg-emerald-50/60'
-                          : 'bg-red-50/50 hover:bg-red-50';
-                        return (
-                        <TableRow key={claim.id} className={rowTint}>
-                          <TableCell className="font-mono text-sm">{claim.claim_number}</TableCell>
-                          <TableCell className="font-medium">{claim.employee_name}</TableCell>
-                          <TableCell className="text-sm">
-                            {claim.expense_date ? format(new Date(claim.expense_date), 'dd.MM.yyyy') : '-'}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{t(claim.category)}</Badge>
-                          </TableCell>
-                          <TableCell className="font-semibold">{formatCurrency(claim.amount || 0)}</TableCell>
-                          <TableCell>
-                            {/* Recognition toggle — click flips is_recognized
-                                via PATCH /expenses/:id/recognize. Guarded
-                                by the same update permission as the edit
-                                button so view-only users can't toggle. */}
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className={`h-7 px-2 rounded-full text-xs font-medium border ${
-                                isRecognized
-                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                                  : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
-                              }`}
-                              disabled={!canUpdate(MODULES.FINANCIALS)}
-                              title={
-                                isRecognized
-                                  ? (t('recognition_click_to_unrecognize') || 'Tan olinmaydi qilish uchun bosing')
-                                  : (t('recognition_click_to_recognize') || 'Tan olinadi qilish uchun bosing')
-                              }
-                              onClick={async () => {
-                                try {
-                                  await recognizeExpense(claim.id, !isRecognized);
-                                } catch (e) {
-                                  console.error('Failed to toggle recognition', e);
-                                }
-                              }}
-                            >
-                              {isRecognized ? (t('recognized_short') || 'HA') : (t('unrecognized_short') || "YO'Q")}
-                            </Button>
-                          </TableCell>
-                          <TableCell>
-                            <Badge className={getStatusColor(claim.status)}>{t(claim.status)}</Badge>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex gap-1">
-                              {canUpdate(MODULES.FINANCIALS) && (
-                                <Button size="sm" variant="ghost" onClick={() => handleEditClaim(claim)} title={t('edit_claim')}>
-                                  <Edit className="w-4 h-4" />
-                                </Button>
-                              )}
-                              {canUpdate(MODULES.FINANCIALS) && claim.status === 'draft' && (
-                                <Button size="sm" variant="ghost" onClick={() => updateClaimStatus(claim.id, 'submitted')}>
-                                  {t('submit')}
-                                </Button>
-                              )}
-                              {canUpdate(MODULES.FINANCIALS) && (claim.status === 'submitted' || claim.status === 'pending') && (
-                                <>
-                                  <Button size="sm" variant="ghost" className="text-green-600" onClick={() => updateClaimStatus(claim.id, 'approved')} title={t('approve')}>
-                                    <CheckCircle className="w-4 h-4" />
-                                  </Button>
-                                  <Button size="sm" variant="ghost" className="text-red-600" onClick={() => updateClaimStatus(claim.id, 'rejected')} title={t('reject')}>
-                                    <XCircle className="w-4 h-4" />
-                                  </Button>
-                                </>
-                              )}
-                              {canUpdate(MODULES.FINANCIALS) && claim.status === 'approved' && (
-                                <Button size="sm" variant="ghost" onClick={() => updateClaimStatus(claim.id, 'paid')}>
-                                  {t('pay')}
-                                </Button>
-                              )}
-                              {canDelete(MODULES.FINANCIALS) && (claim.status === 'draft' || claim.status === 'rejected') && (
-                                <Button size="sm" variant="ghost" onClick={() => handleDeleteClick(claim)} title={t('delete_claim')}>
-                                  <Trash2 className="w-4 h-4 text-red-500" />
-                                </Button>
-                              )}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-        {/* Create Claim Modal */}
-        <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Brain className="w-5 h-5 text-blue-600" />
-                {t('submit_expense_claim')}
-              </DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium mb-1 block">{t('employee_name')} *</label>
-                  <Select value={newClaim.employee_name} onValueChange={(value) => setNewClaim({...newClaim, employee_name: value})}>
-                    <SelectTrigger>
-                      <SelectValue placeholder={t('select_employee')} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(employees || []).map((emp) => (
-                        <SelectItem key={emp.id} value={emp.full_name || `${emp.first_name || ''} ${emp.last_name || ''}`.trim()}>
-                          {emp.full_name || `${emp.first_name || ''} ${emp.last_name || ''}`.trim()}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <label className="text-sm font-medium mb-1 block">{t('expense_date')} *</label>
-                  <Input
-                    type="date"
-                    value={newClaim.expense_date}
-                    onChange={(e) => setNewClaim({...newClaim, expense_date: e.target.value})}
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium mb-1 block">{t('category')} *</label>
-                  <Select
-                    value={newClaim.category_id || ''}
-                    onValueChange={(value) => {
-                      const picked = categories.find((c) => c.id === value);
-                      setNewClaim({
-                        ...newClaim,
-                        category_id: value,
-                        // Keep the name in sync so the legacy `category`
-                        // text column still gets a sensible value on
-                        // backends that haven't migrated to category_id.
-                        category: picked?.name || '',
-                      });
-                    }}
-                    disabled={categoriesLoading || categories.length === 0}
-                  >
-                    <SelectTrigger>
-                      <SelectValue
-                        placeholder={
-                          categoriesLoading
-                            ? (t('loading') || 'Loading…')
-                            : categories.length === 0
-                              ? (t('no_categories_yet') || 'No categories yet')
-                              : (t('select_category') || 'Select category')
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {categories.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.name}
-                          {c.account_code && (
-                            <span className="ml-2 text-[10px] font-mono text-slate-400">
-                              {c.account_code}
-                            </span>
-                          )}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {!categoriesLoading && categories.length === 0 && (
-                    <p className="text-[11px] text-amber-700 mt-1">
-                      {t('no_categories_create_first')
-                        || 'No categories yet — '}
-                      <Link
-                        to="/settings?tab=expenses"
-                        className="underline font-medium"
-                      >
-                        {t('create_in_settings') || 'create one in Settings'}
-                      </Link>
-                    </p>
-                  )}
-                </div>
-                <div>
-                  <label className="text-sm font-medium mb-1 block">{t('amount')} *</label>
-                  <Input
-                    type="text"
-                    inputMode="decimal"
-                    placeholder="0"
-                    value={formatAmountForInput(newClaim.amount)}
-                    onChange={(e) => setNewClaim({ ...newClaim, amount: stripAmountInput(e.target.value) })}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium mb-1 block">{t('description')}</label>
-                <Input
-                  placeholder={t('expense_description')}
-                  value={newClaim.description}
-                  onChange={(e) => setNewClaim({...newClaim, description: e.target.value})}
-                />
-              </div>
-
-              {/* Profit-tax recognition toggle — lets the submitter flag
-                  non-deductible expenses up front (fines, undocumented
-                  spending, personal costs). Defaults to "recognized"
-                  which matches the DB default from migration 336. */}
-              <div className="flex items-center justify-between rounded-md border p-3">
-                <div className="text-sm">
-                  <p className="font-medium">{t('recognition') || 'Tan olinadi?'}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {t('recognition_help') || "Tan olinmagan xarajat foyda solig'i bazasidan chiqarilmaydi."}
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className={`h-7 px-3 rounded-full text-xs font-medium ${
-                    newClaim.is_recognized
-                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                      : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
-                  }`}
-                  onClick={() => setNewClaim({ ...newClaim, is_recognized: !newClaim.is_recognized })}
-                >
-                  {newClaim.is_recognized ? (t('recognized_short') || 'HA') : (t('unrecognized_short') || "YO'Q")}
-                </Button>
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <Button variant="outline" onClick={() => setShowCreateModal(false)} className="flex-1">
-                  {t('cancel')}
-                </Button>
-                <Button
-                  onClick={handleCreateClaim}
-                  className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-                  disabled={!newClaim.amount || !newClaim.employee_name || !newClaim.category_id || isSubmitting}
-                >
-                  {isSubmitting ? t('submitting') : t('submit_claim')}
-                </Button>
-              </div>
+        {listLoading ? (
+          <div className="p-5 space-y-3">
+            {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-12 rounded-xl" />)}
+          </div>
+        ) : expenses.length === 0 ? (
+          <div className="py-16 flex flex-col items-center text-center px-6">
+            <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center mb-3">
+              <Receipt className="w-6 h-6 text-slate-400" />
             </div>
-          </DialogContent>
-        </Dialog>
-
-        {/* Delete Confirmation Dialog */}
-        <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>{t('confirm_delete_claim')}</AlertDialogTitle>
-              <AlertDialogDescription>
-                {t('delete_claim_confirm')} <strong>{claimToDelete?.claim_number}</strong>? {t('action_cannot_undone')}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={handleDeleteClaim}
-                className="bg-red-600 hover:bg-red-700"
-              >
-                {t('delete')}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-
-        {/* Edit Claim Modal */}
-        <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>{t('edit_expense_claim')}</DialogTitle>
-            </DialogHeader>
-            {editClaim && (
-              <div className="space-y-4 py-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium mb-1 block">{t('employee_name')} *</label>
-                    <Select value={editClaim.employee_name} onValueChange={(value) => setEditClaim({...editClaim, employee_name: value})}>
-                      <SelectTrigger>
-                        <SelectValue placeholder={t('select_employee')} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(employees || []).map((emp) => (
-                          <SelectItem key={emp.id} value={emp.full_name || `${emp.first_name || ''} ${emp.last_name || ''}`.trim()}>
-                            {emp.full_name || `${emp.first_name || ''} ${emp.last_name || ''}`.trim()}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <label className="text-sm font-medium mb-1 block">{t('expense_date')}</label>
-                    <Input
-                      type="date"
-                      value={editClaim.expense_date?.split('T')[0] || ''}
-                      onChange={(e) => setEditClaim({...editClaim, expense_date: e.target.value})}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium mb-1 block">{t('category')}</label>
-                    <Select
-                      value={editClaim.category_id || ''}
-                      onValueChange={(value) => {
-                        const picked = categories.find((c) => c.id === value);
-                        setEditClaim({
-                          ...editClaim,
-                          category_id: value,
-                          category: picked?.name || editClaim.category || '',
-                        });
-                      }}
-                      disabled={categoriesLoading || categories.length === 0}
-                    >
-                      <SelectTrigger>
-                        <SelectValue
-                          placeholder={
-                            categories.length === 0
-                              ? (t('no_categories_yet') || 'No categories yet')
-                              : (t('select_category') || 'Select category')
-                          }
-                        />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {categories.map((c) => (
-                          <SelectItem key={c.id} value={c.id}>
-                            {c.name}
-                            {c.account_code && (
-                              <span className="ml-2 text-[10px] font-mono text-slate-400">
-                                {c.account_code}
-                              </span>
-                            )}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium mb-1 block">{t('amount')} *</label>
-                    <Input
-                      type="text"
-                      inputMode="decimal"
-                      value={formatAmountForInput(editClaim.amount)}
-                      onChange={(e) => setEditClaim({ ...editClaim, amount: stripAmountInput(e.target.value) })}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium mb-1 block">{t('status')}</label>
-                  <Select value={editClaim.status || 'pending'} onValueChange={(value) => setEditClaim({...editClaim, status: value})}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="pending">{t('pending')}</SelectItem>
-                      <SelectItem value="approved">{t('approved')}</SelectItem>
-                      <SelectItem value="rejected">{t('rejected')}</SelectItem>
-                      <SelectItem value="paid">{t('paid')}</SelectItem>
-                      <SelectItem value="cancelled">{t('cancelled')}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium mb-1 block">{t('description')}</label>
-                  <Input
-                    value={editClaim.description || ''}
-                    onChange={(e) => setEditClaim({...editClaim, description: e.target.value})}
-                  />
-                </div>
-
-                {/* Same recognition toggle as the create modal — reusing
-                    the same component-level semantics so a row can be
-                    re-classified without having to use the table pill. */}
-                <div className="flex items-center justify-between rounded-md border p-3">
-                  <div className="text-sm">
-                    <p className="font-medium">{t('recognition') || 'Tan olinadi?'}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {t('recognition_help') || "Tan olinmagan xarajat foyda solig'i bazasidan chiqarilmaydi."}
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className={`h-7 px-3 rounded-full text-xs font-medium ${
-                      editClaim.is_recognized !== false
-                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                        : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
-                    }`}
-                    onClick={() => setEditClaim({ ...editClaim, is_recognized: !(editClaim.is_recognized !== false) })}
-                  >
-                    {editClaim.is_recognized !== false
-                      ? (t('recognized_short') || 'HA')
-                      : (t('unrecognized_short') || "YO'Q")}
+            <p className="text-slate-700 font-medium">
+              {hasFilters ? t('exp_empty_filtered') : t('exp_empty_title')}
+            </p>
+            {!hasFilters && (
+              <>
+                <p className="text-sm text-slate-500 mt-1 max-w-sm">{t('exp_empty_hint')}</p>
+                {mayCreate && (
+                  <Button className="mt-4" onClick={() => { setEditing(null); setFormOpen(true); }}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    {t('exp_add_button')}
                   </Button>
-                </div>
-
-                <div className="flex gap-3 pt-4">
-                  <Button variant="outline" onClick={() => { setShowEditModal(false); setEditClaim(null); }} className="flex-1">
-                    {t('cancel')}
-                  </Button>
-                  <Button
-                    onClick={handleUpdateClaim}
-                    className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-                    disabled={!editClaim.employee_name || isSubmitting}
-                  >
-                    {isSubmitting ? t('saving') : t('save_changes')}
-                  </Button>
-                </div>
-              </div>
+                )}
+              </>
             )}
-          </DialogContent>
-        </Dialog>
-
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  {mayApprove && <TableHead className="w-10" />}
+                  <TableHead>{t('exp_col_number')}</TableHead>
+                  <TableHead>{t('exp_col_date')}</TableHead>
+                  <TableHead>{t('employee')}</TableHead>
+                  <TableHead>{t('category')}</TableHead>
+                  <TableHead className="max-w-[260px]">{t('exp_description')}</TableHead>
+                  <TableHead className="text-right">{t('exp_amount')}</TableHead>
+                  <TableHead>{t('status')}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {expenses.map((e) => {
+                  const meta = STATUS_META[e.status] || STATUS_META.draft;
+                  return (
+                    <TableRow
+                      key={e.id}
+                      className="cursor-pointer hover:bg-slate-50/80"
+                      onClick={() => setSelected(e)}
+                    >
+                      {mayApprove && (
+                        <TableCell onClick={(ev) => ev.stopPropagation()} className="w-10">
+                          {e.status === 'submitted' && (
+                            <Checkbox
+                              checked={checkedIds.has(e.id)}
+                              onCheckedChange={() => toggleChecked(e.id)}
+                            />
+                          )}
+                        </TableCell>
+                      )}
+                      <TableCell className="font-mono text-sm">{e.expense_number}</TableCell>
+                      <TableCell className="whitespace-nowrap text-sm">
+                        {e.date ? format(new Date(e.date), 'dd.MM.yyyy') : '—'}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {e.employee_name || <span className="text-slate-300">—</span>}
+                      </TableCell>
+                      <TableCell>
+                        {e.category ? (
+                          <span className="inline-flex items-center gap-1.5 text-sm">
+                            <span
+                              className="w-2 h-2 rounded-full shrink-0"
+                              style={{ background: e.category_color || '#94a3b8' }}
+                            />
+                            {e.category}
+                          </span>
+                        ) : (
+                          <span className="text-slate-300 text-sm">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="max-w-[260px]">
+                        <p className="truncate text-sm text-slate-600" title={e.description}>{e.description}</p>
+                      </TableCell>
+                      <TableCell className="text-right font-semibold whitespace-nowrap">
+                        {formatCurrency(e.total_amount ?? e.amount ?? 0)}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={meta.className}>{t(meta.tKey)}</Badge>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        )}
       </div>
+
+      {/* Detail side panel */}
+      {selected && (
+        <ExpenseDetailSheet
+          expense={selected}
+          onClose={() => setSelected(null)}
+          onAction={runAction}
+          busyAction={busyAction}
+          permissions={{ canEditRecord: mayEdit || mayCreate, canApprove: mayApprove, canDelete: mayDelete }}
+          formatCurrency={formatCurrency}
+          t={t}
+        />
+      )}
+
+      <ExpenseFormModal
+        open={formOpen}
+        onClose={() => { setFormOpen(false); setEditing(null); }}
+        onSave={handleSave}
+        expense={editing}
+        employees={employees}
+        categories={categories}
+        categoriesLoading={categoriesLoading}
+        saving={saving}
+        t={t}
+      />
+
+      <PayExpenseDialog
+        open={Boolean(payTarget)}
+        onClose={() => setPayTarget(null)}
+        onPay={handlePay}
+        expense={payTarget}
+        paying={paying}
+        formatCurrency={formatCurrency}
+        t={t}
+      />
+
+      <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('exp_delete_title')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('exp_delete_confirm')} {deleteTarget?.expense_number}. {t('action_cannot_undone')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
+            <AlertDialogAction className="bg-red-600 hover:bg-red-700" onClick={handleDelete}>
+              {t('delete')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

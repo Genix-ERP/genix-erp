@@ -1,3 +1,4 @@
+import { formatDate } from '@/utils/formatDate';
 import React, { useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -97,7 +98,7 @@ const WBSTreeNode = ({ node, level = 0, onEdit, onDelete, onAddChild, t, formatC
         {/* Dates */}
         {node.date_start_plan && (
           <span className="text-xs text-slate-400 min-w-[80px]">
-            {new Date(node.date_start_plan).toLocaleDateString('uz-UZ')}
+            {formatDate(node.date_start_plan)}
           </span>
         )}
 

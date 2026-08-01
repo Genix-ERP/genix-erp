@@ -45,6 +45,7 @@ import * as XLSX from "xlsx";
 import ExcelJS from "exceljs";
 import { jsPDF } from "jspdf";
 import "jspdf-autotable";
+import { formatDate } from '@/utils/formatDate';
 
 // Export formats
 export const EXPORT_FORMATS = {
@@ -189,7 +190,7 @@ export const exportToPDF = async (data, columns, filename, title = "Report") => 
   // Date
   doc.setFontSize(10);
   if (fontFamily) doc.setFont(fontFamily, "normal");
-  doc.text(`Yaratilgan: ${new Date().toLocaleDateString("uz-UZ")}`, 14, 22);
+  doc.text(`Yaratilgan: ${formatDate()}`, 14, 22);
 
   // Table
   const tableData = data.map((row) =>

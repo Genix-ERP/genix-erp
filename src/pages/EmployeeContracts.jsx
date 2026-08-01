@@ -472,8 +472,8 @@ export default function EmployeeContracts() {
                         </TableCell>
                         <TableCell>
                           <div className="text-sm">
-                            <p>{format(parseISO(contract.start_date), 'dd MMM yyyy')}</p>
-                            <p className="text-slate-500">→ {format(parseISO(contract.end_date), 'dd MMM yyyy')}</p>
+                            <p>{format(parseISO(contract.start_date), 'dd.MM.yyyy')}</p>
+                            <p className="text-slate-500">→ {format(parseISO(contract.end_date), 'dd.MM.yyyy')}</p>
                           </div>
                         </TableCell>
                         <TableCell>
@@ -728,11 +728,11 @@ export default function EmployeeContracts() {
                   </div>
                   <div>
                     <p className="text-sm text-slate-500">{t('start_date') || "Boshlanish"}</p>
-                    <p className="font-medium">{format(parseISO(selectedContract.start_date), 'dd MMM yyyy')}</p>
+                    <p className="font-medium">{format(parseISO(selectedContract.start_date), 'dd.MM.yyyy')}</p>
                   </div>
                   <div>
                     <p className="text-sm text-slate-500">{t('end_date') || "Tugash"}</p>
-                    <p className="font-medium">{format(parseISO(selectedContract.end_date), 'dd MMM yyyy')}</p>
+                    <p className="font-medium">{format(parseISO(selectedContract.end_date), 'dd.MM.yyyy')}</p>
                   </div>
                   <div>
                     <p className="text-sm text-slate-500">{t('working_hours') || "Haftalik soat"}</p>

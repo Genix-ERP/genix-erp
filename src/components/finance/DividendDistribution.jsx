@@ -1,3 +1,4 @@
+import { formatDate } from '@/utils/formatDate';
 import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -273,7 +274,7 @@ export default function DividendDistribution() {
                 <span className="font-mono">{lastResult.entry_number}</span>
               </p>
               <p className="text-muted-foreground">
-                {lastResult.shareholder_name} · {lastResult.distribution_date}
+                {lastResult.shareholder_name} · {formatDate(lastResult.distribution_date)}
               </p>
               <p className="text-muted-foreground">
                 {t('dividend_amount') || "Summa"}: {formatCurrency(lastResult.gross_distribution)}

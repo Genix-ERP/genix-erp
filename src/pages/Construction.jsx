@@ -33,7 +33,6 @@ import {
   Plus,
   FolderTree,
   FileSpreadsheet,
-  Camera,
   ClipboardList,
   TrendingUp,
   Users,
@@ -114,7 +113,6 @@ const FormsTab = lazy(() => import('@/components/construction/tabs/FormsTab'));
 // const FinancialTab = lazy(() => import('@/components/construction/tabs/FinancialTab'));
 const RejaFaktTab = lazy(() => import('@/components/construction/tabs/RejaFaktTab'));
 const SmetaVsFactTab = lazy(() => import('@/components/construction/tabs/SmetaVsFactTab'));
-const PhotoReportsTab = lazy(() => import('@/components/construction/tabs/PhotoReportsTab'));
 const TeamTab = lazy(() => import('@/components/construction/tabs/TeamTab'));
 import { ImportModal, ExportModal, ImportExportButtons } from '@/components/shared';
 import { ProjectKanban } from '@/components/construction/ProjectKanban';
@@ -963,17 +961,6 @@ const OverviewTabContent = React.memo(function OverviewTabContent({
       go: () => { setActiveGroup('hujjatlar'); setActiveTab('forms'); },
     },
     {
-      // Foto hisobot replaces the old Material shortcut — the
-      // Materiallar group is hidden in the nav anyway, so the Material
-      // tile led nowhere visible. Photo reports live under
-      // Jamoa → Foto hisobot, so route there directly.
-      id: 'photo_reports',
-      label: t('nav_photo_reports') || 'Foto hisobot',
-      icon: Camera,
-      hint: t('photo_report_hint') || "Loyiha bo'yicha foto hisobotlar",
-      go: () => { setActiveGroup('jamoa'); setActiveTab('photo_reports'); },
-    },
-    {
       id: 'journal',
       label: t('journal') || 'Jurnal',
       icon: ClipboardList,
@@ -1227,7 +1214,6 @@ const ProjectDetailView = ({
     ]},
     { key: 'jamoa', label: t('nav_team') || 'Jamoa', icon: Users, subs: [
       { key: 'team_tab', label: t('nav_team_members') || "Jamoa a'zolari" },
-      { key: 'photo_reports', label: t('nav_photo_reports') || 'Foto hisobot' },
     ]},
   ];
 
@@ -1262,7 +1248,6 @@ const ProjectDetailView = ({
   const [employees, setEmployees] = useState([]);
   const [vendors, setVendors] = useState([]);
   const [dailyLogs, setDailyLogs] = useState([]);
-  const [photoReports, setPhotoReports] = useState([]);
   const [materialRequests, setMaterialRequests] = useState([]);
   const [projectMaterials, setProjectMaterials] = useState([]);
   const [wbsTree, setWbsTree] = useState([]);
@@ -1274,7 +1259,6 @@ const ProjectDetailView = ({
   const [viewBuilding, setViewBuilding] = useState(null);
   const [showTeamModal, setShowTeamModal] = useState(false);
 const [showDailyLogModal, setShowDailyLogModal] = useState(false);
-  const [showPhotoReportModal, setShowPhotoReportModal] = useState(false);
   const [showMaterialRequestModal, setShowMaterialRequestModal] = useState(false);
 
   // Import/Export modals
@@ -1348,18 +1332,6 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
   });
   const [selectedDailyLog, setSelectedDailyLog] = useState(null);
   const [showDailyLogViewModal, setShowDailyLogViewModal] = useState(false);
-  const [photoReportForm, setPhotoReportForm] = useState({
-    report_date: new Date().toISOString().split('T')[0],
-    report_type: 'progress',
-    title: '',
-    description: '',
-    location_description: '',
-    weather: '',
-    temperature: ''
-  });
-  const [photoFiles, setPhotoFiles] = useState([]);
-  const [photoPreview, setPhotoPreview] = useState([]);
-  const [uploadingPhotos, setUploadingPhotos] = useState(false);
   const [dailyLogFiles, setDailyLogFiles] = useState([]);
   const [dailyLogPhotoPreview, setDailyLogPhotoPreview] = useState([]);
   const [uploadingDailyLog, setUploadingDailyLog] = useState(false);
@@ -1489,12 +1461,6 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
               console.error('Error loading daily logs:', e);
               setDailyLogs([]);
             }
-            break;
-          case 'photo_reports':
-            try {
-              const photosData = await constructionService.listPhotoReports(project.id);
-              setPhotoReports(photosData || []);
-            } catch (e) { setPhotoReports([]); }
             break;
           case 'materials':
             {
@@ -2203,123 +2169,6 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
     }
   };
 
-  // Handle photo file selection
-  const handlePhotoSelect = (e) => {
-    const files = Array.from(e.target.files);
-    if (files.length === 0) return;
-
-    // Limit to 10 photos
-    const newFiles = files.slice(0, 10 - photoFiles.length);
-    setPhotoFiles(prev => [...prev, ...newFiles]);
-
-    // Create previews
-    newFiles.forEach(file => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPhotoPreview(prev => [...prev, { file, preview: reader.result }]);
-      };
-      reader.readAsDataURL(file);
-    });
-  };
-
-  // Remove photo from selection
-  const handleRemovePhoto = (index) => {
-    // Check if removing an existing photo (string URL) or new upload (object)
-    const item = photoPreview[index];
-    const isExisting = typeof item === 'string';
-
-    if (!isExisting) {
-      // For new uploads, also remove from photoFiles
-      // Find the corresponding file index (new uploads start after existing photos)
-      const existingCount = photoPreview.filter(p => typeof p === 'string').length;
-      const newFileIndex = index - existingCount;
-      if (newFileIndex >= 0) {
-        setPhotoFiles(prev => prev.filter((_, i) => i !== newFileIndex));
-      }
-    }
-
-    setPhotoPreview(prev => prev.filter((_, i) => i !== index));
-  };
-
-  // Handle photo report creation or update
-  const handleCreatePhotoReport = async (e) => {
-    e.preventDefault();
-    try {
-      setUploadingPhotos(true);
-
-      // Upload new photos first
-      const uploadedPhotos = [];
-      for (const file of photoFiles) {
-        try {
-          const uploadResult = await Integrations.UploadFile(file);
-          uploadedPhotos.push({
-            url: uploadResult.url,
-            filename: file.name,
-            size: file.size,
-            type: file.type
-          });
-        } catch (uploadError) {
-          console.error('Error uploading photo:', uploadError);
-        }
-      }
-
-      // Combine existing photos (from preview) with newly uploaded ones
-      // photoPreview contains full URLs of existing photos when editing
-      const existingPhotos = photoReportForm.id ? photoPreview
-        .filter(p => typeof p === 'string' && p.includes('/api/v1/files/'))
-        .map(fullUrl => {
-          // Extract the relative URL part (/api/v1/files/xxx)
-          const match = fullUrl.match(/\/api\/v1\/files\/[a-f0-9]+/);
-          const relativeUrl = match ? match[0] : fullUrl;
-          return { url: relativeUrl, filename: 'existing', size: 0, type: 'image/jpeg' };
-        }) : [];
-      const allPhotos = [...existingPhotos, ...uploadedPhotos];
-
-      const reportData = {
-        report_date: photoReportForm.report_date,
-        report_type: photoReportForm.report_type,
-        title: photoReportForm.title,
-        description: photoReportForm.description,
-        location_description: photoReportForm.location_description,
-        weather: photoReportForm.weather,
-        temperature: parseFloat(photoReportForm.temperature) || 0,
-        photos: allPhotos
-      };
-
-      if (photoReportForm.id) {
-        await constructionService.updatePhotoReport(photoReportForm.id, reportData);
-        toast.success(t('photo_report_updated') || 'Foto hisobot yangilandi');
-      } else {
-        await constructionService.createPhotoReport(project.id, reportData);
-        toast.success(t('photo_report_created') || 'Foto hisobot saqlandi');
-      }
-
-      const photosData = await constructionService.listPhotoReports(project.id);
-      setPhotoReports(photosData || []);
-      setShowPhotoReportModal(false);
-      setPhotoReportForm({
-        report_date: new Date().toISOString().split('T')[0],
-        report_type: 'progress',
-        title: '',
-        description: '',
-        location_description: '',
-        weather: '',
-        temperature: ''
-      });
-      setPhotoFiles([]);
-      setPhotoPreview([]);
-    } catch (error) {
-      console.error('Error saving photo report:', error);
-      toast.error(
-        error?.response?.data?.message ||
-          t('photo_report_save_failed') ||
-          "Foto hisobotni saqlashda xatolik"
-      );
-    } finally {
-      setUploadingPhotos(false);
-    }
-  };
-
   // Helper to get full URL for file
   const getFileUrl = (url) => {
     if (!url) return '';
@@ -2362,65 +2211,6 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
       }
     }
     return [];
-  };
-
-  // Handle view photo report
-  const handleViewPhotoReport = (report) => {
-    const photos = parsePhotos(report.photos);
-    setPhotoReportForm({
-      id: report.id,
-      report_date: report.report_date?.split('T')[0] || new Date().toISOString().split('T')[0],
-      report_type: report.report_type || 'progress',
-      title: report.title || '',
-      description: report.description || '',
-      location_description: report.location_description || '',
-      weather: report.weather || '',
-      temperature: report.temperature || ''
-    });
-    // Convert relative URLs to full URLs for display
-    setPhotoPreview(photos.map(p => getFileUrl(p.url || p)));
-    setShowPhotoReportModal(true);
-  };
-
-  // Handle edit photo report
-  const handleEditPhotoReport = (report) => {
-    const photos = parsePhotos(report.photos);
-    setPhotoReportForm({
-      id: report.id,
-      report_date: report.report_date?.split('T')[0] || new Date().toISOString().split('T')[0],
-      report_type: report.report_type || 'progress',
-      title: report.title || '',
-      description: report.description || '',
-      location_description: report.location_description || '',
-      weather: report.weather || '',
-      temperature: report.temperature || ''
-    });
-    // Convert relative URLs to full URLs for display
-    setPhotoPreview(photos.map(p => getFileUrl(p.url || p)));
-    setPhotoFiles([]);
-    setShowPhotoReportModal(true);
-  };
-
-  // Handle delete photo report
-  const handleDeletePhotoReport = (reportId) => {
-    setConfirmDelete({
-      open: true,
-      title: t('confirm_delete_photo_report') || "Foto hisobotni o'chirishni tasdiqlaysizmi?",
-      description:
-        t('photo_report_delete_warning') ||
-        "Hisobot va unga biriktirilgan barcha suratlar o'chiriladi.",
-      onConfirm: async () => {
-        try {
-          await constructionService.deletePhotoReport(reportId);
-          const photosData = await constructionService.listPhotoReports(project.id);
-          setPhotoReports(photosData || []);
-          toast.success(t('photo_report_deleted') || "Foto hisobot o'chirildi");
-        } catch (error) {
-          console.error('Error deleting photo report:', error);
-          toast.error(t('error_occurred') || 'Xatolik yuz berdi');
-        }
-      },
-    });
   };
 
   return (
@@ -3387,11 +3177,6 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
             sidebar definition. The render slot is kept here as a no-op
             stub so any deep-link with ?tab=financial still loads the
             page without exploding. */}
-
-        {/* Photo Reports Tab */}
-        {activeTab === 'photo_reports' && (
-          <PhotoReportsTab project={project} />
-        )}
 
         {/* Team Tab (Full) */}
         {activeTab === 'team_tab' && (
@@ -4557,208 +4342,6 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
               </Button>
               <Button type="submit" disabled={!dailyLogForm.report_date || uploadingDailyLog}>
                 {uploadingDailyLog ? `${t('uploading') || 'Yuklanmoqda'}...` : dailyLogForm.id ? (t('save') || 'Saqlash') : (t('create') || 'Yaratish')}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Photo Report Modal */}
-      <Dialog
-        open={showPhotoReportModal}
-        onOpenChange={(open) => {
-          setShowPhotoReportModal(open);
-          if (!open) {
-            setPhotoFiles([]);
-            setPhotoPreview([]);
-            setPhotoReportForm({
-              report_date: new Date().toISOString().split('T')[0],
-              report_type: 'progress',
-              title: '',
-              description: '',
-              location_description: '',
-              weather: '',
-              temperature: '',
-            });
-          }
-        }}
-      >
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" aria-describedby="pr-help">
-          <DialogHeader>
-            <DialogTitle>
-              {photoReportForm.id
-                ? (t('edit_photo_report') || 'Foto hisobotni tahrirlash')
-                : (t('new_photo_report') || 'Yangi foto hisobot')}
-            </DialogTitle>
-            <p id="pr-help" className="text-sm text-slate-500">
-              {t('photo_report_help') ||
-                "Loyihaning ayni paytdagi holatini suratga oling va izohlar bilan saqlang."}
-            </p>
-          </DialogHeader>
-          <form onSubmit={handleCreatePhotoReport} className="space-y-4">
-            <div>
-              <Label>{t('report_date') || 'Hisobot sanasi'} *</Label>
-              <Input
-                type="date"
-                value={photoReportForm.report_date}
-                onChange={(e) => setPhotoReportForm({ ...photoReportForm, report_date: e.target.value })}
-                required
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>{t('report_type') || 'Hisobot turi'}</Label>
-                <Select
-                  value={photoReportForm.report_type}
-                  onValueChange={(value) => setPhotoReportForm({ ...photoReportForm, report_type: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={t('select_type') || 'Turni tanlang'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="progress">{t('progress') || 'Progress'}</SelectItem>
-                    <SelectItem value="quality">{t('quality') || 'Sifat'}</SelectItem>
-                    <SelectItem value="safety">{t('safety') || 'Xavfsizlik'}</SelectItem>
-                    <SelectItem value="issue">{t('issue') || 'Muammo'}</SelectItem>
-                    <SelectItem value="completion">{t('completion') || 'Tugallash'}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>{t('weather') || 'Ob-havo'}</Label>
-                <Select
-                  value={photoReportForm.weather}
-                  onValueChange={(value) => setPhotoReportForm({ ...photoReportForm, weather: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={t('select_weather') || 'Tanlang'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="sunny">{t('sunny') || 'Quyoshli'}</SelectItem>
-                    <SelectItem value="cloudy">{t('cloudy') || 'Bulutli'}</SelectItem>
-                    <SelectItem value="rainy">{t('rainy') || "Yomg'irli"}</SelectItem>
-                    <SelectItem value="snowy">{t('snowy') || 'Qorli'}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div>
-              <Label>{t('title') || 'Sarlavha'} *</Label>
-              <Input
-                value={photoReportForm.title}
-                onChange={(e) => setPhotoReportForm({ ...photoReportForm, title: e.target.value })}
-                placeholder={t('photo_report_title_placeholder') || 'Foto hisobot sarlavhasi'}
-                required
-              />
-            </div>
-            <div>
-              <Label>{t('description') || 'Tavsif'}</Label>
-              <Textarea
-                value={photoReportForm.description}
-                onChange={(e) => setPhotoReportForm({ ...photoReportForm, description: e.target.value })}
-                placeholder={t('photo_report_description_placeholder') || 'Bajarilgan ishlar haqida tavsif...'}
-                rows={3}
-              />
-            </div>
-            <div>
-              <Label>{t('location_description') || 'Joylashuv'}</Label>
-              <Input
-                value={photoReportForm.location_description}
-                onChange={(e) => setPhotoReportForm({ ...photoReportForm, location_description: e.target.value })}
-                placeholder={t('location_placeholder') || "A blok, 3-qavat"}
-              />
-            </div>
-            <div>
-              <Label>{t('temperature') || 'Harorat'} (°C)</Label>
-              <Input
-                type="number"
-                value={photoReportForm.temperature}
-                onChange={(e) => setPhotoReportForm({ ...photoReportForm, temperature: e.target.value })}
-                placeholder="20"
-              />
-            </div>
-
-            {/* Photo Upload Section */}
-            <div>
-              <Label>{t('photos') || 'Rasmlar'} *</Label>
-              <div className="mt-2">
-                {/* Upload Area */}
-                <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-slate-300 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
-                  <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                    <Upload className="w-8 h-8 text-slate-400 mb-2" />
-                    <p className="text-sm text-slate-500">
-                      {t('click_to_upload') || 'Rasmlarni yuklash uchun bosing'}
-                    </p>
-                    <p className="text-xs text-slate-400 mt-1">
-                      PNG, JPG (max 10 ta rasm)
-                    </p>
-                  </div>
-                  <input
-                    type="file"
-                    className="hidden"
-                    accept="image/*"
-                    multiple
-                    onChange={handlePhotoSelect}
-                    disabled={photoFiles.length >= 10}
-                  />
-                </label>
-
-                {/* Photo Previews */}
-                {photoPreview.length > 0 && (
-                  <div className="mt-4 grid grid-cols-4 gap-2">
-                    {photoPreview.map((item, index) => {
-                      // Handle both new uploads (object with preview) and existing photos (URL string)
-                      const imgSrc = typeof item === 'string' ? item : (item.preview || item.url);
-                      const isExisting = typeof item === 'string';
-                      return (
-                        <div key={index} className="relative group">
-                          <img
-                            src={imgSrc}
-                            alt={`Preview ${index + 1}`}
-                            className="w-full h-20 object-cover rounded-lg"
-                          />
-                          {isExisting && (
-                            <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs text-center py-0.5 rounded-b-lg">
-                              Mavjud
-                            </div>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => handleRemovePhoto(index)}
-                            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {photoFiles.length > 0 && (
-                  <p className="text-xs text-slate-500 mt-2">
-                    {photoFiles.length} {t('photos_selected') || 'ta rasm tanlandi'}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => {
-                setShowPhotoReportModal(false);
-                setPhotoFiles([]);
-                setPhotoPreview([]);
-              }}>
-                {t('cancel') || 'Bekor qilish'}
-              </Button>
-              <Button type="submit" disabled={!photoReportForm.report_date || !photoReportForm.title || (photoFiles.length === 0 && photoPreview.length === 0) || uploadingPhotos}>
-                {uploadingPhotos ? (
-                  <>{t('uploading') || 'Yuklanmoqda'}...</>
-                ) : photoReportForm.id ? (
-                  <>{t('update') || 'Yangilash'}</>
-                ) : (
-                  <>{t('create') || 'Yaratish'}</>
-                )}
               </Button>
             </DialogFooter>
           </form>

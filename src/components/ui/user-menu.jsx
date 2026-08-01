@@ -28,7 +28,8 @@ import {
   Bell,
   Lock,
   LogOut,
-  ChevronDown
+  ChevronDown,
+  Wallet
 } from 'lucide-react';
 
 export default function UserMenu({ compact = false }) {
@@ -114,6 +115,16 @@ export default function UserMenu({ compact = false }) {
             <DropdownMenuItem className="cursor-pointer">
               <Bell className="w-4 h-4 mr-2 text-slate-500" />
               <span>{t('notifications') || 'Bildirishnomalar'}</span>
+            </DropdownMenuItem>
+          </Link>
+
+          {/* Xodim kabineti — own payslips, own advances/debts. Server-side
+              scoped via /my/*; shows a friendly empty state for accounts
+              with no linked employee record. */}
+          <Link to="/employee-cabinet">
+            <DropdownMenuItem className="cursor-pointer">
+              <Wallet className="w-4 h-4 mr-2 text-slate-500" />
+              <span>{t('employee_portal') || 'Xodim kabineti'}</span>
             </DropdownMenuItem>
           </Link>
 

@@ -453,10 +453,10 @@ export default function AccountsReceivable() {
                         <TableCell className="font-mono text-sm">{invoice.invoice_number}</TableCell>
                         <TableCell className="font-medium">{customerName}</TableCell>
                         <TableCell className="text-sm">
-                          {invoice.invoice_date ? format(new Date(invoice.invoice_date), 'dd MMM yyyy', { locale: dateLocale }) : '-'}
+                          {invoice.invoice_date ? format(new Date(invoice.invoice_date), 'dd.MM.yyyy', { locale: dateLocale }) : '-'}
                         </TableCell>
                         <TableCell className="text-sm">
-                          {invoice.due_date ? format(new Date(invoice.due_date), 'dd MMM yyyy', { locale: dateLocale }) : '-'}
+                          {invoice.due_date ? format(new Date(invoice.due_date), 'dd.MM.yyyy', { locale: dateLocale }) : '-'}
                         </TableCell>
                         <TableCell className="font-semibold">{formatCurrency(invoice.total_amount || 0)}</TableCell>
                         <TableCell>

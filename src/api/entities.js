@@ -194,10 +194,6 @@ export const ProductionOrder = createLocalEntity('genix_production_orders');
 export const WorkOrder = createLocalEntity('genix_work_orders');
 export const QualityCheck = createLocalEntity('genix_quality_checks');
 
-// Projects - use Go backend
-export const Project = createGenericEntity('/projects');
-export const Task = createGenericEntity('/tasks');
-
 // Expenses - use Go backend (endpoint: /expenses)
 export const ExpenseClaim = createGenericEntity('/expenses');
 

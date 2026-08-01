@@ -19,7 +19,6 @@ import {
   Factory,
   Briefcase,
   DollarSign,
-  FolderKanban,
   Save,
   RotateCcw,
   AlertTriangle,
@@ -49,7 +48,6 @@ import ManufacturingSettings from '@/components/admin-settings/ManufacturingSett
 import HRSettings from '@/components/admin-settings/HRSettings';
 import FinanceSettings from '@/components/admin-settings/FinanceSettings';
 import ExpensesSettings from '@/components/admin-settings/ExpensesSettings';
-import ProjectSettings from '@/components/admin-settings/ProjectSettings';
 import ConstructionSettings from '@/components/admin-settings/ConstructionSettings';
 import AISettings from '@/components/admin-settings/AISettings';
 import MobileAppSettings from '@/components/admin-settings/MobileAppSettings';
@@ -73,7 +71,6 @@ const SECTIONS = [
   { id: 'finance', icon: DollarSign, label: 'finance_settings', component: FinanceSettings, appIds: ['finance', 'assets', 'expenses'] },
   { id: 'asset-mapping', icon: Landmark, label: 'asset_mapping_settings', component: FixedAssetsMappingSettings, appIds: ['finance', 'assets'] },
   { id: 'expenses', icon: Receipt, label: 'expenses_settings', component: ExpensesSettings, appIds: ['expenses'] },
-  { id: 'projects', icon: FolderKanban, label: 'project_settings', component: ProjectSettings, appIds: ['projects'] },
   { id: 'construction', icon: HardHat, label: 'construction_settings', component: ConstructionSettings, appIds: ['construction'] },
   // Workflow automation rules moved to the dedicated Workflows module (sidebar → Ish jarayonlari)
   { id: 'ai', icon: Sparkles, label: 'ai_settings', component: AISettings, appIds: null },

@@ -745,8 +745,8 @@ export default function VendorBills() {
                       <TableCell className="font-medium">{bill.bill_number}</TableCell>
                       <TableCell>{bill.vendor_name}</TableCell>
                       <TableCell className="text-muted-foreground text-sm">{bill.vendor_invoice_number || '-'}</TableCell>
-                      <TableCell>{bill.bill_date ? format(parseISO(bill.bill_date), 'MMM dd, yyyy') : '-'}</TableCell>
-                      <TableCell className={overdue ? 'text-red-600 font-medium' : ''}>{bill.due_date ? format(parseISO(bill.due_date), 'MMM dd, yyyy') : '-'}</TableCell>
+                      <TableCell>{bill.bill_date ? format(parseISO(bill.bill_date), 'dd.MM.yyyy') : '-'}</TableCell>
+                      <TableCell className={overdue ? 'text-red-600 font-medium' : ''}>{bill.due_date ? format(parseISO(bill.due_date), 'dd.MM.yyyy') : '-'}</TableCell>
                       <TableCell>
                         {bill.purchase_order_id && (
                           <Badge variant="outline" className="flex items-center gap-1 w-fit">
@@ -1291,11 +1291,11 @@ export default function VendorBills() {
                 </div>
                 <div>
                   <Label className="text-muted-foreground">{t('bill_date') || 'Bill Date'}</Label>
-                  <p>{selectedBill.bill_date ? format(parseISO(selectedBill.bill_date), 'MMM dd, yyyy') : '-'}</p>
+                  <p>{selectedBill.bill_date ? format(parseISO(selectedBill.bill_date), 'dd.MM.yyyy') : '-'}</p>
                 </div>
                 <div>
                   <Label className="text-muted-foreground">{t('due_date') || 'Due Date'}</Label>
-                  <p className={isOverdue(selectedBill) ? 'text-red-600 font-medium' : ''}>{selectedBill.due_date ? format(parseISO(selectedBill.due_date), 'MMM dd, yyyy') : '-'}</p>
+                  <p className={isOverdue(selectedBill) ? 'text-red-600 font-medium' : ''}>{selectedBill.due_date ? format(parseISO(selectedBill.due_date), 'dd.MM.yyyy') : '-'}</p>
                 </div>
                 <div>
                   <Label className="text-muted-foreground">{t('status') || 'Status'}</Label>

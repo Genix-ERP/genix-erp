@@ -1,3 +1,4 @@
+import { formatDate } from '@/utils/formatDate';
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -502,7 +503,7 @@ export default function BlanketOrders() {
                     <TableCell>{order.vendor_name}</TableCell>
                     <TableCell>
                       <div className="text-sm">
-                        {order.start_date} - {order.end_date}
+                        {formatDate(order.start_date)} - {formatDate(order.end_date)}
                         {order.days_remaining > 0 && (
                           <span className="text-muted-foreground ml-2">
                             ({order.days_remaining} {t('days_left')})
@@ -879,11 +880,11 @@ export default function BlanketOrders() {
                   <div className="space-y-3">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">{t('start_date')}</span>
-                      <span>{selectedOrder.start_date}</span>
+                      <span>{formatDate(selectedOrder.start_date)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">{t('end_date')}</span>
-                      <span>{selectedOrder.end_date}</span>
+                      <span>{formatDate(selectedOrder.end_date)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">{t('days_remaining')}</span>
@@ -974,7 +975,7 @@ export default function BlanketOrders() {
                       (selectedOrder.releases || []).map((release) => (
                         <TableRow key={release.id}>
                           <TableCell className="font-medium">{release.release_number}</TableCell>
-                          <TableCell>{release.release_date}</TableCell>
+                          <TableCell>{formatDate(release.release_date)}</TableCell>
                           <TableCell>{release.po_number || "-"}</TableCell>
                           <TableCell className="text-right">
                             {formatCurrency(release.total_amount, selectedOrder.currency)}

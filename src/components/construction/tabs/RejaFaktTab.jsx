@@ -19,6 +19,7 @@ import { sortBuildings } from '@/utils/naturalSort';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { toast } from 'sonner';
+import { formatDateTime } from '@/utils/formatDate';
 
 const STATUS_COLORS = {
   not_started: 'bg-slate-100 text-slate-700',
@@ -1529,7 +1530,7 @@ const RejaFaktTab = ({ project }) => {
                       {t(`rf_action_${entry.action}`)}
                     </Badge>
                     <span className="text-xs text-slate-400">
-                      {new Date(entry.created_at).toLocaleString()}
+                      {formatDateTime(entry.created_at)}
                     </span>
                   </div>
                   {entry.user_name && (
