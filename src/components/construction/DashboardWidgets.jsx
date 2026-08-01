@@ -503,7 +503,6 @@ export function QuickActionsWidget({ onAction }) {
   const { t } = useTranslation(language);
   const actions = [
     { id: 'daily_log', labelKey: 'daily_log', icon: FileText },
-    { id: 'photo_report', labelKey: 'photo_report', icon: FileText },
     { id: 'material_request', labelKey: 'material_request', icon: Package },
     { id: 'add_team', labelKey: 'add_team_member', icon: Users },
   ];

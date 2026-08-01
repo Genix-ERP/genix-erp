@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import ReactDOM from 'react-dom';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Kanban, DollarSign, Calendar, TrendingUp, Target, Percent, Loader2, AlertCircle, Edit, Trash2, MoreVertical } from "lucide-react";
+import { Kanban, DollarSign, Calendar, TrendingUp, Target, Percent, Loader2, AlertCircle, Edit, Trash2, MoreVertical, FileSignature } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -88,6 +89,7 @@ const stageConfig = [
 ];
 
 export default function DragDropKanban({ opportunities = [], leads = [], onUpdateOpportunity, onEditOpportunity, onDeleteOpportunity, language = 'en' }) {
+  const navigate = useNavigate();
   const { t } = useTranslation(language);
   const { canCreate, canUpdate, canDelete } = usePermissions();
   const { formatCurrency } = useCurrencyFormatter();
@@ -238,6 +240,23 @@ export default function DragDropKanban({ opportunities = [], leads = [], onUpdat
                   }}>
                     <Edit className="w-4 h-4 mr-2" />
                     {t('edit')}
+                  </DropdownMenuItem>
+                )}
+                {opportunity.stage === 'closed_won' && (
+                  <DropdownMenuItem onClick={(e) => {
+                    e.stopPropagation();
+                    const params = new URLSearchParams({
+                      create: '1',
+                      deal_id: opportunity.id,
+                      title: opportunity.name || '',
+                      value: String(opportunity.actual_revenue || opportunity.expected_revenue || ''),
+                      direction: 'income',
+                    });
+                    if (opportunity.contact_id) params.set('counterparty_id', opportunity.contact_id);
+                    navigate(`/contracts?${params.toString()}`);
+                  }}>
+                    <FileSignature className="w-4 h-4 mr-2" />
+                    {t('create_contract')}
                   </DropdownMenuItem>
                 )}
                 {canDelete(MODULES.CUSTOMERS) && onDeleteOpportunity && (

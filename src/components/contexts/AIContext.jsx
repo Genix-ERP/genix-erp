@@ -35,8 +35,6 @@ const AI_ACTIONS = {
   // Finance
   CREATE_EXPENSE: 'create_expense',
   CREATE_INVOICE: 'create_invoice',
-  // Projects
-  CREATE_PROJECT: 'create_project',
   // Contracts
   CREATE_CONTRACT: 'create_contract',
   // Vendors
@@ -183,22 +181,6 @@ const parseActionIntent = (message) => {
     };
   }
 
-  // Project creation patterns
-  if ((lowerMessage.includes('create') || lowerMessage.includes('add') || lowerMessage.includes('new') || lowerMessage.includes('start')) &&
-      (lowerMessage.includes('project') || lowerMessage.includes('loyiha'))) {
-    const nameMatch = message.match(/(?:called|named|name[d]?|project)\s+["']?([^"'\n,]+)["']?/i);
-    const clientMatch = message.match(/(?:for|client|customer|mijoz)\s+["']?([^"'\n,]+)["']?/i);
-    const budgetMatch = message.match(/(?:budget|byudjet)\s*(?:\$|:)?\s*(\d+(?:[.,]\d+)?)/i);
-
-    return {
-      action: AI_ACTIONS.CREATE_PROJECT,
-      params: {
-        project_name: nameMatch ? nameMatch[1].trim() : null,
-        client_name: clientMatch ? clientMatch[1].trim() : null,
-        budget: budgetMatch ? parseFloat(budgetMatch[1].replace(',', '.')) : null
-      }
-    };
-  }
 
   // Contract creation patterns
   if ((lowerMessage.includes('create') || lowerMessage.includes('add') || lowerMessage.includes('new')) &&
@@ -2736,52 +2718,6 @@ export function AIProvider({ children }) {
             success: false,
             error: 'create_failed',
             message: `Xarajat qo'shishda xatolik: ${err.message}`
-          };
-        }
-      }
-
-      case AI_ACTIONS.CREATE_PROJECT: {
-        if (!modulesContext) {
-          return {
-            success: false,
-            error: 'context_unavailable',
-            message: 'Loyihalar moduli mavjud emas.'
-          };
-        }
-
-        if (!params.project_name) {
-          return {
-            success: false,
-            error: 'missing_params',
-            message: 'Loyiha nomini kiriting. Masalan: "Veb-sayt loyihasi yarating, mijoz: Tech Solutions, byudjet: $50000"'
-          };
-        }
-
-        const projData = {
-          project_name: params.project_name,
-          client_name: params.client_name || '',
-          start_date: new Date().toISOString().split('T')[0],
-          end_date: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          budget: params.budget || 0,
-          actual_cost: 0,
-          status: 'planning',
-          progress_percentage: 0,
-          priority: 'medium',
-          billing_type: 'fixed_price'
-        };
-
-        try {
-          const newProj = modulesContext.createProject(projData);
-          return {
-            success: true,
-            message: `✅ **Loyiha yaratildi!**\n\n**Nomi:** ${params.project_name}${params.client_name ? `\n**Mijoz:** ${params.client_name}` : ''}${params.budget ? `\n**Byudjet:** ${formatCurrency(params.budget)}` : ''}\n\nLoyihalar bo'limida ko'rishingiz mumkin.`,
-            data: newProj
-          };
-        } catch (err) {
-          return {
-            success: false,
-            error: 'create_failed',
-            message: `Loyiha yaratishda xatolik: ${err.message}`
           };
         }
       }

@@ -92,13 +92,13 @@ const appsList = [
     permissionModule: MODULES.PURCHASES
   },
   {
-    id: 'projects',
-    nameKey: 'app_projects_name',
-    descriptionKey: 'app_projects_description',
+    id: 'tasks',
+    nameKey: 'app_tasks_name',
+    descriptionKey: 'app_tasks_description',
     version: '1.0',
     icon: Briefcase,
     color: '#3b82f6',
-    permissionModule: MODULES.PROJECTS
+    permissionModule: MODULES.TASKS
   },
   {
     id: 'sales_orders',

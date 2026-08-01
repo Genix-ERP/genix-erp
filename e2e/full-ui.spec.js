@@ -94,14 +94,14 @@ test.describe('Sidebar Navigation', () => {
     await expect(page).toHaveURL(/\/salesorders/);
   });
 
-  test('navigate to Projects page', async ({ page }) => {
-    const link = page.locator('a[href="/projects"]');
+  test('navigate to Tasks (Vazifalar) page', async ({ page }) => {
+    const link = page.locator('a[href="/tasks"]');
     if (await link.count() === 0) {
       test.skip();
       return;
     }
     await link.click();
-    await expect(page).toHaveURL(/\/projects/);
+    await expect(page).toHaveURL(/\/tasks/);
   });
 
   test('navigate to HR page', async ({ page }) => {
@@ -133,7 +133,7 @@ test.describe('No 429 errors on page loads', () => {
     { name: 'Customers', url: '/customers' },
     { name: 'Financials', url: '/financials' },
     { name: 'Sales Orders', url: '/salesorders' },
-    { name: 'Projects', url: '/projects' },
+    { name: 'Tasks', url: '/tasks' },
     { name: 'HR', url: '/hr' },
     { name: 'Settings', url: '/settings' },
   ];

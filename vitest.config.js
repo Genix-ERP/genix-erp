@@ -7,6 +7,12 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  // The app builds with @vitejs/plugin-react (automatic JSX runtime), but
+  // vitest transforms with plain esbuild — without this, any component file
+  // that skips `import React` renders fine in the app yet crashes in tests.
+  esbuild: {
+    jsx: 'automatic',
+  },
   test: {
     globals: true,
     exclude: ['e2e/**', 'node_modules/**'],

@@ -149,6 +149,10 @@ export default function DirectorDashboard() {
           totalEmployees: Number(row.total_employees || 0),
           salaryFund: Number(row.salary_fund || 0),
           constructionProjects: Array.isArray(row.construction_projects) ? row.construction_projects : [],
+          activeContracts: Number(row.active_contracts || 0),
+          activeContractsValue: Number(row.active_contracts_value || 0),
+          expiringContracts: Number(row.expiring_contracts || 0),
+          contractsOutstanding: Number(row.contracts_outstanding || 0),
         };
       });
       setPerCompany(next);
@@ -438,6 +442,15 @@ export default function DirectorDashboard() {
           <MetricCard label={t('Foyda', 'Прибыль', 'Profit')} value={agg.profit} color="#1D9E75" />
           <MetricCard label={t('Debitorlar', 'Дебиторы', 'Debtors')} value={agg.deb} color="#E24B4A" />
           <MetricCard label={t('Kreditorlar', 'Кредиторы', 'Creditors')} value={agg.cred} color="#EF9F27" />
+        </div>
+      )}
+
+      {(section === 'all' || section === 'finance') && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 mb-3">
+          <MetricCard label={t('Amaldagi shartnomalar', 'Действующие договоры', 'Active contracts')} value={sum(visibleCompanies.map(c => perCompany[c.id]?.activeContracts || 0))} color="#185FA5" />
+          <MetricCard label={t('Shartnomalar summasi', 'Сумма договоров', 'Contracts value')} value={sum(visibleCompanies.map(c => perCompany[c.id]?.activeContractsValue || 0))} color="#1D9E75" />
+          <MetricCard label={t('Muddati tugayotgan', 'Истекающие', 'Expiring soon')} value={sum(visibleCompanies.map(c => perCompany[c.id]?.expiringContracts || 0))} color="#EF9F27" />
+          <MetricCard label={t("To'lanmagan qoldiq", 'Неоплаченный остаток', 'Outstanding')} value={sum(visibleCompanies.map(c => perCompany[c.id]?.contractsOutstanding || 0))} color="#E24B4A" />
         </div>
       )}
 

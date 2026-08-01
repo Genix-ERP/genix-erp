@@ -35,7 +35,6 @@ import { format } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { salesService } from '@/api/services/sales';
 import { inventoryService } from '@/api/services/inventory';
-import { projectsService } from '@/api/services/projects';
 import apiClient from '@/api/client';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -400,17 +399,17 @@ export default function SalesOrders() {
       const intercompanyCustomers = (customers || []).filter(c => c.source_organization_id);
       if (intercompanyCustomers.length === 0) return;
 
-      // /projects/by-organization is gated by projects:read on the backend.
-      // A user with sales but no projects access would 403 on every
-      // intercompany customer; skip the fetch and just leave the
+      // /construction/projects/by-organization is gated by construction:read
+      // on the backend. A user with sales but no construction access would
+      // 403 on every intercompany customer; skip the fetch and just leave the
       // intercompany-projects list empty (the UI handles that).
-      if (!canRead(MODULES.PROJECTS)) return;
+      if (!canRead(MODULES.CONSTRUCTION)) return;
 
       setLoadingIntercompanyProjects(true);
       try {
         const allProjects = [];
         for (const customer of intercompanyCustomers) {
-          const res = await apiClient.get('/projects/by-organization', {
+          const res = await apiClient.get('/construction/projects/by-organization', {
             params: { organization_id: customer.source_organization_id }
           });
           const projects = res.data?.data || [];
