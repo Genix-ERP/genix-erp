@@ -155,6 +155,12 @@ export default function DirectorDashboard() {
           activeContractsValue: Number(row.active_contracts_value || 0),
           expiringContracts: Number(row.expiring_contracts || 0),
           contractsOutstanding: Number(row.contracts_outstanding || 0),
+          crmOpenLeads: Number(row.crm_open_leads || 0),
+          crmPipelineValue: Number(row.crm_pipeline_value || 0),
+          crmWonMonth: Number(row.crm_won_month || 0),
+          crmWonValueMonth: Number(row.crm_won_value_month || 0),
+          crmConversion: Number(row.crm_conversion || 0),
+          crmTopLossReason: row.crm_top_loss_reason || '',
         };
       });
       setPerCompany(next);
@@ -453,6 +459,22 @@ export default function DirectorDashboard() {
           <MetricCard label={t('Shartnomalar summasi', 'Сумма договоров', 'Contracts value')} value={sum(visibleCompanies.map(c => perCompany[c.id]?.activeContractsValue || 0))} color="#1D9E75" />
           <MetricCard label={t('Muddati tugayotgan', 'Истекающие', 'Expiring soon')} value={sum(visibleCompanies.map(c => perCompany[c.id]?.expiringContracts || 0))} color="#EF9F27" />
           <MetricCard label={t("To'lanmagan qoldiq", 'Неоплаченный остаток', 'Outstanding')} value={sum(visibleCompanies.map(c => perCompany[c.id]?.contractsOutstanding || 0))} color="#E24B4A" />
+        </div>
+      )}
+
+      {(section === 'all' || section === 'finance') && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 mb-3">
+          <MetricCard label={t('Ochiq lidlar', 'Открытые лиды', 'Open leads')} value={sum(visibleCompanies.map(c => perCompany[c.id]?.crmOpenLeads || 0))} color="#534AB7" />
+          <MetricCard label={t('Voronka summasi', 'Сумма воронки', 'Pipeline value')} value={sum(visibleCompanies.map(c => perCompany[c.id]?.crmPipelineValue || 0))} color="#185FA5" />
+          <MetricCard label={t('Bu oy yutilgan', 'Выиграно за месяц', 'Won this month')} value={sum(visibleCompanies.map(c => perCompany[c.id]?.crmWonValueMonth || 0))} color="#1D9E75" />
+          <MetricCard
+            label={t('CRM konversiya %', 'Конверсия CRM %', 'CRM conversion %')}
+            value={(() => {
+              const vals = visibleCompanies.map(c => perCompany[c.id]?.crmConversion || 0).filter(v => v > 0);
+              return vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : 0;
+            })()}
+            color="#EF9F27"
+          />
         </div>
       )}
 

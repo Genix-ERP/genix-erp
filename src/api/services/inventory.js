@@ -265,6 +265,27 @@ export const inventoryService = {
     return response.data.data;
   },
 
+  // Paged variant that preserves the meta block (total/total_pages) for
+  // server-side pagination in the Hujjatlar → Harakatlar list.
+  async listInventoryMovementsPaged(params = {}) {
+    const response = await apiClient.get('/inventory/movements', { params });
+    return {
+      items: response.data.data || [],
+      total: response.data.meta?.total ?? 0,
+    };
+  },
+
+  // Tannarx usuli (AVECO/FIFO) — tenant-level valuation setting
+  async getValuationSettings() {
+    const response = await apiClient.get('/inventory/valuation-settings');
+    return response.data.data;
+  },
+
+  async updateValuationSettings(method) {
+    const response = await apiClient.put('/inventory/valuation-settings', { method });
+    return response.data.data;
+  },
+
   // As-of date stock report. Replays inventory_transactions on the
   // backend up to `asOf` (YYYY-MM-DD) and returns per-product /
   // per-warehouse quantity + weighted-average cost. Soft-deleted
@@ -307,6 +328,15 @@ export const inventoryService = {
       }
     });
     const response = await apiClient.get('/inventory/turnover', { params: clean });
+    return response.data.data;
+  },
+
+  // Single-call dashboard payload for the Ombor Asosiy panel: totals
+  // (total_value, low_stock_count, product_count, warehouse_count,
+  // today_movements), value_series (6 months), category_values (top 6 +
+  // Boshqa), low_stock_items (top 10) and recent_moves (last 10).
+  async getInventoryStats() {
+    const response = await apiClient.get('/inventory/stats');
     return response.data.data;
   },
 

@@ -52,7 +52,10 @@ const LabelWithHelp = ({ label, helpText, required }) => (
   </label>
 );
 
-export default function Warehouses() {
+// hideSubTabs: when rendered inside the Sozlamalar surface the stocktake/
+// scrap/stock-management flows already live under Hujjatlar, so only the
+// warehouse list is shown and the internal tab strip is hidden.
+export default function Warehouses({ hideSubTabs = false }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
@@ -350,7 +353,8 @@ export default function Warehouses() {
     <TooltipProvider delayDuration={200}>
     <div className="space-y-6">
       {/* Sub-tabs for Warehouses, Stock Management, Stocktake, and Scrap */}
-      <Tabs value={activeSubTab} onValueChange={setActiveSubTab} className="w-full">
+      <Tabs value={hideSubTabs ? 'warehouses' : activeSubTab} onValueChange={setActiveSubTab} className="w-full">
+        {!hideSubTabs && (
         <TabsList className="w-fit bg-slate-100/80 p-1 rounded-lg flex-wrap">
           <TabsTrigger value="warehouses" className="data-[state=active]:bg-white">
             <Warehouse className="w-4 h-4 mr-2" />
@@ -369,6 +373,7 @@ export default function Warehouses() {
             {t('scrap') || 'Scrap'}
           </TabsTrigger>
         </TabsList>
+        )}
 
         {/* Warehouses Tab */}
         <TabsContent value="warehouses" className="mt-4 space-y-6">

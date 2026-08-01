@@ -551,6 +551,7 @@ function LayoutContent({ children, currentPageName }) {
                     {currentPageName === 'AdminPanel' ? t('admin_panel') :
                      currentPageName === 'AIAssistant' ? t('ai_assistant') :
                      currentPageName === 'DirectorDashboard' ? t('director_dashboard') :
+                     currentPageName === 'Customers' ? t('crm') /* sidebar says CRM — the header must match */ :
                      (t(currentPageName?.toLowerCase()) || t("dashboard"))}
                   </h1>
                 </div>

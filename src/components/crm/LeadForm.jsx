@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,9 +11,9 @@ import { useAuth } from "@/components/contexts/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useCompany } from "@/components/contexts/CompanyContext";
 import apiClient from "@/api/client";
-import { formatPhoneInput, parsePhoneInput } from '@/utils/formatCurrency';
 import { pipelineStagesService } from "@/api/services/crm";
-import { Phone, CalendarDays, Mail, Bell } from "lucide-react";
+import { leadsService } from "@/api/services/leads";
+import { Phone, CalendarDays, Mail, Bell, Sparkles, Loader2 } from "lucide-react";
 import { formatDate, formatDateTime } from '@/utils/formatDate';
 
 // English defaults — if name matches, show translation; otherwise show custom name
@@ -21,7 +21,8 @@ const DEFAULT_STAGE_NAMES = {
   new: 'New',
   contacted: 'Contacted',
   in_progress: 'In Progress',
-  qualified: 'Qualified',
+  qualified: 'Negotiation',
+  won: 'Won',
   lost: 'Lost',
 };
 
@@ -44,6 +45,8 @@ export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
     phone: lead?.phone || "+998",
     status: lead?.status || "new",
     source: lead?.source || "website",
+    expected_value: lead?.expected_value ?? "",
+    currency: lead?.currency || "UZS",
     // Notes always open empty — they're treated as a per-update
     // comment, captured in the change-history audit log of THIS edit.
     // Showing the previous note would imply it's the lead's "current
@@ -52,6 +55,47 @@ export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
     notes: "",
     assigned_to: lead?.assigned_to || user?.id || ""
   });
+
+  // AI enrichment: paste a Telegram message / free text → field suggestions.
+  const [aiText, setAiText] = useState("");
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiFilled, setAiFilled] = useState(false);
+
+  const runAiExtract = async () => {
+    if (!aiText.trim()) return;
+    setAiLoading(true);
+    try {
+      const res = await leadsService.aiExtract(aiText.trim());
+      const s = res?.suggestions;
+      if (res?.ai_configured === false || !s) {
+        setAiFilled(false);
+        setAiOpen(false);
+        return;
+      }
+      const pick = (key) => {
+        const f = s[key];
+        return f && f.value != null && f.value !== '' && (f.confidence ?? 0) >= 0.4 ? f.value : null;
+      };
+      setFormData(prev => ({
+        ...prev,
+        contact_name: pick('contact_name') || prev.contact_name,
+        company_name: pick('company_name') || prev.company_name,
+        phone: pick('phone') || prev.phone,
+        email: pick('email') || prev.email,
+        expected_value: pick('amount') ?? prev.expected_value,
+        currency: pick('currency') || prev.currency,
+        source: pick('source') || prev.source,
+      }));
+      const need = pick('need');
+      if (need) setFollowup(prev => ({ ...prev, comment: prev.comment || need }));
+      setAiFilled(true);
+    } catch (err) {
+      console.warn('AI extract failed:', err);
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   // Structured follow-up: a separate scheduled activity that fires a
   // notification at the chosen time. All fields optional — if nothing
@@ -157,7 +201,14 @@ export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
       };
     }
 
-    onSave(formData, followupPayload);
+    const payload = {
+      ...formData,
+      expected_value:
+        formData.expected_value === "" || formData.expected_value == null
+          ? undefined
+          : Number(formData.expected_value),
+    };
+    onSave(payload, followupPayload);
   };
 
   const handleChange = (field, value) => {
@@ -180,6 +231,48 @@ export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* AI enrichment — paste a Telegram message, AI fills the form.
+                Suggestions only; the user reviews before saving. */}
+            {!lead && (
+              <div className="rounded-lg border border-purple-200 bg-purple-50/40 p-3">
+                {!aiOpen ? (
+                  <button
+                    type="button"
+                    onClick={() => setAiOpen(true)}
+                    className="flex w-full items-center gap-2 text-sm font-medium text-purple-700"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    {t('crm_ai_fill') || "AI bilan to'ldirish — xabar matnini joylashtiring"}
+                  </button>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-sm font-medium text-purple-700">
+                      <Sparkles className="h-4 w-4" />
+                      {t('crm_ai_fill_title') || 'Telegram xabari yoki matnni joylashtiring'}
+                    </div>
+                    <Textarea
+                      value={aiText}
+                      onChange={(e) => setAiText(e.target.value)}
+                      rows={3}
+                      placeholder={t('crm_ai_fill_placeholder') || "Masalan: Assalomu alaykum, men Alisher, uy ta'miri kerak, byudjet 50 mln, tel 90 123 45 67"}
+                      className="bg-white text-sm"
+                    />
+                    <div className="flex items-center gap-2">
+                      <Button type="button" size="sm" onClick={runAiExtract} disabled={aiLoading || !aiText.trim()}>
+                        {aiLoading ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1 h-3.5 w-3.5" />}
+                        {t('crm_ai_extract') || "To'ldirish"}
+                      </Button>
+                      {aiFilled && (
+                        <span className="text-xs text-emerald-600">
+                          {t('crm_ai_filled') || 'Maydonlar to‘ldirildi — tekshirib chiqing'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="space-y-2">
               <LabelWithHelp
                 htmlFor="contact_name"
@@ -240,11 +333,50 @@ export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
               </div>
             </div>
 
+            {/* Amount — the pipeline's money dimension. Without it the board
+                is a contact list, not a sales tool. */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <LabelWithHelp
+                  htmlFor="expected_value"
+                  label={t('crm_deal_amount') || 'Bitim summasi'}
+                  helpText={t('help_lead_amount')}
+                />
+                <Input
+                  id="expected_value"
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={formData.expected_value}
+                  onChange={(e) => handleChange("expected_value", e.target.value)}
+                  placeholder="0"
+                />
+              </div>
+              <div className="space-y-2">
+                <LabelWithHelp
+                  htmlFor="currency"
+                  label={t('currency') || 'Valyuta'}
+                  helpText={t('help_lead_currency')}
+                />
+                <Select value={formData.currency} onValueChange={(value) => handleChange("currency", value)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="UZS">UZS (so&apos;m)</SelectItem>
+                    <SelectItem value="USD">USD</SelectItem>
+                    <SelectItem value="EUR">EUR</SelectItem>
+                    <SelectItem value="RUB">RUB</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <LabelWithHelp
                   htmlFor="status"
-                  label={t('status')}
+                  label={t('crm_stage') || t('status')}
                   helpText={t('help_lead_status')}
                 />
                 <Select value={formData.status} onValueChange={(value) => handleChange("status", value)}>
@@ -253,21 +385,21 @@ export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
                   </SelectTrigger>
                   <SelectContent>
                     {leadStages.length > 0 ? (
-                      leadStages.map(stage => {
+                      // terminal stages go through the win/loss flows, not the form
+                      leadStages.filter(s => !s.is_won && !s.is_lost).map(stage => {
                         const isDefault = DEFAULT_STAGE_NAMES[stage.code] && stage.name === DEFAULT_STAGE_NAMES[stage.code];
                         return (
                           <SelectItem key={stage.id} value={stage.code}>
-                            {isDefault ? t(stage.code) : stage.name}
+                            {stage.custom_name || (isDefault ? (t(`crm_stage_${stage.code}`) || stage.name) : stage.name)}
                           </SelectItem>
                         );
                       })
                     ) : (
                       <>
-                        <SelectItem value="new">{t('new')}</SelectItem>
-                        <SelectItem value="contacted">{t('contacted')}</SelectItem>
-                        <SelectItem value="in_progress">{t('in_progress')}</SelectItem>
-                        <SelectItem value="qualified">{t('qualified')}</SelectItem>
-                        <SelectItem value="lost">{t('lost')}</SelectItem>
+                        <SelectItem value="new">{t('crm_stage_new') || t('new')}</SelectItem>
+                        <SelectItem value="contacted">{t('crm_stage_contacted') || t('contacted')}</SelectItem>
+                        <SelectItem value="in_progress">{t('crm_stage_in_progress') || t('in_progress')}</SelectItem>
+                        <SelectItem value="qualified">{t('crm_stage_qualified') || t('qualified')}</SelectItem>
                       </>
                     )}
                   </SelectContent>
@@ -285,6 +417,7 @@ export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="website">{t('website')}</SelectItem>
+                    <SelectItem value="telegram">Telegram</SelectItem>
                     <SelectItem value="referral">{t('referral')}</SelectItem>
                     <SelectItem value="social_media">{t('social_media')}</SelectItem>
                     <SelectItem value="cold_call">{t('cold_call')}</SelectItem>

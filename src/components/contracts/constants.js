@@ -19,6 +19,7 @@ export const CONTRACT_DIRECTIONS = {
 export const CONTRACT_TYPES = ['fixed', 'annual', 'monthly', 'project'];
 
 export const LINK_MODULES = [
+  { value: 'crm_lead', labelKey: 'link_module_crm_lead' },
   { value: 'crm_deal', labelKey: 'link_module_crm_deal' },
   { value: 'construction_object', labelKey: 'link_module_construction' },
   { value: 'sale_order', labelKey: 'link_module_sale_order' },
