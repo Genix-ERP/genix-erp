@@ -64,14 +64,91 @@ const initials = (name) =>
     .map((p) => p[0].toUpperCase())
     .join('') || '•';
 
-// Portal wrapper so dragged elements render above everything
+// Compact money for the summary chips ("63 000 000" → "63 mln") — the full
+// formatted value stays on column headers and cards where there's room.
+const compactSum = (v) => {
+  const n = Number(v) || 0;
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000_000) return `${parseFloat((n / 1_000_000_000).toFixed(2))} mlrd`;
+  if (abs >= 1_000_000) return `${parseFloat((n / 1_000_000).toFixed(1))} mln`;
+  if (abs >= 10_000) return `${Math.round(n / 1_000)} ming`;
+  return `${Math.round(n)}`;
+};
+
+// LeadCard lives at module scope on purpose: defined inside PipelineBoard it
+// would get a new component identity on every render, and the isDraggingCard
+// state flip at drag START would remount every card — replacing the dragged
+// DOM node mid-drag and breaking the drag.
+function LeadCard({ lead, t, formatCurrency, onOpen }) {
+  const stale = daysSince(lead.last_activity_at);
+  const isStale = stale != null && stale >= STALE_DAYS && !lead.won_at && !lead.lost_at;
+  const noTask = (lead.open_task_count ?? 0) === 0 && !lead.won_at && !lead.lost_at;
+  const responsible = lead.responsible_name || lead.assigned_to_name;
+  return (
+    <div
+      onClick={() => onOpen(lead.id)}
+      className="group cursor-pointer rounded-lg border border-slate-200 bg-white p-3 shadow-sm transition-shadow hover:shadow-md"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-slate-900">{lead.contact_name || lead.name}</p>
+          {lead.company_name && (
+            <p className="truncate text-xs text-slate-500">{lead.company_name}</p>
+          )}
+        </div>
+        {responsible && (
+          <div
+            title={responsible}
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[var(--genix-blue)] to-[var(--genix-purple)] text-[10px] font-semibold text-white"
+          >
+            {initials(responsible)}
+          </div>
+        )}
+      </div>
+
+      {Number(lead.expected_value) > 0 ? (
+        <p className="mt-2 text-sm font-bold text-slate-900">
+          {formatCurrency ? formatCurrency(Number(lead.expected_value)) : Number(lead.expected_value).toLocaleString()}
+        </p>
+      ) : (
+        <p className="mt-2 text-xs italic text-slate-400">{t('crm_no_amount') || "Summa kiritilmagan"}</p>
+      )}
+
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        {lead.source && (
+          <Badge variant="outline" className="h-5 border-slate-200 px-1.5 text-[10px] font-normal text-slate-500">
+            {t(lead.source) || lead.source}
+          </Badge>
+        )}
+        {noTask && (
+          <span className="inline-flex items-center gap-1 rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-600">
+            <AlertTriangle className="h-3 w-3" />
+            {t('crm_no_task') || "Vazifa yo'q"}
+          </span>
+        )}
+        {isStale && (
+          <span
+            className="inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-600"
+            title={t('crm_stale_hint') || ''}
+          >
+            <Clock className="h-3 w-3" />
+            {stale} {t('crm_days_short') || 'kun'}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Portal wrapper so dragged elements render above everything (incl. the
+// fixed terminal drop bar, hence the explicit z-index while dragging).
 function PortalAware({ provided, snapshot, children, className }) {
   const node = (
     <div
       ref={provided.innerRef}
       {...provided.draggableProps}
       {...provided.dragHandleProps}
-      className={className}
+      className={`${className || ''} ${snapshot.isDragging ? 'z-[9999]' : ''}`}
     >
       {children}
     </div>
@@ -350,68 +427,6 @@ export default function PipelineBoard({
     onRefresh?.();
   };
 
-  // ── card ──
-  const LeadCard = ({ lead }) => {
-    const stale = daysSince(lead.last_activity_at);
-    const isStale = stale != null && stale >= STALE_DAYS && !lead.won_at && !lead.lost_at;
-    const noTask = (lead.open_task_count ?? 0) === 0 && !lead.won_at && !lead.lost_at;
-    const responsible = lead.responsible_name || lead.assigned_to_name;
-    return (
-      <div
-        onClick={() => setSelectedLeadId(lead.id)}
-        className="group cursor-pointer rounded-lg border border-slate-200 bg-white p-3 shadow-sm transition-shadow hover:shadow-md"
-      >
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-slate-900">{lead.contact_name || lead.name}</p>
-            {lead.company_name && (
-              <p className="truncate text-xs text-slate-500">{lead.company_name}</p>
-            )}
-          </div>
-          {responsible && (
-            <div
-              title={responsible}
-              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[var(--genix-blue)] to-[var(--genix-purple)] text-[10px] font-semibold text-white"
-            >
-              {initials(responsible)}
-            </div>
-          )}
-        </div>
-
-        {Number(lead.expected_value) > 0 ? (
-          <p className="mt-2 text-sm font-bold text-slate-900">
-            {formatCurrency ? formatCurrency(Number(lead.expected_value)) : Number(lead.expected_value).toLocaleString()}
-          </p>
-        ) : (
-          <p className="mt-2 text-xs italic text-slate-400">{t('crm_no_amount') || "Summa kiritilmagan"}</p>
-        )}
-
-        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          {lead.source && (
-            <Badge variant="outline" className="h-5 border-slate-200 px-1.5 text-[10px] font-normal text-slate-500">
-              {t(lead.source) || lead.source}
-            </Badge>
-          )}
-          {noTask && (
-            <span className="inline-flex items-center gap-1 rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-600">
-              <AlertTriangle className="h-3 w-3" />
-              {t('crm_no_task') || "Vazifa yo'q"}
-            </span>
-          )}
-          {isStale && (
-            <span
-              className="inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-600"
-              title={t('crm_stale_hint') || ''}
-            >
-              <Clock className="h-3 w-3" />
-              {stale} {t('crm_days_short') || 'kun'}
-            </span>
-          )}
-        </div>
-      </div>
-    );
-  };
-
   const summaShort = (v) => (formatCurrency ? formatCurrency(v) : v.toLocaleString());
 
   // ── list view ──
@@ -470,58 +485,100 @@ export default function PipelineBoard({
 
   return (
     <div className="space-y-4">
-      {/* Toolbar */}
-      <div className="flex flex-col gap-3 rounded-xl border border-slate-200/60 bg-white/80 p-4 shadow-sm backdrop-blur-sm lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex flex-wrap items-center gap-2">
-          {pipelines.length > 1 ? (
-            <Select value={activePipelineId || ''} onValueChange={setActivePipelineId}>
-              <SelectTrigger className="h-9 w-[190px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {pipelines.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : (
-            <span className="text-sm font-semibold text-slate-800">{activePipeline?.name || t('crm_pipeline') || 'Voronka'}</span>
-          )}
-          {canManagePipeline && (
-            <Button variant="ghost" size="sm" className="h-9 text-slate-500" onClick={() => setPipelineDialog(true)}>
-              <Plus className="mr-1 h-3.5 w-3.5" />
-              {t('crm_new_pipeline') || 'Voronka'}
-            </Button>
-          )}
-          <div className="ml-1 hidden items-center gap-2 md:flex">
-            {wonStage && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
-                <Trophy className="h-3 w-3" />
-                {wonThisBoard.length} · {summaShort(columnSum(wonStage.id))}
+      {/* Toolbar — two deliberate tiers so nothing wraps randomly:
+          tier 1: funnel identity + won/lost summary · primary actions
+          tier 2: search + filters · view toggle */}
+      <div className="rounded-xl border border-slate-200/60 bg-white/80 shadow-sm backdrop-blur-sm">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">
+          <div className="flex min-w-0 items-center gap-1.5">
+            {pipelines.length > 1 ? (
+              <Select value={activePipelineId || ''} onValueChange={setActivePipelineId}>
+                <SelectTrigger className="h-9 w-[200px] font-semibold">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {pipelines.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <span className="truncate text-base font-semibold text-slate-900">
+                {activePipeline?.name || t('crm_pipeline') || 'Voronka'}
               </span>
             )}
-            {lostStage && lostThisBoard.length > 0 && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600">
-                <XCircle className="h-3 w-3" />
-                {lostThisBoard.length}
-              </span>
+            {canManagePipeline && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0 text-slate-400 hover:text-slate-700"
+                onClick={() => setPipelineDialog(true)}
+                title={t('crm_new_pipeline_title') || 'Yangi voronka'}
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+
+          {(wonStage || (lostStage && lostThisBoard.length > 0)) && (
+            <div className="flex items-center gap-1.5">
+              {wonStage && (
+                <span
+                  title={t('crm_won') || 'Yutilgan'}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-100"
+                >
+                  <Trophy className="h-3 w-3" />
+                  {wonThisBoard.length}
+                  {columnSum(wonStage.id) > 0 && (
+                    <span className="text-emerald-600/80">· {compactSum(columnSum(wonStage.id))}</span>
+                  )}
+                </span>
+              )}
+              {lostStage && lostThisBoard.length > 0 && (
+                <span
+                  title={t('crm_lost') || "Yo'qotilgan"}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600 ring-1 ring-inset ring-red-100"
+                >
+                  <XCircle className="h-3 w-3" />
+                  {lostThisBoard.length}
+                </span>
+              )}
+            </div>
+          )}
+
+          <div className="ml-auto flex items-center gap-2">
+            {canManagePipeline && view === 'board' && (
+              <Button variant="outline" size="sm" className="h-9" onClick={openAddStage}>
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                {t('crm_add_stage') || "Bosqich qo'shish"}
+              </Button>
+            )}
+            {onAddLead && canCreate(MODULES.CUSTOMERS) && (
+              <Button
+                size="sm"
+                className="h-9 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white shadow-sm"
+                onClick={onAddLead}
+              >
+                <UserPlus className="mr-1.5 h-3.5 w-3.5" />
+                {t('add_lead') || "Lid qo'shish"}
+              </Button>
             )}
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative">
+        <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 px-4 py-2.5">
+          <div className="relative min-w-[180px] max-w-sm flex-1">
             <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={t('crm_search_leads') || 'Qidirish...'}
-              className="h-9 w-40 pl-8 md:w-52"
+              className="h-9 w-full border-slate-200 bg-slate-50/50 pl-8 focus:bg-white"
             />
           </div>
           {responsibles.length > 0 && (
             <Select value={responsibleFilter} onValueChange={setResponsibleFilter}>
-              <SelectTrigger className="h-9 w-[150px]">
+              <SelectTrigger className={`h-9 w-[170px] ${responsibleFilter === 'all' ? 'text-slate-500' : ''}`}>
                 <SelectValue placeholder={t('crm_responsible') || "Mas'ul"} />
               </SelectTrigger>
               <SelectContent>
@@ -532,7 +589,7 @@ export default function PipelineBoard({
           )}
           {sources.length > 0 && (
             <Select value={sourceFilter} onValueChange={setSourceFilter}>
-              <SelectTrigger className="h-9 w-[140px]">
+              <SelectTrigger className={`h-9 w-[170px] ${sourceFilter === 'all' ? 'text-slate-500' : ''}`}>
                 <SelectValue placeholder={t('source') || 'Manba'} />
               </SelectTrigger>
               <SelectContent>
@@ -541,11 +598,11 @@ export default function PipelineBoard({
               </SelectContent>
             </Select>
           )}
-          <div className="flex overflow-hidden rounded-lg border border-slate-200">
+          <div className="ml-auto flex shrink-0 items-center gap-0.5 rounded-lg bg-slate-100 p-0.5">
             <button
               type="button"
               onClick={() => setView('board')}
-              className={`px-2.5 py-1.5 ${view === 'board' ? 'bg-slate-100 text-slate-900' : 'bg-white text-slate-400 hover:text-slate-600'}`}
+              className={`rounded-md px-2.5 py-1.5 transition-colors ${view === 'board' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
               title={t('crm_board_view') || 'Doska'}
             >
               <LayoutGrid className="h-4 w-4" />
@@ -553,28 +610,12 @@ export default function PipelineBoard({
             <button
               type="button"
               onClick={() => setView('list')}
-              className={`px-2.5 py-1.5 ${view === 'list' ? 'bg-slate-100 text-slate-900' : 'bg-white text-slate-400 hover:text-slate-600'}`}
+              className={`rounded-md px-2.5 py-1.5 transition-colors ${view === 'list' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
               title={t('crm_list_view') || "Ro'yxat"}
             >
               <List className="h-4 w-4" />
             </button>
           </div>
-          {canManagePipeline && view === 'board' && (
-            <Button variant="outline" size="sm" className="h-9" onClick={openAddStage}>
-              <Plus className="mr-1 h-3.5 w-3.5" />
-              {t('crm_add_stage') || "Bosqich qo'shish"}
-            </Button>
-          )}
-          {onAddLead && canCreate(MODULES.CUSTOMERS) && (
-            <Button
-              size="sm"
-              className="h-9 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
-              onClick={onAddLead}
-            >
-              <UserPlus className="mr-1 h-3.5 w-3.5" />
-              {t('add_lead') || "Lid qo'shish"}
-            </Button>
-          )}
         </div>
       </div>
 
@@ -596,83 +637,100 @@ export default function PipelineBoard({
                     index={index}
                     isDragDisabled={!canManagePipeline}
                   >
-                    {(stageProvided, stageSnapshot) => (
-                      <PortalAware
-                        provided={stageProvided}
-                        snapshot={stageSnapshot}
-                        className="w-72 shrink-0"
-                      >
-                        <div className={`flex max-h-[70vh] flex-col rounded-xl border border-t-2 border-slate-200 ${stageColor(stage.color).top} bg-slate-50/80`}>
-                          {/* column header */}
-                          <div className="flex items-center justify-between px-3 pb-1 pt-2.5">
-                            <div className="flex min-w-0 items-center gap-2">
-                              {canManagePipeline && (
-                                <GripVertical className="h-3.5 w-3.5 shrink-0 text-slate-300" />
-                              )}
-                              <span className={`h-2 w-2 shrink-0 rounded-full ${stageColor(stage.color).dot}`} />
-                              <span className="truncate text-sm font-semibold text-slate-800">{stageLabel(stage)}</span>
-                              <span className="rounded-full bg-white px-1.5 py-0.5 text-[11px] font-medium text-slate-500 ring-1 ring-slate-200">
-                                {(leadsByStage[stage.id] || []).length}
-                              </span>
-                            </div>
-                            {canManagePipeline && (
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-400 opacity-0 group-hover/col:opacity-100 hover:text-slate-700 [.group\\/col:hover_&]:opacity-100">
-                                    <MoreHorizontal className="h-3.5 w-3.5" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem onClick={() => openEditStage(stage)}>
-                                    <Pencil className="mr-2 h-3.5 w-3.5" />
-                                    {t('crm_edit_stage') || 'Tahrirlash'}
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem className="text-red-600" onClick={() => deleteStage(stage)}>
-                                    <Trash2 className="mr-2 h-3.5 w-3.5" />
-                                    {t('delete') || "O'chirish"}
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            )}
-                          </div>
-                          <p className="px-3 pb-2 text-xs font-medium text-slate-500">
-                            {summaShort(columnSum(stage.id))}
-                          </p>
-
-                          {/* cards */}
-                          <Droppable droppableId={stage.id} type="CARD">
-                            {(colProvided, colSnapshot) => (
-                              <div
-                                ref={colProvided.innerRef}
-                                {...colProvided.droppableProps}
-                                className={`flex-1 space-y-2 overflow-y-auto px-2.5 pb-3 transition-colors ${colSnapshot.isDraggingOver ? 'rounded-lg bg-blue-50/60' : ''}`}
-                              >
-                                {(leadsByStage[stage.id] || []).map((lead, i) => (
-                                  <Draggable
-                                    key={lead.id}
-                                    draggableId={lead.id}
-                                    index={i}
-                                    isDragDisabled={!canManageLeads}
-                                  >
-                                    {(cardProvided, cardSnapshot) => (
-                                      <PortalAware provided={cardProvided} snapshot={cardSnapshot}>
-                                        <LeadCard lead={lead} />
-                                      </PortalAware>
-                                    )}
-                                  </Draggable>
-                                ))}
-                                {colProvided.placeholder}
-                                {(leadsByStage[stage.id] || []).length === 0 && !colSnapshot.isDraggingOver && (
-                                  <div className="rounded-lg border border-dashed border-slate-200 py-8 text-center text-xs text-slate-400">
-                                    {t('drop_leads_here') || 'Lidlarni shu yerga tashlang'}
-                                  </div>
+                    {(stageProvided, stageSnapshot) => {
+                      // The drag HANDLE is only the column header — putting it
+                      // on the whole column (old version) made every touch of
+                      // the column body start a column drag, fighting card
+                      // drags and the column's own scroll.
+                      const columnNode = (
+                        <div
+                          ref={stageProvided.innerRef}
+                          {...stageProvided.draggableProps}
+                          className={`w-72 shrink-0 ${stageSnapshot.isDragging ? 'z-[9999]' : ''}`}
+                        >
+                          <div className={`flex max-h-[70vh] flex-col rounded-xl border border-t-2 border-slate-200 ${stageColor(stage.color).top} bg-slate-50/80 ${stageSnapshot.isDragging ? 'shadow-xl ring-2 ring-blue-200' : ''}`}>
+                            {/* column header = the column drag handle */}
+                            <div
+                              {...stageProvided.dragHandleProps}
+                              className="flex items-center justify-between px-3 pb-1 pt-2.5"
+                            >
+                              <div className="flex min-w-0 items-center gap-2">
+                                {canManagePipeline && (
+                                  <GripVertical className="h-3.5 w-3.5 shrink-0 text-slate-300" />
                                 )}
+                                <span className={`h-2 w-2 shrink-0 rounded-full ${stageColor(stage.color).dot}`} />
+                                <span className="truncate text-sm font-semibold text-slate-800">{stageLabel(stage)}</span>
+                                <span className="rounded-full bg-white px-1.5 py-0.5 text-[11px] font-medium text-slate-500 ring-1 ring-slate-200">
+                                  {(leadsByStage[stage.id] || []).length}
+                                </span>
                               </div>
-                            )}
-                          </Droppable>
+                              {canManagePipeline && (
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-400 hover:text-slate-700">
+                                      <MoreHorizontal className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={() => openEditStage(stage)}>
+                                      <Pencil className="mr-2 h-3.5 w-3.5" />
+                                      {t('crm_edit_stage') || 'Tahrirlash'}
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem className="text-red-600" onClick={() => deleteStage(stage)}>
+                                      <Trash2 className="mr-2 h-3.5 w-3.5" />
+                                      {t('delete') || "O'chirish"}
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              )}
+                            </div>
+                            <p className="px-3 pb-2 text-xs font-medium text-slate-500">
+                              {summaShort(columnSum(stage.id))}
+                            </p>
+
+                            {/* cards */}
+                            <Droppable droppableId={stage.id} type="CARD">
+                              {(colProvided, colSnapshot) => (
+                                <div
+                                  ref={colProvided.innerRef}
+                                  {...colProvided.droppableProps}
+                                  className={`min-h-[80px] flex-1 space-y-2 overflow-y-auto px-2.5 pb-3 transition-colors ${colSnapshot.isDraggingOver ? 'rounded-lg bg-blue-50/60' : ''}`}
+                                >
+                                  {(leadsByStage[stage.id] || []).map((lead, i) => (
+                                    <Draggable
+                                      key={lead.id}
+                                      draggableId={lead.id}
+                                      index={i}
+                                      isDragDisabled={!canManageLeads}
+                                    >
+                                      {(cardProvided, cardSnapshot) => (
+                                        <PortalAware provided={cardProvided} snapshot={cardSnapshot}>
+                                          <LeadCard
+                                            lead={lead}
+                                            t={t}
+                                            formatCurrency={formatCurrency}
+                                            onOpen={setSelectedLeadId}
+                                          />
+                                        </PortalAware>
+                                      )}
+                                    </Draggable>
+                                  ))}
+                                  {colProvided.placeholder}
+                                  {(leadsByStage[stage.id] || []).length === 0 && !colSnapshot.isDraggingOver && (
+                                    <div className="rounded-lg border border-dashed border-slate-200 py-8 text-center text-xs text-slate-400">
+                                      {t('drop_leads_here') || 'Lidlarni shu yerga tashlang'}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </Droppable>
+                          </div>
                         </div>
-                      </PortalAware>
-                    )}
+                      );
+                      return stageSnapshot.isDragging
+                        ? createPortal(columnNode, document.body)
+                        : columnNode;
+                    }}
                   </Draggable>
                 ))}
                 {boardProvided.placeholder}
@@ -680,9 +738,18 @@ export default function PipelineBoard({
             )}
           </Droppable>
 
-          {/* Terminal drop bar — appears while dragging a card (Pipedrive-style) */}
-          {isDraggingCard && (wonStage || lostStage) && (
-            <div className="fixed inset-x-0 bottom-0 z-50 flex gap-3 border-t border-slate-200 bg-white/95 p-3 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur">
+          {/* Terminal drop bar (Pipedrive-style). ALWAYS mounted — a Droppable
+              added after a drag has started is never registered by
+              @hello-pangea/dnd, so a conditionally-rendered bar silently
+              swallowed every drop. Visibility is CSS-only. */}
+          {(wonStage || lostStage) && (
+            <div
+              aria-hidden={!isDraggingCard}
+              // fade only — a translate would move the droppable's rect, and
+              // the library captures droppable geometry at drag start, so the
+              // zones must always sit exactly where they will be shown
+              className={`fixed inset-x-0 bottom-0 z-40 flex gap-3 border-t border-slate-200 bg-white/95 p-3 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur transition-opacity duration-200 ${isDraggingCard ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+            >
               {wonStage && (
                 <Droppable droppableId="won-drop" type="CARD">
                   {(provided, snapshot) => (
@@ -693,7 +760,7 @@ export default function PipelineBoard({
                     >
                       <Trophy className="h-4 w-4" />
                       {t('crm_won') || 'Yutilgan'}
-                      <span className="hidden">{provided.placeholder}</span>
+                      <div className="h-0 w-0 overflow-hidden">{provided.placeholder}</div>
                     </div>
                   )}
                 </Droppable>
@@ -708,7 +775,7 @@ export default function PipelineBoard({
                     >
                       <XCircle className="h-4 w-4" />
                       {t('crm_lost') || "Yo'qotilgan"}
-                      <span className="hidden">{provided.placeholder}</span>
+                      <div className="h-0 w-0 overflow-hidden">{provided.placeholder}</div>
                     </div>
                   )}
                 </Droppable>
