@@ -73,7 +73,6 @@ import { ProcurementProvider } from "@/components/contexts/ProcurementContext";
 import { SalesProvider } from "@/components/contexts/SalesContext";
 import { ManufacturingProvider } from "@/components/contexts/ManufacturingContext";
 import { HRProvider } from "@/components/contexts/HRContext";
-import { ProjectsProvider } from "@/components/contexts/ProjectsContext";
 import { AdminSettingsProvider, useAdminSettings } from "@/components/contexts/AdminSettingsContext";
 import { resolveBrandLogoUrl, readStoredBrandLogo, applyFavicon, applyBrowserTitle, readStoredFavicon, readStoredTitle } from "@/utils/brandLogo";
 import { CargoProvider } from "@/components/contexts/CargoContext";
@@ -296,12 +295,12 @@ function LayoutContent({ children, currentPageName }) {
       badge: null,
       moduleId: 'purchase'
     },
-    'projects': {
-      title: t("projects"),
-      url: createPageUrl("Projects"),
+    'tasks': {
+      title: t("tasks_module"),
+      url: createPageUrl("Tasks"),
       icon: FolderKanban,
       badge: null,
-      moduleId: 'projects'
+      moduleId: 'tasks'
     },
     'sales_orders': {
       title: t("sales_orders"),
@@ -634,15 +633,13 @@ export default function Layout({ children, currentPageName }) {
                         <SalesProvider>
                           <ManufacturingProvider>
                             <HRProvider>
-                              <ProjectsProvider>
-                                <CargoProvider>
-                                  <ConstructionProvider>
-                                    <AIProvider>
-                                      <LayoutContent children={children} currentPageName={currentPageName} />
-                                    </AIProvider>
-                                  </ConstructionProvider>
-                                </CargoProvider>
-                              </ProjectsProvider>
+                              <CargoProvider>
+                                <ConstructionProvider>
+                                  <AIProvider>
+                                    <LayoutContent children={children} currentPageName={currentPageName} />
+                                  </AIProvider>
+                                </ConstructionProvider>
+                              </CargoProvider>
                             </HRProvider>
                           </ManufacturingProvider>
                         </SalesProvider>

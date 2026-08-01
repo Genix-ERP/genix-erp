@@ -42,6 +42,22 @@ export const NOTIFICATION_TEMPLATES = {
     fields: ['product_name', 'quantity'],
     format: { quantity: 'number' },
   },
+  // ── Vazifalar (task management) ───────────────────────────────────────
+  task_assigned: {
+    titleKey: 'notif_task_assigned_title',
+    bodyKey: 'notif_task_assigned_body',
+    fields: ['task_title', 'board_name'],
+  },
+  task_comment_mention: {
+    titleKey: 'notif_task_comment_mention_title',
+    bodyKey: 'notif_task_comment_mention_body',
+    fields: ['actor_name', 'task_title'],
+  },
+  task_overdue: {
+    titleKey: 'notif_task_overdue_title',
+    bodyKey: 'notif_task_overdue_body',
+    fields: ['task_title', 'due_date'],
+  },
   // ── Sales ─────────────────────────────────────────────────────────────
   sales_order_confirmed: {
     titleKey: 'notif_sales_order_confirmed_title',

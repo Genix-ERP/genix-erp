@@ -41,7 +41,10 @@ import {
   AlertTriangle,
   ChevronLeft,
   ChevronRight,
+  CheckSquare,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import taskBoardsService from "@/api/services/taskBoards";
 
 // Import universal ERP components
 import {
@@ -84,6 +87,7 @@ import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 export default function HR() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const navigate = useNavigate();
   const { coreModules, appModules } = useModules();
   const { isAppInstalled } = useInstalledApps();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
@@ -113,6 +117,7 @@ export default function HR() {
   const submittingRef = useRef(false);
   const [isAssessingRisk, setIsAssessingRisk] = useState(false);
   const [employeeDeductions, setEmployeeDeductions] = useState([]);
+  const [employeeTasks, setEmployeeTasks] = useState([]);
   const [salaryCalc, setSalaryCalc] = useState(null);
   const [loadingDeductions, setLoadingDeductions] = useState(false);
   const { addAuditLog } = useAuditTrail('employees');
@@ -442,6 +447,11 @@ Only return the JSON, no other text.`;
   const handleViewEmployee = async (employee) => {
     setSelectedEmployee(employee);
     setShowViewModal(true);
+    // Open tasks for the Vazifalar section (best-effort — user may lack tasks access)
+    setEmployeeTasks([]);
+    taskBoardsService.listEmployeeTasks(employee.id)
+      .then((tasks) => setEmployeeTasks(Array.isArray(tasks) ? tasks : []))
+      .catch(() => setEmployeeTasks([]));
     // Load deductions and salary calculation
     setLoadingDeductions(true);
     try {
@@ -1274,6 +1284,39 @@ Only return the JSON, no other text.`;
                     <Badge>{t(selectedEmployee.status)}</Badge>
                   </div>
                 </div>
+
+                {/* Vazifalar Section — open tasks from the task-management module */}
+                {employeeTasks.length > 0 && (
+                  <div className="border-t pt-4 space-y-3">
+                    <h4 className="font-semibold text-sm text-blue-700 flex items-center gap-2">
+                      <CheckSquare className="w-4 h-4" />
+                      {t('tasks_module')} ({employeeTasks.length})
+                    </h4>
+                    <div className="space-y-2 max-h-40 overflow-y-auto">
+                      {employeeTasks.map((task) => (
+                        <button
+                          key={task.id}
+                          onClick={() => { setShowViewModal(false); navigate(`/tasks/${task.board_id}`); }}
+                          className={`w-full flex items-center justify-between p-2 rounded text-sm text-left hover:bg-slate-100 ${
+                            task.is_overdue ? 'bg-red-50 border border-red-200' : 'bg-slate-50'
+                          }`}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="truncate font-medium">{task.title}</p>
+                            <p className="text-xs text-slate-500 truncate">
+                              {task.board_name} · {task.column_name}
+                            </p>
+                          </div>
+                          {task.due_date && (
+                            <span className={`ml-2 text-xs whitespace-nowrap ${task.is_overdue ? 'text-red-600 font-semibold' : 'text-slate-500'}`}>
+                              {new Date(task.due_date).toLocaleDateString()}
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Deductions Section */}
                 {!loadingDeductions && employeeDeductions.length > 0 && (
