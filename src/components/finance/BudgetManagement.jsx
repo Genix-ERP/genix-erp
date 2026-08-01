@@ -1,3 +1,4 @@
+import { formatDate } from '@/utils/formatDate';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -473,7 +474,7 @@ export default function BudgetManagement() {
                       </TableCell>
                       <TableCell><TypeBadge type={budget.budget_type} t={t} /></TableCell>
                       <TableCell className="text-sm text-slate-600">
-                        {budget.start_date && budget.end_date ? `${format(new Date(budget.start_date), 'dd.MM.yy')} – ${format(new Date(budget.end_date), 'dd.MM.yy')}` : '—'}
+                        {budget.start_date && budget.end_date ? `${format(new Date(budget.start_date), 'dd.MM.yyyy')} – ${format(new Date(budget.end_date), 'dd.MM.yyyy')}` : '—'}
                       </TableCell>
                       <TableCell onClick={e => e.stopPropagation()}>
                         <UsageBar planned={u.planned} actual={u.actual}
@@ -849,7 +850,7 @@ export default function BudgetManagement() {
                 [t('code') || 'Code', wizardData.code],
                 [t('type') || 'Type', t(`budget_type_${wizardData.budget_type}_title`) || t(`budget_type_${wizardData.budget_type}`) || wizardData.budget_type],
                 [t('approach') || 'Approach', t(`approach_${wizardData.approach}_title`) || wizardData.approach],
-                [t('period') || 'Period', wizardData.start_date && wizardData.end_date ? `${wizardData.start_date} – ${wizardData.end_date}` : '—'],
+                [t('period') || 'Period', wizardData.start_date && wizardData.end_date ? `${formatDate(wizardData.start_date)} – ${formatDate(wizardData.end_date)}` : '—'],
                 [t('overspend_policy') || 'Policy', t(`policy_${wizardData.overspend_policy}`) || wizardData.overspend_policy],
               ].map(([k, v]) => (
                 <div key={k}><p className="text-xs text-slate-500">{k}</p><p className="font-medium">{v}</p></div>
@@ -1125,7 +1126,7 @@ export default function BudgetManagement() {
                       <div key={i} className={`flex items-center justify-between p-2 rounded-lg ${r.urgency === 'overdue' ? 'bg-red-50 border border-red-200' : r.urgency === 'due_soon' ? 'bg-amber-50 border border-amber-200' : 'bg-slate-50'}`}>
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium truncate">{r.counterparty}</p>
-                          <p className="text-xs text-slate-500">{r.reference} · {r.due_date}</p>
+                          <p className="text-xs text-slate-500">{r.reference} · {formatDate(r.due_date)}</p>
                         </div>
                         <div className="text-right ml-3 shrink-0">
                           <p className="font-semibold text-sm">{formatCurrency(r.amount)}</p>
@@ -1151,7 +1152,7 @@ export default function BudgetManagement() {
                       <div key={i} className={`flex items-center justify-between p-2 rounded-lg ${p.urgency === 'overdue' ? 'bg-red-50 border border-red-200' : 'bg-slate-50'}`}>
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium truncate">{p.counterparty}</p>
-                          <p className="text-xs text-slate-500">{p.reference} · {p.due_date}</p>
+                          <p className="text-xs text-slate-500">{p.reference} · {formatDate(p.due_date)}</p>
                         </div>
                         <div className="text-right ml-3 shrink-0">
                           <p className="font-semibold text-sm">{formatCurrency(p.amount)}</p>

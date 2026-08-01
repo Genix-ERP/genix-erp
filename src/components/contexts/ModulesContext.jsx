@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { hrService, purchaseService, salesService, financeService, procurementService, projectsService } from '@/api/services';
+import { hrService, purchaseService, salesService, financeService, procurementService } from '@/api/services';
 import { useCompany } from './CompanyContext';
 import { useEmployeePermissions } from './EmployeePermissionsContext';
 import { checkBackendHealth } from '@/config/dataMode';
@@ -25,7 +25,7 @@ const APP_MODULES = [
   { id: 'hr', nameKey: 'hr', icon: 'Briefcase', appId: 'hr' },
   { id: 'manufacturing', nameKey: 'manufacturing', icon: 'Zap', appId: 'manufacturing' },
   { id: 'procurement', nameKey: 'procurement', icon: 'ShoppingCart', appId: 'procurement' },
-  { id: 'projects', nameKey: 'projects', icon: 'Briefcase', appId: 'projects' },
+  { id: 'tasks', nameKey: 'tasks_module', icon: 'Briefcase', appId: 'tasks' },
   { id: 'sales_orders', nameKey: 'sales_orders', icon: 'ShoppingBag', appId: 'sales_orders' },
   { id: 'assets', nameKey: 'assets', icon: 'Monitor', appId: 'assets' },
   { id: 'expenses', nameKey: 'expenses', icon: 'Receipt', appId: 'expenses' },
@@ -44,7 +44,6 @@ export function ModulesProvider({ children }) {
   const [employees, setEmployees] = useState([]);
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [salesOrders, setSalesOrders] = useState([]);
-  const [projects, setProjects] = useState([]);
   const [assets, setAssets] = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [payrolls, setPayrolls] = useState([]);
@@ -96,7 +95,6 @@ export function ModulesProvider({ children }) {
         empData,
         poData,
         soData,
-        projectsData,
         contractsData,
         expensesData,
         assetsData,
@@ -105,7 +103,6 @@ export function ModulesProvider({ children }) {
         allow('hr')          ? hrService.listEmployees().catch(err => { console.warn('Employees API error:', err); return []; })            : skip(),
         allow('purchase')    ? purchaseService.listOrders().catch(err => { console.warn('PO API error:', err); return []; })                : skip(),
         allow('sales')       ? salesService.listOrders({ page_size: 1000 }).catch(err => { console.warn('SO API error:', err); return []; }) : skip(),
-        allow('projects')    ? projectsService.listProjects().catch(err => { console.warn('Projects API error:', err); return []; })        : skip(),
         allow('contracts') || allow('purchase')
                              ? procurementService.listContracts().catch(err => { console.warn('Contracts API error:', err); return []; })   : skip(),
         allow('expenses') || allow('finance')
@@ -123,14 +120,6 @@ export function ModulesProvider({ children }) {
       setEmployees(toArray(empData));
       setPurchaseOrders(toArray(poData));
       setSalesOrders(toArray(soData));
-      // Map backend project fields to frontend expected fields
-      const rawProjects = toArray(projectsData);
-      const mappedProjects = rawProjects.map(p => ({
-        ...p,
-        project_name: p.name || p.project_name,
-        progress_percentage: p.progress || p.progress_percentage || 0
-      }));
-      setProjects(mappedProjects);
       // Map backend contract fields to frontend expected fields
       const rawContracts = toArray(contractsData);
       const mappedContracts = rawContracts.map(c => ({
@@ -146,15 +135,16 @@ export function ModulesProvider({ children }) {
         auto_renew: c.auto_renewal || c.auto_renew || false,
       }));
       setContracts(mappedContracts);
-      // Map backend expense fields to frontend expected fields
-      // Backend returns: date (not expense_date), expense_number, category (not category_name)
+      // Map backend expense fields to frontend expected fields.
+      // v2 note: no more `|| 'other'` fallback on category — that fake
+      // default was what collapsed the category donut into one giant
+      // "Boshqa" slice (docs/xarajatlar-audit.md §2.1). An expense
+      // without a category now surfaces as an honest empty value.
       const rawExpenses = toArray(expensesData);
       const mappedExpenses = rawExpenses.map(e => ({
         ...e,
-        claim_number: e.expense_number || e.claim_number,
-        expense_date: e.date || e.expense_date || e.claim_date, // Backend returns 'date'
-        claim_date: e.date || e.expense_date || e.claim_date,
-        category: e.category || e.category_name || 'other', // Backend returns 'category'
+        expense_date: e.date || e.expense_date, // Backend returns 'date'
+        category: e.category || e.category_name || '',
       }));
       setExpenses(mappedExpenses);
       // Map backend asset fields to frontend expected fields
@@ -280,65 +270,6 @@ export function ModulesProvider({ children }) {
     setSalesOrders(prev => prev.filter(s => s.id !== id));
   }, []);
 
-  // Project CRUD - API only
-  const createProject = useCallback(async (data) => {
-    const apiData = {
-      project_code: data.project_code,
-      project_name: data.project_name || data.name,
-      description: data.description,
-      client_name: data.client_name,
-      start_date: data.start_date,
-      end_date: data.end_date,
-      budget: data.budget || 0,
-      billing_type: data.billing_type,
-      priority: data.priority || 'medium',
-      status: data.status || 'planning'
-    };
-    const result = await projectsService.createProject(apiData);
-    if (result && result.data) {
-      const mappedResult = {
-        ...result.data,
-        project_name: result.data.name || result.data.project_name,
-        client_name: result.data.client_name || data.client_name,
-        progress_percentage: result.data.progress || 0
-      };
-      setProjects(prev => [mappedResult, ...prev]);
-      return mappedResult;
-    }
-    throw new Error('Failed to create project');
-  }, []);
-
-  const updateProject = useCallback(async (id, data) => {
-    const apiData = {
-      project_name: data.project_name || data.name,
-      description: data.description,
-      client_name: data.client_name,
-      start_date: data.start_date,
-      end_date: data.end_date,
-      budget: data.budget,
-      billing_type: data.billing_type,
-      priority: data.priority,
-      status: data.status,
-      progress: data.progress_percentage !== undefined ? data.progress_percentage : data.progress
-    };
-    const result = await projectsService.updateProject(id, apiData);
-    if (result && result.data) {
-      const mappedResult = {
-        ...result.data,
-        project_name: result.data.name || result.data.project_name,
-        progress_percentage: result.data.progress
-      };
-      setProjects(prev => prev.map(p => p.id === id ? mappedResult : p));
-      return mappedResult;
-    }
-    throw new Error('Failed to update project');
-  }, []);
-
-  const deleteProject = useCallback(async (id) => {
-    await projectsService.deleteProject(id);
-    setProjects(prev => prev.filter(p => p.id !== id));
-  }, []);
-
   // Asset CRUD (Fixed Assets) - API only
   const createAsset = useCallback(async (data) => {
     const apiData = {
@@ -428,7 +359,10 @@ export function ModulesProvider({ children }) {
     throw new Error('Failed to dispose asset');
   }, []);
 
-  // Expense CRUD - API only
+  // Expense CRUD - API only.
+  // v2: employee_id + status (draft|submitted) are forwarded on create;
+  // status is NOT forwarded on update — lifecycle transitions go through
+  // the dedicated financeService.submit/approve/reject/payExpense calls.
   const createExpense = useCallback(async (data) => {
     const apiData = {
       date: data.expense_date || data.claim_date || data.date,
@@ -436,14 +370,16 @@ export function ModulesProvider({ children }) {
       amount: data.amount || 0,
       tax_amount: data.tax_amount || 0,
       currency: data.currency || 'UZS',
+      employee_id: data.employee_id,
       employee_name: data.employee_name,
       vendor_name: data.vendor_name,
       category_id: data.category_id,
       category: data.category, // Send category name to backend
       payment_method: data.payment_method,
-      reference: data.reference || data.claim_number,
+      reference: data.reference,
       reimbursable: data.reimbursable || false,
       notes: data.notes,
+      ...(data.status && { status: data.status }),
       // Profit-tax recognition flag — forwarded when caller provides it;
       // backend defaults to TRUE otherwise (migration 336).
       ...(data.is_recognized !== undefined && { is_recognized: Boolean(data.is_recognized) }),
@@ -452,10 +388,8 @@ export function ModulesProvider({ children }) {
     if (result && result.id) {
       const mappedResult = {
         ...result,
-        claim_number: result.expense_number,
         expense_date: result.date || result.expense_date,
-        claim_date: result.date || result.expense_date,
-        category: result.category || result.category_name || data.category || 'other',
+        category: result.category || result.category_name || '',
       };
       setExpenses(prev => [mappedResult, ...prev]);
       return mappedResult;
@@ -470,6 +404,7 @@ export function ModulesProvider({ children }) {
       amount: data.amount,
       tax_amount: data.tax_amount,
       currency: data.currency,
+      employee_id: data.employee_id,
       employee_name: data.employee_name,
       vendor_name: data.vendor_name,
       category_id: data.category_id,
@@ -478,17 +413,14 @@ export function ModulesProvider({ children }) {
       reference: data.reference,
       reimbursable: data.reimbursable,
       notes: data.notes,
-      status: data.status,
       ...(data.is_recognized !== undefined && { is_recognized: Boolean(data.is_recognized) }),
     };
     const result = await financeService.updateExpense(id, apiData);
     if (result) {
       const mappedResult = {
         ...result,
-        claim_number: result.expense_number,
         expense_date: result.date || result.expense_date,
-        claim_date: result.date || result.expense_date,
-        category: result.category || result.category_name || data.category || 'other',
+        category: result.category || result.category_name || '',
       };
       setExpenses(prev => prev.map(e => e.id === id ? mappedResult : e));
       return mappedResult;
@@ -538,9 +470,10 @@ export function ModulesProvider({ children }) {
 
     if (periodResult && periodResult.id) {
       // If employee salary data is provided, create a payroll entry
+      let createdEntryId = null;
       if (data.employee_id && data.basic_salary > 0) {
         try {
-          await hrService.createPayrollEntry(periodResult.id, {
+          const entryResult = await hrService.createPayrollEntry(periodResult.id, {
             employee_id: data.employee_id,
             base_salary: data.basic_salary || 0,
             overtime_hours: data.overtime_hours || 0,
@@ -562,13 +495,20 @@ export function ModulesProvider({ children }) {
             // undefined so the server uses its default (apply all active taxes).
             excluded_tax_ids: Array.isArray(data.excluded_tax_ids) ? data.excluded_tax_ids : undefined,
           });
+          createdEntryId = entryResult?.id || null;
         } catch (entryError) {
-          console.warn('Failed to create payroll entry:', entryError);
+          // A period with no entry is an empty shell the UI shows as a
+          // successful calculation — remove it and surface the real error.
+          try {
+            await hrService.deletePayrollPeriod(periodResult.id);
+          } catch { /* best-effort cleanup */ }
+          throw entryError;
         }
       }
 
       const mappedResult = {
         ...periodResult,
+        first_entry_id: createdEntryId,
         payroll_number: periodResult.period_code,
         period_name: periodResult.period_name,
         employee_id: data.employee_id || periodResult.employee_id || '',
@@ -760,7 +700,7 @@ export function ModulesProvider({ children }) {
 
   const value = useMemo(() => ({
     // Data
-    employees, purchaseOrders, salesOrders, projects, assets, expenses, payrolls, contracts,
+    employees, purchaseOrders, salesOrders, assets, expenses, payrolls, contracts,
     isLoading, backendAvailable,
     // Employee methods
     createEmployee, updateEmployee, deleteEmployee,
@@ -768,8 +708,6 @@ export function ModulesProvider({ children }) {
     createPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder,
     // Sales Order methods
     createSalesOrder, updateSalesOrder, deleteSalesOrder,
-    // Project methods
-    createProject, updateProject, deleteProject,
     // Asset methods
     createAsset, updateAsset, deleteAsset, disposeAsset,
     // Expense methods
@@ -791,7 +729,7 @@ export function ModulesProvider({ children }) {
     deleteEmployeePermissions,
     // Refresh
     refreshData: loadData
-  }), [employees, purchaseOrders, salesOrders, projects, assets, expenses, payrolls, contracts, isLoading, backendAvailable, createEmployee, updateEmployee, deleteEmployee, createPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder, createSalesOrder, updateSalesOrder, deleteSalesOrder, createProject, updateProject, deleteProject, createAsset, updateAsset, deleteAsset, disposeAsset, createExpense, updateExpense, deleteExpense, approveExpense, createPayroll, updatePayroll, deletePayroll, processPayroll, createContract, updateContract, deleteContract, permissions, getEmployeePermissions, setEmployeePermissions, updateModulePermission, hasPermission, setModuleFullAccess, deleteEmployeePermissions, loadData]);
+  }), [employees, purchaseOrders, salesOrders, assets, expenses, payrolls, contracts, isLoading, backendAvailable, createEmployee, updateEmployee, deleteEmployee, createPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder, createSalesOrder, updateSalesOrder, deleteSalesOrder, createAsset, updateAsset, deleteAsset, disposeAsset, createExpense, updateExpense, deleteExpense, approveExpense, createPayroll, updatePayroll, deletePayroll, processPayroll, createContract, updateContract, deleteContract, permissions, getEmployeePermissions, setEmployeePermissions, updateModulePermission, hasPermission, setModuleFullAccess, deleteEmployeePermissions, loadData]);
 
   return (
     <ModulesContext.Provider value={value}>

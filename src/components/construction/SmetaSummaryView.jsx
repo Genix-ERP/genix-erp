@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Trash2, Loader2, BarChart3 } from 'lucide-react';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { formatDate } from '@/utils/formatDate';
 
 export default function SmetaSummaryView({ projectId }) {
   const [data, setData] = useState([]);
@@ -109,7 +110,7 @@ export default function SmetaSummaryView({ projectId }) {
                   <BarChart3 className="w-4 h-4" />
                   Smeta svodi
                   <Badge variant="outline" className="text-xs font-normal">
-                    {new Date(batch.created_date).toLocaleDateString('ru-RU')}
+                    {formatDate(batch.created_date)}
                   </Badge>
                 </CardTitle>
                 <Button

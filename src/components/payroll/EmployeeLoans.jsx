@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { formatDate } from '@/utils/formatDate';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,12 +9,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { Separator } from "@/components/ui/separator";
-import { Plus, CreditCard, CheckCircle, Clock, AlertTriangle, User, Wallet, Calendar, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, CreditCard, CheckCircle, Clock, Wallet, ChevronDown, ChevronUp } from 'lucide-react';
 import { useModules } from '@/components/contexts/ModulesContext';
 import { usePermissions } from "@/hooks/usePermissions";
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import hrService from '@/api/services/hr';
 import { financeService } from '@/api/services/finance';
 
@@ -22,6 +23,7 @@ export default function EmployeeLoans() {
   const { t } = useTranslation(language);
   const { employees } = useModules();
   const { canCreate, canUpdate, MODULES } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
 
   const [loans, setLoans] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -56,7 +58,10 @@ export default function EmployeeLoans() {
     try {
       const data = await financeService.listAccounts({ limit: 200 });
       const items = data?.items || data || [];
-      setAccounts(items.filter(a => ['1000', '1010', '1020'].includes(a.code) || a.code?.startsWith('10')));
+      setAccounts(items.filter(a =>
+        (a.code?.startsWith('50') || a.code?.startsWith('51') || a.is_bank_account === true) &&
+        a.is_leaf !== false
+      ));
     } catch (e) { console.error(e); }
   }, []);
 
@@ -94,13 +99,16 @@ export default function EmployeeLoans() {
     let rem = parseFloat(loanForm.amount);
     const months = parseInt(loanForm.duration_months);
     const mp = Math.ceil(rem / months);
-    const uzMonths = ['', 'Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun', 'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'];
+    const monthFormatter = new Intl.DateTimeFormat(
+      language === 'ru' ? 'ru-RU' : language === 'en' ? 'en-US' : 'uz-UZ',
+      { month: 'long', year: 'numeric' }
+    );
     for (let i = 0; i < months && i < 5; i++) {
       const d = new Date(loanForm.start_date);
       d.setMonth(d.getMonth() + i);
       const pay = Math.min(mp, rem);
       rem -= pay;
-      paymentPreview.push({ month: `${uzMonths[d.getMonth() + 1]} ${d.getFullYear()}`, payment: pay, remaining: rem });
+      paymentPreview.push({ month: monthFormatter.format(d), payment: pay, remaining: rem });
     }
   }
 
@@ -132,7 +140,6 @@ export default function EmployeeLoans() {
     } catch (e) { console.error(e); }
   };
 
-  const fmt = (n) => String(Number(n || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
   const fmtInput = (v) => {
     const num = String(v).replace(/[^0-9]/g, '');
     return num ? num.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') : '';
@@ -165,7 +172,7 @@ export default function EmployeeLoans() {
               <div className="p-2 rounded-lg bg-amber-100"><Wallet className="w-5 h-5 text-amber-600" /></div>
               <div>
                 <p className="text-xs text-slate-500">{t('remaining_debt')}</p>
-                <p className="text-xl font-bold text-slate-900">{fmt(totalOutstanding)} so'm</p>
+                <p className="text-xl font-bold text-slate-900">{formatCurrency(totalOutstanding)}</p>
               </div>
             </div>
           </CardContent>
@@ -187,7 +194,7 @@ export default function EmployeeLoans() {
               <div className="p-2 rounded-lg bg-purple-100"><CreditCard className="w-5 h-5 text-purple-600" /></div>
               <div>
                 <p className="text-xs text-slate-500">{t('total_issued')}</p>
-                <p className="text-xl font-bold text-slate-900">{fmt(totalLent)} so'm</p>
+                <p className="text-xl font-bold text-slate-900">{formatCurrency(totalLent)}</p>
               </div>
             </div>
           </CardContent>
@@ -226,13 +233,13 @@ export default function EmployeeLoans() {
                         </div>
                         <div>
                           <p className="font-semibold text-slate-900">{loan.employee_name}</p>
-                          <p className="text-sm text-slate-500">{loan.loan_number} · {loan.start_date} — {loan.end_date}</p>
+                          <p className="text-sm text-slate-500">{loan.loan_number} · {formatDate(loan.start_date)} — {formatDate(loan.end_date)}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-6">
                         <div className="text-right">
-                          <p className="font-semibold text-slate-900">{fmt(loan.remaining_amount)} so'm</p>
-                          <p className="text-xs text-slate-500">{t('remains_of')} {fmt(loan.amount)} so'm</p>
+                          <p className="font-semibold text-slate-900">{formatCurrency(loan.remaining_amount)}</p>
+                          <p className="text-xs text-slate-500">{t('remains_of')} {formatCurrency(loan.amount)}</p>
                         </div>
                         <div className="w-24">
                           <Progress value={paidPercent} className="h-2" />
@@ -249,15 +256,15 @@ export default function EmployeeLoans() {
                         <div className="grid grid-cols-3 gap-4 mb-4">
                           <div className="bg-slate-900 text-white rounded-lg p-3 text-center">
                             <p className="text-xs text-slate-400">{t('issued')}</p>
-                            <p className="text-lg font-bold">{fmt(expandedLoanData.amount)}</p>
+                            <p className="text-lg font-bold">{formatCurrency(expandedLoanData.amount)}</p>
                           </div>
                           <div className="bg-blue-600 text-white rounded-lg p-3 text-center">
                             <p className="text-xs text-blue-200">{t('remaining')}</p>
-                            <p className="text-lg font-bold">{fmt(expandedLoanData.remaining_amount)}</p>
+                            <p className="text-lg font-bold">{formatCurrency(expandedLoanData.remaining_amount)}</p>
                           </div>
                           <div className="bg-green-600 text-white rounded-lg p-3 text-center">
                             <p className="text-xs text-green-200">{t('paid_amount')}</p>
-                            <p className="text-lg font-bold">{fmt(expandedLoanData.paid_amount)}</p>
+                            <p className="text-lg font-bold">{formatCurrency(expandedLoanData.paid_amount)}</p>
                           </div>
                         </div>
                         <Table>
@@ -274,8 +281,8 @@ export default function EmployeeLoans() {
                             {(expandedLoanData.payments || []).map(p => (
                               <TableRow key={p.id}>
                                 <TableCell className="font-medium">{p.month_label}</TableCell>
-                                <TableCell className="text-right">{fmt(p.amount)}</TableCell>
-                                <TableCell className="text-right">{fmt(p.remaining_after)}</TableCell>
+                                <TableCell className="text-right">{formatCurrency(p.amount)}</TableCell>
+                                <TableCell className="text-right">{formatCurrency(p.remaining_after)}</TableCell>
                                 <TableCell>
                                   {p.status === 'paid' ? (
                                     <Badge className="bg-green-100 text-green-800"><CheckCircle className="w-3 h-3 mr-1" /> {t('paid_status')}</Badge>
@@ -308,21 +315,21 @@ export default function EmployeeLoans() {
 
       {/* Create Loan Modal */}
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-        <DialogContent className="max-w-lg bg-slate-900 text-white border-slate-700">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-white text-lg">{t('grant_loan_title')}</DialogTitle>
+            <DialogTitle className="text-lg">{t('grant_loan_title')}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label className="text-slate-300">{t('employee_label')} *</Label>
+              <Label>{t('employee_label')} *</Label>
               <Select value={loanForm.employee_id} onValueChange={v => setLoanForm(p => ({ ...p, employee_id: v }))}>
-                <SelectTrigger className="bg-slate-800 border-slate-600 text-white">
+                <SelectTrigger>
                   <SelectValue placeholder={t('select_employee')} />
                 </SelectTrigger>
                 <SelectContent>
                   {employees.filter(emp => emp.status === 'active').map(emp => (
                     <SelectItem key={emp.id} value={emp.id}>
-                      {emp.first_name} {emp.last_name} ({emp.job_title || t('employee_default')} · {fmt(emp.salary || 0)} so'm)
+                      {emp.first_name} {emp.last_name} ({emp.job_title || t('employee_default')} · {formatCurrency(emp.salary || 0)})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -331,32 +338,32 @@ export default function EmployeeLoans() {
 
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <Label className="text-slate-300">{t('loan_amount')} *</Label>
-                <Input className="bg-slate-800 border-slate-600 text-white" value={fmtInput(loanForm.amount)}
+                <Label>{t('loan_amount')} *</Label>
+                <Input value={fmtInput(loanForm.amount)}
                   onChange={e => setLoanForm(p => ({ ...p, amount: parseInput(e.target.value) }))} placeholder="3 000 000" />
               </div>
               <div>
-                <Label className="text-slate-300">{t('duration_months')} *</Label>
-                <Input type="number" className="bg-slate-800 border-slate-600 text-white" value={loanForm.duration_months}
+                <Label>{t('duration_months')} *</Label>
+                <Input type="number" value={loanForm.duration_months}
                   onChange={e => setLoanForm(p => ({ ...p, duration_months: e.target.value }))} placeholder="10" />
               </div>
               <div>
-                <Label className="text-slate-300">{t('monthly_payment_auto')}</Label>
-                <div className="h-9 px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white flex items-center">
-                  {fmt(monthlyPayment)} so'm
+                <Label>{t('monthly_payment_auto')}</Label>
+                <div className="h-9 px-3 py-2 bg-slate-50 border border-slate-200 rounded-md text-slate-900 flex items-center">
+                  {formatCurrency(monthlyPayment)}
                 </div>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label className="text-slate-300">{t('start_date')} *</Label>
-                <Input type="date" className="bg-slate-800 border-slate-600 text-white" value={loanForm.start_date}
+                <Label>{t('start_date')} *</Label>
+                <Input type="date" value={loanForm.start_date}
                   onChange={e => setLoanForm(p => ({ ...p, start_date: e.target.value }))} />
               </div>
               <div>
-                <Label className="text-slate-300">{t('end_date_auto')}</Label>
-                <div className="h-9 px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white flex items-center">
+                <Label>{t('end_date_auto')}</Label>
+                <div className="h-9 px-3 py-2 bg-slate-50 border border-slate-200 rounded-md text-slate-900 flex items-center">
                   {endDate || '—'}
                 </div>
               </div>
@@ -364,9 +371,9 @@ export default function EmployeeLoans() {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label className="text-slate-300">{t('cash_withdrawal')}</Label>
+                <Label>{t('cash_withdrawal')}</Label>
                 <Select value={loanForm.cash_account_id} onValueChange={v => setLoanForm(p => ({ ...p, cash_account_id: v }))}>
-                  <SelectTrigger className="bg-slate-800 border-slate-600 text-white">
+                  <SelectTrigger>
                     <SelectValue placeholder={t('select_account')} />
                   </SelectTrigger>
                   <SelectContent>
@@ -379,26 +386,26 @@ export default function EmployeeLoans() {
                 </Select>
               </div>
               <div>
-                <Label className="text-slate-300">{t('reason_optional')}</Label>
-                <Input className="bg-slate-800 border-slate-600 text-white" value={loanForm.reason}
+                <Label>{t('reason_optional')}</Label>
+                <Input value={loanForm.reason}
                   onChange={e => setLoanForm(p => ({ ...p, reason: e.target.value }))} placeholder={t('reason_placeholder')} />
               </div>
             </div>
 
             {/* Provodka preview */}
             {loanForm.cash_account_id && loanForm.amount && (
-              <div className="bg-slate-800 border border-slate-600 rounded-lg p-3 text-sm">
-                <p className="text-slate-400">{t('accounting_entry')}</p>
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm">
+                <p className="text-slate-500">{t('accounting_entry')}</p>
                 <div className="flex justify-between">
-                  <span>Dt 4720 / Kt {accounts.find(a => a.id === loanForm.cash_account_id)?.code || '...'}</span>
+                  <span className="text-slate-900">Dt 4720 / Kt {accounts.find(a => a.id === loanForm.cash_account_id)?.code || '...'}</span>
                 </div>
                 <div className="flex justify-between mt-1">
-                  <span className="text-slate-400">{t('employee_salary')}</span>
-                  <span>{fmt(selectedEmployee?.base_salary || 0)} so'm</span>
+                  <span className="text-slate-500">{t('employee_salary')}</span>
+                  <span className="text-slate-900">{formatCurrency(selectedEmployee?.base_salary || 0)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">{t('after_deduction')}</span>
-                  <span className="text-green-400">{fmt((selectedEmployee?.base_salary || 0) - monthlyPayment)} so'm</span>
+                  <span className="text-slate-500">{t('after_deduction')}</span>
+                  <span className="text-green-600">{formatCurrency((selectedEmployee?.base_salary || 0) - monthlyPayment)}</span>
                 </div>
               </div>
             )}
@@ -406,21 +413,21 @@ export default function EmployeeLoans() {
             {/* Payment schedule preview */}
             {paymentPreview.length > 0 && (
               <div>
-                <p className="text-sm text-slate-400 mb-2">{t('payment_schedule_preview')}</p>
+                <p className="text-sm text-slate-500 mb-2">{t('payment_schedule_preview')}</p>
                 <Table>
                   <TableHeader>
-                    <TableRow className="border-slate-700">
-                      <TableHead className="text-slate-400">{t('month_col')}</TableHead>
-                      <TableHead className="text-slate-400 text-right">{t('payment_col')}</TableHead>
-                      <TableHead className="text-slate-400 text-right">{t('balance_col')}</TableHead>
+                    <TableRow>
+                      <TableHead>{t('month_col')}</TableHead>
+                      <TableHead className="text-right">{t('payment_col')}</TableHead>
+                      <TableHead className="text-right">{t('balance_col')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {paymentPreview.map((p, i) => (
-                      <TableRow key={i} className="border-slate-700">
-                        <TableCell className="text-white font-medium">{p.month}</TableCell>
-                        <TableCell className="text-white text-right">{fmt(p.payment)}</TableCell>
-                        <TableCell className="text-white text-right">{fmt(p.remaining)}</TableCell>
+                      <TableRow key={i}>
+                        <TableCell className="font-medium">{p.month}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(p.payment)}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(p.remaining)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -432,13 +439,13 @@ export default function EmployeeLoans() {
             )}
           </div>
           <DialogFooter className="gap-2 mt-4">
-            <Button variant="outline" onClick={() => setShowCreateModal(false)} className="border-slate-600 text-slate-300 hover:bg-slate-800">
+            <Button variant="outline" onClick={() => setShowCreateModal(false)}>
               {t('cancel')}
             </Button>
             <Button
               onClick={handleCreateLoan}
               disabled={!loanForm.employee_id || !loanForm.amount || !loanForm.duration_months}
-              className="bg-white text-slate-900 hover:bg-slate-100"
+              className="bg-gradient-to-r from-blue-600 to-purple-600 text-white"
             >
               {t('confirm_send_sms')}
             </Button>

@@ -22,7 +22,7 @@ export const AVAILABLE_MODULES = [
   { id: 'hr', nameKey: 'hr', appId: 'hr' },
   { id: 'manufacturing', nameKey: 'manufacturing', appId: 'manufacturing' },
   { id: 'purchase', nameKey: 'procurement', appId: 'procurement' },
-  { id: 'projects', nameKey: 'projects', appId: 'projects' },
+  { id: 'tasks', nameKey: 'tasks_module', appId: 'tasks' },
   { id: 'sales', nameKey: 'sales_orders', appId: 'sales_orders' },
   { id: 'assets', nameKey: 'assets', appId: 'assets' },
   { id: 'expenses', nameKey: 'expenses', appId: 'expenses' },

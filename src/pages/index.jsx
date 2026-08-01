@@ -1,5 +1,6 @@
 import React, { Suspense } from 'react';
 import Layout from "./Layout.jsx";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 // Retry wrapper for lazy imports — handles stale chunks after deployments
 function lazyRetry(importFn) {
@@ -37,13 +38,15 @@ const AdminPanel = lazyRetry(() => import('./AdminPanel'));
 const AdminSettings = lazyRetry(() => import('./AdminSettings'));
 const Manufacturing = lazyRetry(() => import('./Manufacturing'));
 const Procurement = lazyRetry(() => import('./Procurement'));
-const Projects = lazyRetry(() => import('./Projects'));
-const ProjectDetail = lazyRetry(() => import('./ProjectDetail'));
+const Tasks = lazyRetry(() => import('./Tasks'));
+const TaskBoard = lazyRetry(() => import('./TaskBoard'));
 const SalesOrders = lazyRetry(() => import('./SalesOrders'));
 const Assets = lazyRetry(() => import('./Assets'));
 const Expenses = lazyRetry(() => import('./Expenses'));
 const Payroll = lazyRetry(() => import('./Payroll'));
+const EmployeeCabinet = lazyRetry(() => import('./EmployeeCabinet'));
 const Contracts = lazyRetry(() => import('./Contracts'));
+const ContractDetail = lazyRetry(() => import('./ContractDetail'));
 const Companies = lazyRetry(() => import('./Companies'));
 const AddCompany = lazyRetry(() => import('./AddCompany'));
 const LeaveManagement = lazyRetry(() => import('./LeaveManagement'));
@@ -65,7 +68,7 @@ const SuspenseFallback = (
     </div>
 );
 
-import { BrowserRouter as Router, Route, Routes, useLocation, Navigate, Outlet } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, useLocation, useParams, Navigate, Outlet } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/components/contexts/AuthContext';
 import { LanguageProvider } from '@/components/contexts/LanguageContext';
 import { EmployeePermissionsProvider, useEmployeePermissions } from '@/components/contexts/EmployeePermissionsContext';
@@ -86,8 +89,8 @@ const PAGES = {
     AdminSettings: AdminSettings,
     Manufacturing: Manufacturing,
     Procurement: Procurement,
-    Projects: Projects,
-    ProjectDetail: ProjectDetail,
+    Tasks: Tasks,
+    TaskBoard: TaskBoard,
     SalesOrders: SalesOrders,
     Assets: Assets,
     Expenses: Expenses,
@@ -101,6 +104,13 @@ const PAGES = {
     Cargo: Cargo,
     Construction: Construction,
     DirectorDashboard: DirectorDashboard,
+}
+
+// Old /projects/:projectId deep links keep working — migration 440 reuses the
+// project id as the task-board id.
+function LegacyProjectRedirect() {
+    const { projectId } = useParams();
+    return <Navigate to={`/tasks/${projectId}`} replace />;
 }
 
 function _getCurrentPage(url) {
@@ -169,7 +179,7 @@ function ModuleRoute({ children, moduleId }) {
 
     // Admins always have access
     if (isAdmin || isSiteAdmin() || isOwner()) {
-        return children;
+        return <ErrorBoundary>{children}</ErrorBoundary>;
     }
 
     // Check module-specific permission
@@ -177,7 +187,7 @@ function ModuleRoute({ children, moduleId }) {
         return <Navigate to="/dashboard" replace />;
     }
 
-    return children;
+    return <ErrorBoundary>{children}</ErrorBoundary>;
 }
 
 // Layout wrapper that uses Outlet for child routes
@@ -222,8 +232,8 @@ function PagesContent() {
                 <Route path="hr" element={<ModuleRoute moduleId="hr"><HR /></ModuleRoute>} />
                 <Route path="leave-management" element={<ModuleRoute moduleId="hr"><LeaveManagement /></ModuleRoute>} />
                 <Route path="attendance" element={<ModuleRoute moduleId="hr"><Attendance /></ModuleRoute>} />
-                {/* Employee contracts are now managed on the unified Contracts page */}
-                <Route path="employee-contracts" element={<Navigate to="/contracts" replace />} />
+                {/* Xodim (HR) contracts keep their own page; business contracts live in Shartnomalar */}
+                <Route path="employee-contracts" element={<ModuleRoute moduleId="hr"><EmployeeContracts /></ModuleRoute>} />
                 <Route path="cargo" element={<ModuleRoute moduleId="cargo"><Cargo /></ModuleRoute>} />
                 <Route path="construction" element={<ModuleRoute moduleId="construction"><Construction /></ModuleRoute>} />
                 <Route path="directordashboard" element={<ModuleRoute moduleId="director_dashboard"><DirectorDashboard /></ModuleRoute>} />
@@ -237,8 +247,11 @@ function PagesContent() {
                 <Route path="adminsettings" element={<AdminRoute><AdminSettings /></AdminRoute>} />
                 <Route path="manufacturing" element={<ModuleRoute moduleId="manufacturing"><Manufacturing /></ModuleRoute>} />
                 <Route path="procurement" element={<ModuleRoute moduleId="purchase"><Procurement /></ModuleRoute>} />
-                <Route path="projects" element={<ModuleRoute moduleId="projects"><Projects /></ModuleRoute>} />
-                <Route path="projects/:projectId" element={<ModuleRoute moduleId="projects"><ProjectDetail /></ModuleRoute>} />
+                <Route path="tasks" element={<ModuleRoute moduleId="tasks"><Tasks /></ModuleRoute>} />
+                <Route path="tasks/:boardId" element={<ModuleRoute moduleId="tasks"><TaskBoard /></ModuleRoute>} />
+                {/* Legacy Loyihalar URLs → Vazifalar (board ids reuse old project ids) */}
+                <Route path="projects" element={<Navigate to="/tasks" replace />} />
+                <Route path="projects/:projectId" element={<LegacyProjectRedirect />} />
                 <Route path="salesorders" element={<ModuleRoute moduleId="sales"><SalesOrders /></ModuleRoute>} />
                 <Route path="pos" element={<ModuleRoute moduleId="sales"><POS /></ModuleRoute>} />
                 <Route path="assets" element={<ModuleRoute moduleId="assets"><Assets /></ModuleRoute>} />
@@ -248,7 +261,12 @@ function PagesContent() {
                     dedicated route here. Link to it with
                     /financials?tab=profit-tax. */}
                 <Route path="payroll" element={<ModuleRoute moduleId="payroll"><Payroll /></ModuleRoute>} />
+                {/* Xodim kabineti — employee self-service (own payslips/loan).
+                    Deliberately NOT module-gated: any logged-in user may see
+                    their own data; scoping happens server-side via /my/*. */}
+                <Route path="employee-cabinet" element={<EmployeeCabinet />} />
                 <Route path="contracts" element={<ModuleRoute moduleId="contracts"><Contracts /></ModuleRoute>} />
+                <Route path="contracts/:contractId" element={<ModuleRoute moduleId="contracts"><ContractDetail /></ModuleRoute>} />
                 <Route path="companies" element={<AdminRoute><Companies /></AdminRoute>} />
                 <Route path="addcompany" element={<AdminRoute><AddCompany /></AdminRoute>} />
             </Route>

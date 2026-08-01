@@ -21,6 +21,7 @@ import AddResourcePickerModal from '@/components/construction/AddResourcePickerM
 import AddSubWorkModal from '@/components/construction/AddSubWorkModal';
 import EstimateLineEditModal from '@/components/construction/EstimateLineEditModal';
 import { sortLinesManualFirst, sortLinesManualFirstInPlace } from '@/components/construction/utils/sortLines';
+import { formatDate, formatDateTime } from '@/utils/formatDate';
 
 // SmetaManagementTab — full match to files/Form2_Works_v2 (7).html.
 //
@@ -4598,12 +4599,12 @@ function HistoryPage({ t, loading, snapshots, onView, onDelete, onRefresh, onSav
     if (!s) return '—';
     try {
       const d = new Date(s);
-      return d.toLocaleDateString('ru-RU') + ' ' + d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+      return formatDateTime(d);
     } catch { return s; }
   };
   const fmtPeriod = (a, b) => {
     if (!a && !b) return '—';
-    const fmtD = (s) => s ? new Date(s).toLocaleDateString('ru-RU') : '—';
+    const fmtD = (s) => s ? formatDate(s) : '—';
     return `${fmtD(a)} — ${fmtD(b)}`;
   };
   return (
@@ -4779,7 +4780,7 @@ function AuditPage({ t, language, loading, entries, filter, onFilterChange, onRe
     if (!s) return '—';
     try {
       const d = new Date(s);
-      return d.toLocaleDateString('ru-RU') + ' ' + d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+      return formatDateTime(d);
     } catch { return s; }
   };
   return (

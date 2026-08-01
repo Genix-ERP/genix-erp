@@ -252,25 +252,6 @@ export const DEFAULT_ADMIN_SETTINGS = {
       date: null,
       enabled: false
     }
-  },
-
-  // Project Settings
-  projects: {
-    billing: {
-      default_type: 'time_materials', // 'fixed_price', 'time_materials', 'milestone'
-      allow_overtime_billing: true,
-      default_hourly_rate: 0
-    },
-    timesheet: {
-      approval_required: true,
-      max_hours_per_day: 12,
-      reminder_enabled: true
-    },
-    task: {
-      default_hours: 8,
-      allow_subtasks: true
-    },
-    stages: ['Planning', 'In Progress', 'Review', 'Completed', 'On Hold', 'Cancelled']
   }
 };
 

@@ -519,12 +519,12 @@ export default function EquipmentMaintenance() {
                             {workCenters.find(wc => wc.id === eq.work_center_id)?.name || '-'}
                           </TableCell>
                           <TableCell>
-                            {eq.last_maintenance ? format(parseISO(eq.last_maintenance), 'dd MMM yyyy', { locale: getDateLocale() }) : '-'}
+                            {eq.last_maintenance ? format(parseISO(eq.last_maintenance), 'dd.MM.yyyy', { locale: getDateLocale() }) : '-'}
                           </TableCell>
                           <TableCell>
                             {nextDue && (
                               <span className={isDue ? 'text-red-600 font-medium' : ''}>
-                                {format(nextDue, 'dd MMM yyyy', { locale: getDateLocale() })}
+                                {format(nextDue, 'dd.MM.yyyy', { locale: getDateLocale() })}
                               </span>
                             )}
                           </TableCell>
@@ -636,7 +636,7 @@ export default function EquipmentMaintenance() {
                               {t(MAINTENANCE_TYPE[task.type]?.label) || task.type}
                             </Badge>
                           </TableCell>
-                          <TableCell>{format(parseISO(task.scheduled_date), 'dd MMM yyyy', { locale: getDateLocale() })}</TableCell>
+                          <TableCell>{format(parseISO(task.scheduled_date), 'dd.MM.yyyy', { locale: getDateLocale() })}</TableCell>
                           <TableCell>{task.assigned_to || '-'}</TableCell>
                           <TableCell>
                             <Badge variant="outline" className={MAINTENANCE_STATUS[status]?.color}>

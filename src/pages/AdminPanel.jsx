@@ -369,7 +369,7 @@ export default function AdminPanel() {
       });
 
       if (result.success) {
-        toast.success(`Sinov muddati ${extendTrialData.days} kunga uzaytirildi! Yangi tugash sanasi: ${format(newEndDate, 'MMM dd, yyyy')}`);
+        toast.success(`Sinov muddati ${extendTrialData.days} kunga uzaytirildi! Yangi tugash sanasi: ${format(newEndDate, 'dd.MM.yyyy')}`);
         setShowExtendTrialModal(false);
         setSelectedUser(null);
         setExtendTrialData({ days: 14, reason: '' });
@@ -398,7 +398,7 @@ export default function AdminPanel() {
       });
 
       if (result.success) {
-        toast.success(`Obuna faollashtirildi! Tarif: ${upgradeData.plan.toUpperCase()}, Amal qilish muddati: ${format(endDate, 'MMM dd, yyyy')}`);
+        toast.success(`Obuna faollashtirildi! Tarif: ${upgradeData.plan.toUpperCase()}, Amal qilish muddati: ${format(endDate, 'dd.MM.yyyy')}`);
         setShowUpgradeModal(false);
         setSelectedUser(null);
         setUpgradeData({ plan: 'professional', duration: 12 });

@@ -6,6 +6,7 @@ import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useCompany } from '@/components/contexts/CompanyContext';
 import ExcelJS from 'exceljs';
+import { formatDate } from '@/utils/formatDate';
 
 // Form2Preview — print-ready ФОРМА № 2 (KS-2 / ВОР) document.
 //
@@ -506,12 +507,12 @@ ${linkParts.join('\n')}
 
   const sections = useMemo(() => buildSections(lines || []), [lines]);
   const summary = useMemo(() => buildSummary(lines || [], otherCostsPct, useVat), [lines, otherCostsPct, useVat]);
-  const today = new Date().toLocaleDateString('ru-RU');
+  const today = formatDate();
 
   // Pretty-printed period for the document header and CSV export.
   const periodLabel = (() => {
     if (!periodFrom && !periodTo) return '';
-    const fmtD = (s) => (s ? new Date(s).toLocaleDateString('ru-RU') : '…');
+    const fmtD = (s) => (s ? formatDate(s) : '…');
     return `${fmtD(periodFrom)} — ${fmtD(periodTo)}`;
   })();
 

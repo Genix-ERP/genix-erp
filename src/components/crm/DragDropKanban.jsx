@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import ReactDOM from 'react-dom';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Kanban, DollarSign, Calendar, TrendingUp, Target, Percent, Loader2, AlertCircle, Edit, Trash2, MoreVertical } from "lucide-react";
+import { Kanban, DollarSign, Calendar, TrendingUp, Target, Percent, Loader2, AlertCircle, Edit, Trash2, MoreVertical, FileSignature } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -15,6 +16,7 @@ import { useTranslation } from "@/components/utils/translations";
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { formatDate } from '@/utils/formatDate';
 
 // Portal component for dragging items
 const PortalAwareItem = ({ provided, snapshot, children }) => {
@@ -88,6 +90,7 @@ const stageConfig = [
 ];
 
 export default function DragDropKanban({ opportunities = [], leads = [], onUpdateOpportunity, onEditOpportunity, onDeleteOpportunity, language = 'en' }) {
+  const navigate = useNavigate();
   const { t } = useTranslation(language);
   const { canCreate, canUpdate, canDelete } = usePermissions();
   const { formatCurrency } = useCurrencyFormatter();
@@ -240,6 +243,23 @@ export default function DragDropKanban({ opportunities = [], leads = [], onUpdat
                     {t('edit')}
                   </DropdownMenuItem>
                 )}
+                {opportunity.stage === 'closed_won' && (
+                  <DropdownMenuItem onClick={(e) => {
+                    e.stopPropagation();
+                    const params = new URLSearchParams({
+                      create: '1',
+                      deal_id: opportunity.id,
+                      title: opportunity.name || '',
+                      value: String(opportunity.actual_revenue || opportunity.expected_revenue || ''),
+                      direction: 'income',
+                    });
+                    if (opportunity.contact_id) params.set('counterparty_id', opportunity.contact_id);
+                    navigate(`/contracts?${params.toString()}`);
+                  }}>
+                    <FileSignature className="w-4 h-4 mr-2" />
+                    {t('create_contract')}
+                  </DropdownMenuItem>
+                )}
                 {canDelete(MODULES.CUSTOMERS) && onDeleteOpportunity && (
                   <DropdownMenuItem
                     onClick={(e) => {
@@ -286,7 +306,7 @@ export default function DragDropKanban({ opportunities = [], leads = [], onUpdat
           {opportunity.expected_close_date && (
             <div className="flex items-center gap-1.5 text-xs text-slate-500 pt-2 border-t border-slate-100">
               <Calendar className="w-3.5 h-3.5" />
-              <span className="font-medium">{new Date(opportunity.expected_close_date).toLocaleDateString()}</span>
+              <span className="font-medium">{formatDate(opportunity.expected_close_date)}</span>
             </div>
           )}
         </div>

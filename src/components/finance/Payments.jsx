@@ -925,7 +925,7 @@ export default function Payments({ side } = {}) {
                   <p className="text-xs text-slate-500 mb-1">{t('date')}</p>
                   <p className="text-sm font-semibold text-slate-900">
                     {selectedPayment.payment_date
-                      ? format(new Date(selectedPayment.payment_date), 'MMM dd, yyyy')
+                      ? format(new Date(selectedPayment.payment_date), 'dd.MM.yyyy')
                       : '-'}
                   </p>
                 </div>
@@ -1231,7 +1231,7 @@ export default function Payments({ side } = {}) {
                         className="hover:bg-blue-50/50 transition-colors"
                       >
                         <TableCell className="font-medium text-slate-700">
-                          {payment.payment_date ? format(new Date(payment.payment_date), 'MMM dd, yyyy') : '-'}
+                          {payment.payment_date ? format(new Date(payment.payment_date), 'dd.MM.yyyy') : '-'}
                         </TableCell>
                         <TableCell className="font-mono text-sm text-slate-600">
                           {payment.reference || '-'}

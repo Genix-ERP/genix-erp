@@ -1,3 +1,4 @@
+import { formatDate } from '@/utils/formatDate';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useModules } from '@/components/contexts/ModulesContext';
 import { usePermissions } from "@/hooks/usePermissions";
@@ -338,7 +339,7 @@ export default function Assets() {
     const formatDate = (dateStr) => {
       if (!dateStr) return '';
       try {
-        return format(new Date(dateStr), 'dd/MM/yyyy');
+        return format(new Date(dateStr), 'dd.MM.yyyy');
       } catch {
         return dateStr;
       }
@@ -607,7 +608,7 @@ export default function Assets() {
                             {asset.next_maintenance_date && (
                               <div className="mt-3 flex items-center gap-2 text-sm">
                                 <Wrench className="w-4 h-4 text-yellow-600" />
-                                <span className="text-slate-600">{t('next_maintenance')}: {asset.next_maintenance_date}</span>
+                                <span className="text-slate-600">{t('next_maintenance')}: {formatDate(asset.next_maintenance_date)}</span>
                               </div>
                             )}
                           </div>

@@ -591,9 +591,59 @@ export const financeService = {
     await apiClient.delete(`/expenses/${id}`);
   },
 
+  // Whole-tenant aggregates for the Xarajatlar page: per-status
+  // counts+amounts, by-category breakdown, 6-month series. Replaces the
+  // old client-side metrics that only saw the first 20 rows.
+  async getExpenseStats(params = {}) {
+    const response = await apiClient.get('/expenses/stats', { params });
+    return response.data.data;
+  },
+
+  // Lifecycle transitions (expenses v2). Status can no longer be flipped
+  // through updateExpense — these are the only paths.
+  async submitExpense(id) {
+    const response = await apiClient.post(`/expenses/${id}/submit`);
+    return response.data.data;
+  },
+
   async approveExpense(id) {
     const response = await apiClient.post(`/expenses/${id}/approve`);
     return response.data.data;
+  },
+
+  async rejectExpense(id, reason) {
+    const response = await apiClient.post(`/expenses/${id}/reject`, { reason });
+    return response.data.data;
+  },
+
+  // Marking paid posts the journal entry server-side (Dt category account /
+  // Kt the chosen kassa-bank account) — pass payment_account_id from the
+  // pay dialog; empty body pays from the default kassa (5010).
+  async payExpense(id, { payment_account_id, payment_method, paid_date } = {}) {
+    const body = {};
+    if (payment_account_id) body.payment_account_id = payment_account_id;
+    if (payment_method) body.payment_method = payment_method;
+    if (paid_date) body.paid_date = paid_date;
+    const response = await apiClient.post(`/expenses/${id}/pay`, body);
+    return response.data.data;
+  },
+
+  // Polymorphic links: expense ↔ construction_object | contract | crm_deal
+  async listExpenseLinks(id) {
+    const response = await apiClient.get(`/expenses/${id}/links`);
+    return response.data.data;
+  },
+
+  async createExpenseLink(id, linkedModule, linkedId) {
+    const response = await apiClient.post(`/expenses/${id}/links`, {
+      linked_module: linkedModule,
+      linked_id: String(linkedId),
+    });
+    return response.data.data;
+  },
+
+  async deleteExpenseLink(id, linkId) {
+    await apiClient.delete(`/expenses/${id}/links/${linkId}`);
   },
 
   // Toggle an expense's profit-tax recognition flag (PATCH

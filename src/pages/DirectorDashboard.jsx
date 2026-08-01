@@ -148,7 +148,13 @@ export default function DirectorDashboard() {
           activeEmployees: Number(row.active_employees || 0),
           totalEmployees: Number(row.total_employees || 0),
           salaryFund: Number(row.salary_fund || 0),
+          payrollFund: Number(row.payroll_fund || 0),
+          payrollUnpaid: Number(row.payroll_unpaid || 0),
           constructionProjects: Array.isArray(row.construction_projects) ? row.construction_projects : [],
+          activeContracts: Number(row.active_contracts || 0),
+          activeContractsValue: Number(row.active_contracts_value || 0),
+          expiringContracts: Number(row.expiring_contracts || 0),
+          contractsOutstanding: Number(row.contracts_outstanding || 0),
         };
       });
       setPerCompany(next);
@@ -441,6 +447,15 @@ export default function DirectorDashboard() {
         </div>
       )}
 
+      {(section === 'all' || section === 'finance') && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 mb-3">
+          <MetricCard label={t('Amaldagi shartnomalar', 'Действующие договоры', 'Active contracts')} value={sum(visibleCompanies.map(c => perCompany[c.id]?.activeContracts || 0))} color="#185FA5" />
+          <MetricCard label={t('Shartnomalar summasi', 'Сумма договоров', 'Contracts value')} value={sum(visibleCompanies.map(c => perCompany[c.id]?.activeContractsValue || 0))} color="#1D9E75" />
+          <MetricCard label={t('Muddati tugayotgan', 'Истекающие', 'Expiring soon')} value={sum(visibleCompanies.map(c => perCompany[c.id]?.expiringContracts || 0))} color="#EF9F27" />
+          <MetricCard label={t("To'lanmagan qoldiq", 'Неоплаченный остаток', 'Outstanding')} value={sum(visibleCompanies.map(c => perCompany[c.id]?.contractsOutstanding || 0))} color="#E24B4A" />
+        </div>
+      )}
+
       {(section === 'all' || section === 'inventory') && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 mb-3">
           <MetricCard label={t('Mahsulotlar', 'Товары', 'Products')} value={sum(visibleCompanies.map(c => perCompany[c.id]?.productCount || 0))} color="#185FA5" />
@@ -464,6 +479,8 @@ export default function DirectorDashboard() {
           <MetricCard label={t('Xodimlar', 'Сотрудники', 'Employees')} value={sum(visibleCompanies.map(c => perCompany[c.id]?.totalEmployees || 0))} color="#185FA5" />
           <MetricCard label={t('Faol', 'Активных', 'Active')} value={sum(visibleCompanies.map(c => perCompany[c.id]?.activeEmployees || 0))} color="#1D9E75" />
           <MetricCard label={t('Maosh fondi', 'Зарплатный фонд', 'Salary fund')} value={sum(visibleCompanies.map(c => perCompany[c.id]?.salaryFund || 0))} color="#534AB7" />
+          <MetricCard label={t('Hisoblangan FOT', 'Начисленный ФОТ', 'Payroll fund')} value={sum(visibleCompanies.map(c => perCompany[c.id]?.payrollFund || 0))} color="#D85A30" />
+          <MetricCard label={t("To'lanmagan ish haqi", 'Невыплаченная зарплата', 'Unpaid payroll')} value={sum(visibleCompanies.map(c => perCompany[c.id]?.payrollUnpaid || 0))} color="#E24B4A" />
           <MetricCard label={t('Kompaniyalar', 'Компаний', 'Companies')} value={visibleCompanies.length} color="#EF9F27" />
         </div>
       )}
@@ -788,6 +805,8 @@ export default function DirectorDashboard() {
               {(section === 'all' || section === 'hr') && (<>
                 <th className="text-right py-1.5">{t('Xodimlar', 'Сотрудники', 'Employees')}</th>
                 <th className="text-right py-1.5">{t('Maosh fondi', 'ЗП фонд', 'Salary fund')}</th>
+                <th className="text-right py-1.5">{t('Hisoblangan FOT', 'Начисл. ФОТ', 'Payroll fund')}</th>
+                <th className="text-right py-1.5">{t("To'lanmagan", 'Невыплач.', 'Unpaid')}</th>
               </>)}
             </tr>
           </thead>
@@ -825,6 +844,8 @@ export default function DirectorDashboard() {
                   {(section === 'all' || section === 'hr') && (<>
                     <td className="text-right">{d.totalEmployees || 0}</td>
                     <td className="text-right">{fmtCompact(d.salaryFund || 0)}</td>
+                    <td className="text-right">{fmtCompact(d.payrollFund || 0)}</td>
+                    <td className="text-right">{fmtCompact(d.payrollUnpaid || 0)}</td>
                   </>)}
                 </tr>
               );

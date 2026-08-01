@@ -11,6 +11,7 @@ import {
   Minus, Plus, CreditCard, Loader2, AlertTriangle, CheckCircle, XCircle, Clock
 } from 'lucide-react';
 import subscriptionService from '@/api/services/subscription';
+import { formatDate } from '@/utils/formatDate';
 
 export default function SubscriptionSettings() {
   const { language } = useLanguage();
@@ -67,7 +68,7 @@ export default function SubscriptionSettings() {
   const fmtDate = (d) => {
     if (!d) return '—';
     const dt = new Date(d);
-    return dt.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+    return formatDate(dt);
   };
 
   const handleCheckout = async () => {
