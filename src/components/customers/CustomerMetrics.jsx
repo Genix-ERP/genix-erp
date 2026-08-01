@@ -1,72 +1,79 @@
-import React from 'react';
 import { Card, CardContent } from "@/components/ui/card";
-import { Users, UserPlus, TrendingUp } from "lucide-react";
+import { Users, Target, Trophy, Percent } from "lucide-react";
 import { useTranslation } from "@/components/utils/translations";
+import { useCurrencyFormatter } from "@/hooks/useCurrencyFormatter";
 
-export default function CustomerMetrics({ customers, leads, opportunities, language = 'en' }) {
+// CRM stats row (CRM v2): Jami mijozlar · Ochiq bitimlar (count + summa) ·
+// Bu oy yutilgan (summa) · Konversiya % (bu oy). Numbers come from
+// GET /leads/stats — no more client-side aggregation over dead entities.
+export default function CustomerMetrics({ customers = [], stats = null, language = 'uz' }) {
   const { t } = useTranslation(language);
+  const { formatCurrency } = useCurrencyFormatter();
 
-  const metrics = React.useMemo(() => {
-    const totalCustomers = customers.length;
-    const totalLeads = leads.length;
-    const qualifiedLeads = leads.filter(l => l.status === 'qualified').length;
-    const avgDealSize = opportunities.length > 0 
-      ? opportunities.reduce((sum, o) => sum + (o.expected_value || 0), 0) / opportunities.length 
-      : 0;
+  const money = (v) => (formatCurrency ? formatCurrency(v || 0) : (v || 0).toLocaleString());
 
-    return {
-      totalCustomers,
-      totalLeads,
-      qualifiedLeads,
-      avgDealSize
-    };
-  }, [customers, leads, opportunities]);
+  const openCount = stats?.open_leads ?? 0;
+  const openValue = stats?.open_value ?? 0;
+  const wonMonthValue = stats?.won_value_month ?? 0;
+  const wonMonthCount = stats?.won_this_month ?? 0;
+  const conversionMonth = stats?.conversion_month ?? 0;
+  const conversionAll = stats?.conversion_rate ?? 0;
 
   const metricCards = [
     {
       title: t('total_customers'),
-      value: metrics.totalCustomers.toLocaleString(),
+      value: customers.length.toLocaleString(),
+      sub: null,
       icon: Users,
       iconBg: "bg-blue-100",
       iconColor: "text-blue-600",
-      gradient: "from-blue-50 to-blue-100/50"
     },
     {
-      title: t('total_leads'),
-      value: metrics.totalLeads.toLocaleString(),
-      icon: UserPlus,
-      iconBg: "bg-green-100",
-      iconColor: "text-green-600",
-      gradient: "from-green-50 to-green-100/50"
+      title: t('crm_open_deals') || 'Ochiq bitimlar',
+      value: openCount.toLocaleString(),
+      sub: openValue > 0 ? money(openValue) : null,
+      icon: Target,
+      iconBg: "bg-violet-100",
+      iconColor: "text-violet-600",
     },
     {
-      title: t('avg_deal_size'),
-      value: Math.round(metrics.avgDealSize).toLocaleString(),
-      icon: TrendingUp,
-      iconBg: "bg-purple-100",
-      iconColor: "text-purple-600",
-      gradient: "from-purple-50 to-purple-100/50"
+      title: t('crm_won_this_month') || 'Bu oy yutilgan',
+      value: money(wonMonthValue),
+      sub: wonMonthCount > 0 ? `${wonMonthCount} ${t('crm_deals_count') || 'ta bitim'}` : null,
+      icon: Trophy,
+      iconBg: "bg-emerald-100",
+      iconColor: "text-emerald-600",
+    },
+    {
+      title: t('crm_conversion_month') || 'Konversiya % (bu oy)',
+      value: `${Math.round(conversionMonth || conversionAll)}%`,
+      sub: conversionAll > 0 ? `${t('crm_conversion_all') || 'Umumiy'}: ${Math.round(conversionAll)}%` : null,
+      icon: Percent,
+      iconBg: "bg-amber-100",
+      iconColor: "text-amber-600",
     }
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6">
+    <div className="grid grid-cols-2 gap-4 lg:grid-cols-4 md:gap-6">
       {metricCards.map((metric, index) => (
-        <Card 
-          key={index} 
-          className="bg-white border-slate-200/60 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 overflow-hidden group"
+        <Card
+          key={index}
+          className="bg-white border-slate-200/60 shadow-sm hover:shadow-md transition-shadow overflow-hidden"
         >
-          <CardContent className="p-6 relative">
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex-1">
-                <p className="text-sm font-medium text-slate-600 mb-1">{metric.title}</p>
-                <p className="text-3xl font-bold text-slate-900 tracking-tight">{metric.value}</p>
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-slate-500 mb-1 truncate">{metric.title}</p>
+                <p className="text-2xl font-bold text-slate-900 tracking-tight truncate">{metric.value}</p>
+                {metric.sub && (
+                  <p className="text-xs text-slate-500 mt-0.5 truncate">{metric.sub}</p>
+                )}
               </div>
-              <div className={`${metric.iconBg} p-3 rounded-xl shadow-sm group-hover:scale-110 transition-transform duration-300`}>
-                <metric.icon className={`w-6 h-6 ${metric.iconColor}`} />
+              <div className={`${metric.iconBg} p-2.5 rounded-xl shrink-0 ml-2`}>
+                <metric.icon className={`w-5 h-5 ${metric.iconColor}`} />
               </div>
             </div>
-            <div className={`absolute inset-0 bg-gradient-to-br ${metric.gradient} opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10`}></div>
           </CardContent>
         </Card>
       ))}

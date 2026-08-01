@@ -1,377 +1,123 @@
-import React, { useState, useEffect, useCallback } from "react";
+import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
-import { usePermissions } from "@/hooks/usePermissions";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import {
   Package,
-  Search,
-  Plus,
-  AlertTriangle,
-  TrendingUp,
-  Filter,
-  Download,
-  Clock,
-  Zap,
-  Warehouse,
+  FileText,
   LayoutDashboard,
-  Box,
-  ShoppingCart,
-  ClipboardList,
-  DollarSign,
-  Settings2,
-  MapPin,
   CalendarClock,
   BarChart3,
-  ArrowLeftRight,
-  ShieldCheck,
+  Settings,
 } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-import InventoryForm from "@/components/inventory/InventoryForm";
-// COGSCalculator is now integrated into Products component
+import InventoryDashboard from "@/components/inventory/InventoryDashboard";
+import InventoryDocuments from "@/components/inventory/InventoryDocuments";
+import InventorySettings from "@/components/inventory/InventorySettings";
 import Products from "@/components/inventory/Products";
-import Warehouses from "@/components/inventory/Warehouses";
-// StockCounting and ScrapManagement are now integrated into Warehouses component
-// InventoryManagement (Stock Management) is now integrated into Warehouses component
-// BOM moved to Manufacturing module - it's a manufacturing concept, not inventory
-import InventoryValuation from "@/components/inventory/InventoryValuation";
 import Planning from "@/components/inventory/Planning";
-// ReorderRules and Replenishment are now integrated into Planning component
-import OperationTypes from "@/components/inventory/OperationTypes";
-import StockOperations from "@/components/inventory/StockOperations";
-import WarehouseLocations from "@/components/inventory/WarehouseLocations";
 import StockReport from "@/components/inventory/StockReport";
-import StockTransfers from "@/components/inventory/StockTransfers";
-// MaterialReservations moved to Products sub-tab
 
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
-import { useInventory } from "@/components/contexts/InventoryContext";
-import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { useCurrencyFormatter } from "@/hooks/useCurrencyFormatter";
+
+// Ombor — 5 daily tabs + a settings surface (docs/ombor-audit.md §8).
+// The old page had 7 visible tabs plus 3 orphan TabsContent blocks with no
+// trigger; Omborlar and Baholash were rarely-touched settings promoted to
+// tabs, while inventarizatsiya/scrap/transfers were document flows buried
+// in different places. Now: daily work in the first three tabs, documents
+// unified under Hujjatlar, configuration under Sozlamalar.
+const LEGACY_TAB_MAP = {
+  warehouses: "settings",
+  valuation: "settings",
+  operations: "settings",
+  locations: "settings",
+  transfers: "documents",
+  "stock-ops": "documents",
+};
+
+const TAB_STYLE =
+  "flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 " +
+  "data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] " +
+  "data-[state=active]:text-white data-[state=active]:shadow-md " +
+  "data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100";
 
 export default function Inventory() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
-  const {
-    items,
-    products,
-    warehouses,
-    stockMovements,
-    isLoading,
-    createItem,
-    updateItem,
-    getInventorySummary,
-    refreshData,
-  } = useInventory();
+  const { formatCurrencyCompact } = useCurrencyFormatter();
 
-  const [filteredItems, setFilteredItems] = useState([]);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [costingFilter, setCostingFilter] = useState("all");
-  const [showForm, setShowForm] = useState(false);
-  const [editingItem, setEditingItem] = useState(null);
-  const activeTab = searchParams.get("tab") || "dashboard";
+  const rawTab = searchParams.get("tab") || "dashboard";
+  const activeTab = LEGACY_TAB_MAP[rawTab] || rawTab;
   const setActiveTab = (tab) => setSearchParams({ tab }, { replace: true });
 
-  // Refresh data when navigating to this page
-  useEffect(() => {
-    refreshData();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Old bookmarked URLs (?tab=transfers, ?tab=warehouses…) land on the
+  // section that now hosts that flow.
+  const initialDocSection = useMemo(() => {
+    if (rawTab === "transfers") return "transfers";
+    if (rawTab === "stock-ops") return "operations";
+    return "operations";
+  }, [rawTab]);
 
-  // Cleanup on unmount to prevent blocking navigation
-  useEffect(() => {
-    return () => {
-      setShowForm(false);
-      setEditingItem(null);
-    };
-  }, []);
+  const initialSettingsSection = useMemo(() => {
+    if (rawTab === "valuation") return "valuation";
+    if (rawTab === "operations") return "operation-types";
+    if (rawTab === "locations") return "locations";
+    return "warehouses";
+  }, [rawTab]);
 
-  // Get summary from context
-  const summary = getInventorySummary();
-
-  const filterItems = useCallback(() => {
-    let filtered = items;
-
-    if (searchQuery) {
-      filtered = filtered.filter(item =>
-        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.sku?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.supplier?.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-
-    if (categoryFilter !== "all") {
-      filtered = filtered.filter(item => item.category === categoryFilter);
-    }
-
-    if (statusFilter !== "all") {
-      filtered = filtered.filter(item => item.status === statusFilter);
-    }
-
-    if (costingFilter !== "all") {
-      filtered = filtered.filter(item => item.costing_method === costingFilter);
-    }
-
-    setFilteredItems(filtered);
-  }, [items, searchQuery, categoryFilter, statusFilter, costingFilter]);
-
-  useEffect(() => {
-    filterItems();
-  }, [filterItems]);
-
-  const handleSave = (itemData) => {
-    if (editingItem) {
-      updateItem(editingItem.id, itemData);
-    } else {
-      createItem(itemData);
-    }
-    setShowForm(false);
-    setEditingItem(null);
-  };
-
-  const getStatusColor = (status) => {
-    const colors = {
-      active: "bg-green-100 text-green-800",
-      low_stock: "bg-yellow-100 text-yellow-800",
-      backordered: "bg-red-100 text-red-800",
-      discontinued: "bg-gray-100 text-gray-800",
-      overstock: "bg-blue-100 text-blue-800",
-      dead_stock: "bg-purple-100 text-purple-800"
-    };
-    return colors[status] || colors.active;
-  };
-
-  const getCostingMethodColor = (method) => {
-    const colors = {
-      fifo: "bg-green-100 text-green-800",
-      weighted_average: "bg-blue-100 text-blue-800",
-      lifo: "bg-orange-100 text-orange-800"
-    };
-    return colors[method] || colors.fifo;
-  };
-
-  const calculateMetrics = () => {
-    // Total inventory value: derive from the SAME source the Qoldiq boshqaruvi
-    // (Stock Management) page uses — `getInventorySummary().totalValue` from
-    // InventoryContext. That formula sums per-lot:
-    //     SUM(inventory.quantity_on_hand × COALESCE(inventory.unit_cost,
-    //                                               product.cost_price, 0))
-    //
-    // The previous version computed totalValue by iterating `items`
-    // (one row per product, with `current_stock = sum of lots`) and
-    // multiplying that total by a *single* `item.cost_price`. That
-    // undervalues whenever lots were received at different prices over
-    // time (FIFO scenarios) because product.cost_price typically tracks
-    // only the oldest lot's cost. Result: this card showed ~880M while
-    // Qoldiq boshqaruvi correctly showed ~1.6B for the same physical
-    // inventory. We now read from the same source so the two screens
-    // agree.
-    const summary = getInventorySummary ? getInventorySummary() : null;
-    const totalValueFromSummary = summary?.totalValue ?? 0;
-
-    const lowStockItems = items.filter(item => {
-      const stock = parseFloat(item.current_stock) || parseFloat(item.quantity_on_hand) || parseFloat(item.quantity) || 0;
-      const reorderLevel = parseFloat(item.reorder_level) || parseFloat(item.min_stock_level) || 10;
-      return stock > 0 && stock <= reorderLevel;
-    });
-    const deadStockItems = items.filter(item => item.status === 'dead_stock');
-    const expiringItems = items.filter(item =>
-      item.expiration_date && new Date(item.expiration_date) < new Date(Date.now() + 30*24*60*60*1000)
-    );
-
-    return {
-      totalValue: isNaN(totalValueFromSummary) ? 0 : totalValueFromSummary,
-      lowStockCount: lowStockItems.length,
-      deadStockCount: deadStockItems.length,
-      expiringCount: expiringItems.length,
-      totalItems: items.reduce((sum, item) => sum + (parseFloat(item.current_stock) || parseFloat(item.quantity_on_hand) || parseFloat(item.quantity) || 0), 0),
-      totalSKUs: items.length,
-      fifoItems: items.filter(item => item.costing_method === 'fifo').length,
-      wacItems: items.filter(item => item.costing_method === 'weighted_average').length,
-      lifoItems: items.filter(item => item.costing_method === 'lifo').length
-    };
-  };
-
-  const metrics = calculateMetrics();
+  const TABS = [
+    { value: "dashboard", icon: LayoutDashboard, label: t("dashboard") },
+    { value: "products", icon: Package, label: t("products") },
+    { value: "documents", icon: FileText, label: t("inv_tab_documents") },
+    { value: "planning", icon: CalendarClock, label: t("planning") },
+    { value: "reports", icon: BarChart3, label: t("reports") },
+    { value: "settings", icon: Settings, label: t("inv_tab_settings") },
+  ];
 
   return (
     <div className="p-4 md:p-6 lg:p-8 bg-slate-50 min-h-screen">
       <div className="space-y-6">
-
-        {/* Main Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="w-full bg-white p-1.5 rounded-xl border border-slate-200 flex flex-wrap justify-start gap-1 h-auto">
-            <TabsTrigger
-              value="dashboard"
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-50"
-            >
-              <LayoutDashboard className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('dashboard')}</span>
-            </TabsTrigger>
-
-            <TabsTrigger
-              value="products"
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-50"
-            >
-              <Package className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('products')}</span>
-            </TabsTrigger>
-
-            <TabsTrigger
-              value="warehouses"
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-50"
-            >
-              <Warehouse className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('warehouses')}</span>
-            </TabsTrigger>
-
-            <TabsTrigger
-              value="transfers"
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
-            >
-              <ArrowLeftRight className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('transfers') || "O'tkazmalar"}</span>
-            </TabsTrigger>
-
-            {/* Stock Operations, Operation Types, and Locations tabs hidden — simplified to 1-step operations */}
-
-            <TabsTrigger
-              value="valuation"
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-50"
-            >
-              <DollarSign className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('valuation') || 'Valuation'}</span>
-            </TabsTrigger>
-
-            <TabsTrigger
-              value="planning"
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-50"
-            >
-              <CalendarClock className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('planning') || 'Planning'}</span>
-            </TabsTrigger>
-
-            <TabsTrigger
-              value="reports"
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-50"
-            >
-              <BarChart3 className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('reports') || 'Reports'}</span>
-            </TabsTrigger>
+            {TABS.map(({ value, icon: Icon, label }) => (
+              <TabsTrigger key={value} value={value} className={TAB_STYLE}>
+                <Icon className="w-4 h-4" />
+                <span className="hidden sm:inline">{label}</span>
+              </TabsTrigger>
+            ))}
           </TabsList>
 
-          {/* Dashboard Tab */}
-          <TabsContent value="dashboard" className="mt-6 space-y-5">
-            {/* Metrics Cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="bg-white rounded-2xl border border-slate-100 p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center">
-                    <DollarSign className="w-5 h-5 text-emerald-600" />
-                  </div>
-                </div>
-                <p className="text-xs font-medium text-slate-500 mb-1">{t('total_value')}</p>
-                <p className="text-xl font-bold text-slate-900">{formatCurrency(metrics.totalValue)}</p>
-              </div>
-
-              <div className={`bg-white rounded-2xl border p-5 ${metrics.lowStockCount > 0 ? 'border-amber-200' : 'border-slate-100'}`}>
-                <div className="flex items-center justify-between mb-3">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${metrics.lowStockCount > 0 ? 'bg-amber-50' : 'bg-slate-50'}`}>
-                    <AlertTriangle className={`w-5 h-5 ${metrics.lowStockCount > 0 ? 'text-amber-500' : 'text-slate-400'}`} />
-                  </div>
-                </div>
-                <p className="text-xs font-medium text-slate-500 mb-1">{t('low_stock')}</p>
-                <p className={`text-xl font-bold ${metrics.lowStockCount > 0 ? 'text-amber-600' : 'text-slate-900'}`}>{metrics.lowStockCount}</p>
-              </div>
-
-              <div className="bg-white rounded-2xl border border-slate-100 p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
-                    <Package className="w-5 h-5 text-blue-600" />
-                  </div>
-                </div>
-                <p className="text-xs font-medium text-slate-500 mb-1">{t('products')}</p>
-                <p className="text-xl font-bold text-slate-900">{products?.length || 0}</p>
-              </div>
-
-              <div className="bg-white rounded-2xl border border-slate-100 p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="w-10 h-10 rounded-xl bg-violet-50 flex items-center justify-center">
-                    <Warehouse className="w-5 h-5 text-violet-600" />
-                  </div>
-                </div>
-                <p className="text-xs font-medium text-slate-500 mb-1">{t('warehouses')}</p>
-                <p className="text-xl font-bold text-slate-900">{warehouses?.length || 0}</p>
-              </div>
-            </div>
+          <TabsContent value="dashboard" className="mt-6">
+            <InventoryDashboard
+              t={t}
+              language={language}
+              formatCompact={formatCurrencyCompact}
+              onOpenTab={setActiveTab}
+            />
           </TabsContent>
 
-          {/* Products Tab */}
           <TabsContent value="products" className="mt-6">
             <Products />
           </TabsContent>
 
-          {/* Warehouses Tab */}
-          <TabsContent value="warehouses" className="mt-6">
-            <Warehouses />
+          <TabsContent value="documents" className="mt-6">
+            <InventoryDocuments t={t} language={language} initialSection={initialDocSection} />
           </TabsContent>
 
-          {/* Operation Types Tab */}
-          <TabsContent value="operations" className="mt-6">
-            <OperationTypes />
-          </TabsContent>
-
-          {/* Transfers Tab */}
-          <TabsContent value="transfers" className="mt-6">
-            <StockTransfers />
-          </TabsContent>
-
-          {/* Stock Operations Tab (TT: Receipt, Delivery, Internal, Write-off) */}
-          <TabsContent value="stock-ops" className="mt-6">
-            <StockOperations />
-          </TabsContent>
-
-          {/* Locations Tab */}
-          <TabsContent value="locations" className="mt-6">
-            <WarehouseLocations />
-          </TabsContent>
-
-          {/* Inventory Valuation Tab */}
-          <TabsContent value="valuation" className="mt-6">
-            <InventoryValuation />
-          </TabsContent>
-
-          {/* Planning Tab (Reorder Rules + Replenishment) */}
           <TabsContent value="planning" className="mt-6">
             <Planning />
           </TabsContent>
 
-          {/* Reports Tab (Stock Movements, Changes, Adjustment P&L) */}
           <TabsContent value="reports" className="mt-6">
             <StockReport />
           </TabsContent>
-        </Tabs>
 
-        {/* Form Modal */}
-        {showForm && (
-          <InventoryForm
-            item={editingItem}
-            onSave={handleSave}
-            onCancel={() => {
-              setShowForm(false);
-              setEditingItem(null);
-            }}
-          />
-        )}
+          <TabsContent value="settings" className="mt-6">
+            <InventorySettings t={t} initialSection={initialSettingsSection} />
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
