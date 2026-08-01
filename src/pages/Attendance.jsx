@@ -725,7 +725,7 @@ export default function Attendance() {
               <div className="p-4 bg-blue-50 rounded-lg text-center">
                 <Clock className="w-8 h-8 text-blue-600 mx-auto mb-2" />
                 <p className="text-2xl font-bold text-blue-600">{format(new Date(), 'HH:mm:ss')}</p>
-                <p className="text-sm text-blue-500">{format(new Date(), 'dd MMMM yyyy')}</p>
+                <p className="text-sm text-blue-500">{format(new Date(), 'dd.MM.yyyy')}</p>
               </div>
 
               <div className="flex justify-end gap-3 pt-4">

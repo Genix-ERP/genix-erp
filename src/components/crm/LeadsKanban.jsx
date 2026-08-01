@@ -27,6 +27,7 @@ import { MODULES } from "@/config/permissions";
 import { useCompany } from "@/components/contexts/CompanyContext";
 import { pipelineStagesService, activitiesService } from "@/api/services/crm";
 import { leadsService } from "@/api/services/leads";
+import { formatDate, formatDateTime } from '@/utils/formatDate';
 
 // Portal for dragged cards
 const PortalAwareItem = ({ provided, snapshot, children }) => {
@@ -578,7 +579,7 @@ export default function LeadsKanban({
           )}
           {lead.created_at && (
             <div className="flex items-center gap-1 text-xs text-slate-400">
-              <Calendar className="w-3 h-3" /><span>{new Date(lead.created_at).toLocaleDateString()}</span>
+              <Calendar className="w-3 h-3" /><span>{formatDate(lead.created_at)}</span>
             </div>
           )}
         </div>
@@ -924,7 +925,7 @@ export default function LeadsKanban({
                       <div className="text-xs text-slate-500 mb-0.5">{t('created') || 'Created'}</div>
                       <div className="text-slate-800 flex items-center gap-1">
                         <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                        {lead.created_at ? new Date(lead.created_at).toLocaleDateString() : '—'}
+                        {lead.created_at ? formatDate(lead.created_at) : '—'}
                       </div>
                     </div>
                     {lead.updated_at && (
@@ -932,7 +933,7 @@ export default function LeadsKanban({
                         <div className="text-xs text-slate-500 mb-0.5">{t('updated') || 'Updated'}</div>
                         <div className="text-slate-800 flex items-center gap-1">
                           <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                          {new Date(lead.updated_at).toLocaleDateString()}
+                          {formatDate(lead.updated_at)}
                         </div>
                       </div>
                     )}
@@ -1139,7 +1140,7 @@ export default function LeadsKanban({
                                       {entry.user_name || t('action_note') || 'Note'}
                                     </span>
                                     <span className="text-xs text-slate-500">
-                                      {entry.created_at ? new Date(entry.created_at).toLocaleString(undefined, { hour12: false }) : ''}
+                                      {entry.created_at ? formatDateTime(entry.created_at) : ''}
                                     </span>
                                   </div>
                                   <div className="text-slate-800 whitespace-pre-wrap text-xs">
@@ -1155,7 +1156,7 @@ export default function LeadsKanban({
                                     {entry.user_name}
                                   </span>
                                   <span className="text-xs text-slate-500">
-                                    {new Date(entry.created_at).toLocaleString(undefined, { hour12: false })}
+                                    {formatDateTime(entry.created_at)}
                                   </span>
                                 </div>
                                 <div className="space-y-1">

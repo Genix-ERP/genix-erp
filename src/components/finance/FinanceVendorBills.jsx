@@ -606,12 +606,12 @@ export default function FinanceVendorBills() {
                         </TableCell>
                         <TableCell className="text-slate-600">
                           {(bill.invoice_date || bill.bill_date || bill.date)
-                            ? format(new Date(bill.invoice_date || bill.bill_date || bill.date), 'dd/MM/yyyy')
+                            ? format(new Date(bill.invoice_date || bill.bill_date || bill.date), 'dd.MM.yyyy')
                             : '-'}
                         </TableCell>
                         <TableCell className={overdue ? 'text-red-600 font-semibold' : 'text-slate-600'}>
                           {bill.due_date
-                            ? format(new Date(bill.due_date), 'dd/MM/yyyy')
+                            ? format(new Date(bill.due_date), 'dd.MM.yyyy')
                             : '-'}
                           {overdue && <span className="ml-1">⚠️</span>}
                         </TableCell>

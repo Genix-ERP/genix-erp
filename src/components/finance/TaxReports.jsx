@@ -1,3 +1,4 @@
+import { formatDate } from '@/utils/formatDate';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -673,7 +674,7 @@ export default function TaxReports() {
                       <TableRow key={period.id}>
                         <TableCell className="font-medium">{period.name}</TableCell>
                         <TableCell>
-                          {period.start_date} - {period.end_date}
+                          {formatDate(period.start_date)} - {formatDate(period.end_date)}
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline">{t(period.period_type) || period.period_type}</Badge>
@@ -782,7 +783,7 @@ export default function TaxReports() {
                   ) : (
                     transactions.map((tx) => (
                       <TableRow key={tx.id}>
-                        <TableCell>{tx.transaction_date}</TableCell>
+                        <TableCell>{formatDate(tx.transaction_date)}</TableCell>
                         <TableCell>
                           <Badge variant={tx.transaction_type === 'sales_invoice' ? 'default' : 'secondary'}>
                             {tx.transaction_type === 'sales_invoice' ? (t('sale') || 'Sale') : (t('purchase') || 'Purchase')}

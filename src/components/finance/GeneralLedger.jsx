@@ -1,4 +1,5 @@
 
+import { formatDate } from '@/utils/formatDate';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -166,15 +167,15 @@ const JE_DESC_LABELS = {
                                 uz: (d) => `Hisob-faktura uchun to'lov ${d.ref} — ${d.vendor}`,
                                 ru: (d) => `Оплата по счёту ${d.ref} — ${d.vendor}` },
   // Bank Reconciliation
-  je_bank_recon_receipts:    { en: (d) => `Bank reconciliation — receipts (${d.date})`,
-                                uz: (d) => `Bank solishtirma — tushumlar (${d.date})`,
-                                ru: (d) => `Банковская сверка — поступления (${d.date})` },
-  je_bank_recon_payments:    { en: (d) => `Bank reconciliation — payments (${d.date})`,
-                                uz: (d) => `Bank solishtirma — to'lovlar (${d.date})`,
-                                ru: (d) => `Банковская сверка — платежи (${d.date})` },
-  je_recon_writeoff:         { en: (d) => `Reconciliation write-off (${d.amount}) — ${d.date}`,
-                                uz: (d) => `Solishtirma hisobdan chiqarish (${d.amount}) — ${d.date}`,
-                                ru: (d) => `Списание при сверке (${d.amount}) — ${d.date}` },
+  je_bank_recon_receipts:    { en: (d) => `Bank reconciliation — receipts (${formatDate(d.date)})`,
+                                uz: (d) => `Bank solishtirma — tushumlar (${formatDate(d.date)})`,
+                                ru: (d) => `Банковская сверка — поступления (${formatDate(d.date)})` },
+  je_bank_recon_payments:    { en: (d) => `Bank reconciliation — payments (${formatDate(d.date)})`,
+                                uz: (d) => `Bank solishtirma — to'lovlar (${formatDate(d.date)})`,
+                                ru: (d) => `Банковская сверка — платежи (${formatDate(d.date)})` },
+  je_recon_writeoff:         { en: (d) => `Reconciliation write-off (${d.amount}) — ${formatDate(d.date)}`,
+                                uz: (d) => `Solishtirma hisobdan chiqarish (${d.amount}) — ${formatDate(d.date)}`,
+                                ru: (d) => `Списание при сверке (${d.amount}) — ${formatDate(d.date)}` },
   // Reversal
   je_reversal:               { en: (d) => `Reversal: ${d.ref}`,
                                 uz: (d) => `Teskari yozuv: ${d.ref}`,

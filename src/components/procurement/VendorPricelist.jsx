@@ -427,9 +427,9 @@ export default function VendorPricelist() {
                       <TableCell>
                         {price.valid_from || price.valid_until ? (
                           <div className="text-xs">
-                            {price.valid_from && <span>{format(new Date(price.valid_from), 'dd.MM.yy')}</span>}
+                            {price.valid_from && <span>{format(new Date(price.valid_from), 'dd.MM.yyyy')}</span>}
                             {price.valid_from && price.valid_until && <span> - </span>}
-                            {price.valid_until && <span>{format(new Date(price.valid_until), 'dd.MM.yy')}</span>}
+                            {price.valid_until && <span>{format(new Date(price.valid_until), 'dd.MM.yyyy')}</span>}
                           </div>
                         ) : (
                           <span className="text-slate-400">-</span>

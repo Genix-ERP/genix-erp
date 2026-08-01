@@ -11,6 +11,7 @@ import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { toast } from 'sonner';
+import { formatDate } from '@/utils/formatDate';
 
 const STATUS_COLORS = {
   pending: 'bg-amber-100 text-amber-700 border-amber-200',
@@ -204,7 +205,7 @@ export default function MaterialReservations() {
                       </td>
                       <td className="px-3 py-3 text-slate-600">{res.requested_by_name}</td>
                       <td className="px-3 py-3 text-slate-500 text-xs">
-                        {new Date(res.created_at).toLocaleDateString()}
+                        {formatDate(res.created_at)}
                       </td>
                       <td className="px-3 py-3 text-center">
                         <div className="flex items-center justify-center gap-1">

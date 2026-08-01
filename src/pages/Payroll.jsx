@@ -1,4 +1,6 @@
+import { formatDate } from '@/utils/formatDate';
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useModules } from '@/components/contexts/ModulesContext';
 import { usePermissions } from "@/hooks/usePermissions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,12 +12,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Search, DollarSign, Users, Calculator, TrendingUp, Brain, Download, AlertTriangle, CheckCircle, Target, Lightbulb, Edit, Trash2, CreditCard, UserCircle, Printer, Settings as SettingsIcon, History, FileDown, Loader2, X, RotateCcw, Percent, ChevronRight, ChevronDown, Wallet, FileMinus } from 'lucide-react';
+import { Plus, Search, DollarSign, Users, Calculator, TrendingUp, Download, AlertTriangle, Edit, Trash2, CreditCard, Printer, Settings as SettingsIcon, FileDown, Loader2, X, RotateCcw, Percent, ChevronRight, ChevronDown, Wallet, FileMinus } from 'lucide-react';
 import { hrService } from '@/api/services/hr';
 import { employeeTaxesService } from '@/api/services/employeeTaxes';
 import { toast } from 'sonner';
 import EmployeeLoans from '@/components/payroll/EmployeeLoans';
-import EmployeePortal from '@/components/payroll/EmployeePortal';
 import { format } from 'date-fns';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import apiClient from '@/api/client';
@@ -130,6 +131,16 @@ export default function Payroll() {
     allowances: 0
   });
 
+  // Payroll tax rates from settings (defaults: Uzbekistan 2024-2026 rates).
+  // Fallback only — when the tenant's employee-tax catalog (migration 330)
+  // has active rows, the server preview is authoritative and these are unused.
+  // Declared BEFORE the effects below: overtimeMultiplier appears in a
+  // dependency array, which is evaluated synchronously during render.
+  const incomeTaxRate = parseFloat(getSetting('payroll.tax.income_tax_rate', '12')) / 100;
+  const socialInsuranceRate = parseFloat(getSetting('payroll.tax.social_insurance_rate', '1')) / 100;
+  const taxFreeMinimum = parseFloat(getSetting('payroll.tax.tax_free_minimum', '0'));
+  const overtimeMultiplier = parseFloat(getSetting('hr.working_hours.overtime_multiplier', '1.5')) || 1.5;
+
   // Load the employee-tax catalog once — used by the create-payroll modal and
   // the edit modal's tax picker. Only active taxes are shown (settings page
   // controls which ones are enabled). Placed after the state declarations it
@@ -151,7 +162,7 @@ export default function Payroll() {
       return;
     }
     const base = Number(newPayroll.basic_salary) || 0;
-    const overtimeAmount = (Number(newPayroll.overtime_hours) || 0) * (base / (Number(newPayroll.monthly_hours) || 208) * 1.5);
+    const overtimeAmount = (Number(newPayroll.overtime_hours) || 0) * (base / (Number(newPayroll.monthly_hours) || 208)) * overtimeMultiplier;
     const bonus = Number(newPayroll.bonuses) || 0;
     const allowances = Number(newPayroll.allowances) || 0;
     let cancelled = false;
@@ -166,7 +177,7 @@ export default function Payroll() {
       .then((res) => { if (!cancelled && res) setTaxPreview(res); })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [showCreateModal, taxCatalog, excludedTaxIds,
+  }, [showCreateModal, taxCatalog, excludedTaxIds, overtimeMultiplier,
       newPayroll.basic_salary, newPayroll.overtime_hours,
       newPayroll.monthly_hours, newPayroll.bonuses, newPayroll.allowances]);
 
@@ -243,16 +254,11 @@ export default function Payroll() {
   const shortageDeductionAmount = Math.round(totalPendingDeduction * deductionPercent / 100);
   const totalLoanDeduction = Object.values(loanDeductions).reduce((s, v) => s + (Number(v) || 0), 0);
 
-  // Payroll tax rates from settings (defaults: Uzbekistan 2024-2026 rates)
-  const incomeTaxRate = parseFloat(getSetting('payroll.tax.income_tax_rate', '12')) / 100;
-  const socialInsuranceRate = parseFloat(getSetting('payroll.tax.social_insurance_rate', '1')) / 100;
-  const taxFreeMinimum = parseFloat(getSetting('payroll.tax.tax_free_minimum', '0'));
-
   const calculatePayroll = (data, shortageAmount = 0, loanAmount = 0) => {
     const basicSalary = parseFloat(data.basic_salary) || 0;
     const overtimeHours = parseFloat(data.overtime_hours) || 0;
     const monthlyHours = parseFloat(data.monthly_hours) || 208;
-    const overtimePay = overtimeHours * (basicSalary / monthlyHours);
+    const overtimePay = overtimeHours * (basicSalary / monthlyHours) * overtimeMultiplier;
     const bonuses = parseFloat(data.bonuses) || 0;
     const allowances = parseFloat(data.allowances) || 0;
 
@@ -298,31 +304,31 @@ export default function Payroll() {
       payment_method: 'bank_transfer'
     };
 
-    await createPayroll(payrollData);
+    let createdPeriod = null;
+    try {
+      createdPeriod = await createPayroll(payrollData);
+    } catch (e) {
+      toast.error(e?.response?.data?.message || e?.response?.data?.error?.message
+        || t('error_occurred') || 'Xatolik');
+      return; // keep the modal open so nothing entered is lost
+    }
 
-    // Record loan payments for each loan with a deduction amount > 0
+    // Mark the next pending schedule payment paid for each loan with a
+    // deduction, linked to the created entry so /my/payroll-history and the
+    // confirm-SMS report the withholding truthfully.
     for (const loan of activeLoans) {
       const amount = Number(loanDeductions[loan.id] || 0);
       if (amount <= 0) continue;
       try {
-        // Find the next pending payment on this loan and mark it paid with this amount.
-        // If the backend requires an explicit payment id, we POST a new payment of this amount.
-        await apiClient.post(`/employee-loans/${loan.id}/payments`, {
-          amount,
-          payment_date: newPayroll.payment_date || new Date().toISOString().slice(0, 10),
-          method: 'salary_deduction',
-          note: `Deducted from payroll`,
-        }).catch(async () => {
-          // Fallback: if there's no generic payments endpoint, try mark-paid on first pending payment
-          try {
-            const schedRes = await apiClient.get(`/employee-loans/${loan.id}`);
-            const payments = schedRes.data?.data?.payments || schedRes.data?.payments || [];
-            const pending = payments.find(p => p.status !== 'paid');
-            if (pending) {
-              await apiClient.post(`/employee-loans/${loan.id}/payments/${pending.id}/mark-paid`, { amount });
-            }
-          } catch { /* ignore */ }
-        });
+        const schedRes = await apiClient.get(`/employee-loans/${loan.id}`);
+        const payments = schedRes.data?.data?.payments || schedRes.data?.payments || [];
+        const pending = payments.find(p => p.status !== 'paid');
+        if (pending) {
+          await apiClient.post(`/employee-loans/${loan.id}/payments/${pending.id}/mark-paid`, {
+            amount,
+            payroll_entry_id: createdPeriod?.first_entry_id || undefined,
+          });
+        }
       } catch (err) {
         console.warn('Failed to record loan payment', err);
       }
@@ -380,10 +386,7 @@ export default function Payroll() {
       } else {
         toast.info(t('payroll_already_exists') || "Joriy oy qaydnomasi allaqachon mavjud");
       }
-      // Refresh list — the existing load function name varies; try a couple.
-      if (typeof loadPayrolls === 'function') { await loadPayrolls(); }
-      else if (typeof loadData === 'function') { await loadData(); }
-      else { window.location.reload(); }
+      await refreshData();
     } catch (e) {
       toast.error(e?.response?.data?.message || e?.response?.data?.error?.message
         || t('error_occurred') || 'Xatolik');
@@ -404,14 +407,40 @@ export default function Payroll() {
     saving: false,
   });
 
-  const toggleTTPaid = async (entry, kind) => {
-    const isPaid = kind === 'advance' ? !!entry.advance_paid : !!entry.remainder_paid;
+  // The advance/remainder endpoints operate on payroll ENTRIES; the table rows
+  // are PERIODS. The list API now ships first_entry_id for single-employee
+  // periods; fall back to fetching the period's entries for older rows.
+  const resolveTTEntryId = async (period) => {
+    if (period.first_entry_id) return period.first_entry_id;
+    try {
+      const entries = await hrService.listPayrollEntries(period.id);
+      const list = Array.isArray(entries) ? entries : (entries?.data || []);
+      return list[0]?.id || null;
+    } catch {
+      return null;
+    }
+  };
+
+  const applyTTResult = (periodId, result) => {
+    const patch = {
+      advance_paid: result.advance_paid,
+      advance_paid_day: result.advance_paid_day ?? null,
+      remainder_paid: result.remainder_paid,
+      remainder_paid_day: result.remainder_paid_day ?? null,
+    };
+    setFilteredPayrolls((prev) => prev.map((p) => (p.id === periodId ? { ...p, ...patch } : p)));
+  };
+
+  const toggleTTPaid = async (period, kind) => {
+    const isPaid = kind === 'advance' ? !!period.advance_paid : !!period.remainder_paid;
     if (isPaid) {
-      // Uncheck — no prompt, just clear.
+      // Uncheck — no prompt; the backend reverses the payment JE.
       try {
+        const entryId = await resolveTTEntryId(period);
+        if (!entryId) { toast.error(t('error_occurred') || 'Xatolik'); return; }
         const fn = kind === 'advance' ? hrService.markAdvancePaid : hrService.markRemainderPaid;
-        const result = await fn(entry.id, { paid: false, day: null });
-        setFilteredPayrolls((prev) => prev.map((p) => (p.id === entry.id ? { ...p, ...result } : p)));
+        const result = await fn(entryId, { paid: false, day: null });
+        applyTTResult(period.id, result);
         toast.success(t('saved') || 'Saqlandi');
       } catch (e) {
         toast.error(e?.response?.data?.message || t('error_occurred') || 'Xatolik');
@@ -420,7 +449,7 @@ export default function Payroll() {
     }
     // Marking as paid — open the day-picker dialog.
     const suggested = String(new Date().getDate()); // today
-    setPaidDialog({ open: true, kind, entry, dayInput: suggested, saving: false });
+    setPaidDialog({ open: true, kind, entry: period, dayInput: suggested, saving: false });
   };
 
   const submitPaidDialog = async () => {
@@ -438,9 +467,11 @@ export default function Payroll() {
     }
     setPaidDialog((d) => ({ ...d, saving: true }));
     try {
+      const entryId = await resolveTTEntryId(entry);
+      if (!entryId) throw new Error('entry not found');
       const fn = kind === 'advance' ? hrService.markAdvancePaid : hrService.markRemainderPaid;
-      const result = await fn(entry.id, { paid: true, day });
-      setFilteredPayrolls((prev) => prev.map((p) => (p.id === entry.id ? { ...p, ...result } : p)));
+      const result = await fn(entryId, { paid: true, day });
+      applyTTResult(entry.id, result);
       toast.success(t('saved') || 'Saqlandi');
       setPaidDialog({ open: false, kind: null, entry: null, dayInput: '', saving: false });
     } catch (e) {
@@ -467,6 +498,7 @@ export default function Payroll() {
     setEditPayroll({
       ...payroll,
       entry_id: firstEntry?.id || null,
+      employee_id: firstEntry?.employee_id || payroll.employee_id || '',
       employee_name: firstEntry?.employee_name || payroll.employee_name || '',
       basic_salary: firstEntry?.base_salary ?? payroll.basic_salary ?? 0,
       overtime_hours: firstEntry?.overtime_hours ?? payroll.overtime_hours ?? 0,
@@ -550,7 +582,7 @@ export default function Payroll() {
     const formatDate = (dateStr) => {
       if (!dateStr) return 'N/A';
       try {
-        return format(new Date(dateStr), 'MMM dd, yyyy');
+        return format(new Date(dateStr), 'dd.MM.yyyy');
       } catch {
         return dateStr;
       }
@@ -583,7 +615,7 @@ export default function Payroll() {
       ['NET PAY', (payroll.net_pay || 0).toFixed(2)],
       [''],
       ['Status', payroll.status?.toUpperCase() || 'N/A'],
-      ['Generated', format(new Date(), 'MMM dd, yyyy HH:mm')]
+      ['Generated', format(new Date(), 'dd.MM.yyyy HH:mm')]
     ].map(row => row.join(',')).join('\n');
 
     // Create and download CSV file
@@ -1133,7 +1165,12 @@ export default function Payroll() {
     totalPayrolls: payrolls.length,
     totalGrossPay: payrolls.reduce((sum, p) => sum + (p.gross_pay || 0), 0),
     totalNetPay: payrolls.reduce((sum, p) => sum + (p.net_pay || 0), 0),
-    pendingPayments: payrolls.filter(p => p.status === 'approved').length
+    pendingPayments: payrolls.filter(p => p.status === 'approved').length,
+    // Confirmed-but-unpaid remainder: the money that still has to leave the
+    // till, not just how many periods are waiting.
+    pendingAmount: payrolls
+      .filter(p => p.status === 'approved')
+      .reduce((sum, p) => sum + (p.net_pay || 0), 0)
   };
 
   // Group payrolls into a calendar-month bucket and stash the original
@@ -1172,29 +1209,29 @@ export default function Payroll() {
               <CreditCard className="w-4 h-4" />
               {t('employee_loans')}
             </TabsTrigger>
-            <TabsTrigger value="portal" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
-              <UserCircle className="w-4 h-4" />
-              {t('employee_portal')}
-            </TabsTrigger>
-            {/* TT §3.2 / §5.1: Xodimlar — inline employee list scoped to the Ish haqi module */}
+            {/* Stavkalar — read-only rates view; employee management lives in
+                Xodimlar boshqaruvi (HR). Xodim kabineti moved to the app-level
+                /employee-cabinet route (user menu); Tarix merged into the main
+                list (same data, one list + filters). */}
             <TabsTrigger value="employees" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
               <Users className="w-4 h-4" />
-              {t('employees') || 'Xodimlar'}
+              {t('salary_rates') || 'Stavkalar'}
             </TabsTrigger>
-            {/* TT §2.6: Tarix (history) */}
-            <TabsTrigger value="history" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
-              <History className="w-4 h-4" />
-              {t('history') || 'Tarix'}
-            </TabsTrigger>
-            {/* Sozlamalar tab removed at user request — payroll
-                settings (advance %, currency, company name on print
-                header) live in the global Settings module instead. */}
+            {/* TT §2.2 Sozlamalar — advance %, currency, print header. No
+                global-Settings equivalent exists, so this tab is the only
+                place to edit payroll_settings; visible to payroll admins. */}
+            {(canUpdate(MODULES.PAYROLL) || canUpdate(MODULES.HR)) && (
+              <TabsTrigger value="settings" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
+                <SettingsIcon className="w-4 h-4" />
+                {t('settings') || 'Sozlamalar'}
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="payroll" className="mt-4 space-y-6">
 
         {/* Metrics */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
@@ -1245,7 +1282,8 @@ export default function Payroll() {
                 </div>
                 <div>
                   <p className="text-xs text-slate-600">{t('pending_payments')}</p>
-                  <p className="text-2xl font-bold text-slate-900">{metrics.pendingPayments}</p>
+                  <p className="text-2xl font-bold text-slate-900">{formatCurrencyCompact(metrics.pendingAmount)}</p>
+                  <p className="text-xs text-slate-500">{metrics.pendingPayments} {t('periods_count') || 'ta davr'}</p>
                 </div>
               </div>
             </CardContent>
@@ -1483,7 +1521,8 @@ export default function Payroll() {
                                   : (t('mark_advance_paid') || 'Avansni to\'langan deb belgilash')}
                                 onClick={() => toggleTTPaid(payroll, 'advance')}
                               >
-                                {payroll.advance_paid ? '🟢' : '⚪'} {t('advance_short') || 'Avans'}
+                                <span className={`inline-block w-2 h-2 rounded-full mr-1.5 ${payroll.advance_paid ? 'bg-green-500' : 'bg-slate-300 border border-slate-400'}`} />
+                                {t('advance_short') || 'Avans'}
                                 {payroll.advance_paid_day ? ` (${payroll.advance_paid_day})` : ''}
                               </Button>
                               <Button
@@ -1494,25 +1533,21 @@ export default function Payroll() {
                                   : (t('mark_remainder_paid') || 'Qoldiqni to\'langan deb belgilash')}
                                 onClick={() => toggleTTPaid(payroll, 'remainder')}
                               >
-                                {payroll.remainder_paid ? '🟢' : '⚪'} {t('remainder_short') || 'Qoldiq'}
+                                <span className={`inline-block w-2 h-2 rounded-full mr-1.5 ${payroll.remainder_paid ? 'bg-green-500' : 'bg-slate-300 border border-slate-400'}`} />
+                                {t('remainder_short') || 'Qoldiq'}
                                 {payroll.remainder_paid_day ? ` (${payroll.remainder_paid_day})` : ''}
                               </Button>
-                              {payroll.status === 'draft' && canUpdate(MODULES.PAYROLL) || canUpdate(MODULES.HR) && (
+                              {(payroll.status === 'draft' || payroll.status === 'calculated') && (canUpdate(MODULES.PAYROLL) || canUpdate(MODULES.HR)) && (
                                 <Button size="sm" variant="ghost" className="text-blue-600" onClick={() => updatePayrollStatus(payroll.id, 'approved')}>
                                   {t('approve')}
                                 </Button>
                               )}
-                              {payroll.status === 'calculated' && canUpdate(MODULES.PAYROLL) || canUpdate(MODULES.HR) && (
-                                <Button size="sm" variant="ghost" className="text-blue-600" onClick={() => updatePayrollStatus(payroll.id, 'approved')}>
-                                  {t('approve')}
-                                </Button>
-                              )}
-                              {payroll.status === 'approved' && canUpdate(MODULES.PAYROLL) || canUpdate(MODULES.HR) && (
+                              {payroll.status === 'approved' && (canUpdate(MODULES.PAYROLL) || canUpdate(MODULES.HR)) && (
                                 <Button size="sm" variant="ghost" className="text-green-600" onClick={() => handlePayClick(payroll.id)}>
                                   {t('pay')}
                                 </Button>
                               )}
-                              {(payroll.status === 'draft' || payroll.status === 'calculated') && canUpdate(MODULES.PAYROLL) || canUpdate(MODULES.HR) && (
+                              {(payroll.status === 'draft' || payroll.status === 'calculated') && (canUpdate(MODULES.PAYROLL) || canUpdate(MODULES.HR)) && (
                                 <Button size="sm" variant="ghost" onClick={() => handleEditPayroll(payroll)} title={t('edit')}>
                                   <Edit className="w-4 h-4" />
                                 </Button>
@@ -1520,7 +1555,7 @@ export default function Payroll() {
                               <Button size="sm" variant="ghost" onClick={() => handleDownloadPayslip(payroll)} title={t('download')}>
                                 <Download className="w-4 h-4" />
                               </Button>
-                              {(payroll.status === 'draft' || payroll.status === 'calculated') && canDelete(MODULES.PAYROLL) || canDelete(MODULES.HR) && (
+                              {(payroll.status === 'draft' || payroll.status === 'calculated') && (canDelete(MODULES.PAYROLL) || canDelete(MODULES.HR)) && (
                                 <Button size="sm" variant="ghost" onClick={() => handleDeleteClick(payroll)} title={t('delete')}>
                                   <Trash2 className="w-4 h-4 text-red-500" />
                                 </Button>
@@ -1823,12 +1858,14 @@ export default function Payroll() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium mb-1 block">{t('employee')} *</label>
-                  <Select value={newPayroll.employee_name} onValueChange={(value) => {
-                    const selectedEmployee = employees.find(emp => emp.full_name === value);
+                  {/* Keyed on id — two employees with the same full name must
+                      not resolve to the same record. */}
+                  <Select value={newPayroll.employee_id || ''} onValueChange={(value) => {
+                    const selectedEmployee = employees.find(emp => emp.id === value);
                     setNewPayroll({
                       ...newPayroll,
                       employee_id: selectedEmployee?.id,
-                      employee_name: value,
+                      employee_name: selectedEmployee?.full_name || '',
                       basic_salary: selectedEmployee?.salary || selectedEmployee?.base_salary || 0
                     });
                     if (selectedEmployee?.id) {
@@ -1841,7 +1878,7 @@ export default function Payroll() {
                     </SelectTrigger>
                     <SelectContent>
                       {employees.map(emp => (
-                        <SelectItem key={emp.id} value={emp.full_name}>{emp.full_name}</SelectItem>
+                        <SelectItem key={emp.id} value={emp.id}>{emp.full_name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -1940,7 +1977,7 @@ export default function Payroll() {
                   <div className="flex items-center gap-2 mb-3">
                     <CreditCard className="h-5 w-5 text-blue-600" />
                     <h4 className="font-semibold text-blue-800">
-                      {language === 'uz' ? "Faol qarzlar (ixtiyoriy ushlash)" : language === 'ru' ? 'Активные займы (удержание опционально)' : 'Active loans (optional deduction)'}
+                      {t('active_loans_optional')}
                     </h4>
                   </div>
                   <div className="space-y-2">
@@ -1957,17 +1994,17 @@ export default function Payroll() {
                                 {loan.reason && <span className="text-slate-500 font-normal"> — {loan.reason}</span>}
                               </div>
                               <div className="text-xs text-slate-500">
-                                {language === 'uz' ? 'Qoldiq' : language === 'ru' ? 'Остаток' : 'Remaining'}: <span className="font-semibold">{formatCurrency(remaining)}</span>
+                                {t('loan_remaining')}: <span className="font-semibold">{formatCurrency(remaining)}</span>
                                 {suggested > 0 && <>
                                   {' · '}
-                                  {language === 'uz' ? 'Oylik' : language === 'ru' ? 'Ежемесячно' : 'Monthly'}: {formatCurrency(suggested)}
+                                  {t('loan_monthly')}: {formatCurrency(suggested)}
                                 </>}
                               </div>
                             </div>
                           </div>
                           <div className="flex items-center gap-2 mt-2">
                             <label className="text-xs text-slate-600 whitespace-nowrap">
-                              {language === 'uz' ? 'Ushlab qolish' : language === 'ru' ? 'Удержать' : 'Deduct'}:
+                              {t('deduct_label')}:
                             </label>
                             <Input
                               type="text"
@@ -1983,9 +2020,9 @@ export default function Payroll() {
                               variant="outline"
                               className="h-8 px-2 text-xs"
                               onClick={() => setLoanDeductions(prev => ({ ...prev, [loan.id]: 0 }))}
-                              title={language === 'uz' ? "0 qilish" : 'Zero'}
+                              title={t('set_zero')}
                             >
-                              {language === 'uz' ? 'Ushlamaslik' : language === 'ru' ? 'Не удерживать' : 'Skip'}
+                              {t('skip_deduction')}
                             </Button>
                           </div>
                         </div>
@@ -1993,7 +2030,7 @@ export default function Payroll() {
                     })}
                     {totalLoanDeduction > 0 && (
                       <div className="flex justify-between pt-2 border-t border-blue-300 text-sm font-bold text-blue-900">
-                        <span>{language === 'uz' ? 'Jami qarz ushlamasi' : language === 'ru' ? 'Итого удержания' : 'Total loan deduction'}:</span>
+                        <span>{t('total_loan_deduction')}:</span>
                         <span>-{formatCurrency(totalLoanDeduction)}</span>
                       </div>
                     )}
@@ -2140,7 +2177,10 @@ export default function Payroll() {
                 // UI and the actual saved record match exactly.
                 const effectiveDeductions = taxCatalog.length > 0
                   ? (taxPreview.total_employee || 0) + shortageDeductionAmount + totalLoanDeduction
-                  : calc.total_deductions + shortageDeductionAmount + totalLoanDeduction;
+                  // calc.total_deductions already contains shortage + loan
+                  // (passed into calculatePayroll as otherDeductions) — adding
+                  // them again double-counted the withholdings.
+                  : calc.total_deductions;
                 const effectiveNet = calc.gross_pay - effectiveDeductions;
                 return (
                   <div className="p-4 bg-slate-50 rounded-lg">
@@ -2162,7 +2202,7 @@ export default function Payroll() {
                       )}
                       {totalLoanDeduction > 0 && (
                         <div className="flex justify-between text-blue-700">
-                          <span>{language === 'uz' ? 'Qarz ushlamasi' : language === 'ru' ? 'Удержание займа' : 'Loan deduction'}:</span>
+                          <span>{t('loan_deduction')}:</span>
                           <span className="font-semibold">-{formatCurrency(totalLoanDeduction)}</span>
                         </div>
                       )}
@@ -2202,20 +2242,21 @@ export default function Payroll() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="text-sm font-medium mb-1 block">{t('employee')} *</label>
-                    <Select value={editPayroll.employee_name} onValueChange={(value) => {
-                      const selectedEmployee = employees.find(emp => emp.full_name === value);
+                    <Select value={editPayroll.employee_id || ''} onValueChange={(value) => {
+                      const selectedEmployee = employees.find(emp => emp.id === value);
                       setEditPayroll({
                         ...editPayroll,
-                        employee_name: value,
+                        employee_id: selectedEmployee?.id || editPayroll.employee_id,
+                        employee_name: selectedEmployee?.full_name || editPayroll.employee_name,
                         basic_salary: selectedEmployee?.salary || editPayroll.basic_salary
                       });
                     }}>
                       <SelectTrigger>
-                        <SelectValue />
+                        <SelectValue placeholder={editPayroll.employee_name || t('select_employee')} />
                       </SelectTrigger>
                       <SelectContent>
                         {employees.map(emp => (
-                          <SelectItem key={emp.id} value={emp.full_name}>{emp.full_name}</SelectItem>
+                          <SelectItem key={emp.id} value={emp.id}>{emp.full_name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -2357,18 +2398,9 @@ export default function Payroll() {
             <EmployeeLoans />
           </TabsContent>
 
-          <TabsContent value="portal" className="mt-4">
-            <EmployeePortal />
-          </TabsContent>
-
-          {/* TT §3.2 Xodimlar — employees scoped to the payroll module */}
+          {/* Stavkalar — read-only rates view (salary editing lives in HR) */}
           <TabsContent value="employees" className="mt-4">
             <PayrollEmployeesTab t={t} formatCurrency={formatCurrency} />
-          </TabsContent>
-
-          {/* TT §2.6 Tarix — lists all past payrolls with fund/headcount/status */}
-          <TabsContent value="history" className="mt-4">
-            <PayrollHistoryTab t={t} formatCurrency={formatCurrency} />
           </TabsContent>
 
           {/* TT §2.2 Sozlamalar — advance percent, currency, company name */}
@@ -2507,94 +2539,14 @@ function PayrollSettingsTab({ t }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// TT §2.6 — Tarix (history) tab
-// ─────────────────────────────────────────────────────────────────────
-function PayrollHistoryTab({ t, formatCurrency }) {
-  const [loading, setLoading] = useState(true);
-  const [periods, setPeriods] = useState([]);
-
-  useEffect(() => {
-    let alive = true;
-    hrService.listPayrollPeriods({ page: 1, limit: 100 })
-      .then((res) => {
-        if (!alive) return;
-        const list = Array.isArray(res) ? res : (res?.data || []);
-        setPeriods(list);
-      })
-      .catch(() => alive && setPeriods([]))
-      .finally(() => alive && setLoading(false));
-    return () => { alive = false; };
-  }, []);
-
-  const statusBadge = (s) => {
-    const map = {
-      draft: 'bg-slate-100 text-slate-700',
-      processing: 'bg-blue-100 text-blue-700',
-      approved: 'bg-amber-100 text-amber-700',
-      paid: 'bg-green-100 text-green-700',
-      cancelled: 'bg-red-100 text-red-700',
-    };
-    return <Badge className={map[s] || 'bg-slate-100 text-slate-700'}>{t(s) || s}</Badge>;
-  };
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <History className="w-5 h-5" />
-          {t('history') || 'Tarix'}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="p-0">
-        {loading ? (
-          <div className="flex items-center gap-2 text-slate-500 p-6">
-            <Loader2 className="w-4 h-4 animate-spin" /> {t('loading')}
-          </div>
-        ) : periods.length === 0 ? (
-          <div className="text-center py-10 text-slate-400">{t('no_data') || "Ma'lumot yo'q"}</div>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t('period') || 'Davr'}</TableHead>
-                <TableHead className="text-right">{t('employee_count') || 'Xodimlar'}</TableHead>
-                <TableHead className="text-right">{t('fund') || 'Fond'}</TableHead>
-                <TableHead className="text-right">{t('total_net') || 'Sof summa'}</TableHead>
-                <TableHead>{t('status') || 'Holat'}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {periods.map((p) => (
-                <TableRow key={p.id}>
-                  <TableCell className="font-medium">
-                    {p.period_name || p.period_code}
-                    <div className="text-xs text-slate-500">{p.start_date} — {p.end_date}</div>
-                  </TableCell>
-                  <TableCell className="text-right">{p.employee_count || 0}</TableCell>
-                  <TableCell className="text-right">{formatCurrency(p.total_gross || 0)}</TableCell>
-                  <TableCell className="text-right">{formatCurrency(p.total_net || 0)}</TableCell>
-                  <TableCell>{statusBadge(p.status)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// TT §3.2 / §5.1 — Xodimlar (employees) tab scoped to payroll context.
-// Shows FIO, position (job_title), monthly salary. Salary can be edited
-// inline. Creating or deleting employees is still the HR module's job.
+// Stavkalar — read-only rates view scoped to payroll context. Shows FIO,
+// position (job_title), monthly salary basis, and a link to the HR module
+// where the employee record (including the salary) is managed. Audit §4:
+// employee management lives in Xodimlar boshqaruvi, not here.
 // ─────────────────────────────────────────────────────────────────────
 function PayrollEmployeesTab({ t, formatCurrency }) {
   const [loading, setLoading] = useState(true);
   const [employees, setEmployees] = useState([]);
-  const [editingId, setEditingId] = useState(null);
-  const [editValue, setEditValue] = useState('');
-  const [saving, setSaving] = useState(false);
 
   // Per-row expand state — same pattern as the Payroll Records table:
   // chevron toggles a sub-row that lists the employee's outstanding
@@ -2642,38 +2594,19 @@ function PayrollEmployeesTab({ t, formatCurrency }) {
   };
   useEffect(() => { load(); }, []);
 
-  const startEdit = (emp) => {
-    setEditingId(emp.id);
-    setEditValue(String(emp.salary || 0));
-  };
-  const cancelEdit = () => { setEditingId(null); setEditValue(''); };
-  const saveEdit = async (emp) => {
-    const parsed = parseFloat(editValue);
-    if (Number.isNaN(parsed) || parsed < 0) {
-      toast.error(t('invalid_salary') || "Noto'g'ri summa");
-      return;
-    }
-    setSaving(true);
-    try {
-      await hrService.updateEmployee(emp.id, { salary: parsed });
-      toast.success(t('saved') || 'Saqlandi');
-      setEditingId(null);
-      await load();
-    } catch (e) {
-      toast.error(e?.response?.data?.message || t('error_occurred') || 'Xatolik');
-    } finally {
-      setSaving(false);
-    }
-  };
-
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Users className="w-5 h-5" />
-          {t('employees') || 'Xodimlar'}
+          {t('salary_rates') || 'Stavkalar'}
           <span className="ml-2 text-sm font-normal text-slate-500">
             ({employees.length})
+          </span>
+          <span className="ml-auto text-sm font-normal">
+            <Link to="/hr" className="text-blue-600 hover:underline">
+              {t('manage_in_hr') || 'Xodimlar boshqaruvida tahrirlash'}
+            </Link>
           </span>
         </CardTitle>
       </CardHeader>
@@ -2695,7 +2628,6 @@ function PayrollEmployeesTab({ t, formatCurrency }) {
                 <TableHead>{t('full_name') || "F.I.O."}</TableHead>
                 <TableHead>{t('position') || 'Lavozim'}</TableHead>
                 <TableHead className="text-right">{t('monthly_salary') || 'Oylik maosh'}</TableHead>
-                <TableHead className="w-40">{t('actions')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -2725,31 +2657,7 @@ function PayrollEmployeesTab({ t, formatCurrency }) {
                     <TableCell className="font-medium">{fullName}</TableCell>
                     <TableCell className="text-slate-600">{position}</TableCell>
                     <TableCell className="text-right">
-                      {editingId === e.id ? (
-                        <Input
-                          type="number" min={0}
-                          value={editValue}
-                          onChange={(ev) => setEditValue(ev.target.value)}
-                          className="w-40 text-right"
-                        />
-                      ) : (
-                        <span className="font-medium">{formatCurrency(e.salary || 0)}</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {editingId === e.id ? (
-                        <div className="flex gap-1">
-                          <Button size="sm" onClick={() => saveEdit(e)} disabled={saving}>
-                            {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : (t('save') || 'Saqlash')}
-                          </Button>
-                          <Button size="sm" variant="ghost" onClick={cancelEdit}>{t('cancel')}</Button>
-                        </div>
-                      ) : (
-                        <Button size="sm" variant="ghost" onClick={() => startEdit(e)}>
-                          <Edit className="w-4 h-4 mr-1" />
-                          {t('edit_salary') || 'Oylikni tahrirlash'}
-                        </Button>
-                      )}
+                      <span className="font-medium">{formatCurrency(e.salary || 0)}</span>
                     </TableCell>
                   </TableRow>
                   {/* Debts sub-row — same shape as the Payroll Records

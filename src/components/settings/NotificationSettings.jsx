@@ -6,6 +6,7 @@ import { Loader2, Bell, BellRing, CheckCheck, Trash2 } from "lucide-react";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { renderNotification } from "@/utils/notificationCatalog";
+import { formatDateTime } from '@/utils/formatDate';
 
 export default function NotificationSettings() {
   const { language } = useLanguage();
@@ -148,7 +149,7 @@ export default function NotificationSettings() {
                               : notification.type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()))}
                       </span>
                     )}
-                    <p className="text-xs text-slate-400">{new Date(notification.created_at).toLocaleString(undefined, { hour12: false })}</p>
+                    <p className="text-xs text-slate-400">{formatDateTime(notification.created_at)}</p>
                   </div>
                 </div>
                 <div className="flex gap-1 shrink-0">

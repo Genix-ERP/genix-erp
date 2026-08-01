@@ -8,6 +8,7 @@ import { useAuth } from '@/components/contexts/AuthContext';
 import { constructionService } from '@/api/services/construction';
 import { formatApiError } from '@/utils/apiErrors';
 import Loader from '@/components/ui/loader';
+import { formatDateTime } from '@/utils/formatDate';
 
 // ResourcesPanel — faithful port of the mockup's Resources page
 // (files/Form2_Works_v2 (7).html → renderResourcesPage()).
@@ -795,7 +796,7 @@ export default function ResourcesPanel({ project, estimateId, onResourceChanged 
                     >
                       <div>
                         <div className="font-mono" style={{ color: '#475569' }}>
-                          {new Date(h.changed_at).toLocaleString()}
+                          {formatDateTime(h.changed_at)}
                         </div>
                         <div className="text-[10px] mt-0.5" style={{ color: '#94A3B8' }}>
                           {h.changed_by_name || (t('system') || 'Tizim')}

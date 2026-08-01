@@ -1,3 +1,4 @@
+import { formatDate } from '@/utils/formatDate';
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { aiService } from '@/api/services/ai';
 import { useAuth } from './AuthContext';
@@ -2078,7 +2079,7 @@ ${Object.entries(byType).map(([type, count]) => `- ${type}: ${count}`).join('\n'
 ${Object.entries(byStatus).map(([status, count]) => `- ${status}: ${count}`).join('\n')}
 
 ${expiringSoon.length > 0 ? `**⚠️ ${t('expiringSoon30')}**
-${expiringSoon.map(c => `- ${c.contract_name || c.contract_number}: ${c.end_date}`).join('\n')}` : `**✓ ${t('noExpiringSoon')}**`}
+${expiringSoon.map(c => `- ${c.contract_name || c.contract_number}: ${formatDate(c.end_date)}`).join('\n')}` : `**✓ ${t('noExpiringSoon')}**`}
 
 **${t('recommendations')}**
 ${expiringSoon.length > 0 ? `- ${t('reviewForRenewal')} ${expiringSoon.length}` : `- ${t('allContractsUpToDate')}`}

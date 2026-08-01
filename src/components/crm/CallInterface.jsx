@@ -51,6 +51,7 @@ import { Switch } from "@/components/ui/switch";
 import { pbxService } from '@/api/services';
 import { useTranslation } from "@/components/utils/translations";
 import { useCustomers } from "@/components/contexts/CustomersContext";
+import { formatDateTime } from '@/utils/formatDate';
 
 export default function CallInterface({ callLogs = [], onUpdate, customer, language = 'en', companyId }) {
   const { t } = useTranslation(language);
@@ -210,7 +211,7 @@ export default function CallInterface({ callLogs = [], onUpdate, customer, langu
     const time = d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
     if (isToday) return time;
     if (isYesterday) return `${t('yesterday')} ${time}`;
-    return d.toLocaleDateString(locale, { day: '2-digit', month: '2-digit' }) + ' ' + time;
+    return formatDateTime(d);
   };
 
   const handleDialDigit = (digit) => setDialNumber(prev => prev + digit);

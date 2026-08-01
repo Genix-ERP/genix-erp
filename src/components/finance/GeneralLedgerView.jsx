@@ -1,3 +1,4 @@
+import { formatDate } from '@/utils/formatDate';
 import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -510,7 +511,7 @@ export default function GeneralLedgerView() {
                                     </TableRow>
                                     {acc.transactions.map((tx, idx) => (
                                       <TableRow key={idx} className="hover:bg-slate-50/50">
-                                        <TableCell className="text-xs text-slate-600">{tx.date}</TableCell>
+                                        <TableCell className="text-xs text-slate-600">{formatDate(tx.date)}</TableCell>
                                         <TableCell className="text-xs font-mono text-slate-600">{tx.entry_number}</TableCell>
                                         <TableCell className="text-xs text-slate-700">{tx.description || '-'}</TableCell>
                                         <TableCell className="text-xs text-slate-500">{tx.reference || '-'}</TableCell>

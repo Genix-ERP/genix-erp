@@ -135,15 +135,16 @@ export function ModulesProvider({ children }) {
         auto_renew: c.auto_renewal || c.auto_renew || false,
       }));
       setContracts(mappedContracts);
-      // Map backend expense fields to frontend expected fields
-      // Backend returns: date (not expense_date), expense_number, category (not category_name)
+      // Map backend expense fields to frontend expected fields.
+      // v2 note: no more `|| 'other'` fallback on category — that fake
+      // default was what collapsed the category donut into one giant
+      // "Boshqa" slice (docs/xarajatlar-audit.md §2.1). An expense
+      // without a category now surfaces as an honest empty value.
       const rawExpenses = toArray(expensesData);
       const mappedExpenses = rawExpenses.map(e => ({
         ...e,
-        claim_number: e.expense_number || e.claim_number,
-        expense_date: e.date || e.expense_date || e.claim_date, // Backend returns 'date'
-        claim_date: e.date || e.expense_date || e.claim_date,
-        category: e.category || e.category_name || 'other', // Backend returns 'category'
+        expense_date: e.date || e.expense_date, // Backend returns 'date'
+        category: e.category || e.category_name || '',
       }));
       setExpenses(mappedExpenses);
       // Map backend asset fields to frontend expected fields
@@ -358,7 +359,10 @@ export function ModulesProvider({ children }) {
     throw new Error('Failed to dispose asset');
   }, []);
 
-  // Expense CRUD - API only
+  // Expense CRUD - API only.
+  // v2: employee_id + status (draft|submitted) are forwarded on create;
+  // status is NOT forwarded on update — lifecycle transitions go through
+  // the dedicated financeService.submit/approve/reject/payExpense calls.
   const createExpense = useCallback(async (data) => {
     const apiData = {
       date: data.expense_date || data.claim_date || data.date,
@@ -366,14 +370,16 @@ export function ModulesProvider({ children }) {
       amount: data.amount || 0,
       tax_amount: data.tax_amount || 0,
       currency: data.currency || 'UZS',
+      employee_id: data.employee_id,
       employee_name: data.employee_name,
       vendor_name: data.vendor_name,
       category_id: data.category_id,
       category: data.category, // Send category name to backend
       payment_method: data.payment_method,
-      reference: data.reference || data.claim_number,
+      reference: data.reference,
       reimbursable: data.reimbursable || false,
       notes: data.notes,
+      ...(data.status && { status: data.status }),
       // Profit-tax recognition flag — forwarded when caller provides it;
       // backend defaults to TRUE otherwise (migration 336).
       ...(data.is_recognized !== undefined && { is_recognized: Boolean(data.is_recognized) }),
@@ -382,10 +388,8 @@ export function ModulesProvider({ children }) {
     if (result && result.id) {
       const mappedResult = {
         ...result,
-        claim_number: result.expense_number,
         expense_date: result.date || result.expense_date,
-        claim_date: result.date || result.expense_date,
-        category: result.category || result.category_name || data.category || 'other',
+        category: result.category || result.category_name || '',
       };
       setExpenses(prev => [mappedResult, ...prev]);
       return mappedResult;
@@ -400,6 +404,7 @@ export function ModulesProvider({ children }) {
       amount: data.amount,
       tax_amount: data.tax_amount,
       currency: data.currency,
+      employee_id: data.employee_id,
       employee_name: data.employee_name,
       vendor_name: data.vendor_name,
       category_id: data.category_id,
@@ -408,17 +413,14 @@ export function ModulesProvider({ children }) {
       reference: data.reference,
       reimbursable: data.reimbursable,
       notes: data.notes,
-      status: data.status,
       ...(data.is_recognized !== undefined && { is_recognized: Boolean(data.is_recognized) }),
     };
     const result = await financeService.updateExpense(id, apiData);
     if (result) {
       const mappedResult = {
         ...result,
-        claim_number: result.expense_number,
         expense_date: result.date || result.expense_date,
-        claim_date: result.date || result.expense_date,
-        category: result.category || result.category_name || data.category || 'other',
+        category: result.category || result.category_name || '',
       };
       setExpenses(prev => prev.map(e => e.id === id ? mappedResult : e));
       return mappedResult;
@@ -468,9 +470,10 @@ export function ModulesProvider({ children }) {
 
     if (periodResult && periodResult.id) {
       // If employee salary data is provided, create a payroll entry
+      let createdEntryId = null;
       if (data.employee_id && data.basic_salary > 0) {
         try {
-          await hrService.createPayrollEntry(periodResult.id, {
+          const entryResult = await hrService.createPayrollEntry(periodResult.id, {
             employee_id: data.employee_id,
             base_salary: data.basic_salary || 0,
             overtime_hours: data.overtime_hours || 0,
@@ -492,13 +495,20 @@ export function ModulesProvider({ children }) {
             // undefined so the server uses its default (apply all active taxes).
             excluded_tax_ids: Array.isArray(data.excluded_tax_ids) ? data.excluded_tax_ids : undefined,
           });
+          createdEntryId = entryResult?.id || null;
         } catch (entryError) {
-          console.warn('Failed to create payroll entry:', entryError);
+          // A period with no entry is an empty shell the UI shows as a
+          // successful calculation — remove it and surface the real error.
+          try {
+            await hrService.deletePayrollPeriod(periodResult.id);
+          } catch { /* best-effort cleanup */ }
+          throw entryError;
         }
       }
 
       const mappedResult = {
         ...periodResult,
+        first_entry_id: createdEntryId,
         payroll_number: periodResult.period_code,
         period_name: periodResult.period_name,
         employee_id: data.employee_id || periodResult.employee_id || '',

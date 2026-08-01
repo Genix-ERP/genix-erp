@@ -1,3 +1,4 @@
+import { formatDate } from '@/utils/formatDate';
 import React, { useState, useRef, useCallback } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -565,7 +566,7 @@ export default function BankStatementImport({ open, onOpenChange, bankAccount, o
                   {transactions.map((tx, i) => (
                     <TableRow key={i} className="hover:bg-slate-50">
                       <TableCell className="text-xs text-slate-400">{i + 1}</TableCell>
-                      <TableCell className="text-xs">{tx.transaction_date}</TableCell>
+                      <TableCell className="text-xs">{formatDate(tx.transaction_date)}</TableCell>
                       <TableCell className="text-xs max-w-[250px] truncate">{tx.description || '—'}</TableCell>
                       <TableCell className="text-xs font-mono">{tx.reference || '—'}</TableCell>
                       <TableCell className="text-xs">

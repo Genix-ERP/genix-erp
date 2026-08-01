@@ -1,3 +1,4 @@
+import { formatDate } from '@/utils/formatDate';
 import React, { useState, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { useCompany } from "@/components/contexts/CompanyContext";
@@ -822,7 +823,7 @@ export function BatchPrintModal({
                 <div className="flex-1">
                   <p className="font-medium text-sm">{doc.name || doc.number || `#${doc.id}`}</p>
                   {doc.date && (
-                    <p className="text-xs text-slate-500">{doc.date}</p>
+                    <p className="text-xs text-slate-500">{formatDate(doc.date)}</p>
                   )}
                 </div>
               </label>
