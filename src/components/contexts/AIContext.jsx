@@ -2256,7 +2256,7 @@ ${t('onceDataPersonalized')}`,
 };
 
 export function AIProvider({ children }) {
-  const { isBackendConnected, isOwner, isSiteAdmin, user } = useAuth();
+  const { backendAvailable: isBackendConnected, isOwner, isSiteAdmin, user } = useAuth();
   const { activeCompany, addCompany, companies, getCompanyCount } = useCompany();
   const { canMakeAIRequest, incrementAIUsage, getRemainingAIRequests, getAIUsagePercentage, getPlanLimits, subscription, canAddCompany } = useSubscription();
   const { formatCurrency } = useCurrencyFormatter();
@@ -3283,6 +3283,13 @@ To change your subscription, go to **Settings** → **Subscription**.`
 
           // Call backend AI without requiring conversation ID
           const response = await aiService.chat(content, activeConversation?.id, enhancedContext);
+          // When no LLM key is configured server-side the backend answers with a
+          // static English template (model "demo"/"demo-fallback"). Our local
+          // grounded analysis is better (multilingual + real numbers), so only
+          // use the backend reply when a real model produced it.
+          if (String(response.model || '').startsWith('demo')) {
+            throw new Error('backend AI is in demo mode');
+          }
           const detectedLang = detectMessageLanguage(content);
           const lang = detectedLang || currentLanguage || 'en';
           const fallbackText = {
