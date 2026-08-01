@@ -101,6 +101,33 @@ export const TRIGGER_EVENTS = [
     updatable: { target: 'leads', fields: [{ field: 'status', labelKey: 'status' }] },
   },
   {
+    value: 'lead.won', labelKey: 'evt_lead_won', descKey: 'evt_lead_won_desc',
+    category: 'crm', icon: Users, scheduled: false,
+    fields: [
+      { key: 'contact_name', labelKey: 'wf_f_contact_name', type: 'text' },
+      { key: 'company_name', labelKey: 'wf_f_company_name', type: 'text' },
+      { key: 'amount', labelKey: 'wf_f_expected_value', type: 'number' },
+    ],
+  },
+  {
+    value: 'lead.lost', labelKey: 'evt_lead_lost', descKey: 'evt_lead_lost_desc',
+    category: 'crm', icon: ArrowRightLeft, scheduled: false,
+    fields: [
+      { key: 'contact_name', labelKey: 'wf_f_contact_name', type: 'text' },
+      { key: 'lost_reason', labelKey: 'wf_f_lost_reason', type: 'text' },
+      { key: 'amount', labelKey: 'wf_f_expected_value', type: 'number' },
+    ],
+  },
+  {
+    value: 'lead.stale', labelKey: 'evt_lead_stale', descKey: 'evt_lead_stale_desc',
+    category: 'crm', icon: ArrowRightLeft, scheduled: true,
+    fields: [
+      { key: 'contact_name', labelKey: 'wf_f_contact_name', type: 'text' },
+      { key: 'stage', labelKey: 'wf_f_new_status', type: 'text' },
+      { key: 'stale_days', labelKey: 'wf_f_stale_days', type: 'number' },
+    ],
+  },
+  {
     value: 'task.assigned', labelKey: 'evt_task_assigned', descKey: 'evt_task_assigned_desc',
     category: 'tasks', icon: Users, scheduled: false,
     fields: [
