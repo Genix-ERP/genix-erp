@@ -139,7 +139,9 @@ export default function Contracts() {
     Employee.list().then((d) => setEmployees(Array.isArray(d) ? d : [])).catch(() => setEmployees([]));
   }, []);
 
-  // CRM "Bitim yutildi" entry: /contracts?create=1&counterparty_id=..&title=..&value=..&deal_id=..
+  // CRM "Bitim yutildi" entry: /contracts?create=1&counterparty_id=..&title=..&value=..
+  // Link back either as legacy deal_id (opportunities → crm_deal) or, since
+  // CRM v2, as lead_id (leads → crm_lead).
   useEffect(() => {
     if (searchParams.get('create') === '1') {
       setForm((f) => ({
@@ -149,7 +151,8 @@ export default function Contracts() {
         value: searchParams.get('value') || f.value,
         direction: searchParams.get('direction') || 'income',
       }));
-      if (searchParams.get('deal_id')) setPendingDealLink(searchParams.get('deal_id'));
+      if (searchParams.get('deal_id')) setPendingDealLink({ module: 'crm_deal', id: searchParams.get('deal_id') });
+      if (searchParams.get('lead_id')) setPendingDealLink({ module: 'crm_lead', id: searchParams.get('lead_id') });
       setShowCreateModal(true);
       setSearchParams({}, { replace: true });
     }
@@ -228,7 +231,7 @@ export default function Contracts() {
         try { await contractsService.attachFile(created.id, aiFile.file_id); } catch (e) { console.error(e); }
       }
       if (pendingDealLink && created?.id) {
-        try { await contractsService.createLink(created.id, 'crm_deal', pendingDealLink); } catch (e) { console.error(e); }
+        try { await contractsService.createLink(created.id, pendingDealLink.module, pendingDealLink.id); } catch (e) { console.error(e); }
         setPendingDealLink(null);
       }
       toast.success(t('contract_created'));

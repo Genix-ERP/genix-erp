@@ -22,6 +22,9 @@ export { default as intercompanyService } from './intercompany';
 export {
   opportunitiesService,
   pipelineStagesService,
+  pipelinesService,
+  lostReasonsService,
+  crmReportsService,
   activitiesService,
   tasksService,
   leadConversionService

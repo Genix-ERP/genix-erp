@@ -221,6 +221,87 @@ export const pipelineStagesService = {
   async delete(id, companyId) {
     await apiClient.delete(`/pipeline-stages/${id}`);
     return true;
+  },
+
+  // One batched call instead of N PUTs (same shape as task-board column reorder)
+  async reorder(stageIds) {
+    const response = await apiClient.post('/pipeline-stages/reorder', { stage_ids: stageIds });
+    return response.data.data;
+  }
+};
+
+// =====================================================
+// PIPELINES (CRM v2 — funnels; stages come nested)
+// =====================================================
+export const pipelinesService = {
+  async list() {
+    const response = await apiClient.get('/pipelines');
+    return response.data.data || [];
+  },
+
+  async create(data) {
+    const response = await apiClient.post('/pipelines', data);
+    return response.data.data;
+  },
+
+  async update(id, updates) {
+    const response = await apiClient.put(`/pipelines/${id}`, updates);
+    return response.data.data;
+  },
+
+  async delete(id) {
+    await apiClient.delete(`/pipelines/${id}`);
+    return true;
+  }
+};
+
+// =====================================================
+// LOST REASONS (tenant catalog — required on loss)
+// =====================================================
+export const lostReasonsService = {
+  async list() {
+    const response = await apiClient.get('/lost-reasons');
+    return response.data.data || [];
+  },
+
+  async create(data) {
+    const response = await apiClient.post('/lost-reasons', data);
+    return response.data.data;
+  },
+
+  async update(id, updates) {
+    const response = await apiClient.put(`/lost-reasons/${id}`, updates);
+    return response.data.data;
+  },
+
+  async delete(id) {
+    await apiClient.delete(`/lost-reasons/${id}`);
+    return true;
+  }
+};
+
+// =====================================================
+// CRM REPORTS (Hisobotlar — funnel / sources / managers / loss reasons)
+// =====================================================
+export const crmReportsService = {
+  async funnel(params = {}) {
+    const response = await apiClient.get('/crm/reports/funnel', { params });
+    return response.data.data;
+  },
+
+  async sources(params = {}) {
+    const response = await apiClient.get('/crm/reports/sources', { params });
+    return response.data.data || [];
+  },
+
+  async managers(params = {}) {
+    const response = await apiClient.get('/crm/reports/managers', { params });
+    return response.data.data || [];
+  },
+
+  async lossReasons(params = {}) {
+    const response = await apiClient.get('/crm/reports/loss-reasons', { params });
+    return response.data.data;
   }
 };
 
@@ -618,6 +699,9 @@ export const leadConversionService = {
 export default {
   opportunities: opportunitiesService,
   pipelineStages: pipelineStagesService,
+  pipelines: pipelinesService,
+  lostReasons: lostReasonsService,
+  reports: crmReportsService,
   activities: activitiesService,
   tasks: tasksService,
   leadConversion: leadConversionService

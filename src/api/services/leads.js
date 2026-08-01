@@ -176,6 +176,57 @@ export const leadsService = {
     return response.data.data || [];
   },
 
+  // ── CRM v2 lifecycle (server-enforced won/lost flows) ──
+
+  // Move a lead to an open stage. Terminal stages answer 409
+  // WON_FLOW_REQUIRED / LOST_REASON_REQUIRED so the UI opens the right dialog.
+  async move(leadId, stageId) {
+    const response = await apiClient.post(`/leads/${leadId}/move`, { stage_id: stageId });
+    return response.data.data;
+  },
+
+  // Win a lead — creates-or-links the unified partner (phone dedupe server-side)
+  async win(leadId, { partnerId, partnerType } = {}) {
+    const response = await apiClient.post(`/leads/${leadId}/won`, {
+      partner_id: partnerId || undefined,
+      partner_type: partnerType || undefined,
+    });
+    return response.data.data;
+  },
+
+  // Lose a lead — reason is mandatory
+  async lose(leadId, lostReasonId, note) {
+    const response = await apiClient.post(`/leads/${leadId}/lost`, {
+      lost_reason_id: lostReasonId,
+      note: note || undefined,
+    });
+    return response.data.data;
+  },
+
+  // Merged timeline: stage changes ∪ field changes ∪ activities ∪ calls
+  async getTimeline(leadId) {
+    const response = await apiClient.get(`/leads/${leadId}/timeline`);
+    return response.data.data || [];
+  },
+
+  // Vazifalar tasks linked via task_links (linked_module = 'crm_lead')
+  async getTasks(leadId) {
+    const response = await apiClient.get(`/leads/${leadId}/tasks`);
+    return response.data.data || [];
+  },
+
+  // AI: extract lead fields from pasted free text (Telegram message etc.)
+  async aiExtract(text) {
+    const response = await apiClient.post('/leads/ai/extract', { text });
+    return response.data.data;
+  },
+
+  // AI: draft a follow-up message for a stale lead
+  async aiNextStep(leadId) {
+    const response = await apiClient.post(`/leads/${leadId}/ai/next-step`);
+    return response.data.data;
+  },
+
   // Convert lead to contact/customer
   async convertToCustomer(leadId, companyId) {
     try {
