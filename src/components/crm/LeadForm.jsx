@@ -14,6 +14,7 @@ import apiClient from "@/api/client";
 import { formatPhoneInput, parsePhoneInput } from '@/utils/formatCurrency';
 import { pipelineStagesService } from "@/api/services/crm";
 import { Phone, CalendarDays, Mail, Bell } from "lucide-react";
+import { formatDate, formatDateTime } from '@/utils/formatDate';
 
 // English defaults — if name matches, show translation; otherwise show custom name
 const DEFAULT_STAGE_NAMES = {
@@ -126,7 +127,7 @@ export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
       // Scheduled follow-up. Combine local date+time into an ISO
       // string with the user's timezone offset so the backend stores
       // the exact wall-clock moment the user picked.
-      const local = new Date(`${followup.date}T${followup.time}:00`);
+      const local = new Date(`${formatDate(followup.date)}T${followup.time}:00`);
       if (!isNaN(local.getTime())) {
         const isoDatetime = local.toISOString();
         followupPayload = {
@@ -430,7 +431,7 @@ export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
                 <div className="text-xs text-slate-600 bg-white rounded px-3 py-2 border border-slate-200">
                   {t('reminder_will_fire') || 'A reminder will fire on'}{' '}
                   <span className="font-semibold">
-                    {new Date(`${followup.date}T${followup.time}:00`).toLocaleString(undefined, { hour12: false })}
+                    {formatDateTime(`${formatDate(followup.date)}T${followup.time}:00`)}
                   </span>
                 </div>
               )}

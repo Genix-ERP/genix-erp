@@ -21,6 +21,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { contactsService } from '@/api/services';
 import financeService from "@/api/services/finance";
+import { formatDate, formatDateTime } from '@/utils/formatDate';
 
 // Fix share URLs: replace backend's FRONTEND_URL with actual browser origin
 const fixShareUrl = (url) => {
@@ -303,7 +304,7 @@ export default function ActSverka() {
     const linesHtml = lines.map((l, i) => `
       <tr>
         <td style="text-align:center">${i + 1}</td>
-        <td>${l.date}</td>
+        <td>${formatDate(l.date)}</td>
         <td>${l.document || ''}</td>
         <td>${l.description || ''}</td>
         <td style="text-align:right">${l.debit > 0 ? formatCurrency(l.debit) : ''}</td>
@@ -744,7 +745,7 @@ export default function ActSverka() {
                                 {idx + 1}
                               </div>
                             </TableCell>
-                            <TableCell className="text-xs text-slate-600">{line.date}</TableCell>
+                            <TableCell className="text-xs text-slate-600">{formatDate(line.date)}</TableCell>
                             <TableCell className="text-xs font-mono text-slate-600">{line.document || '-'}</TableCell>
                             <TableCell className="text-xs text-slate-700">
                               <div className="flex items-center gap-1.5">
@@ -865,11 +866,11 @@ export default function ActSverka() {
                       <span className="text-slate-600 flex-1">
                         <strong>{act.sent_via === 'email' ? 'Email' : 'WhatsApp'}</strong> orqali yuborilgan:
                         {' '}{act.sent_to}
-                        {' '}— {new Date(act.sent_at).toLocaleDateString('uz-UZ')}
+                        {' '}— {formatDate(act.sent_at)}
                         {act.share_expires_at && (
                           <span className="text-slate-400 ml-2">
                             (havola {new Date(act.share_expires_at) > new Date() ?
-                              `${new Date(act.share_expires_at).toLocaleString('uz-UZ')} gacha amal qiladi` :
+                              `${formatDateTime(act.share_expires_at)} gacha amal qiladi` :
                               'muddati tugagan'})
                           </span>
                         )}
@@ -914,7 +915,7 @@ export default function ActSverka() {
                         )}
                         {act.responded_at && (
                           <span className="text-slate-400 ml-2 text-xs">
-                            {new Date(act.responded_at).toLocaleDateString('uz-UZ')}
+                            {formatDate(act.responded_at)}
                           </span>
                         )}
                         {act.dispute_note && (

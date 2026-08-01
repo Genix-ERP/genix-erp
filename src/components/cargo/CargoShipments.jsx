@@ -58,7 +58,7 @@ export default function CargoShipments() {
 
       const date = new Date(dateStr);
       if (isNaN(date.getTime())) return '-';
-      return format(date, 'dd MMM yyyy');
+      return format(date, 'dd.MM.yyyy');
     } catch (error) {
       console.error('Date formatting error:', error);
       return '-';

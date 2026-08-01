@@ -3,6 +3,7 @@
 import {
   Package, FileText, Users, AlertTriangle, Clock, ShoppingCart,
   CreditCard, Truck, UserPlus, FileSignature, ArrowRightLeft, ClipboardList,
+  Receipt,
 } from 'lucide-react';
 
 // field.type: 'number' | 'text' | 'select' (with options)
@@ -194,6 +195,62 @@ export const TRIGGER_EVENTS = [
     fields: [
       { key: 'contract_number', labelKey: 'wf_f_contract_number', type: 'text' },
       { key: 'contact_name', labelKey: 'wf_f_contact_name', type: 'text' },
+    ],
+  },
+  {
+    value: 'expenses.submitted', labelKey: 'evt_expenses_submitted', descKey: 'evt_expenses_submitted_desc',
+    category: 'expenses', icon: Receipt, scheduled: false,
+    fields: [
+      { key: 'expense_number', labelKey: 'wf_f_expense_number', type: 'text' },
+      { key: 'employee_name', labelKey: 'wf_f_employee_name', type: 'text' },
+      { key: 'category_name', labelKey: 'wf_f_category_name', type: 'text' },
+      { key: 'total_amount', labelKey: 'wf_f_total_amount', type: 'number' },
+    ],
+  },
+  {
+    value: 'expenses.approved', labelKey: 'evt_expenses_approved', descKey: 'evt_expenses_approved_desc',
+    category: 'expenses', icon: Receipt, scheduled: false,
+    fields: [
+      { key: 'expense_number', labelKey: 'wf_f_expense_number', type: 'text' },
+      { key: 'employee_name', labelKey: 'wf_f_employee_name', type: 'text' },
+      { key: 'category_name', labelKey: 'wf_f_category_name', type: 'text' },
+      { key: 'total_amount', labelKey: 'wf_f_total_amount', type: 'number' },
+    ],
+  },
+  {
+    value: 'expenses.rejected', labelKey: 'evt_expenses_rejected', descKey: 'evt_expenses_rejected_desc',
+    category: 'expenses', icon: Receipt, scheduled: false,
+    fields: [
+      { key: 'expense_number', labelKey: 'wf_f_expense_number', type: 'text' },
+      { key: 'employee_name', labelKey: 'wf_f_employee_name', type: 'text' },
+      { key: 'total_amount', labelKey: 'wf_f_total_amount', type: 'number' },
+      { key: 'reason', labelKey: 'wf_f_reason', type: 'text' },
+    ],
+  },
+  {
+    value: 'expenses.paid', labelKey: 'evt_expenses_paid', descKey: 'evt_expenses_paid_desc',
+    category: 'expenses', icon: Receipt, scheduled: false,
+    fields: [
+      { key: 'expense_number', labelKey: 'wf_f_expense_number', type: 'text' },
+      { key: 'employee_name', labelKey: 'wf_f_employee_name', type: 'text' },
+      { key: 'category_name', labelKey: 'wf_f_category_name', type: 'text' },
+      { key: 'total_amount', labelKey: 'wf_f_total_amount', type: 'number' },
+    ],
+  },
+  {
+    value: 'payroll.period_confirmed', labelKey: 'evt_payroll_period_confirmed', descKey: 'evt_payroll_period_confirmed_desc',
+    category: 'hr', icon: CreditCard, scheduled: false,
+    fields: [
+      { key: 'period_name', labelKey: 'wf_f_period_name', type: 'text' },
+      { key: 'total_net', labelKey: 'wf_f_total_amount', type: 'number' },
+    ],
+  },
+  {
+    value: 'payroll.paid', labelKey: 'evt_payroll_paid', descKey: 'evt_payroll_paid_desc',
+    category: 'hr', icon: CreditCard, scheduled: false,
+    fields: [
+      { key: 'period_name', labelKey: 'wf_f_period_name', type: 'text' },
+      { key: 'total_net', labelKey: 'wf_f_total_amount', type: 'number' },
     ],
   },
 ];

@@ -36,6 +36,7 @@ import { opportunitiesService } from '@/api/services/crm';
 import constructionService from '@/api/services/construction';
 import { Employee } from '@/api/entities';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
+import { formatDate, formatDateTime } from '@/utils/formatDate';
 import { CONTRACT_STATUSES, CONTRACT_DIRECTIONS, CONTRACT_TYPES, LINK_MODULES } from '@/components/contracts/constants';
 
 export default function ContractDetail() {
@@ -85,8 +86,7 @@ export default function ContractDetail() {
 
   const fileInputRef = useRef(null);
 
-  const dateLocale = { uz: 'uz-UZ', ru: 'ru-RU', en: 'en-GB' }[language] || 'uz-UZ';
-  const fmtDate = (d) => (d ? new Date(d).toLocaleDateString(dateLocale) : '—');
+  const fmtDate = (d) => formatDate(d) || '—';
 
   // Financial rollups are visible only to roles that can read Moliyaviy
   // ma'lumotlar (finance module).
@@ -922,7 +922,7 @@ export default function ContractDetail() {
                       <div key={a.id} className="text-sm border-l-2 border-slate-200 pl-3">
                         <p className="font-medium text-slate-800">{activityLabel(a)}</p>
                         <p className="text-xs text-slate-400">
-                          {a.user_name || t('system')} · {new Date(a.created_at).toLocaleString(dateLocale)}
+                          {a.user_name || t('system')} · {formatDateTime(a.created_at)}
                         </p>
                       </div>
                     ))}

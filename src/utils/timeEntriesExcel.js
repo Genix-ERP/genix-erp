@@ -1,3 +1,4 @@
+import { formatDate as fmtDdMmYyyy } from './formatDate';
 import ExcelJS from 'exceljs';
 import * as XLSX from 'xlsx';
 
@@ -6,7 +7,7 @@ import * as XLSX from 'xlsx';
  */
 export async function exportTimeEntriesToExcel({ projectName = '', entries = [], tasksById = {}, labels = {}, formatDate }) {
   const l = (k, fb) => labels[k] || fb;
-  const fd = formatDate || ((d) => (d ? new Date(d).toLocaleDateString() : ''));
+  const fd = formatDate || ((d) => (d ? formatDate(d) : ''));
 
   const wb = new ExcelJS.Workbook();
   wb.creator = 'GenixERP';

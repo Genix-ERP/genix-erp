@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
+import { formatDate, formatDateTime } from '@/utils/formatDate';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
 
@@ -181,7 +182,7 @@ export default function SharedReconciliation() {
                 data.lines.map((line, i) => (
                   <tr key={i} style={i % 2 === 0 ? styles.trEven : {}}>
                     <td style={{ ...styles.td, textAlign: 'center' }}>{i + 1}</td>
-                    <td style={styles.td}>{line.date}</td>
+                    <td style={styles.td}>{formatDate(line.date)}</td>
                     <td style={styles.td}>{line.document}</td>
                     <td style={styles.td}>{line.description}</td>
                     <td style={{ ...styles.td, textAlign: 'right' }}>
@@ -325,7 +326,7 @@ export default function SharedReconciliation() {
         {/* Expiry notice */}
         {data.share_expires_at && (
           <p style={styles.expiryNote}>
-            Bu havola {new Date(data.share_expires_at).toLocaleString('uz-UZ')} gacha amal qiladi
+            Bu havola {formatDateTime(data.share_expires_at)} gacha amal qiladi
           </p>
         )}
 

@@ -29,6 +29,7 @@ import contractsService from '@/api/services/contracts';
 import { contactsService } from '@/api/services';
 import { Employee } from '@/api/entities';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
+import { formatDate } from '@/utils/formatDate';
 import { CONTRACT_STATUSES, CONTRACT_DIRECTIONS } from '@/components/contracts/constants';
 
 const EMPTY_FORM = {
@@ -270,11 +271,9 @@ export default function Contracts() {
     return <Badge variant="outline" className={cfg.chip}>{t(cfg.labelKey)}</Badge>;
   };
 
-  const dateLocale = { uz: 'uz-UZ', ru: 'ru-RU', en: 'en-GB' }[language] || 'uz-UZ';
-
   const expiryCell = (row) => {
     if (!row.end_date) return <span className="text-slate-400">{t('contract_open_ended')}</span>;
-    const dateStr = new Date(row.end_date).toLocaleDateString(dateLocale);
+    const dateStr = formatDate(row.end_date);
     const d = row.days_to_expiry;
     if (row.status === 'active' && d != null && d >= 0 && d <= 30) {
       return (

@@ -19,6 +19,7 @@ import { useTranslation } from '@/components/utils/translations';
 import { sortBuildings } from '@/utils/naturalSort';
 import { toast } from 'sonner';
 import MaterialConsolidationModal from '@/components/construction/MaterialConsolidationModal';
+import { formatDate } from '@/utils/formatDate';
 
 const TYPE_COLORS = {
   ks2: 'bg-blue-100 text-blue-700',
@@ -860,7 +861,7 @@ const FormsTab = ({ project }) => {
                   <div className="mt-1">
                     <p className="text-xs text-green-600 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> {t('signed') || 'Imzolangan'}</p>
                     {sig.name && <p className="text-xs text-slate-600">{sig.name}</p>}
-                    <p className="text-xs text-slate-400">{new Date(sig.at).toLocaleDateString()}</p>
+                    <p className="text-xs text-slate-400">{formatDate(sig.at)}</p>
                   </div>
                 ) : (
                   <div className="mt-1">

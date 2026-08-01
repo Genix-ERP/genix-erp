@@ -78,6 +78,7 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useModules } from "@/components/contexts/ModulesContext";
+import { formatDate } from '@/utils/formatDate';
 import { useCompany } from "@/components/contexts/CompanyContext";
 import { useInstalledApps } from "@/components/contexts/InstalledAppsContext";
 import { useEmployeePermissions, AVAILABLE_MODULES } from "@/components/contexts/EmployeePermissionsContext";
@@ -173,7 +174,7 @@ export default function HR() {
     template: 'payslip',
     title: 'Xodim ma\'lumotlari',
     documentNumber: employee.id,
-    documentDate: new Date().toLocaleDateString('uz-UZ'),
+    documentDate: formatDate(),
     headerFields: [
       { label: 'Xodim', value: employee.full_name },
       { label: 'Lavozim', value: employee.job_title },
@@ -1001,7 +1002,7 @@ Only return the JSON, no other text.`;
                       </div>
                     </TableCell>
                     <TableCell><Badge variant="outline">{e.department || '-'}</Badge></TableCell>
-                    <TableCell>{new Date(e.hire_date).toLocaleDateString()}</TableCell>
+                    <TableCell>{formatDate(e.hire_date)}</TableCell>
                     <TableCell>
                       <Badge className={
                         e.status === 'active' ? 'bg-green-100 text-green-700 border-green-200 hover:bg-green-100' :
@@ -1270,7 +1271,7 @@ Only return the JSON, no other text.`;
                       <Calendar className="w-4 h-4" />
                       {t('hire_date') || 'Hire Date'}
                     </div>
-                    <p className="font-medium">{new Date(selectedEmployee.hire_date).toLocaleDateString()}</p>
+                    <p className="font-medium">{formatDate(selectedEmployee.hire_date)}</p>
                   </div>
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 text-slate-500 text-sm">
@@ -1309,7 +1310,7 @@ Only return the JSON, no other text.`;
                           </div>
                           {task.due_date && (
                             <span className={`ml-2 text-xs whitespace-nowrap ${task.is_overdue ? 'text-red-600 font-semibold' : 'text-slate-500'}`}>
-                              {new Date(task.due_date).toLocaleDateString()}
+                              {formatDate(task.due_date)}
                             </span>
                           )}
                         </button>

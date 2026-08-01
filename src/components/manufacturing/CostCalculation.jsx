@@ -11,6 +11,7 @@ import { inventoryService, costCalculationsService } from '@/api/services';
 import { toast } from 'sonner';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { formatDate } from '@/utils/formatDate';
 
 const DEFAULT_PROFIT = 45;
 
@@ -297,7 +298,7 @@ export default function CostCalculation() {
     doc.setTextColor(100, 100, 100);
     doc.text(calc.name, pageW / 2, 30, { align: 'center' });
 
-    const dateStr = new Date(calc.created_at).toLocaleDateString();
+    const dateStr = formatDate(calc.created_at);
     doc.setFontSize(10);
     doc.text(dateStr, pageW / 2, 37, { align: 'center' });
 
@@ -404,7 +405,7 @@ export default function CostCalculation() {
                       <span>{tx.material_cost}: <b className="text-slate-700">{fmtMoney(calc.material_cost)}</b></span>
                       <span>{tx.profit_pct}: <b className="text-slate-700">{calc.profit_percent}%</b></span>
                       <span className="text-xs text-slate-400">
-                        {new Date(calc.created_at).toLocaleDateString()}
+                        {formatDate(calc.created_at)}
                       </span>
                     </div>
                   </div>

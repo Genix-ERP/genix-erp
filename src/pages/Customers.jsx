@@ -65,6 +65,7 @@ import { activitiesService } from "@/api/services/crm";
 import { useToast } from "@/components/ui/use-toast";
 import { useSales } from "@/components/contexts/SalesContext";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { formatDate, formatDateTime } from '@/utils/formatDate';
 
 function CustomerReports({ customers, salesOrders, invoices, leads, callLogs, formatCurrency, language, t }) {
   const [sortField, setSortField] = useState('totalSales');
@@ -606,9 +607,7 @@ function CustomerReports({ customers, salesOrders, invoices, leads, callLogs, fo
                       <TableCell className="text-slate-500">{idx + 1}</TableCell>
                       <TableCell className="text-sm">
                         {call.call_start_time
-                          ? new Date(call.call_start_time).toLocaleString(language === 'uz' ? 'uz-UZ' : language === 'ru' ? 'ru-RU' : 'en-US', {
-                              day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
-                            })
+                          ? formatDateTime(call.call_start_time)
                           : '-'
                         }
                       </TableCell>
@@ -716,7 +715,7 @@ function CustomerReports({ customers, salesOrders, invoices, leads, callLogs, fo
                       {formatCurrency(c.totalDebt)}
                     </TableCell>
                     <TableCell className="text-sm text-slate-500">
-                      {c.lastOrderDate ? new Date(c.lastOrderDate).toLocaleDateString(language === 'uz' ? 'uz-UZ' : 'en-US') : '-'}
+                      {c.lastOrderDate ? formatDate(c.lastOrderDate) : '-'}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -958,7 +957,7 @@ export default function Customers() {
             title: t('followup_scheduled') || 'Follow-up scheduled',
             description:
               followupPayload.start_datetime
-                ? new Date(followupPayload.start_datetime).toLocaleString(undefined, { hour12: false })
+                ? formatDateTime(followupPayload.start_datetime)
                 : '',
           });
         } catch (activityErr) {
@@ -1333,7 +1332,7 @@ export default function Customers() {
                     <div>
                       <div className="font-medium text-sm">{s.order_number}</div>
                       <div className="text-xs text-slate-500">
-                        {new Date(s.order_date || s.created_at).toLocaleDateString()} · {s.status} · {s.payment_status}
+                        {formatDate(s.order_date || s.created_at)} · {s.status} · {s.payment_status}
                       </div>
                     </div>
                     <div className="text-right text-sm">

@@ -132,6 +132,18 @@ export const NOTIFICATION_TEMPLATES = {
     fields: ['expense_number', 'amount'],
     format: { amount: 'number' },
   },
+  expense_rejected: {
+    titleKey: 'notif_expense_rejected_title',
+    bodyKey: 'notif_expense_rejected_body',
+    fields: ['expense_number', 'amount'],
+    format: { amount: 'number' },
+  },
+  expense_paid: {
+    titleKey: 'notif_expense_paid_title',
+    bodyKey: 'notif_expense_paid_body',
+    fields: ['expense_number', 'amount'],
+    format: { amount: 'number' },
+  },
   salary_confirmed: {
     titleKey: 'notif_salary_confirmed_title',
     bodyKey: 'notif_salary_confirmed_body',

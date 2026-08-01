@@ -1,3 +1,4 @@
+import { formatDate } from '@/utils/formatDate';
 import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -1258,7 +1259,7 @@ export default function FixedAssets() {
                     <div key={m.id} className="p-2 text-xs flex justify-between items-center">
                       <div>
                         <span className="font-medium">{maintenanceTypeLabels[m.maintenance_type]?.uz || m.maintenance_type}</span>
-                        <span className="text-slate-500 ml-2">{m.service_date}</span>
+                        <span className="text-slate-500 ml-2">{formatDate(m.service_date)}</span>
                       </div>
                       <div className="text-right">
                         {m.cost > 0 && <span className="text-red-600">{formatCurrency(m.cost)}</span>}

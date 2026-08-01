@@ -44,6 +44,7 @@ const SalesOrders = lazyRetry(() => import('./SalesOrders'));
 const Assets = lazyRetry(() => import('./Assets'));
 const Expenses = lazyRetry(() => import('./Expenses'));
 const Payroll = lazyRetry(() => import('./Payroll'));
+const EmployeeCabinet = lazyRetry(() => import('./EmployeeCabinet'));
 const Contracts = lazyRetry(() => import('./Contracts'));
 const ContractDetail = lazyRetry(() => import('./ContractDetail'));
 const Companies = lazyRetry(() => import('./Companies'));
@@ -260,6 +261,10 @@ function PagesContent() {
                     dedicated route here. Link to it with
                     /financials?tab=profit-tax. */}
                 <Route path="payroll" element={<ModuleRoute moduleId="payroll"><Payroll /></ModuleRoute>} />
+                {/* Xodim kabineti — employee self-service (own payslips/loan).
+                    Deliberately NOT module-gated: any logged-in user may see
+                    their own data; scoping happens server-side via /my/*. */}
+                <Route path="employee-cabinet" element={<EmployeeCabinet />} />
                 <Route path="contracts" element={<ModuleRoute moduleId="contracts"><Contracts /></ModuleRoute>} />
                 <Route path="contracts/:contractId" element={<ModuleRoute moduleId="contracts"><ContractDetail /></ModuleRoute>} />
                 <Route path="companies" element={<AdminRoute><Companies /></AdminRoute>} />

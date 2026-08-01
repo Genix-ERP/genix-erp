@@ -650,10 +650,10 @@ export default function AccountsPayable() {
                         {bill.goods_receipt_number || '-'}
                       </TableCell>
                       <TableCell className="text-sm">
-                        {bill.invoice_date ? format(new Date(bill.invoice_date), 'dd MMM yyyy', { locale: dateLocale }) : '-'}
+                        {bill.invoice_date ? format(new Date(bill.invoice_date), 'dd.MM.yyyy', { locale: dateLocale }) : '-'}
                       </TableCell>
                       <TableCell className="text-sm">
-                        {bill.due_date ? format(new Date(bill.due_date), 'dd MMM yyyy', { locale: dateLocale }) : '-'}
+                        {bill.due_date ? format(new Date(bill.due_date), 'dd.MM.yyyy', { locale: dateLocale }) : '-'}
                       </TableCell>
                       <TableCell className="font-semibold">{formatCurrency(bill.total_amount || 0)}</TableCell>
                       <TableCell>
@@ -1144,7 +1144,7 @@ export default function AccountsPayable() {
                   <p className="text-xs text-slate-500 mb-1">{t('invoice_date')}</p>
                   <p className="text-sm font-semibold text-slate-900">
                     {selectedBill.invoice_date
-                      ? format(new Date(selectedBill.invoice_date), 'dd MMM yyyy', { locale: dateLocale })
+                      ? format(new Date(selectedBill.invoice_date), 'dd.MM.yyyy', { locale: dateLocale })
                       : '-'}
                   </p>
                 </div>
@@ -1152,7 +1152,7 @@ export default function AccountsPayable() {
                   <p className="text-xs text-slate-500 mb-1">{t('due_date')}</p>
                   <p className="text-sm font-semibold text-slate-900">
                     {selectedBill.due_date
-                      ? format(new Date(selectedBill.due_date), 'dd MMM yyyy', { locale: dateLocale })
+                      ? format(new Date(selectedBill.due_date), 'dd.MM.yyyy', { locale: dateLocale })
                       : '-'}
                   </p>
                 </div>

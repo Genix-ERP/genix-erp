@@ -20,6 +20,7 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { renderNotification, NOTIFICATION_TEMPLATES } from "@/utils/notificationCatalog";
 import { cn } from "@/lib/utils";
+import { formatDateTime } from '@/utils/formatDate';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
 
@@ -361,7 +362,7 @@ export default function Notifications() {
                             <Badge variant="outline" className={getTypeColor(notification.type)}>
                               {getTypeLabel(notification.type)}
                             </Badge>
-                            <span>{new Date(notification.created_at).toLocaleString(undefined, { hour12: false })}</span>
+                            <span>{formatDateTime(notification.created_at)}</span>
                           </div>
                         </div>
 

@@ -19,6 +19,7 @@ import { format, differenceInDays, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { formatDate } from '@/utils/formatDate';
 
 // ─────────────────────────────────────────────
 // Shared primitives
@@ -574,7 +575,7 @@ export function AlertsWidget({ project, sections = [], vendors = [], acts = [] }
       type: isOverdue ? 'error' : (daysLeft <= 1 ? 'warning' : 'info'),
       title: `${act.name || 'Akt'} — ${label}`,
       description: (t('act_deadline_alert_desc') || "Akt muddati yaqinlashmoqda")
-        + ` · ${new Date(act.period_to).toLocaleDateString()}`,
+        + ` · ${formatDate(act.period_to)}`,
       icon: Clock,
     });
   }

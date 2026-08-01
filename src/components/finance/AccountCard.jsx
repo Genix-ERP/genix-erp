@@ -1,3 +1,4 @@
+import { formatDate } from '@/utils/formatDate';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -149,7 +150,7 @@ export default function AccountCard() {
     const rowsHtml = transactions.map((tx, i) => `
       <tr>
         <td style="text-align:center">${i + 1}</td>
-        <td>${tx.date}</td>
+        <td>${formatDate(tx.date)}</td>
         <td>${tx.entry_number || ''}</td>
         <td>${tx.description || ''}${tx.contact_name ? ' (' + tx.contact_name + ')' : ''}</td>
         <td style="text-align:center;font-family:monospace">${tx.counterpart_code || ''}</td>
@@ -190,7 +191,7 @@ export default function AccountCard() {
           <thead>
             <tr>
               <th style="width:30px">№</th>
-              <th style="width:80px">${labels.date}</th>
+              <th style="width:80px">${formatDate(labels.date)}</th>
               <th style="width:110px">${labels.document}</th>
               <th>${labels.description}</th>
               <th style="width:70px">${labels.counterpart_account}</th>
@@ -399,7 +400,7 @@ export default function AccountCard() {
                     <TableHeader>
                       <TableRow className="bg-slate-50">
                         <TableHead className="w-[40px] text-center">№</TableHead>
-                        <TableHead className="w-[90px]">{labels.date}</TableHead>
+                        <TableHead className="w-[90px]">{formatDate(labels.date)}</TableHead>
                         <TableHead className="w-[120px]">{labels.document}</TableHead>
                         <TableHead>{labels.description}</TableHead>
                         <TableHead className="w-[80px] text-center">{labels.counterpart_account}</TableHead>

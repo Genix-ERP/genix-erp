@@ -16,6 +16,7 @@ import { useTranslation } from "@/components/utils/translations";
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { formatDate } from '@/utils/formatDate';
 
 // Portal component for dragging items
 const PortalAwareItem = ({ provided, snapshot, children }) => {
@@ -305,7 +306,7 @@ export default function DragDropKanban({ opportunities = [], leads = [], onUpdat
           {opportunity.expected_close_date && (
             <div className="flex items-center gap-1.5 text-xs text-slate-500 pt-2 border-t border-slate-100">
               <Calendar className="w-3.5 h-3.5" />
-              <span className="font-medium">{new Date(opportunity.expected_close_date).toLocaleDateString()}</span>
+              <span className="font-medium">{formatDate(opportunity.expected_close_date)}</span>
             </div>
           )}
         </div>
