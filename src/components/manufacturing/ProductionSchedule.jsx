@@ -1,218 +1,412 @@
-import React, { useState, useMemo } from 'react';
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar, ChevronLeft, ChevronRight, Clock, Factory, AlertTriangle } from 'lucide-react';
-import { useManufacturing } from '@/components/contexts/ManufacturingContext';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
+import {
+  Calendar, ChevronLeft, ChevronRight, Factory, AlertTriangle, RotateCcw,
+  ExternalLink, X, Minus, Plus,
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import { productionOrdersService } from '@/api/services/manufacturing';
+import { getApiErrorMessage } from '@/utils/apiError';
+import { formatDate } from '@/utils/formatDate';
+import { PAL, EmptyNote, Segmented } from '@/components/shared/DashboardKit';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { usePermissions } from '@/hooks/usePermissions';
+import { MODULES } from '@/config/permissions';
 
-const STATUS_COLORS = {
-  draft: { bg: 'bg-slate-200', text: 'text-slate-700', bar: 'bg-slate-400' },
-  confirmed: { bg: 'bg-blue-100', text: 'text-blue-700', bar: 'bg-blue-500' },
-  in_progress: { bg: 'bg-amber-100', text: 'text-amber-700', bar: 'bg-amber-500' },
-  paused: { bg: 'bg-orange-100', text: 'text-orange-700', bar: 'bg-orange-400' },
-  done: { bg: 'bg-green-100', text: 'text-green-700', bar: 'bg-green-500' },
-  completed: { bg: 'bg-green-100', text: 'text-green-700', bar: 'bg-green-500' },
-  cancelled: { bg: 'bg-red-100', text: 'text-red-700', bar: 'bg-red-400' }
+// ─── Day math on plain 'YYYY-MM-DD' strings (local midnight, no
+// toLocaleDateString, no toISOString timezone drift) ─────────────────────
+const pad2 = (n) => String(n).padStart(2, '0');
+const parseDay = (s) => {
+  const [y, m, d] = String(s).split('-').map(Number);
+  return new Date(y, m - 1, d);
+};
+const toISODay = (dt) => `${dt.getFullYear()}-${pad2(dt.getMonth() + 1)}-${pad2(dt.getDate())}`;
+const addDays = (s, n) => {
+  const d = parseDay(s);
+  d.setDate(d.getDate() + n);
+  return toISODay(d);
+};
+const dayDiff = (a, b) => Math.round((parseDay(a) - parseDay(b)) / 86400000); // a - b in days
+const ddmm = (s) => {
+  const [, m, d] = String(s).split('-');
+  return m && d ? `${d}.${m}` : String(s || '');
+};
+const todayISO = () => toISODay(new Date());
+
+// Weekday initials by getDay() (0 = Sunday), per language.
+const WEEKDAYS = {
+  uz: ['Ya', 'Du', 'Se', 'Ch', 'Pa', 'Ju', 'Sh'],
+  ru: ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'],
+  en: ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'],
 };
 
+// Zoom → window shape around the anchor day and column width in px.
+const ZOOMS = {
+  '2w': { back: 7, fwd: 6, dayWidth: 72 },
+  '1m': { back: 14, fwd: 28, dayWidth: 40 }, // default: today ±(14 back / 28 fwd)
+  '3m': { back: 28, fwd: 62, dayWidth: 22 },
+};
+
+// Status → bar color (PAL order is CVD-validated; identity also lives in the
+// rail text + legend, color is a redundant cue).
+const STATUS_COLORS = {
+  draft: '#94A3B8',
+  confirmed: PAL[0].c,
+  in_progress: PAL[4].c,
+  paused: PAL[1].c,
+  completed: PAL[2].c,
+  done: PAL[2].c,
+};
+const LOCKED_STATUSES = new Set(['completed', 'done', 'cancelled', 'closed']);
+
+const MAX_ROWS = 200;
+const RAIL_W = 224; // left rail px (w-56)
+const ROW_H = 44;
+const RESIZE_ZONE = 10; // px from the right edge that acts as a resize handle
+
+// Muddatlar — interactive Gantt over GET /production-orders/schedule
+// (server date-window query, not the 1000-row context list). Bars are
+// drag-movable (whole bar) and resizable (right edge); drops PUT the new
+// scheduled dates with an optimistic update + Undo toast.
 export default function ProductionSchedule() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { productionOrders, loading } = useManufacturing();
-  const [viewMode, setViewMode] = useState('week'); // week, month
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const navigate = useNavigate();
+  const { canUpdate } = usePermissions();
+  const canReschedule = canUpdate(MODULES.MANUFACTURING);
 
-  // Calculate date range based on view mode
-  const dateRange = useMemo(() => {
-    const start = new Date(currentDate);
-    const end = new Date(currentDate);
+  const [zoom, setZoom] = useState('1m');
+  const [anchor, setAnchor] = useState(todayISO());
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [selectedId, setSelectedId] = useState(null);
+  const [pendingIds, setPendingIds] = useState(() => new Set());
+  // { id, mode: 'move'|'resize', startClientX, deltaDays } while dragging.
+  const [drag, setDrag] = useState(null);
+  const dragRef = useRef(null); // mirrors `drag` for pointer handlers
+  const movedRef = useRef(false); // suppress click-select after a real drag
+  const scrollerRef = useRef(null);
 
-    if (viewMode === 'week') {
-      // Start from Monday of current week
-      const day = start.getDay();
-      const diff = start.getDate() - day + (day === 0 ? -6 : 1);
-      start.setDate(diff);
-      end.setDate(start.getDate() + 6);
-    } else {
-      // Month view
-      start.setDate(1);
-      end.setMonth(end.getMonth() + 1);
-      end.setDate(0);
-    }
+  const { back, fwd, dayWidth } = ZOOMS[zoom] || ZOOMS['1m'];
+  const windowFrom = addDays(anchor, -back);
+  const windowTo = addDays(anchor, fwd);
+  const dayCount = dayDiff(windowTo, windowFrom) + 1;
 
-    start.setHours(0, 0, 0, 0);
-    end.setHours(23, 59, 59, 999);
-
-    return { start, end };
-  }, [currentDate, viewMode]);
-
-  // Generate array of dates for the header
-  const dates = useMemo(() => {
-    const result = [];
-    const current = new Date(dateRange.start);
-    while (current <= dateRange.end) {
-      result.push(new Date(current));
-      current.setDate(current.getDate() + 1);
-    }
-    return result;
-  }, [dateRange]);
-
-  // Filter and map orders to the schedule
-  const scheduledOrders = useMemo(() => {
-    return productionOrders
-      .filter(order => {
-        const startDate = order.scheduled_start || order.scheduled_start_date || order.actual_start;
-        if (!startDate) return false;
-        const orderStart = new Date(startDate);
-        const endDate = order.scheduled_end || order.scheduled_end_date || order.actual_end;
-        const orderEnd = endDate ? new Date(endDate) : orderStart;
-        return orderStart <= dateRange.end && orderEnd >= dateRange.start;
+  // ─── Data ────────────────────────────────────────────────────────────
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    setError(null);
+    productionOrdersService
+      .getSchedule({ date_from: windowFrom, date_to: windowTo })
+      .then((data) => { if (alive) setOrders(Array.isArray(data) ? data : []); })
+      .catch((e) => {
+        console.error('Failed to load production schedule:', e);
+        if (alive) { setOrders([]); setError(getApiErrorMessage(e, t('mfg_gantt_error'))); }
       })
-      .map(order => {
-        const startDate = order.scheduled_start || order.scheduled_start_date || order.actual_start;
-        const endDate = order.scheduled_end || order.scheduled_end_date || order.actual_end;
-        const orderStart = new Date(startDate);
-        const orderEnd = endDate ? new Date(endDate) : orderStart;
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [windowFrom, windowTo, reloadKey]);
 
-        // Calculate position and width
-        const rangeStart = dateRange.start.getTime();
-        const rangeEnd = dateRange.end.getTime();
-        const totalDays = dates.length;
+  const retry = useCallback(() => setReloadKey((k) => k + 1), []);
 
-        const startOffset = Math.max(0, (orderStart.getTime() - rangeStart) / (1000 * 60 * 60 * 24));
-        const endOffset = Math.min(totalDays, (orderEnd.getTime() - rangeStart) / (1000 * 60 * 60 * 24) + 1);
-        const duration = endOffset - startOffset;
-
-        return {
-          ...order,
-          startOffset,
-          duration,
-          isOverdue: orderEnd < new Date() && order.status !== 'done' && order.status !== 'completed' && order.status !== 'cancelled'
-        };
-      });
-  }, [productionOrders, dateRange, dates]);
-
-  const navigatePeriod = (direction) => {
-    const newDate = new Date(currentDate);
-    if (viewMode === 'week') {
-      newDate.setDate(newDate.getDate() + (direction * 7));
+  // Scroll so today is in view when the window changes.
+  const todayIdx = dayDiff(todayISO(), windowFrom);
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    if (todayIdx >= 0 && todayIdx < dayCount) {
+      el.scrollLeft = Math.max(0, todayIdx * dayWidth - el.clientWidth / 3);
     } else {
-      newDate.setMonth(newDate.getMonth() + direction);
+      el.scrollLeft = 0;
     }
-    setCurrentDate(newDate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [windowFrom, windowTo, dayWidth, loading]);
+
+  // ─── Derived rows ────────────────────────────────────────────────────
+  const days = useMemo(
+    () => Array.from({ length: dayCount }, (_, i) => addDays(windowFrom, i)),
+    [windowFrom, dayCount]
+  );
+
+  // Month header segments: consecutive runs of the same MM.YYYY.
+  const monthSegments = useMemo(() => {
+    const segs = [];
+    days.forEach((d) => {
+      const [y, m] = d.split('-');
+      const label = `${m}.${y}`;
+      const last = segs[segs.length - 1];
+      if (last && last.label === label) last.span += 1;
+      else segs.push({ label, span: 1 });
+    });
+    return segs;
+  }, [days]);
+
+  const rows = useMemo(() => {
+    const today = todayISO();
+    return orders
+      .map((o) => {
+        const start = o.scheduled_start || o.scheduled_end;
+        const end = o.scheduled_end || o.scheduled_start;
+        if (!start) return null;
+        return {
+          ...o,
+          startISO: start,
+          endISO: dayDiff(end, start) < 0 ? start : end,
+          locked: LOCKED_STATUSES.has(o.status),
+          isOverdue: !LOCKED_STATUSES.has(o.status) && dayDiff(end, today) < 0,
+        };
+      })
+      .filter(Boolean);
+  }, [orders]);
+  const visibleRows = rows.slice(0, MAX_ROWS);
+  const hiddenCount = rows.length - visibleRows.length;
+
+  const selected = rows.find((r) => r.id === selectedId) || null;
+
+  // ─── Rescheduling (shared by drag, keyboard and footer buttons) ──────
+  const commitDates = useCallback(async (order, newStart, newEnd, { primary = 'start', silent = false } = {}) => {
+    const oldStart = order.startISO;
+    const oldEnd = order.endISO;
+    if (newStart === oldStart && newEnd === oldEnd) return;
+    setPendingIds((prev) => new Set(prev).add(order.id));
+    setOrders((prev) => prev.map((o) => (
+      o.id === order.id ? { ...o, scheduled_start: newStart, scheduled_end: newEnd } : o
+    )));
+    try {
+      await productionOrdersService.update(order.id, { scheduled_start: newStart, scheduled_end: newEnd });
+      if (!silent) {
+        const fromLabel = ddmm(primary === 'end' ? oldEnd : oldStart);
+        const toLabel = ddmm(primary === 'end' ? newEnd : newStart);
+        toast.success(`${order.code}: ${fromLabel} → ${toLabel}`, {
+          action: {
+            label: t('mfg_gantt_undo'),
+            onClick: () => commitDates(
+              { ...order, startISO: newStart, endISO: newEnd },
+              oldStart, oldEnd,
+              { silent: true }
+            ),
+          },
+        });
+      }
+    } catch (e) {
+      // Revert the optimistic move.
+      setOrders((prev) => prev.map((o) => (
+        o.id === order.id ? { ...o, scheduled_start: oldStart, scheduled_end: oldEnd } : o
+      )));
+      toast.error(getApiErrorMessage(e, t('mfg_gantt_update_failed')));
+    } finally {
+      setPendingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(order.id);
+        return next;
+      });
+    }
+  }, [t]);
+
+  const shiftOrder = useCallback((order, delta) => {
+    if (!canReschedule || order.locked || pendingIds.has(order.id)) return;
+    commitDates(order, addDays(order.startISO, delta), addDays(order.endISO, delta), { primary: 'start' });
+  }, [canReschedule, pendingIds, commitDates]);
+
+  // ─── Pointer drag ────────────────────────────────────────────────────
+  const onBarPointerDown = (e, row) => {
+    if (e.button !== 0) return;
+    movedRef.current = false;
+    if (!canReschedule || row.locked || pendingIds.has(row.id)) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const mode = rect.right - e.clientX <= RESIZE_ZONE ? 'resize' : 'move';
+    const st = { id: row.id, mode, startClientX: e.clientX, deltaDays: 0 };
+    dragRef.current = st;
+    setDrag(st);
+    e.currentTarget.setPointerCapture(e.pointerId);
   };
 
-  const goToToday = () => {
-    setCurrentDate(new Date());
-  };
-
-  // Get locale based on language
-  const getLocale = () => {
-    switch (language) {
-      case 'ru': return 'ru-RU';
-      case 'uz': return 'uz-UZ';
-      default: return 'en-US';
+  const onBarPointerMove = (e) => {
+    const st = dragRef.current;
+    if (!st) return;
+    const deltaDays = Math.round((e.clientX - st.startClientX) / dayWidth);
+    if (Math.abs(e.clientX - st.startClientX) > 4) movedRef.current = true;
+    if (deltaDays !== st.deltaDays) {
+      const next = { ...st, deltaDays };
+      dragRef.current = next;
+      setDrag(next);
     }
   };
 
-  const formatDateHeader = (date) => {
-    const locale = getLocale();
-    const day = date.toLocaleDateString(locale, { weekday: 'short' });
-    const num = date.getDate();
-    return { day, num };
+  const onBarPointerUp = (e, row) => {
+    const st = dragRef.current;
+    dragRef.current = null;
+    setDrag(null);
+    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch { /* already released */ }
+    if (!st || st.id !== row.id) return;
+    if (st.deltaDays === 0) return; // plain click → handled by onClick select
+    if (st.mode === 'move') {
+      commitDates(row, addDays(row.startISO, st.deltaDays), addDays(row.endISO, st.deltaDays), { primary: 'start' });
+    } else {
+      let newEnd = addDays(row.endISO, st.deltaDays);
+      if (dayDiff(newEnd, row.startISO) < 0) newEnd = row.startISO; // never end before start
+      commitDates(row, row.startISO, newEnd, { primary: 'end' });
+    }
   };
 
-  const isToday = (date) => {
-    const today = new Date();
-    return date.toDateString() === today.toDateString();
+  const onBarKeyDown = (e, row) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      setSelectedId(row.id);
+    } else if (e.key === 'ArrowLeft' && selectedId === row.id) {
+      e.preventDefault();
+      shiftOrder(row, -1);
+    } else if (e.key === 'ArrowRight' && selectedId === row.id) {
+      e.preventDefault();
+      shiftOrder(row, 1);
+    } else if (e.key === 'Escape') {
+      setSelectedId(null);
+    }
   };
 
-  const isWeekend = (date) => {
-    const day = date.getDay();
-    return day === 0 || day === 6;
+  // ─── Navigation controls ─────────────────────────────────────────────
+  const span = back + fwd + 1;
+  const goPrev = () => setAnchor((a) => addDays(a, -span));
+  const goNext = () => setAnchor((a) => addDays(a, span));
+  const goToday = () => setAnchor(todayISO());
+  const openOrders = () => navigate('/manufacturing?tab=execute&sub=orders');
+
+  const ZOOM_OPTIONS = [
+    { id: '2w', label: t('mfg_gantt_zoom_2w') },
+    { id: '1m', label: t('mfg_gantt_zoom_1m') },
+    { id: '3m', label: t('mfg_gantt_zoom_3m') },
+  ];
+  const weekdays = WEEKDAYS[language] || WEEKDAYS.uz;
+  const gridWidth = dayCount * dayWidth;
+
+  const statusChip = (status) => {
+    const color = STATUS_COLORS[status] || '#94A3B8';
+    const key = `status_${status}`;
+    const label = t(key);
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[11px] text-slate-500 whitespace-nowrap">
+        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
+        {label === key ? status : label}
+      </span>
+    );
   };
 
+  // ─── Render ──────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-16">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-slate-800 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-slate-600">Loading production schedule...</p>
+      <div className="space-y-4">
+        <div className="flex justify-between">
+          <Skeleton className="h-8 w-52 rounded-lg" />
+          <Skeleton className="h-8 w-64 rounded-lg" />
         </div>
+        <Skeleton className="h-[420px] rounded-2xl" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="glass-card rounded-2xl border border-slate-200/60 bg-white/80 shadow-sm">
+        <EmptyNote
+          icon={AlertTriangle}
+          text={error}
+          cta={(
+            <Button size="sm" variant="outline" onClick={retry} className="gap-1.5">
+              <RotateCcw className="w-4 h-4" />
+              {t('retry')}
+            </Button>
+          )}
+        />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header Controls */}
-      <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-        <CardContent className="p-4">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-[var(--genix-blue)]" />
-              <h3 className="text-lg font-semibold text-slate-800">{t('production_schedule') || 'Production Schedule'}</h3>
-            </div>
+    <div className="space-y-4">
+      {/* Controls */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <Calendar className="w-5 h-5 text-slate-500" />
+          <div className="flex items-center gap-1">
+            <Button variant="outline" size="sm" onClick={goPrev} aria-label={t('mfg_gantt_prev')}>
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            <Button variant="outline" size="sm" onClick={goToday}>
+              {t('mfg_gantt_today')}
+            </Button>
+            <Button variant="outline" size="sm" onClick={goNext} aria-label={t('mfg_gantt_next')}>
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          </div>
+          <span className="text-sm font-medium text-slate-600 tabular-nums ml-1">
+            {ddmm(windowFrom)} — {formatDate(parseDay(windowTo))}
+          </span>
+        </div>
+        <Segmented options={ZOOM_OPTIONS} value={zoom} onChange={setZoom} />
+      </div>
 
-            <div className="flex items-center gap-3">
-              <Select value={viewMode} onValueChange={setViewMode}>
-                <SelectTrigger className="w-32">
-                  <SelectValue placeholder={t('week_view') || 'Week View'}>
-                    {viewMode === 'week' ? (t('week_view') || 'Week View') : (t('month_view') || 'Month View')}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="week">{t('week_view') || 'Week View'}</SelectItem>
-                  <SelectItem value="month">{t('month_view') || 'Month View'}</SelectItem>
-                </SelectContent>
-              </Select>
+      {canReschedule && (
+        <p className="text-xs text-slate-400">{t('mfg_gantt_hint')}</p>
+      )}
 
-              <div className="flex items-center gap-1">
-                <Button variant="outline" size="sm" onClick={() => navigatePeriod(-1)}>
-                  <ChevronLeft className="w-4 h-4" />
-                </Button>
-                <Button variant="outline" size="sm" onClick={goToToday}>
-                  {t('today') || 'Today'}
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => navigatePeriod(1)}>
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
+      {/* Gantt */}
+      <div className="glass-card rounded-2xl border border-slate-200/60 bg-white/80 shadow-sm overflow-hidden">
+        {visibleRows.length === 0 ? (
+          <EmptyNote
+            icon={Factory}
+            text={t('mfg_gantt_empty')}
+            cta={(
+              <Button size="sm" onClick={openOrders} className="gap-1.5">
+                <Plus className="w-4 h-4" />
+                {t('mfg_gantt_empty_cta')}
+              </Button>
+            )}
+          />
+        ) : (
+          <div ref={scrollerRef} className="overflow-x-auto">
+            <div style={{ width: RAIL_W + gridWidth, minWidth: '100%' }}>
+              {/* Month header */}
+              <div className="flex border-b border-slate-100 bg-slate-50/70">
+                <div className="shrink-0 border-r border-slate-200" style={{ width: RAIL_W }} />
+                <div className="flex">
+                  {monthSegments.map((seg, i) => (
+                    <div
+                      key={i}
+                      className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 py-1 px-2 border-r border-slate-100 truncate"
+                      style={{ width: seg.span * dayWidth }}
+                    >
+                      {seg.label}
+                    </div>
+                  ))}
+                </div>
               </div>
 
-              <span className="text-sm font-medium text-slate-600">
-                {dateRange.start.toLocaleDateString(getLocale(), { month: 'short', day: 'numeric' })} - {dateRange.end.toLocaleDateString(getLocale(), { month: 'short', day: 'numeric', year: 'numeric' })}
-              </span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Gantt Chart */}
-      <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg overflow-hidden">
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <div className="min-w-[800px]">
-              {/* Date Headers */}
-              <div className="flex border-b border-slate-200 bg-slate-50">
-                <div className="w-64 min-w-[256px] p-3 border-r border-slate-200 font-medium text-slate-700">
-                  {t('production_order') || 'Production Order'}
+              {/* Day header */}
+              <div className="flex border-b border-slate-200 bg-slate-50/70">
+                <div className="shrink-0 border-r border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-500" style={{ width: RAIL_W }}>
+                  {t('mfg_sub_orders')}
                 </div>
-                <div className="flex-1 flex">
-                  {dates.map((date, idx) => {
-                    const { day, num } = formatDateHeader(date);
+                <div className="flex">
+                  {days.map((d, i) => {
+                    const wd = parseDay(d).getDay();
+                    const isWeekend = wd === 0 || wd === 6;
+                    const isToday = i === todayIdx;
                     return (
                       <div
-                        key={idx}
-                        className={`flex-1 min-w-[60px] p-2 text-center border-r border-slate-100 last:border-r-0 ${
-                          isToday(date) ? 'bg-blue-50' : isWeekend(date) ? 'bg-slate-100' : ''
-                        }`}
+                        key={d}
+                        className={`text-center py-1 border-r border-slate-100 ${isWeekend ? 'bg-slate-100/70' : ''} ${isToday ? 'bg-blue-50' : ''}`}
+                        style={{ width: dayWidth }}
                       >
-                        <div className="text-xs text-slate-500">{day}</div>
-                        <div className={`text-sm font-semibold ${isToday(date) ? 'text-blue-600' : 'text-slate-700'}`}>
-                          {num}
+                        <div className="text-[9px] leading-3 text-slate-400">{weekdays[wd]}</div>
+                        <div className={`text-[11px] leading-4 font-semibold tabular-nums ${isToday ? 'text-blue-600' : 'text-slate-600'}`}>
+                          {dayWidth >= 34 ? ddmm(d) : d.slice(8, 10)}
                         </div>
                       </div>
                     );
@@ -220,152 +414,204 @@ export default function ProductionSchedule() {
                 </div>
               </div>
 
-              {/* Order Rows */}
-              {scheduledOrders.length === 0 ? (
-                <div className="p-8 text-center">
-                  <Factory className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                  <p className="text-slate-500">{t('no_scheduled_orders_for_this_period') || 'No scheduled production orders for this period'}</p>
-                  <p className="text-sm text-slate-400 mt-1">
-                    {t('create_production_orders_with_scheduled_dates') || 'Create production orders with scheduled dates to see them here'}
-                  </p>
-                </div>
-              ) : (
-                scheduledOrders.map((order, idx) => {
-                  const statusColor = STATUS_COLORS[order.status] || STATUS_COLORS.draft;
-                  return (
+              {/* Rows */}
+              <div className="relative">
+                {/* Weekend shading + today line behind all rows */}
+                <div className="absolute inset-y-0 pointer-events-none" style={{ left: RAIL_W, width: gridWidth }}>
+                  {days.map((d, i) => {
+                    const wd = parseDay(d).getDay();
+                    if (wd !== 0 && wd !== 6) return null;
+                    return (
+                      <div
+                        key={d}
+                        className="absolute inset-y-0 bg-slate-100/50"
+                        style={{ left: i * dayWidth, width: dayWidth }}
+                      />
+                    );
+                  })}
+                  {todayIdx >= 0 && todayIdx < dayCount && (
                     <div
-                      key={order.id || idx}
-                      className="flex border-b border-slate-100 hover:bg-slate-50/50 transition-colors"
-                    >
-                      {/* Order Info */}
-                      <div className="w-64 min-w-[256px] p-3 border-r border-slate-200">
-                        <div className="flex items-start gap-2">
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium text-slate-800 truncate">
-                              {order.product_name || 'Unnamed Product'}
-                            </div>
-                            <div className="text-xs text-slate-500 truncate">
-                              {order.code}
-                            </div>
-                            <div className="flex items-center gap-2 mt-1">
-                              <Badge className={`text-xs ${statusColor.bg} ${statusColor.text}`}>
-                                {t(`status_${order.status}`) || order.status?.replace('_', ' ')}
-                              </Badge>
-                              {order.isOverdue && (
-                                <Badge className="text-xs bg-red-100 text-red-700">
-                                  <AlertTriangle className="w-3 h-3 mr-1" />
-                                  Overdue
-                                </Badge>
+                      className="absolute inset-y-0 w-px bg-blue-500/70 z-10"
+                      style={{ left: todayIdx * dayWidth + Math.floor(dayWidth / 2) }}
+                    />
+                  )}
+                </div>
+
+                {visibleRows.map((row) => {
+                  const rawStartIdx = dayDiff(row.startISO, windowFrom);
+                  const rawEndIdx = dayDiff(row.endISO, windowFrom);
+                  const isDragging = drag?.id === row.id;
+                  const dMove = isDragging && drag.mode === 'move' ? drag.deltaDays : 0;
+                  const dResize = isDragging && drag.mode === 'resize' ? drag.deltaDays : 0;
+                  const effStartIdx = rawStartIdx + dMove;
+                  const effEndIdx = Math.max(effStartIdx, rawEndIdx + dMove + dResize);
+                  const clampedStart = Math.max(0, effStartIdx);
+                  const clampedEnd = Math.min(dayCount - 1, effEndIdx);
+                  const barVisible = clampedEnd >= 0 && clampedStart <= dayCount - 1 && clampedEnd >= clampedStart;
+                  const cutLeft = effStartIdx < 0;
+                  const cutRight = effEndIdx > dayCount - 1;
+                  const color = STATUS_COLORS[row.status] || '#94A3B8';
+                  const pending = pendingIds.has(row.id);
+                  const interactive = canReschedule && !row.locked && !pending;
+                  const isSelected = selectedId === row.id;
+
+                  return (
+                    <div key={row.id} className={`flex border-b border-slate-100 ${isSelected ? 'bg-blue-50/40' : 'hover:bg-slate-50/40'}`} style={{ height: ROW_H }}>
+                      {/* Rail */}
+                      <button
+                        type="button"
+                        onClick={() => setSelectedId(isSelected ? null : row.id)}
+                        className="shrink-0 border-r border-slate-200 px-3 py-1 text-left overflow-hidden"
+                        style={{ width: RAIL_W }}
+                      >
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-[11px] font-mono font-medium text-slate-700 truncate">{row.code}</span>
+                          {row.isOverdue && (
+                            <span className="inline-flex items-center px-1 rounded bg-red-50 text-red-600 text-[9px] font-semibold uppercase shrink-0">
+                              {t('overdue')}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-xs text-slate-500 truncate">{row.product_name || t('unnamed_product')}</span>
+                          {statusChip(row.status)}
+                        </div>
+                      </button>
+
+                      {/* Timeline cell */}
+                      <div className="relative" style={{ width: gridWidth }}>
+                        {barVisible && (
+                          <>
+                            {/* Dashed outline at the original slot while dragging */}
+                            {isDragging && drag.deltaDays !== 0 && (
+                              <div
+                                className="absolute top-1/2 -translate-y-1/2 h-6 rounded-md border border-dashed border-slate-300 pointer-events-none"
+                                style={{
+                                  left: Math.max(0, rawStartIdx) * dayWidth + 1,
+                                  width: Math.max(1, (Math.min(dayCount - 1, rawEndIdx) - Math.max(0, rawStartIdx) + 1)) * dayWidth - 2,
+                                }}
+                              />
+                            )}
+                            <div
+                              role="button"
+                              tabIndex={0}
+                              aria-label={`${row.code} ${row.product_name || ''} ${ddmm(row.startISO)} — ${ddmm(row.endISO)}`}
+                              onPointerDown={(e) => onBarPointerDown(e, row)}
+                              onPointerMove={onBarPointerMove}
+                              onPointerUp={(e) => onBarPointerUp(e, row)}
+                              onClick={() => { if (!movedRef.current) setSelectedId(row.id); }}
+                              onFocus={() => setSelectedId(row.id)}
+                              onKeyDown={(e) => onBarKeyDown(e, row)}
+                              className={[
+                                'absolute top-1/2 -translate-y-1/2 h-6 flex items-center px-2 select-none touch-none',
+                                cutLeft ? 'rounded-l-none' : 'rounded-l-md',
+                                cutRight ? 'rounded-r-none' : 'rounded-r-md',
+                                row.locked ? 'opacity-50' : '',
+                                pending ? 'opacity-60 pointer-events-none' : '',
+                                interactive ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer',
+                                isDragging ? 'shadow-lg z-20 opacity-90' : 'shadow-sm',
+                                isSelected ? 'ring-2 ring-blue-400 ring-offset-1' : '',
+                                row.isOverdue ? 'ring-1 ring-red-500' : '',
+                              ].join(' ')}
+                              style={{
+                                left: clampedStart * dayWidth + 1,
+                                width: Math.max(dayWidth - 2, (clampedEnd - clampedStart + 1) * dayWidth - 2),
+                                background: color,
+                              }}
+                            >
+                              <span className="text-[10px] text-white font-medium truncate pointer-events-none">
+                                {isDragging && drag.deltaDays !== 0
+                                  ? `${ddmm(addDays(row.startISO, dMove))} — ${ddmm(addDays(row.endISO, dMove + dResize))}`
+                                  : `${row.quantity_planned ?? ''}`}
+                              </span>
+                              {/* Resize affordance on the right edge */}
+                              {interactive && !cutRight && (
+                                <span className="absolute right-0 top-0 h-full w-2.5 cursor-ew-resize rounded-r-md bg-black/10 pointer-events-none" />
                               )}
                             </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Gantt Bar */}
-                      <div className="flex-1 relative py-3 px-1">
-                        <div
-                          className={`absolute top-1/2 -translate-y-1/2 h-8 rounded-md ${statusColor.bar} shadow-sm flex items-center px-2 cursor-pointer hover:opacity-90 transition-opacity`}
-                          style={{
-                            left: `${(order.startOffset / dates.length) * 100}%`,
-                            width: `${Math.max((order.duration / dates.length) * 100, 5)}%`,
-                            minWidth: '60px'
-                          }}
-                          title={`${order.product_name}\n${order.scheduled_start || order.actual_start || ''} - ${order.scheduled_end || order.actual_end || ''}`}
-                        >
-                          <span className="text-xs text-white font-medium truncate">
-                            {order.quantity_planned || order.quantity_to_produce} {order.uom || t('units') || 'dona'}
-                          </span>
-                        </div>
+                          </>
+                        )}
                       </div>
                     </div>
                   );
-                })
+                })}
+              </div>
+
+              {hiddenCount > 0 && (
+                <div className="px-4 py-2 text-xs text-slate-500 bg-slate-50/70 border-t border-slate-100">
+                  +{hiddenCount} {t('mfg_gantt_more')}
+                </div>
               )}
             </div>
           </div>
-        </CardContent>
-      </Card>
+        )}
+      </div>
 
       {/* Legend */}
-      <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-        <CardContent className="p-4">
-          <div className="flex flex-wrap items-center gap-4">
-            <span className="text-sm font-medium text-slate-600">{t('status') || 'Status'}:</span>
-            {Object.entries(STATUS_COLORS).map(([status, colors]) => (
-              <div key={status} className="flex items-center gap-2">
-                <div className={`w-4 h-4 rounded ${colors.bar}`}></div>
-                <span className="text-sm text-slate-600">{t(`status_${status}`) || status.replace('_', ' ')}</span>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                <Calendar className="w-5 h-5 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-slate-800">{scheduledOrders.length}</p>
-                <p className="text-sm text-slate-500">{t('scheduled_orders') || 'Scheduled Orders'}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center">
-                <Clock className="w-5 h-5 text-amber-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-slate-800">
-                  {scheduledOrders.filter(o => o.status === 'in_progress').length}
-                </p>
-                <p className="text-sm text-slate-500">{t('in_progress') || 'In Progress'}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                <Factory className="w-5 h-5 text-green-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-slate-800">
-                  {scheduledOrders.filter(o => o.status === 'done' || o.status === 'completed').length}
-                </p>
-                <p className="text-sm text-slate-500">{t('completed') || 'Completed'}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
-                <AlertTriangle className="w-5 h-5 text-red-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-slate-800">
-                  {scheduledOrders.filter(o => o.isOverdue).length}
-                </p>
-                <p className="text-sm text-slate-500">{t('overdue') || 'Overdue'}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="flex flex-wrap items-center gap-4 px-1">
+        {Object.entries(STATUS_COLORS).filter(([s]) => s !== 'done').map(([s, c]) => (
+          <span key={s} className="inline-flex items-center gap-1.5 text-xs text-slate-500">
+            <span className="w-3 h-3 rounded" style={{ background: c }} />
+            {t(`status_${s}`)}
+          </span>
+        ))}
+        <span className="inline-flex items-center gap-1.5 text-xs text-slate-500">
+          <span className="w-3 h-3 rounded ring-1 ring-red-500 bg-white" />
+          {t('overdue')}
+        </span>
       </div>
+
+      {/* Selected-order footer panel (accessible fallback for drag-drop) */}
+      {selected && (
+        <div className="glass-card rounded-2xl border border-slate-200/60 bg-white/80 shadow-sm px-4 py-3 flex items-center gap-4 flex-wrap">
+          <div className="min-w-0">
+            <p className="text-sm font-mono font-semibold text-slate-800 truncate">{selected.code}</p>
+            <p className="text-xs text-slate-500 truncate">
+              {selected.product_name || t('unnamed_product')}
+              {selected.work_center_name ? ` · ${selected.work_center_name}` : ''}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 text-sm text-slate-600 tabular-nums">
+            <span>{formatDate(parseDay(selected.startISO))}</span>
+            <span className="text-slate-400">→</span>
+            <span>{formatDate(parseDay(selected.endISO))}</span>
+          </div>
+          {statusChip(selected.status)}
+          <div className="flex items-center gap-2 ml-auto">
+            {canReschedule && !selected.locked && (
+              <>
+                <Button
+                  size="sm" variant="outline" className="gap-1 h-8"
+                  disabled={pendingIds.has(selected.id)}
+                  onClick={() => shiftOrder(selected, -1)}
+                >
+                  <Minus className="w-3.5 h-3.5" />
+                  {t('mfg_gantt_minus_day')}
+                </Button>
+                <Button
+                  size="sm" variant="outline" className="gap-1 h-8"
+                  disabled={pendingIds.has(selected.id)}
+                  onClick={() => shiftOrder(selected, 1)}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  {t('mfg_gantt_plus_day')}
+                </Button>
+              </>
+            )}
+            <Button size="sm" variant="outline" className="gap-1.5 h-8" onClick={openOrders}>
+              <ExternalLink className="w-3.5 h-3.5" />
+              {t('mfg_gantt_open')}
+            </Button>
+            <Button
+              size="sm" variant="ghost" className="h-8 w-8 p-0"
+              onClick={() => setSelectedId(null)}
+              aria-label={t('cancel')}
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

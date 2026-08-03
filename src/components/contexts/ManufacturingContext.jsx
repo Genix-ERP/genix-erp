@@ -281,7 +281,7 @@ export function ManufacturingProvider({ children }) {
             console.error('Failed to load BOMs:', err);
             return [];
           }),
-          productionOrdersService.getStats(companyId).catch(err => {
+          productionOrdersService.getStats().catch(err => {
             console.error('Failed to load stats:', err);
             return null;
           }),
@@ -303,6 +303,8 @@ export function ManufacturingProvider({ children }) {
     } catch (err) {
       console.error('Error loading manufacturing data:', err);
       setError(err.message);
+      // Demo data is on screen from here on — never claim the backend is up.
+      setBackendAvailable(false);
       loadDemoData(isDemoMode());
     } finally {
       setIsLoading(false);
@@ -570,8 +572,13 @@ export function ManufacturingProvider({ children }) {
   // =====================================================
   // COMPUTED VALUES
   // =====================================================
-  const activeProductionOrders = productionOrders.filter(po =>
-    ['confirmed', 'in_progress'].includes(po.status)
+  // Each derived value is memoized on its actual inputs — a bare
+  // `.filter(...)` here would mint a new array identity every render,
+  // which invalidated the provider-value useMemo below and re-rendered
+  // every consumer on every render (audit P1 #23).
+  const activeProductionOrders = useMemo(
+    () => productionOrders.filter(po => ['confirmed', 'in_progress'].includes(po.status)),
+    [productionOrders]
   );
 
   // =====================================================
@@ -608,15 +615,19 @@ export function ManufacturingProvider({ children }) {
     }
   }, []);
 
-  const completedToday = productionOrders.filter(po => {
-    if (po.status !== 'completed' || !po.completed_at) return false;
-    const completedDate = new Date(po.completed_at).toDateString();
-    const today = new Date().toDateString();
-    return completedDate === today;
-  });
+  const completedToday = useMemo(
+    () => productionOrders.filter(po => {
+      if (po.status !== 'completed' || !po.completed_at) return false;
+      const completedDate = new Date(po.completed_at).toDateString();
+      const today = new Date().toDateString();
+      return completedDate === today;
+    }),
+    [productionOrders]
+  );
 
-  const availableWorkCenters = workCenters.filter(wc =>
-    wc.status === 'active' && wc.is_available
+  const availableWorkCenters = useMemo(
+    () => workCenters.filter(wc => wc.status === 'active' && wc.is_available),
+    [workCenters]
   );
 
   // Average work center utilization. Two notes for future-self:
@@ -628,21 +639,21 @@ export function ManufacturingProvider({ children }) {
   //   2. The local fallback averages over ACTIVE work centers only.
   //      Inactive/unavailable centers have current_utilization=0 and would
   //      otherwise drag the mean down for no real-world reason.
-  const averageUtilization = (() => {
+  const averageUtilization = useMemo(() => {
     if (manufacturingStats && typeof manufacturingStats.average_utilization === 'number') {
       return manufacturingStats.average_utilization;
     }
     const activeWCs = workCenters.filter(wc => wc.status === 'active' && wc.is_available);
     if (activeWCs.length === 0) return 0;
     return activeWCs.reduce((sum, wc) => sum + (wc.current_utilization || 0), 0) / activeWCs.length;
-  })();
+  }, [manufacturingStats, workCenters]);
 
   // Count of orders the operator considers "active" right now. Prefer the
   // backend stats numbers because the production-orders list is limited to
   // 1000 rows — for high-volume tenants the local filter would silently
   // undercount. Fall back to filtering the local list only when stats are
   // not present (backend health check failed, etc.).
-  const activeProductionOrdersCount = (() => {
+  const activeProductionOrdersCount = useMemo(() => {
     if (
       manufacturingStats &&
       typeof manufacturingStats.confirmed_orders === 'number' &&
@@ -651,7 +662,7 @@ export function ManufacturingProvider({ children }) {
       return manufacturingStats.confirmed_orders + manufacturingStats.in_progress_orders;
     }
     return activeProductionOrders.length;
-  })();
+  }, [manufacturingStats, activeProductionOrders]);
 
   // Deprecated alias — kept so older imports of `averageOEE` don't crash, but
   // it now correctly reflects utilization (which is what the value always was).

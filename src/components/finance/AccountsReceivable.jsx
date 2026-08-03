@@ -45,7 +45,7 @@ export default function AccountsReceivable() {
     refreshData
   } = useFinancials();
   // Use SalesContext invoices so newly created SO invoices appear immediately
-  const { invoices: salesInvoices } = useSales();
+  const { invoices: salesInvoices, recordPayment, refreshData: refreshSalesData } = useSales();
   const customerInvoices = salesInvoices || [];
   const { canCreate, canUpdate, MODULES } = usePermissions();
   const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
@@ -210,18 +210,27 @@ export default function AccountsReceivable() {
     }
 
     try {
-      // Use the recordPayment API to mark as paid
-      const { salesService } = await import('@/api/services/sales');
-      await salesService.recordPayment(invoiceId, {
-        amount: amountDue,
-        payment_date: new Date().toISOString().split('T')[0],
-        notes: 'Marked as paid'
-      });
-
-      // Refresh data from backend
+      // The rendered rows live in SalesContext — its recordPayment posts the
+      // payment AND merges the fresh invoice back into the list, so the row
+      // flips to "To'langan" immediately. Calling salesService directly (as
+      // before) updated the backend but left the visible list stale.
+      await recordPayment(invoiceId, amountDue, 'bank_transfer', new Date().toISOString().split('T')[0]);
+      // Financials metrics (AR totals, aging) read from the other context.
       await refreshData();
     } catch (err) {
-      const errorMsg = err.response?.data?.error?.message || err.message || 'Failed to record payment';
+      const errorMsg = getApiErrorMessage(err, 'Failed to record payment');
+      // "Already fully paid" means the visible row was stale (an earlier
+      // payment went through without a list refresh) — resync instead of
+      // showing a dead-end error.
+      if (err.response?.status === 400 && /fully paid/i.test(errorMsg)) {
+        try { await refreshSalesData(); } catch { /* list resync is best-effort */ }
+        showAlert(language === 'ru'
+          ? 'Счёт уже оплачен — список обновлён'
+          : language === 'uz'
+            ? "Bu faktura allaqachon to'langan — ro'yxat yangilandi"
+            : 'Invoice is already paid — list refreshed');
+        return;
+      }
       console.error('Mark as paid error:', err.response?.data || err);
       showError(errorMsg, 'To\'lov xatosi');
     }

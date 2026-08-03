@@ -1,344 +1,331 @@
-import React, { useState, useMemo } from 'react';
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Package, CheckCircle, XCircle, DollarSign, List, BarChart3 } from 'lucide-react';
-import { useManufacturing } from '@/components/contexts/ManufacturingContext';
-import { useLanguage } from '@/components/contexts/LanguageContext';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  ComposedChart, BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+  Legend, ResponsiveContainer,
+} from 'recharts';
+import {
+  Factory, Package, Percent, Wallet, BarChart3, TrendingDown,
+  Table2, Tag, AlertTriangle, RotateCcw,
+} from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
+import { productionOrdersService } from '@/api/services/manufacturing';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { formatAxisTick } from '@/utils/formatCurrency';
+import { getApiErrorMessage } from '@/utils/apiError';
+import {
+  PAL, StatTile, ChartCard, EmptyNote, GlassTooltip, Segmented,
+} from '@/components/shared/DashboardKit';
+import { useLanguage } from '@/components/contexts/LanguageContext';
+import { useTranslation } from '@/components/utils/translations';
 
+const iso = (d) => d.toISOString().split('T')[0];
+
+// Period pills → [from, to] for GET /production-orders/report.
+const rangeToDates = (range) => {
+  const now = new Date();
+  switch (range) {
+    case 'last_month': {
+      const from = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const to = new Date(now.getFullYear(), now.getMonth(), 0);
+      return { from: iso(from), to: iso(to) };
+    }
+    case 'quarter':
+      return { from: iso(new Date(now.getFullYear(), now.getMonth() - 2, 1)), to: iso(now) };
+    case 'year':
+      return { from: iso(new Date(now.getFullYear(), 0, 1)), to: iso(now) };
+    case 'month':
+    default:
+      return { from: iso(new Date(now.getFullYear(), now.getMonth(), 1)), to: iso(now) };
+  }
+};
+
+const truncate = (v, n = 16) => (String(v ?? '').length > n ? `${String(v).slice(0, n - 1)}…` : String(v ?? ''));
+
+// Hisobot — fully server-aggregated (GET /production-orders/report), so the
+// numbers cover every order in the window instead of the 1000-row context
+// cap the old client-side version silently truncated at.
 export default function ManufacturingReport() {
   const { language } = useLanguage();
-  const { productionOrders, manufacturingCategories } = useManufacturing();
-  const { formatCurrency } = useCurrencyFormatter();
-  const [selectedCategory, setSelectedCategory] = useState('all');
-  const [viewMode, setViewMode] = useState('byProduct'); // 'byOrder' or 'byProduct'
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  const { t } = useTranslation(language);
+  const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
 
-  const l = {
-    en: { title: 'Manufacturing Report', subtitle: 'Production orders overview by category', all: 'All', order_code: 'Order Code', product: 'Product', qty_planned: 'Planned', qty_produced: 'Produced', good_qty: 'Good', reject_qty: 'Reject', loss: 'Loss', status: 'Status', shortfall_reason: 'Shortfall Reason', total_produced: 'Total Produced', total_good: 'Total Good', total_reject: 'Total Reject', total_loss: 'Total Loss', no_orders: 'No production orders found', uncategorized: 'Uncategorized', by_order: 'By Order', by_product: 'By Product', orders_count: 'Orders', efficiency: 'Efficiency', unit_cost: 'Cost/Unit' },
-    uz: { title: 'Ishlab chiqarish hisoboti', subtitle: 'Kategoriya bo\'yicha ishlab chiqarish buyurtmalari', all: 'Barchasi', order_code: 'Buyurtma kodi', product: 'Mahsulot', qty_planned: 'Rejalashtirilgan', qty_produced: 'Ishlab chiqarilgan', good_qty: 'Yaxshi', reject_qty: 'Yaroqsiz', loss: 'Zarar', status: 'Holat', shortfall_reason: 'Kamomad sababi', total_produced: 'Jami ishlab chiqarilgan', total_good: 'Jami yaxshi', total_reject: 'Jami yaroqsiz', total_loss: 'Jami zarar', no_orders: 'Ishlab chiqarish buyurtmalari topilmadi', uncategorized: 'Kategoriyasiz', by_order: 'Buyurtma bo\'yicha', by_product: 'Mahsulot bo\'yicha', orders_count: 'Buyurtmalar', efficiency: 'Samaradorlik', unit_cost: 'Narx/birlik' },
-    ru: { title: 'Отчёт производства', subtitle: 'Обзор производственных заказов по категориям', all: 'Все', order_code: 'Код заказа', product: 'Продукт', qty_planned: 'План', qty_produced: 'Произведено', good_qty: 'Годные', reject_qty: 'Брак', loss: 'Убыток', status: 'Статус', shortfall_reason: 'Причина недостачи', total_produced: 'Всего произведено', total_good: 'Всего годных', total_reject: 'Всего брак', total_loss: 'Всего убыток', no_orders: 'Производственные заказы не найдены', uncategorized: 'Без категории', by_order: 'По заказам', by_product: 'По продуктам', orders_count: 'Заказов', efficiency: 'Эффективность', unit_cost: 'Цена/ед.' },
-  }[language] || { title: 'Manufacturing Report', subtitle: 'Production orders overview by category', all: 'All', order_code: 'Order Code', product: 'Product', qty_planned: 'Planned', qty_produced: 'Produced', good_qty: 'Good', reject_qty: 'Reject', loss: 'Loss', status: 'Status', shortfall_reason: 'Shortfall Reason', total_produced: 'Total Produced', total_good: 'Total Good', total_reject: 'Total Reject', total_loss: 'Total Loss', no_orders: 'No production orders found', uncategorized: 'Uncategorized' };
+  const [range, setRange] = useState('month');
+  const [report, setReport] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
-  const calcLoss = (order) => {
-    const reject = order.reject_quantity || 0;
-    if (reject <= 0) return 0;
-    const produced = order.quantity_produced || 0;
-    const total = produced + reject;
-    if (total > 0 && order.actual_cost > 0) {
-      return reject * (order.actual_cost / total);
-    }
-    const planned = order.quantity_planned || 1;
-    if (order.material_cost > 0) {
-      return reject * (order.material_cost / planned);
-    }
-    return 0;
-  };
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    setError(null);
+    productionOrdersService
+      .getReport(rangeToDates(range))
+      .then((data) => { if (alive) setReport(data); })
+      .catch((e) => {
+        console.error('Failed to load manufacturing report:', e);
+        if (alive) { setReport(null); setError(getApiErrorMessage(e, t('mfg_report_error'))); }
+      })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [range, reloadKey]);
 
-  const filteredOrders = useMemo(() => {
-    let orders = (productionOrders || []).filter(po => po.status !== 'cancelled');
-    if (selectedCategory !== 'all') {
-      if (selectedCategory === 'uncategorized') orders = orders.filter(po => !po.manufacturing_category_id);
-      else orders = orders.filter(po => po.manufacturing_category_id === selectedCategory);
-    }
-    if (dateFrom) {
-      orders = orders.filter(po => po.created_at && po.created_at.slice(0, 10) >= dateFrom);
-    }
-    if (dateTo) {
-      orders = orders.filter(po => po.created_at && po.created_at.slice(0, 10) <= dateTo);
-    }
-    return orders;
-  }, [productionOrders, selectedCategory, dateFrom, dateTo]);
+  const retry = useCallback(() => setReloadKey((k) => k + 1), []);
 
-  const summary = useMemo(() => {
-    let totalProduced = 0, totalGood = 0, totalReject = 0, totalLoss = 0;
-    filteredOrders.forEach(po => {
-      totalProduced += po.quantity_produced || 0;
-      totalGood += po.good_quantity || 0;
-      totalReject += po.reject_quantity || 0;
-      totalLoss += calcLoss(po);
-    });
-    return { totalProduced, totalGood, totalReject, totalLoss };
-  }, [filteredOrders]);
+  const totals = report?.totals || {};
+  const byProduct = useMemo(() => report?.by_product || [], [report]);
+  const byCategory = report?.by_category || [];
 
-  const statusColors = {
-    draft: 'bg-gray-100 text-gray-700',
-    confirmed: 'bg-blue-100 text-blue-700',
-    in_progress: 'bg-amber-100 text-amber-700',
-    completed: 'bg-green-100 text-green-700',
-    paused: 'bg-orange-100 text-orange-700',
-  };
+  // Top ~10 products by produced qty for the bar chart.
+  const topProducts = useMemo(
+    () => [...byProduct]
+      .filter((p) => (p.produced || 0) > 0)
+      .sort((a, b) => (b.produced || 0) - (a.produced || 0))
+      .slice(0, 10),
+    [byProduct]
+  );
 
-  const statusLabels = {
-    en: { draft: 'Draft', confirmed: 'Confirmed', in_progress: 'In Progress', completed: 'Completed', paused: 'Paused', cancelled: 'Cancelled' },
-    uz: { draft: 'Qoralama', confirmed: 'Tasdiqlangan', in_progress: 'Jarayonda', completed: 'Tugallangan', paused: 'To\'xtatilgan', cancelled: 'Bekor qilingan' },
-    ru: { draft: 'Черновик', confirmed: 'Подтверждён', in_progress: 'В процессе', completed: 'Завершён', paused: 'Приостановлен', cancelled: 'Отменён' },
-  }[language] || { draft: 'Draft', confirmed: 'Confirmed', in_progress: 'In Progress', completed: 'Completed', paused: 'Paused', cancelled: 'Cancelled' };
+  // Pareto — normalize cumulative_share defensively: accept both 0–1
+  // fractions and 0–100 percentages from the backend.
+  const pareto = useMemo(() => {
+    const rows = (report?.scrap_pareto || []).filter((s) => (s.scrapped || 0) > 0);
+    const maxCum = rows.reduce((m, s) => Math.max(m, s.cumulative_share || 0), 0);
+    const factor = maxCum > 0 && maxCum <= 1 ? 100 : 1;
+    return rows.map((s) => ({ ...s, cumulative_pct: (s.cumulative_share || 0) * factor }));
+  }, [report]);
 
-  const activeCategories = (manufacturingCategories || []).filter(c => c.is_active);
+  const scrapRate = Number(totals.scrap_rate || 0);
+
+  const RANGE_OPTIONS = [
+    { id: 'month', label: t('range_this_month') },
+    { id: 'last_month', label: t('range_last_month') },
+    { id: 'quarter', label: t('range_3_months') },
+    { id: 'year', label: t('range_this_year') },
+  ];
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-end"><Skeleton className="h-8 w-64 rounded-lg" /></div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-[104px] rounded-2xl" />)}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Skeleton className="h-[300px] rounded-2xl" />
+          <Skeleton className="h-[300px] rounded-2xl" />
+        </div>
+        <Skeleton className="h-[280px] rounded-2xl" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="glass-card rounded-2xl border border-slate-200/60 bg-white/80 shadow-sm">
+        <EmptyNote
+          icon={AlertTriangle}
+          text={error}
+          cta={(
+            <Button size="sm" variant="outline" onClick={retry} className="gap-1.5">
+              <RotateCcw className="w-4 h-4" />
+              {t('retry')}
+            </Button>
+          )}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-slate-800">{l.title}</h2>
-        <p className="text-slate-600 mt-1">{l.subtitle}</p>
+      {/* Period selector */}
+      <div className="flex items-center justify-end">
+        <Segmented options={RANGE_OPTIONS} value={range} onChange={setRange} />
       </div>
 
-      {/* Category Tabs */}
-      <div className="flex gap-2 flex-wrap">
-        <Button
-          size="sm"
-          variant={selectedCategory === 'all' ? 'default' : 'outline'}
-          onClick={() => setSelectedCategory('all')}
-          className={selectedCategory === 'all' ? 'bg-slate-800 text-white' : ''}
-        >
-          {l.all}
-        </Button>
-        {activeCategories.map(cat => (
-          <Button
-            key={cat.id}
-            size="sm"
-            variant={selectedCategory === cat.id ? 'default' : 'outline'}
-            onClick={() => setSelectedCategory(cat.id)}
-            className={selectedCategory === cat.id ? 'bg-slate-800 text-white' : ''}
-          >
-            {cat.name}
-          </Button>
-        ))}
-        <Button
-          size="sm"
-          variant={selectedCategory === 'uncategorized' ? 'default' : 'outline'}
-          onClick={() => setSelectedCategory('uncategorized')}
-          className={selectedCategory === 'uncategorized' ? 'bg-slate-800 text-white' : ''}
-        >
-          {l.uncategorized}
-        </Button>
+      {/* KPI tiles */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <StatTile
+          label={t('mfg_report_orders')}
+          value={totals.orders ?? 0}
+          icon={Factory}
+          chip="bg-[#E6F1FB] text-[#0C447C]"
+        />
+        <StatTile
+          label={t('mfg_report_produced')}
+          value={totals.produced ?? 0}
+          sub={`${t('mfg_chart_planned')}: ${totals.planned ?? 0}`}
+          icon={Package}
+          chip="bg-[#E1F5EE] text-[#085041]"
+        />
+        <StatTile
+          label={t('mfg_kpi_scrap_rate')}
+          value={`${scrapRate.toFixed(1)}%`}
+          sub={`${totals.scrapped ?? 0} ${t('mfg_unit_pcs')}`}
+          icon={Percent}
+          chip={scrapRate > 5 ? 'bg-red-50 text-red-600' : 'bg-[#FAECE7] text-[#712B13]'}
+          valueCls={scrapRate > 5 ? 'text-red-600' : 'text-slate-900'}
+        />
+        <StatTile
+          label={t('mfg_report_total_cost')}
+          value={formatCurrencyCompact(totals.total_cost || 0)}
+          icon={Wallet}
+          chip="bg-[#EEEDFE] text-[#3C3489]"
+        />
       </div>
 
-      {/* Date Filter */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-2">
-          <label className="text-sm text-slate-600 whitespace-nowrap">{language === 'uz' ? 'Dan' : language === 'ru' ? 'С' : 'From'}:</label>
-          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="border rounded-md px-2 py-1 text-sm" />
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="text-sm text-slate-600 whitespace-nowrap">{language === 'uz' ? 'Gacha' : language === 'ru' ? 'По' : 'To'}:</label>
-          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="border rounded-md px-2 py-1 text-sm" />
-        </div>
-        {(dateFrom || dateTo) && (
-          <Button size="sm" variant="ghost" onClick={() => { setDateFrom(''); setDateTo(''); }} className="text-xs text-slate-500">
-            ✕ {language === 'uz' ? 'Tozalash' : language === 'ru' ? 'Сбросить' : 'Clear'}
-          </Button>
-        )}
-      </div>
-
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="bg-white/80 backdrop-blur-sm">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                <Package className="w-5 h-5 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-slate-800">{summary.totalProduced.toLocaleString()}</p>
-                <p className="text-xs text-slate-500">{l.total_produced}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-white/80 backdrop-blur-sm">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                <CheckCircle className="w-5 h-5 text-green-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-slate-800">{summary.totalGood.toLocaleString()}</p>
-                <p className="text-xs text-slate-500">{l.total_good}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-white/80 backdrop-blur-sm">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
-                <XCircle className="w-5 h-5 text-red-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-slate-800">{summary.totalReject.toLocaleString()}</p>
-                <p className="text-xs text-slate-500">{l.total_reject}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-white/80 backdrop-blur-sm">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center">
-                <DollarSign className="w-5 h-5 text-amber-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-slate-800">{formatCurrency(summary.totalLoss)}</p>
-                <p className="text-xs text-slate-500">{l.total_loss}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* View Toggle */}
-      <div className="flex gap-2">
-        <Button
-          size="sm"
-          variant={viewMode === 'byProduct' ? 'default' : 'outline'}
-          onClick={() => setViewMode('byProduct')}
-          className={viewMode === 'byProduct' ? 'bg-indigo-600 text-white' : ''}
-        >
-          <BarChart3 className="w-4 h-4 mr-1" />
-          {l.by_product}
-        </Button>
-        <Button
-          size="sm"
-          variant={viewMode === 'byOrder' ? 'default' : 'outline'}
-          onClick={() => setViewMode('byOrder')}
-          className={viewMode === 'byOrder' ? 'bg-indigo-600 text-white' : ''}
-        >
-          <List className="w-4 h-4 mr-1" />
-          {l.by_order}
-        </Button>
-      </div>
-
-      {/* By Product View */}
-      {viewMode === 'byProduct' && (
-        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-          <CardContent className="p-0">
-            {filteredOrders.length === 0 ? (
-              <div className="flex items-center justify-center py-16">
-                <p className="text-slate-500">{l.no_orders}</p>
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-slate-50/50">
-                    <TableHead>{l.product}</TableHead>
-                    <TableHead className="text-right">{l.orders_count}</TableHead>
-                    <TableHead className="text-right">{l.qty_planned}</TableHead>
-                    <TableHead className="text-right">{l.qty_produced}</TableHead>
-                    <TableHead className="text-right">{l.good_qty}</TableHead>
-                    <TableHead className="text-right">{l.reject_qty}</TableHead>
-                    <TableHead className="text-right">{l.efficiency}</TableHead>
-                    <TableHead className="text-right">{l.unit_cost || 'Narx/birlik'}</TableHead>
-                    <TableHead className="text-right">{l.loss}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {(() => {
-                    const grouped = {};
-                    filteredOrders.forEach(po => {
-                      const key = po.product_id || po.product_name;
-                      if (!grouped[key]) {
-                        grouped[key] = { name: po.product_name, uom: po.uom || '', orders: 0, planned: 0, produced: 0, good: 0, reject: 0, loss: 0, cost: 0 };
-                      }
-                      if (!grouped[key].uom && po.uom) grouped[key].uom = po.uom;
-                      grouped[key].orders += 1;
-                      grouped[key].planned += po.quantity_planned || 0;
-                      grouped[key].produced += po.quantity_produced || 0;
-                      grouped[key].good += po.good_quantity || 0;
-                      grouped[key].reject += po.reject_quantity || 0;
-                      grouped[key].loss += calcLoss(po);
-                      // Production cost per order (actual → planned → material fallback) for unit-cost rollup.
-                      grouped[key].cost += (po.actual_cost || po.planned_cost || po.material_cost || 0);
-                    });
-                    return Object.entries(grouped)
-                      .sort((a, b) => b[1].produced - a[1].produced)
-                      .map(([key, data]) => {
-                        const efficiency = data.produced > 0 ? ((data.good / data.produced) * 100).toFixed(1) : 0;
-                        // Production cost per unit = total cost ÷ quantity (produced, else planned), shown per UOM.
-                        const qtyForCost = data.produced > 0 ? data.produced : data.planned;
-                        const unitCost = qtyForCost > 0 ? data.cost / qtyForCost : 0;
-                        return (
-                          <TableRow key={key} className="hover:bg-slate-50/50">
-                            <TableCell className="font-medium">{data.name}</TableCell>
-                            <TableCell className="text-right">{data.orders}</TableCell>
-                            <TableCell className="text-right">{data.planned}</TableCell>
-                            <TableCell className="text-right font-medium">{data.produced}</TableCell>
-                            <TableCell className="text-right text-green-700 font-medium">{data.good}</TableCell>
-                            <TableCell className="text-right text-red-600 font-medium">{data.reject}</TableCell>
-                            <TableCell className="text-right">
-                              <span className={`font-medium ${parseFloat(efficiency) >= 90 ? 'text-green-600' : parseFloat(efficiency) >= 70 ? 'text-amber-600' : 'text-red-600'}`}>
-                                {efficiency}%
-                              </span>
-                            </TableCell>
-                            <TableCell className="text-right">{unitCost > 0 ? `${formatCurrency(unitCost)}${data.uom ? ' / ' + data.uom : ''}` : '—'}</TableCell>
-                            <TableCell className="text-right text-amber-700 font-medium">{data.loss > 0 ? formatCurrency(data.loss) : '—'}</TableCell>
-                          </TableRow>
-                        );
-                      });
-                  })()}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* By Order View */}
-      {viewMode === 'byOrder' && (
-      <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-        <CardContent className="p-0">
-          {filteredOrders.length === 0 ? (
-            <div className="flex items-center justify-center py-16">
-              <p className="text-slate-500">{l.no_orders}</p>
-            </div>
+      {/* Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <ChartCard title={t('mfg_report_by_product')} icon={BarChart3} className="min-h-[300px]">
+          {topProducts.length > 0 ? (
+            <ResponsiveContainer width="100%" height={Math.max(220, topProducts.length * 38)}>
+              <BarChart data={topProducts} layout="vertical" margin={{ left: 6, right: 16, top: 4, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E2E8F0" />
+                <XAxis type="number" fontSize={11} tickFormatter={formatAxisTick} tickLine={false} axisLine={false} tick={{ fill: '#94A3B8' }} />
+                <YAxis
+                  dataKey="product_name" type="category" fontSize={12} width={130}
+                  tickLine={false} axisLine={false}
+                  tick={{ fill: '#334155' }}
+                  tickFormatter={(v) => truncate(v)}
+                />
+                <Tooltip content={<GlassTooltip />} cursor={{ fill: 'rgba(148,163,184,0.08)' }} />
+                <Bar dataKey="produced" name={t('mfg_chart_produced')} fill={PAL[0].c} radius={[0, 4, 4, 0]} maxBarSize={22} />
+              </BarChart>
+            </ResponsiveContainer>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-slate-50/50">
-                  <TableHead>{l.order_code}</TableHead>
-                  <TableHead>{l.product}</TableHead>
-                  <TableHead className="text-right">{l.qty_planned}</TableHead>
-                  <TableHead className="text-right">{l.qty_produced}</TableHead>
-                  <TableHead className="text-right">{l.good_qty}</TableHead>
-                  <TableHead className="text-right">{l.reject_qty}</TableHead>
-                  <TableHead className="text-right">{l.loss}</TableHead>
-                  <TableHead>{l.shortfall_reason}</TableHead>
-                  <TableHead>{l.status}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredOrders.map(po => {
-                  const loss = calcLoss(po);
+            <EmptyNote icon={BarChart3} text={t('mfg_report_empty')} />
+          )}
+        </ChartCard>
+
+        <ChartCard title={t('mfg_report_scrap_pareto')} icon={TrendingDown} className="min-h-[300px]">
+          {pareto.length > 0 ? (
+            <ResponsiveContainer width="100%" height={240}>
+              <ComposedChart data={pareto} margin={{ left: 6, right: 6, top: 6, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                <XAxis
+                  dataKey="name" fontSize={11} tickLine={false} axisLine={false}
+                  tick={{ fill: '#64748B' }} tickFormatter={(v) => truncate(v, 12)}
+                  interval="preserveStartEnd" minTickGap={16}
+                />
+                <YAxis
+                  yAxisId="qty" fontSize={11} tickFormatter={formatAxisTick}
+                  tickLine={false} axisLine={false} tick={{ fill: '#94A3B8' }} width={44}
+                />
+                <YAxis
+                  yAxisId="pct" orientation="right" domain={[0, 100]} fontSize={11}
+                  tickFormatter={(v) => `${v}%`}
+                  tickLine={false} axisLine={false} tick={{ fill: '#94A3B8' }} width={40}
+                />
+                <Tooltip content={<GlassTooltip />} cursor={{ fill: 'rgba(148,163,184,0.08)' }} />
+                <Legend
+                  verticalAlign="top"
+                  height={26}
+                  iconType="circle"
+                  iconSize={8}
+                  formatter={(v) => <span className="text-xs text-slate-500">{v}</span>}
+                />
+                <Bar
+                  yAxisId="qty"
+                  dataKey="scrapped"
+                  name={t('mfg_report_col_scrap')}
+                  fill={PAL[1].c}
+                  radius={[4, 4, 0, 0]}
+                  maxBarSize={36}
+                />
+                <Line
+                  yAxisId="pct"
+                  type="monotone"
+                  dataKey="cumulative_pct"
+                  name={t('mfg_report_cumulative')}
+                  stroke={PAL[3].c}
+                  strokeWidth={2}
+                  dot={{ r: 3, fill: PAL[3].c, strokeWidth: 2, stroke: '#fff' }}
+                  activeDot={{ r: 4 }}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          ) : (
+            <EmptyNote icon={TrendingDown} text={t('mfg_report_empty')} />
+          )}
+        </ChartCard>
+      </div>
+
+      {/* By-product table */}
+      <ChartCard title={t('mfg_report_by_product_table')} icon={Table2}>
+        {byProduct.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-[11px] uppercase tracking-wider text-slate-400">
+                  <th className="py-2 pr-3 font-semibold">{t('product')}</th>
+                  <th className="py-2 pr-3 font-semibold text-right">{t('mfg_report_orders')}</th>
+                  <th className="py-2 pr-3 font-semibold text-right">{t('mfg_chart_planned')}</th>
+                  <th className="py-2 pr-3 font-semibold text-right">{t('mfg_chart_produced')}</th>
+                  <th className="py-2 pr-3 font-semibold text-right">{t('mfg_report_col_scrap')}</th>
+                  <th className="py-2 pr-3 font-semibold text-right">{t('mfg_kpi_scrap_rate')}</th>
+                  <th className="py-2 font-semibold text-right">{t('mfg_report_col_cost')}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {byProduct.map((p, i) => {
+                  const rowScrap = Number(p.scrap_rate || 0);
                   return (
-                    <TableRow key={po.id} className="hover:bg-slate-50/50">
-                      <TableCell className="font-medium">{po.code}</TableCell>
-                      <TableCell>{po.product_name}</TableCell>
-                      <TableCell className="text-right">{po.quantity_planned}</TableCell>
-                      <TableCell className="text-right">{po.quantity_produced}</TableCell>
-                      <TableCell className="text-right text-green-700 font-medium">{po.good_quantity || 0}</TableCell>
-                      <TableCell className="text-right text-red-600 font-medium">{po.reject_quantity || 0}</TableCell>
-                      <TableCell className="text-right text-amber-700 font-medium">{loss > 0 ? formatCurrency(loss) : '—'}</TableCell>
-                      <TableCell className="text-sm text-slate-600 max-w-[200px] truncate" title={po.shortfall_reason || ''}>
-                        {po.shortfall_reason || '—'}
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={statusColors[po.status] || 'bg-gray-100 text-gray-700'}>
-                          {statusLabels[po.status] || po.status}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
+                    <tr key={`${p.product_name}-${i}`} className="hover:bg-slate-50/70">
+                      <td className="py-2.5 pr-3 font-medium text-slate-800 truncate max-w-[220px]">{p.product_name}</td>
+                      <td className="py-2.5 pr-3 text-right tabular-nums text-slate-600">{p.orders ?? 0}</td>
+                      <td className="py-2.5 pr-3 text-right tabular-nums text-slate-600">{p.planned ?? 0}</td>
+                      <td className="py-2.5 pr-3 text-right tabular-nums font-medium text-slate-800">{p.produced ?? 0}</td>
+                      <td className="py-2.5 pr-3 text-right tabular-nums text-red-600">{p.scrapped ?? 0}</td>
+                      <td className={`py-2.5 pr-3 text-right tabular-nums font-medium ${rowScrap > 5 ? 'text-red-600' : 'text-slate-600'}`}>
+                        {rowScrap.toFixed(1)}%
+                      </td>
+                      <td className="py-2.5 text-right tabular-nums text-slate-700">{formatCurrency(p.total_cost || 0)}</td>
+                    </tr>
                   );
                 })}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-      )}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyNote icon={Table2} text={t('mfg_report_empty')} />
+        )}
+      </ChartCard>
+
+      {/* Compact by-category table */}
+      <ChartCard title={t('mfg_report_by_category')} icon={Tag}>
+        {byCategory.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-[11px] uppercase tracking-wider text-slate-400">
+                  <th className="py-2 pr-3 font-semibold">{t('category')}</th>
+                  <th className="py-2 pr-3 font-semibold text-right">{t('mfg_report_orders')}</th>
+                  <th className="py-2 pr-3 font-semibold text-right">{t('mfg_chart_produced')}</th>
+                  <th className="py-2 pr-3 font-semibold text-right">{t('mfg_report_col_scrap')}</th>
+                  <th className="py-2 font-semibold text-right">{t('mfg_report_col_cost')}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {byCategory.map((c, i) => (
+                  <tr key={`${c.category_name}-${i}`} className="hover:bg-slate-50/70">
+                    <td className="py-2.5 pr-3 font-medium text-slate-800 truncate max-w-[220px]">
+                      {c.category_name || t('uncategorized')}
+                    </td>
+                    <td className="py-2.5 pr-3 text-right tabular-nums text-slate-600">{c.orders ?? 0}</td>
+                    <td className="py-2.5 pr-3 text-right tabular-nums font-medium text-slate-800">{c.produced ?? 0}</td>
+                    <td className="py-2.5 pr-3 text-right tabular-nums text-red-600">{c.scrapped ?? 0}</td>
+                    <td className="py-2.5 text-right tabular-nums text-slate-700">{formatCurrency(c.total_cost || 0)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyNote icon={Tag} text={t('mfg_report_empty')} />
+        )}
+      </ChartCard>
     </div>
   );
 }

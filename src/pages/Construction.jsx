@@ -51,6 +51,7 @@ import {
   Clock,
   CheckCircle,
   AlertCircle,
+  AlertTriangle,
   Warehouse,
   UserPlus,
   Settings,
@@ -106,11 +107,10 @@ const ProgressTab = lazy(() => import('@/components/construction/tabs/ProgressTa
 const SubcontractorsTab = lazy(() => import('@/components/construction/tabs/SubcontractorsTab'));
 const ActsTab = lazy(() => import('@/components/construction/tabs/ActsTab'));
 const FormsTab = lazy(() => import('@/components/construction/tabs/FormsTab'));
-// FinancialTab (Moliya → Tahlil) was removed from the sidebar nav per
-// product request — the page mostly duplicated Byudjet and showed
-// misleading numbers when smeta totals weren't loaded. The component
-// file is kept on disk in case we reinstate it later.
-// const FinancialTab = lazy(() => import('@/components/construction/tabs/FinancialTab'));
+// FinancialTab (Moliya → Tahlil) was removed per product request — the page
+// mostly duplicated Byudjet and showed misleading numbers when smeta totals
+// weren't loaded. The component file was deleted in the 2026-08 cleanup;
+// rebuild it on DashboardKit primitives if the tab is ever reinstated.
 const RejaFaktTab = lazy(() => import('@/components/construction/tabs/RejaFaktTab'));
 const SmetaVsFactTab = lazy(() => import('@/components/construction/tabs/SmetaVsFactTab'));
 const TeamTab = lazy(() => import('@/components/construction/tabs/TeamTab'));
@@ -138,450 +138,13 @@ const ALLOWED_PROJECT_TRANSITIONS = Object.freeze({
   cancelled: ['draft'],
 });
 
-// Progress Tracking Tab Component
-const ProgressTrackingTab = ({ project, sections, t, formatCurrency, onRefresh }) => {
-  const [estimates, setEstimates] = useState([]);
-  const [allItems, setAllItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedEstimate, setSelectedEstimate] = useState(null);
-  const [estimateLines, setEstimateLines] = useState([]);
-  const [editingItem, setEditingItem] = useState(null);
-  const [completedQty, setCompletedQty] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  // Load estimates and their lines
-  useEffect(() => {
-    const loadData = async () => {
-      if (!project?.id) {
-        setLoading(false);
-        return;
-      }
-      setLoading(true);
-      try {
-        const estimatesData = await constructionService.listEstimates(project.id);
-        const ests = estimatesData || [];
-        setEstimates(ests);
-
-        if (ests.length > 0) {
-          const linesPromises = ests.map(est =>
-            constructionService.listEstimateLines(est.id).then(lines =>
-              (lines || []).map(line => ({ ...line, estimate_name: est.name, estimate_code: est.code }))
-            )
-          );
-          const results = await Promise.all(linesPromises);
-          setAllItems(results.flat());
-        } else {
-          setAllItems([]);
-        }
-      } catch (error) {
-        console.error('Error loading estimates for progress:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadData();
-  }, [project?.id]);
-
-  // Derive lines for the selected estimate from the already-loaded allItems
-  // array to avoid a redundant API call. The initial load already fetches
-  // every line for every estimate via Promise.all.
-  useEffect(() => {
-    if (!selectedEstimate) {
-      setEstimateLines([]);
-      return;
-    }
-    setEstimateLines(allItems.filter((item) => item.estimate_id === selectedEstimate.id));
-  }, [selectedEstimate, allItems]);
-
-  // Calculate overall progress
-  // Value-based: completedValue / totalValue. Quantity-based: derived from
-  // per-item ratios so partial completion is represented correctly (not binary).
-  const calculateProgress = useCallback((items) => {
-    // Only top-level work lines count — exclude resource sub-lines
-    // (resource_type set or parent_line_id present) so we don't double-count
-    // a work's materials/labor as separate "items".
-    const works = (items || []).filter(
-      (it) => String(it.resource_type || '') === '' && !Number(it.parent_line_id || 0),
-    );
-    if (works.length === 0) {
-      return { percent: 0, byQty: 0, completed: 0, total: 0, byValue: 0, completedValue: 0, totalValue: 0 };
-    }
-
-    let totalQty = 0;
-    let doneQty = 0;
-    let totalValue = 0;
-    let completedValue = 0;
-
-    for (const item of works) {
-      // REJA quantity: prefer the smeta plan anchors over the live `quantity`
-      // (which is 0 for works not yet started), matching the Bosqichlar view.
-      const qty = Number(item.imported_quantity) || Number(item.original_quantity) || Number(item.quantity) || 0;
-      const total = Number(item.total_amount) || 0;
-      // Physical progress from done_quantity; fall back to billed actual_amount
-      // for legacy items that track completion by money rather than quantity.
-      const doneQ = Number(item.done_quantity) || 0;
-      const ratio = qty > 0
-        ? Math.min(doneQ / qty, 1)
-        : (total > 0 ? Math.max(0, Math.min(Number(item.actual_amount) || 0, total)) / total : 0);
-
-      totalQty += qty;
-      doneQty += qty * ratio;
-      totalValue += total;
-      completedValue += total * ratio;
-    }
-
-    const byValue = totalValue > 0 ? Math.round((completedValue / totalValue) * 100) : 0;
-    const byQty = totalQty > 0 ? Math.round((doneQty / totalQty) * 100) : 0;
-
-    return {
-      percent: byValue,
-      byQty,
-      completed: doneQty,
-      total: totalQty,
-      byValue,
-      completedValue,
-      totalValue,
-    };
-  }, []);
-
-  // Calculate estimate progress
-  const getEstimateProgress = useCallback((estimateId) => {
-    const items = allItems.filter(item => item.estimate_id === estimateId);
-    return calculateProgress(items);
-  }, [allItems, calculateProgress]);
-
-  const overallProgress = React.useMemo(() => calculateProgress(allItems), [allItems, calculateProgress]);
-
-  const itemCounts = React.useMemo(() => {
-    let completedCount = 0;
-    let inProgressCount = 0;
-    for (const item of allItems) {
-      const total = Number(item.total_amount) || 0;
-      const actual = Number(item.actual_amount) || 0;
-      if (total > 0 && actual >= total) completedCount += 1;
-      else if (actual > 0) inProgressCount += 1;
-    }
-    return { completedCount, inProgressCount };
-  }, [allItems]);
-
-  // Update line progress
-  const handleUpdateProgress = async () => {
-    if (!editingItem || !selectedEstimate) return;
-
-    const newActualAmount = parseFloat(completedQty);
-    if (!Number.isFinite(newActualAmount) || newActualAmount < 0) {
-      toast.error(t('invalid_amount') || "Noto'g'ri qiymat kiritildi");
-      return;
-    }
-
-    const planned = Number(editingItem.total_amount) || 0;
-    if (planned > 0 && newActualAmount > planned) {
-      toast.error(
-        (t('exceeds_planned') || 'Rejadan oshib ketdi') +
-          `: ${formatCurrency(planned)}`
-      );
-      return;
-    }
-
-    setSaving(true);
-    try {
-      await constructionService.updateEstimateLine(selectedEstimate.id, editingItem.id, {
-        actual_amount: newActualAmount,
-      });
-
-      // Update allItems — the effect above will re-derive estimateLines.
-      setAllItems(prev =>
-        prev.map(item =>
-          item.id === editingItem.id ? { ...item, actual_amount: newActualAmount } : item
-        )
-      );
-
-      setEditingItem(null);
-      setCompletedQty('');
-      toast.success(t('progress_updated') || 'Progress yangilandi');
-      if (onRefresh) onRefresh();
-    } catch (error) {
-      console.error('Error updating progress:', error);
-      toast.error(t('update_failed') || "Yangilashda xatolik yuz berdi");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const getProgressColor = (percent) => {
-    if (percent >= 100) return 'bg-green-500';
-    if (percent >= 75) return 'bg-blue-500';
-    if (percent >= 50) return 'bg-yellow-500';
-    if (percent >= 25) return 'bg-orange-500';
-    return 'bg-slate-300';
-  };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'completed': return 'bg-green-100 text-green-700';
-      case 'in_progress': return 'bg-blue-100 text-blue-700';
-      default: return 'bg-slate-100 text-slate-700';
-    }
-  };
-
-  if (loading) {
-    return (
-      <Card>
-        <CardContent className="p-8 text-center">
-          <div className="animate-pulse">
-            <div className="h-8 bg-slate-200 rounded w-1/3 mx-auto mb-4"></div>
-            <div className="h-4 bg-slate-200 rounded w-1/2 mx-auto"></div>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (estimates.length === 0) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>{t('work_progress') || 'Ish bajarilishi'}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center py-12 max-w-md mx-auto">
-            <div className="w-20 h-20 rounded-full bg-blue-50 flex items-center justify-center mx-auto mb-4">
-              <FolderTree className="w-10 h-10 text-blue-400" />
-            </div>
-            <p className="text-slate-700 font-medium mb-1">
-              {t('no_estimate_yet') || "Smeta hali yaratilmagan"}
-            </p>
-            <p className="text-sm text-slate-500 mb-4">
-              {t('progress_needs_estimate_hint') ||
-                "Bajarilish holatini kuzatish uchun avval \"Smeta\" bo'limiga o'ting va ishlar ro'yxatini kiriting."}
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      {/* Overall Progress Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card
-          className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200"
-          title={t('progress_by_qty_hint') || "Barcha ishlarning rejadagi hajmidan qancha qismi bajarilganligi"}
-        >
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-medium text-blue-800">
-                {t('progress_by_qty') || "Hajm bo'yicha bajarilish"}
-              </h3>
-              <TrendingUp className="w-5 h-5 text-blue-600" />
-            </div>
-            <div className="text-3xl font-bold text-blue-900 mb-2">{overallProgress.byQty}%</div>
-            <Progress value={overallProgress.byQty} className="h-2 mb-2" />
-            <p className="text-xs text-blue-700">
-              {overallProgress.completed.toFixed(1)} / {overallProgress.total.toFixed(1)}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card
-          className="bg-gradient-to-br from-green-50 to-green-100 border-green-200"
-          title={t('progress_by_value_hint') || "Bajarilgan ishlarning umumiy summasi smeta qiymatidan qancha qismini tashkil etadi"}
-        >
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-medium text-green-800">{t('progress_by_value') || "Qiymat bo'yicha"}</h3>
-              <DollarSign className="w-5 h-5 text-green-600" />
-            </div>
-            <div className="text-3xl font-bold text-green-900 mb-2">{overallProgress.byValue}%</div>
-            <Progress value={overallProgress.byValue} className="h-2 mb-2" />
-            <p className="text-xs text-green-700">
-              {formatCurrency(overallProgress.completedValue)} / {formatCurrency(overallProgress.totalValue)}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-medium text-purple-800">{t('work_items') || 'Ish bandlari'}</h3>
-              <ClipboardList className="w-5 h-5 text-purple-600" />
-            </div>
-            <div className="text-3xl font-bold text-purple-900 mb-2">{allItems.length}</div>
-            <div className="flex items-center gap-2 text-xs">
-              <span className="flex items-center gap-1">
-                <CheckCircle className="w-3 h-3 text-green-600" />
-                {itemCounts.completedCount} {t('completed') || 'bajarilgan'}
-              </span>
-              <span className="flex items-center gap-1">
-                <Clock className="w-3 h-3 text-orange-600" />
-                {itemCounts.inProgressCount} {t('in_progress') || 'jarayonda'}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Progress by Estimate */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">{t('progress_by_section') || "Smetalar bo'yicha progress"}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {estimates.map((est) => {
-              const progress = getEstimateProgress(est.id);
-              const isSelected = selectedEstimate?.id === est.id;
-              return (
-                <div
-                  key={est.id}
-                  className={`p-4 rounded-lg border cursor-pointer transition-all ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'}`}
-                  onClick={() => setSelectedEstimate(isSelected ? null : est)}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-mono text-slate-500">{est.code}</span>
-                      <span className="font-medium text-slate-800">{est.name}</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm font-semibold text-slate-700">{progress.percent}%</span>
-                      <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${isSelected ? 'rotate-90' : ''}`} />
-                    </div>
-                  </div>
-                  <div className="relative h-2 bg-slate-200 rounded-full overflow-hidden">
-                    <div
-                      className={`absolute left-0 top-0 h-full transition-all ${getProgressColor(progress.percent)}`}
-                      style={{ width: `${progress.percent}%` }}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between mt-2 text-xs text-slate-500">
-                    <span>{progress.completed.toFixed(1)} / {progress.total.toFixed(1)} ({t('quantity') || 'hajm'})</span>
-                    <span>{formatCurrency(progress.completedValue)} / {formatCurrency(progress.totalValue)}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Estimate Lines Detail */}
-      {selectedEstimate && (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">
-              {selectedEstimate.name} - {t('items') || 'Ishlar'}
-            </CardTitle>
-            <Badge variant="outline">
-              {estimateLines.length} {t('items') || 'ta'}
-            </Badge>
-          </CardHeader>
-          <CardContent>
-            {estimateLines.length === 0 ? (
-              <div className="text-center py-8 text-slate-500">
-                {t('no_items_in_section') || "Bu smetada qatorlar yo'q"}
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {estimateLines.map((item) => {
-                  const itemProgress = item.total_amount > 0
-                    ? Math.round(((item.actual_amount || 0) / item.total_amount) * 100)
-                    : 0;
-                  const isEditing = editingItem?.id === item.id;
-
-                  return (
-                    <div
-                      key={item.id}
-                      className="p-4 rounded-lg border border-slate-200 hover:border-slate-300 transition-all"
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            {item.wbs_code && (
-                              <span className="text-xs font-mono text-slate-500">{item.wbs_code}</span>
-                            )}
-                            <Badge className={`text-xs ${getStatusColor(itemProgress >= 100 ? 'completed' : itemProgress > 0 ? 'in_progress' : 'pending')}`}>
-                              {itemProgress >= 100 ? (t('completed') || 'Bajarilgan')
-                                : itemProgress > 0 ? (t('in_progress') || 'Jarayonda')
-                                : (t('pending') || 'Kutilmoqda')}
-                            </Badge>
-                          </div>
-                          <p className="font-medium text-slate-800 truncate">{item.name}</p>
-                          <p className="text-sm text-slate-500 mt-1">
-                            {item.quantity} {item.uom} × {formatCurrency(item.unit_rate || 0)} = {formatCurrency(item.total_amount || 0)}
-                          </p>
-                        </div>
-                        <div className="flex flex-col items-end gap-2">
-                          <div className="text-right">
-                            <p className="text-lg font-bold text-slate-800">{itemProgress}%</p>
-                            <p className="text-xs text-slate-500">
-                              {formatCurrency(item.actual_amount || 0)} / {formatCurrency(item.total_amount || 0)}
-                            </p>
-                          </div>
-                          {!isEditing ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                setEditingItem(item);
-                                setCompletedQty(item.actual_amount?.toString() || '0');
-                              }}
-                            >
-                              <Edit className="w-3 h-3 mr-1" />
-                              {t('update') || 'Yangilash'}
-                            </Button>
-                          ) : (
-                            <div className="flex items-center gap-2">
-                              <NumberInput
-                                value={completedQty}
-                                onChange={(raw) => setCompletedQty(raw)}
-                                className="w-32 h-8 text-sm tabular-nums"
-                              />
-                              <Button
-                                size="sm"
-                                onClick={handleUpdateProgress}
-                                disabled={saving}
-                              >
-                                {saving ? '...' : (t('save') || 'Saqlash')}
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => {
-                                  setEditingItem(null);
-                                  setCompletedQty('');
-                                }}
-                              >
-                                <X className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="mt-3">
-                        <div className="relative h-2 bg-slate-200 rounded-full overflow-hidden">
-                          <div
-                            className={`absolute left-0 top-0 h-full transition-all ${getProgressColor(itemProgress)}`}
-                            style={{ width: `${itemProgress}%` }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-    </div>
-  );
-};
-
 // Tab Components
 const ProjectsTab = ({
   projects,
   loading,
+  loadError,
+  onRetry,
+  readinessById,
   searchQuery,
   setSearchQuery,
   statusFilter,
@@ -677,7 +240,7 @@ const ProjectsTab = ({
           </div>
           <Button
             onClick={onCreateProject}
-            className="h-9 rounded-lg bg-slate-900 text-white shadow-sm hover:bg-slate-800 cursor-pointer transition-colors"
+            className="h-9 rounded-lg bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white shadow-md hover:opacity-90 cursor-pointer transition-opacity"
           >
             <Plus className="w-4 h-4 mr-1.5" />
             {t('new_project') || 'Yangi loyiha'}
@@ -724,9 +287,22 @@ const ProjectsTab = ({
               </div>
             ))}
           </div>
+        ) : loadError ? (
+          <div className="text-center py-16 max-w-md mx-auto" role="alert">
+            <div className="w-16 h-16 rounded-2xl bg-red-50 flex items-center justify-center mx-auto mb-5">
+              <AlertTriangle className="w-8 h-8 text-red-500" strokeWidth={1.5} />
+            </div>
+            <h3 className="text-base font-semibold text-slate-900 mb-1.5">
+              {t('error_occurred') || 'Xatolik yuz berdi'}
+            </h3>
+            <p className="text-sm text-slate-500 mb-5 break-words">{loadError}</p>
+            <Button variant="outline" className="cursor-pointer" onClick={() => onRetry && onRetry()}>
+              {t('retry') || 'Qayta urinish'}
+            </Button>
+          </div>
         ) : viewMode === 'kanban' ? (
           <ProjectKanban
-            projects={projects}
+            projects={filteredProjects}
             onStatusChange={onStatusChange}
             onViewProject={onViewProject}
             onEditProject={onEditProject}
@@ -767,7 +343,7 @@ const ProjectsTab = ({
                 </p>
                 <Button
                   onClick={onCreateProject}
-                  className="cursor-pointer bg-slate-900 text-white hover:bg-slate-800"
+                  className="cursor-pointer bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white shadow-md hover:opacity-90 transition-opacity"
                 >
                   <Plus className="w-4 h-4 mr-1.5" />
                   {t('create_first_project') || 'Birinchi loyihani yaratish'}
@@ -778,7 +354,12 @@ const ProjectsTab = ({
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {filteredProjects.map((project) => {
-              const progress = Number(project.progress_percent) || 0;
+              // Prefer the computed cost-weighted readiness from /stats;
+              // fall back to the manual progress_percent field.
+              const computed = readinessById ? readinessById[project.id] : undefined;
+              const progress = typeof computed === 'number'
+                ? Math.round(computed)
+                : (Number(project.progress_percent) || 0);
               return (
                 <article
                   key={project.id}
@@ -796,9 +377,16 @@ const ProjectsTab = ({
                 >
                   {/* Header */}
                   <div className="flex items-start justify-between gap-3 mb-4">
-                    <h3 className="font-semibold text-slate-900 text-base leading-snug line-clamp-2 flex-1">
-                      {project.name}
-                    </h3>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-slate-900 text-base leading-snug line-clamp-2">
+                        {project.name}
+                      </h3>
+                      {project.code && (
+                        <span className="mt-1 inline-block font-mono text-[11px] text-slate-500 bg-slate-100 rounded px-1.5 py-0.5">
+                          {project.code}
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-1.5 shrink-0">
                       {project.viewer_role === 'subcontractor' && (
                         <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-orange-100 text-orange-700">
@@ -829,6 +417,23 @@ const ProjectsTab = ({
                         <dd className="font-medium tabular-nums">{formatCurrency(project.contract_amount)}</dd>
                       </div>
                     )}
+                    {project.planned_end_date && (() => {
+                      const end = new Date(project.planned_end_date);
+                      const overdue =
+                        !Number.isNaN(end.getTime()) &&
+                        end < new Date() &&
+                        !['completed', 'cancelled'].includes(project.status);
+                      return (
+                        <div className={cn('flex items-center gap-2', overdue ? 'text-red-600' : 'text-slate-600')}>
+                          <Calendar className={cn('w-3.5 h-3.5 shrink-0', overdue ? 'text-red-400' : 'text-slate-400')} strokeWidth={2} />
+                          <dd className="tabular-nums">
+                            {t('deadline') || 'Muddat'}: {Number.isNaN(end.getTime())
+                              ? project.planned_end_date
+                              : end.toLocaleDateString('ru-RU')}
+                          </dd>
+                        </div>
+                      );
+                    })()}
                   </dl>
 
                   {/* Progress */}
@@ -1196,9 +801,8 @@ const ProjectDetailView = ({
       { key: 'expenses', label: t('nav_expenses') || 'Xarajatlar' },
       // 'financial' / Tahlil sub-tab removed per product request — the
       // page mostly duplicated Byudjet's data and showed misleading
-      // "-21666566.7%" margin numbers when smeta totals weren't loaded
-      // yet. Keep FinancialTab.jsx in the codebase for now in case we
-      // reinstate it later, but it's no longer reachable from the UI.
+      // margin numbers when smeta totals weren't loaded yet. The
+      // FinancialTab.jsx file was deleted in the 2026-08 cleanup.
     ]},
     // Materiallar hidden for now — uncomment to bring it back.
     // { key: 'materiallar', label: t('nav_materials') || 'Materiallar', icon: Package, subs: [
@@ -2248,10 +1852,9 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <div className="min-w-0">
-            {/* Breadcrumb above the title — matches the v2 mockup's
-               "Ishlab chiqarish · Loyihalar · {project name}" line. */}
+            {/* Breadcrumb above the title: "Qurilish · Loyihalar · {project name}" */}
             <div className="text-[12px] text-slate-500 mb-1 truncate">
-              {t('nav_production') || 'Ishlab chiqarish'} ·{' '}
+              {t('construction') || 'Qurilish'} ·{' '}
               {t('nav_projects') || 'Loyihalar'} ·{' '}
               <span className="text-slate-700">{project.name}</span>
             </div>
@@ -4644,6 +4247,7 @@ export default function Construction() {
   const {
     projects,
     loading,
+    loadError,
     loadProjects,
     createProject,
     updateProject,
@@ -4653,10 +4257,31 @@ export default function Construction() {
     getProjectStats
   } = useConstructionContext();
 
-  // Refresh data when navigating to this page
+  // Initial load lives in ConstructionContext (gated on installed app +
+  // module access) — no extra fetch here, or the page fires the request
+  // three times and bypasses the access gate.
+
+  // Portfolio stats: per-project COMPUTED readiness (cost-weighted over the
+  // edinich estimate works) so cards show real progress instead of the dead
+  // manual progress_percent. Best-effort: on failure cards fall back to the
+  // manual field.
+  const [readinessById, setReadinessById] = useState(null);
   useEffect(() => {
-    loadProjects();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    let cancelled = false;
+    constructionService.getProjectStats()
+      .then((stats) => {
+        if (cancelled) return;
+        const map = {};
+        (stats?.per_project || []).forEach((p) => {
+          if (p && p.id != null && typeof p.readiness_pct === 'number') {
+            map[p.id] = p.readiness_pct;
+          }
+        });
+        setReadinessById(map);
+      })
+      .catch(() => { if (!cancelled) setReadinessById(null); });
+    return () => { cancelled = true; };
+  }, []);
 
   // Warehouses for the project form's "Loyiha ombori" picker. Loaded
   // once on mount and reused for both the create modal and the inline
@@ -4725,10 +4350,6 @@ export default function Construction() {
   // popovers don't trigger a full form re-render when toggled.
   const [regionPickerOpen, setRegionPickerOpen] = useState(false);
   const [cityPickerOpen, setCityPickerOpen] = useState(false);
-
-  useEffect(() => {
-    loadProjects();
-  }, []);
 
   const stats = getProjectStats();
 
@@ -5179,12 +4800,28 @@ export default function Construction() {
       hint: t('draft_projects_hint') || "Qoralama: tayyorlash bosqichidagi loyihalar",
     },
     {
+      key: 'planning',
+      label: t('planning') || 'Rejalashtirish',
+      value: stats.planning,
+      icon: ClipboardList,
+      accent: 'text-violet-600',
+      hint: t('planning') || 'Rejalashtirish bosqichidagi loyihalar',
+    },
+    {
       key: 'in_progress',
       label: t('in_progress') || 'Jarayonda',
       value: stats.inProgress,
       icon: TrendingUp,
       accent: 'text-amber-600',
       hint: t('in_progress_projects_hint') || "Jarayonda: qurilish ketayotgan loyihalar",
+    },
+    {
+      key: 'on_hold',
+      label: t('on_hold') || "To'xtatilgan",
+      value: stats.onHold,
+      icon: Clock,
+      accent: 'text-orange-600',
+      hint: t('on_hold') || "To'xtatib turilgan loyihalar",
     },
     {
       key: 'completed',
@@ -5201,8 +4838,9 @@ export default function Construction() {
       <div className="mx-auto max-w-[1600px] px-4 md:px-6 lg:px-8 py-6 md:py-8 space-y-8">
         {/* Stats: clickable status filter cards + summary metrics */}
         <div className="space-y-3">
-          {/* Status filter — segmented cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {/* Status filter — segmented cards, one per dropdown status so the
+              two filter controls always stay in sync */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             {STATUS_FILTER_CARDS.map(({ key, label, value, icon: Icon, accent, hint }) => {
               const isActive = statusFilter === key;
               return (
@@ -5213,16 +4851,16 @@ export default function Construction() {
                   aria-pressed={isActive}
                   title={hint}
                   className={cn(
-                    'group relative rounded-xl border bg-white p-4 text-left transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400',
+                    'group relative rounded-xl border bg-white p-4 text-left transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--genix-blue)]',
                     isActive
-                      ? 'border-slate-900 shadow-sm'
+                      ? 'border-[var(--genix-blue)] ring-1 ring-[var(--genix-blue)]/40 bg-blue-50/40 shadow-sm'
                       : 'border-slate-200 hover:border-slate-300'
                   )}
                 >
                   <div className="flex items-start justify-between gap-2 mb-3">
                     <Icon className={cn('w-5 h-5', accent)} strokeWidth={2} />
                     {isActive && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-slate-900" aria-hidden="true" />
+                      <span className="w-2 h-2 rounded-full bg-[var(--genix-blue)]" aria-hidden="true" />
                     )}
                   </div>
                   <p className="text-xs font-medium text-slate-500 mb-1">
@@ -5244,6 +4882,9 @@ export default function Construction() {
         <ProjectsTab
           projects={projects}
           loading={loading}
+          loadError={loadError}
+          onRetry={loadProjects}
+          readinessById={readinessById}
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
           statusFilter={statusFilter}
@@ -5657,6 +5298,10 @@ export default function Construction() {
                   </h3>
                   <div>
                     <Label htmlFor="proj-status">{t('status') || 'Holat'}</Label>
+                    {/* Only the current status + transitions the kanban would
+                        also allow (ALLOWED_PROJECT_TRANSITIONS) — previously
+                        this Select could jump to any status and bypass the
+                        transition rules. */}
                     <Select
                       value={projectForm.status}
                       onValueChange={(v) => setProjectForm({ ...projectForm, status: v })}
@@ -5665,12 +5310,23 @@ export default function Construction() {
                         <SelectValue placeholder={t('select_status') || 'Holatni tanlang'} />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="draft">{t('draft') || 'Qoralama'}</SelectItem>
-                        <SelectItem value="planning">{t('planning') || 'Rejalashtirish'}</SelectItem>
-                        <SelectItem value="in_progress">{t('in_progress') || 'Jarayonda'}</SelectItem>
-                        <SelectItem value="on_hold">{t('on_hold') || "To'xtatilgan"}</SelectItem>
-                        <SelectItem value="completed">{t('completed') || 'Tugallangan'}</SelectItem>
-                        <SelectItem value="cancelled">{t('cancelled') || 'Bekor qilingan'}</SelectItem>
+                        {(() => {
+                          const current = editingProject?.status || projectForm.status || 'draft';
+                          const allowed = new Set([current, ...(ALLOWED_PROJECT_TRANSITIONS[current] || [])]);
+                          const labels = {
+                            draft: t('draft') || 'Qoralama',
+                            planning: t('planning') || 'Rejalashtirish',
+                            in_progress: t('in_progress') || 'Jarayonda',
+                            on_hold: t('on_hold') || "To'xtatilgan",
+                            completed: t('completed') || 'Tugallangan',
+                            cancelled: t('cancelled') || 'Bekor qilingan',
+                          };
+                          return Object.entries(labels)
+                            .filter(([value]) => allowed.has(value))
+                            .map(([value, label]) => (
+                              <SelectItem key={value} value={value}>{label}</SelectItem>
+                            ));
+                        })()}
                       </SelectContent>
                     </Select>
                   </div>
