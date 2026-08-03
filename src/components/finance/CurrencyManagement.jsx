@@ -3,6 +3,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/number-input";
 import { Badge } from "@/components/ui/badge";
 import {
   Plus, Search, RefreshCw, TrendingUp, TrendingDown, Globe, DollarSign,
@@ -262,10 +263,9 @@ export default function CurrencyManagement() {
         <CardContent className="p-4">
           <div className="flex flex-col sm:flex-row items-center gap-4">
             <div className="flex items-center gap-2 flex-1">
-              <Input
-                type="number"
+              <NumberInput
                 value={converter.amount}
-                onChange={(e) => setConverter({ ...converter, amount: e.target.value })}
+                onChange={(raw) => setConverter({ ...converter, amount: raw })}
                 className="w-32 text-center font-semibold"
               />
               <Select value={converter.from} onValueChange={(v) => setConverter({ ...converter, from: v })}>
@@ -812,11 +812,10 @@ export default function CurrencyManagement() {
             </div>
             <div>
               <label className="text-sm font-medium">{t('rate') || 'Rate'} (1 {newRate.from_currency} = ? UZS)</label>
-              <Input
-                type="number"
+              <NumberInput
                 value={newRate.rate}
-                onChange={(e) => setNewRate({ ...newRate, rate: e.target.value })}
-                placeholder="12650"
+                onChange={(raw) => setNewRate({ ...newRate, rate: raw })}
+                placeholder="12 650"
               />
             </div>
             <div>

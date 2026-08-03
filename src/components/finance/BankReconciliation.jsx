@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/number-input";
 import { Badge } from "@/components/ui/badge";
 import {
   Plus, Search, Building2, CreditCard, CheckCircle, Clock, AlertCircle,
@@ -961,10 +962,9 @@ export default function BankReconciliation() {
               </div>
               <div>
                 <label className="text-sm font-medium">{t('amount') || 'Amount'}</label>
-                <Input
-                  type="number"
+                <NumberInput
                   value={newTransaction.amount}
-                  onChange={(e) => setNewTransaction({ ...newTransaction, amount: e.target.value })}
+                  onChange={(raw) => setNewTransaction({ ...newTransaction, amount: raw })}
                   placeholder="0"
                 />
               </div>

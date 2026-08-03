@@ -20,6 +20,7 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { getApiErrorMessage } from '@/utils/apiError';
 import financeService from "@/api/services/finance";
 
 export default function AccountCard() {
@@ -92,7 +93,7 @@ export default function AccountCard() {
       setCurrentPage(1);
     } catch (err) {
       console.error('Failed to load account card:', err);
-      setError(err?.response?.data?.error || 'Failed to load account card');
+      setError(getApiErrorMessage(err, 'Failed to load account card'));
       setReport(null);
     } finally {
       setIsLoading(false);
@@ -183,7 +184,7 @@ export default function AccountCard() {
         <h2>${labels.account}: ${report.account_code} — ${report.account_name}</h2>
 
         <div class="info">
-          <span>${labels.period}: ${report.period_from} — ${report.period_to}</span>
+          <span>${labels.period}: ${formatDate(report.period_from)} — ${formatDate(report.period_to)}</span>
           <span>${language === 'ru' ? 'Тип' : language === 'uz' ? 'Turi' : 'Type'}: ${report.account_type === 'active' ? labels.type_active : labels.type_passive}</span>
         </div>
 
@@ -191,7 +192,7 @@ export default function AccountCard() {
           <thead>
             <tr>
               <th style="width:30px">№</th>
-              <th style="width:80px">${formatDate(labels.date)}</th>
+              <th style="width:80px">${labels.date}</th>
               <th style="width:110px">${labels.document}</th>
               <th>${labels.description}</th>
               <th style="width:70px">${labels.counterpart_account}</th>
@@ -400,7 +401,7 @@ export default function AccountCard() {
                     <TableHeader>
                       <TableRow className="bg-slate-50">
                         <TableHead className="w-[40px] text-center">№</TableHead>
-                        <TableHead className="w-[90px]">{formatDate(labels.date)}</TableHead>
+                        <TableHead className="w-[90px]">{labels.date}</TableHead>
                         <TableHead className="w-[120px]">{labels.document}</TableHead>
                         <TableHead>{labels.description}</TableHead>
                         <TableHead className="w-[80px] text-center">{labels.counterpart_account}</TableHead>

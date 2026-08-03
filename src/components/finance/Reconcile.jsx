@@ -18,6 +18,7 @@ import { useSales } from "@/components/contexts/SalesContext";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import financeService from "@/api/services/finance";
 import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 // Odoo-style reconciliation: list each partner's balance (due + unallocated
 // credit), drill into a partner to see their open documents and available
@@ -50,7 +51,7 @@ export default function Reconcile() {
       setBalances(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Failed to load partner balances:', err);
-      toast.error(err?.response?.data?.error || err?.message || tr('Yuklab bo\'lmadi', 'Не удалось загрузить', 'Failed to load'));
+      toast.error(getApiErrorMessage(err, tr('Yuklab bo\'lmadi', 'Не удалось загрузить', 'Failed to load')));
       setBalances([]);
     } finally {
       setLoading(false);
@@ -66,7 +67,7 @@ export default function Reconcile() {
       setLedger(data || null);
     } catch (err) {
       console.error('Failed to load partner ledger:', err);
-      toast.error(err?.response?.data?.error || err?.message || tr('Yuklab bo\'lmadi', 'Не удалось загрузить', 'Failed to load'));
+      toast.error(getApiErrorMessage(err, tr('Yuklab bo\'lmadi', 'Не удалось загрузить', 'Failed to load')));
       setLedger(null);
     } finally {
       setLedgerLoading(false);
@@ -107,7 +108,7 @@ export default function Reconcile() {
       try { await refreshSalesData(); } catch { /* ignore */ }
       try { await refreshFinancials(); } catch { /* ignore */ }
     } catch (err) {
-      toast.error(err?.response?.data?.error || err?.message || tr('Xatolik', 'Ошибка', 'Error'));
+      toast.error(getApiErrorMessage(err, tr('Xatolik', 'Ошибка', 'Error')));
     } finally {
       setApplying(false);
     }
