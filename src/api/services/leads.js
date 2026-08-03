@@ -203,6 +203,19 @@ export const leadsService = {
     return response.data.data;
   },
 
+  // Phase-2 sales handoff: draft sales order from a won lead.
+  // 400 when the lead has no partner yet (not won).
+  async createSalesOrder(leadId) {
+    const response = await apiClient.post(`/leads/${leadId}/sales-order`);
+    return response.data.data;
+  },
+
+  // Sales orders created from this lead
+  async listSalesOrders(leadId) {
+    const response = await apiClient.get(`/leads/${leadId}/sales-orders`);
+    return response.data.data || [];
+  },
+
   // Merged timeline: stage changes ∪ field changes ∪ activities ∪ calls
   async getTimeline(leadId) {
     const response = await apiClient.get(`/leads/${leadId}/timeline`);

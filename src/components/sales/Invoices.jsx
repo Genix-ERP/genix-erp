@@ -69,6 +69,7 @@ import { inventoryService } from "@/api/services/inventory";
 import { salesService } from "@/api/services/sales";
 import apiClient from "@/api/client";
 import { useCompany } from "@/components/contexts/CompanyContext";
+import { getPrintCompanyConfig } from "./printConfig";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { useAdminSettings } from "@/components/contexts/AdminSettingsContext";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
@@ -107,6 +108,7 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
     deleteInvoice,
     recordPayment,
     isLoading,
+    refreshData,
   } = useSales();
 
   const { customers } = useCustomers();
@@ -347,7 +349,9 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
       customer_id: formData.customer_id,
       organization_id: activeCompany?.id,
       invoice_date: formData.invoice_date,
-      due_date: formData.due_date,
+      // due_date is optional — when omitted, the backend derives it from the
+      // customer's payment term (fallback NET30).
+      ...(formData.due_date ? { due_date: formData.due_date } : {}),
       notes: formData.notes,
       currency_id: currencyObj?.id || undefined,
       exchange_rate: formData.exchange_rate || 1,
@@ -458,18 +462,6 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
       await fetchInvoices();
     } catch (err) {
       console.error("Failed to send invoice:", err);
-    }
-  };
-
-  // Un-post a sent/posted invoice back to draft so it can be edited or deleted.
-  const handleResetToDraft = async (invoice) => {
-    try {
-      await salesService.resetInvoiceToDraft(invoice.id);
-      await fetchInvoices();
-    } catch (err) {
-      const msg = err?.response?.data?.error?.message || err?.message || "Failed to reset invoice";
-      window.alert(msg);
-      console.error("Failed to reset invoice:", err);
     }
   };
 
@@ -717,6 +709,147 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
     }
   };
 
+  // "Chop etish" — A4 hisob-faktura print form (O'zbek standard):
+  // seller rekvizitlari (INN, address, bank), buyer block, lines table
+  // with per-line QQS, totals, Rahbar / Bosh buxgalter signature lines.
+  const handlePrintInvoice = async (invoice) => {
+    if (!invoice) return;
+    // List rows don't carry lines — fetch the full invoice first.
+    let inv = invoice;
+    if (!Array.isArray(inv.lines) && !Array.isArray(inv.items)) {
+      try {
+        inv = await getInvoice(invoice.id);
+      } catch (error) {
+        console.error('Failed to fetch invoice for printing:', error);
+      }
+    }
+    const company = getPrintCompanyConfig(activeCompany);
+    const lines = inv.lines || inv.items || [];
+    const lineNet = (line) => line.line_total || line.total || (line.quantity || 0) * (line.unit_price || 0);
+    const linesNetTotal = lines.reduce((sum, line) => sum + lineNet(line), 0);
+    const subtotal = inv.subtotal ?? linesNetTotal;
+    const taxAmount = inv.tax_amount || 0;
+    const grandTotal = inv.total_amount ?? subtotal + taxAmount;
+    const invoiceDate = inv.invoice_date
+      ? format(new Date(inv.invoice_date), 'dd.MM.yyyy')
+      : format(new Date(), 'dd.MM.yyyy');
+    const dueDate = inv.due_date ? format(new Date(inv.due_date), 'dd.MM.yyyy') : '-';
+
+    // Header VAT allocated proportionally across lines for the QQS column.
+    const lineRows = lines.length > 0
+      ? lines.map((line, i) => {
+          const net = lineNet(line);
+          const vat = linesNetTotal > 0 ? taxAmount * (net / linesNetTotal) : 0;
+          return `
+            <tr>
+              <td class="c">${i + 1}</td>
+              <td>${line.description || line.product_name || '-'}</td>
+              <td class="c">${line.quantity || 0}</td>
+              <td class="r">${formatCurrency(line.unit_price || 0)}</td>
+              <td class="r">${formatCurrency(vat)}</td>
+              <td class="r">${formatCurrency(net + vat)}</td>
+            </tr>`;
+        }).join('')
+      : `<tr><td class="c">1</td><td colspan="5">-</td></tr>`;
+
+    const reqRow = (label, value) => value
+      ? `<div class="req"><span>${label}:</span> <strong>${value}</strong></div>`
+      : '';
+
+    const html = `
+      <html>
+      <head>
+        <title>${t('receipt_invoice')} № ${inv.invoice_number || ''}</title>
+        <style>
+          @page { size: A4; margin: 15mm; }
+          body { font-family: 'Times New Roman', serif; color: #000; font-size: 12px; padding: 24px; max-width: 800px; margin: 0 auto; }
+          .seller { border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 16px; }
+          .seller .name { font-size: 15px; font-weight: bold; margin-bottom: 4px; }
+          .req { padding: 1px 0; }
+          .req span { color: #444; }
+          h1 { text-align: center; font-size: 17px; margin: 18px 0 4px 0; text-transform: uppercase; letter-spacing: 1px; }
+          .doc-dates { text-align: center; margin-bottom: 16px; color: #333; }
+          .buyer { border: 1px solid #000; padding: 8px 10px; margin-bottom: 14px; }
+          table { width: 100%; border-collapse: collapse; margin: 14px 0; }
+          th, td { border: 1px solid #000; padding: 5px 7px; }
+          th { background: #f0f0f0; text-align: center; font-size: 11px; }
+          td.c { text-align: center; }
+          td.r { text-align: right; white-space: nowrap; }
+          .totals { width: 45%; margin-left: auto; }
+          .totals .row { display: flex; justify-content: space-between; padding: 3px 0; }
+          .totals .grand { font-weight: bold; font-size: 13px; border-top: 1px solid #000; padding-top: 5px; }
+          .signatures { display: flex; justify-content: space-between; margin-top: 55px; }
+          .signatures div { width: 45%; }
+          .sig-line { border-bottom: 1px solid #000; margin-top: 30px; }
+          @media print { body { padding: 0; } }
+        </style>
+      </head>
+      <body>
+        <div class="seller">
+          <div class="name">${t('print_seller')}: ${company.name}</div>
+          ${reqRow(t('tax_id') || 'INN', company.inn)}
+          ${reqRow(t('address'), company.address)}
+          ${reqRow(t('phone'), company.phone)}
+          ${reqRow(t('bank_name'), company.bank_name)}
+          ${reqRow('MFO', company.bank_mfo)}
+          ${reqRow(t('bank_account'), company.bank_account)}
+        </div>
+
+        <h1>${t('receipt_invoice')} № ${inv.invoice_number || ''}</h1>
+        <div class="doc-dates">
+          ${t('date')}: <strong>${invoiceDate}</strong>
+          &nbsp;&nbsp;·&nbsp;&nbsp;
+          ${t('print_due')}: <strong>${dueDate}</strong>
+        </div>
+
+        <div class="buyer">
+          <strong>${t('print_buyer')}:</strong> ${inv.customer_name || '-'}<br/>
+          ${t('tax_id') || 'INN'}: ${inv.customer_inn || inv.customer_tax_id || '____________'}
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width:6%">№</th>
+              <th>${t('name')}</th>
+              <th style="width:11%">${t('quantity')}</th>
+              <th style="width:16%">${t('price')}</th>
+              <th style="width:15%">${t('print_vat')}</th>
+              <th style="width:18%">${t('receipt_amount')}</th>
+            </tr>
+          </thead>
+          <tbody>${lineRows}</tbody>
+        </table>
+
+        <div class="totals">
+          <div class="row"><span>${t('print_total')}:</span> <span>${formatCurrency(subtotal)}</span></div>
+          <div class="row"><span>${t('print_vat')}:</span> <span>${formatCurrency(taxAmount)}</span></div>
+          <div class="row grand"><span>${t('print_grand_total')}:</span> <span>${formatCurrency(grandTotal)}</span></div>
+        </div>
+
+        <div class="signatures">
+          <div>
+            <p><strong>${t('print_director')}:</strong></p>
+            <div class="sig-line"></div>
+          </div>
+          <div>
+            <p><strong>${t('print_chief_accountant')}:</strong></p>
+            <div class="sig-line"></div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(html);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.print();
+    }
+  };
+
   const handlePaymentSubmit = async () => {
     if (selectedInvoice && parseFloat(paymentData.amount) > 0) {
       // Derive payment method from selected journal type
@@ -783,8 +916,10 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
       setShowCreditNoteModal(false);
       setCreditNoteInvoice(null);
       setCreditNoteReason("");
-      // Refresh invoices list
-      window.location.reload();
+      // Refresh the paginated list and the shared sales context in place
+      // (a full page reload here used to dump the user's tab/filter state).
+      await fetchInvoices();
+      refreshData?.();
     } catch (error) {
       console.error("Failed to create credit note:", error);
     } finally {
@@ -795,7 +930,8 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
   const handleConfirmCreditNote = async (creditNoteId) => {
     try {
       await salesService.confirmCreditNote(creditNoteId);
-      window.location.reload();
+      await fetchInvoices();
+      refreshData?.();
     } catch (error) {
       console.error("Failed to confirm credit note:", error);
     }
@@ -1065,6 +1201,10 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                                 <Eye className="w-4 h-4 mr-2" />
                                 {t('view')}
                               </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handlePrintInvoice(invoice)}>
+                                <Printer className="w-4 h-4 mr-2" />
+                                {t('invoice_print_action')}
+                              </DropdownMenuItem>
                               {invoice.payment_status !== "paid" && (invoice.invoice_type || "invoice") === "invoice" && (
                                 <DropdownMenuItem onClick={() => handlePayment(invoice)}>
                                   <DollarSign className="w-4 h-4 mr-2" />
@@ -1075,12 +1215,6 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                                 <DropdownMenuItem onClick={() => handleConfirmCreditNote(invoice.id)}>
                                   <CheckCircle className="w-4 h-4 mr-2 text-green-500" />
                                   {t('confirm_credit_note')}
-                                </DropdownMenuItem>
-                              )}
-                              {invoice.status !== "draft" && isSuperAdmin && (invoice.amount_paid || 0) === 0 && (
-                                <DropdownMenuItem onClick={() => handleResetToDraft(invoice)}>
-                                  <RotateCcw className="w-4 h-4 mr-2 text-blue-600" />
-                                  {t('reset_to_draft') || 'Qoralamaga qaytarish'}
                                 </DropdownMenuItem>
                               )}
                               {invoice.status === "draft" && (
@@ -1188,7 +1322,7 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                 />
               </div>
               <div className="space-y-2">
-                <Label>{t('due_date')} *</Label>
+                <Label>{t('due_date')}</Label>
                 <Input
                   type="date"
                   value={formData.due_date}
@@ -1196,6 +1330,9 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                     setFormData({ ...formData, due_date: e.target.value })
                   }
                 />
+                <p className="text-xs text-slate-400">
+                  {t('due_date_auto_hint') || "Bo'sh qoldirilsa — to'lov shartidan"}
+                </p>
               </div>
             </div>
 
@@ -1402,7 +1539,6 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                 onClick={handleSubmit}
                 disabled={
                   !formData.customer_id ||
-                  !formData.due_date ||
                   formData.items.length === 0
                 }
               >

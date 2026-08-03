@@ -11,7 +11,8 @@ import {
   Loader2, ChevronDown, Check, Search, X, Clock,
   TrendingUp, Wallet, ArrowDownRight, ArrowUpRight,
   FileText, Target, Package, HardHat, Users, Building2,
-  BarChart3, PieChart as PieChartIcon, Table2,
+  BarChart3, PieChart as PieChartIcon, Table2, ShoppingCart, ShoppingBag,
+  MonitorCog,
 } from 'lucide-react';
 
 // Per-company series palette. The ORDER is the colorblind-safety mechanism:
@@ -232,6 +233,10 @@ export default function DirectorDashboard() {
   // The /reports/director-summary endpoint aggregates per-org revenue, expenses,
   // debtors/creditors, inventory, and HR stats in one round-trip.
   const [monthLabels, setMonthLabels] = useState([]);
+  // Top-level (tenant-wide) sales block: period-scoped orders + current
+  // overdue receivables. Absent on old cached responses — guard on null.
+  const [salesSummary, setSalesSummary] = useState(null);
+  const [assetsSummary, setAssetsSummary] = useState(null);
 
   const loadAll = useCallback(async () => {
     if (!companies || companies.length === 0) return;
@@ -243,6 +248,8 @@ export default function DirectorDashboard() {
       const payload = res.data?.data ?? res.data ?? {};
       const rows = Array.isArray(payload.companies) ? payload.companies : [];
       if (Array.isArray(payload.month_labels)) setMonthLabels(payload.month_labels);
+      setSalesSummary(payload.sales && typeof payload.sales === 'object' ? payload.sales : null);
+      setAssetsSummary(payload.assets && typeof payload.assets === 'object' ? payload.assets : null);
       const next = {};
       rows.forEach(row => {
         next[row.id] = {
@@ -268,6 +275,10 @@ export default function DirectorDashboard() {
           activeContractsValue: Number(row.active_contracts_value || 0),
           expiringContracts: Number(row.expiring_contracts || 0),
           contractsOutstanding: Number(row.contracts_outstanding || 0),
+          purchasesPeriodTotal: Number(row.purchases_period_total || 0),
+          purchasesPeriodCount: Number(row.purchases_period_count || 0),
+          purchaseAPTotal: Number(row.purchase_ap_total || 0),
+          purchaseOverdueDeliveries: Number(row.purchase_overdue_deliveries || 0),
           crmOpenLeads: Number(row.crm_open_leads || 0),
           crmPipelineValue: Number(row.crm_pipeline_value || 0),
           crmWonMonth: Number(row.crm_won_month || 0),
@@ -280,6 +291,8 @@ export default function DirectorDashboard() {
     } catch (e) {
       console.warn('[DirectorDashboard] /reports/director-summary failed', e?.response?.status, e?.response?.data);
       setPerCompany({});
+      setSalesSummary(null);
+      setAssetsSummary(null);
     } finally {
       setLoading(false);
     }
@@ -673,6 +686,72 @@ export default function DirectorDashboard() {
                   const vals = visibleCompanies.map(c => perCompany[c.id]?.crmConversion || 0).filter(v => v > 0);
                   return vals.length ? `${Math.round(sum(vals) / vals.length)}%` : '0%';
                 })(),
+              },
+            ]}
+          />
+        )}
+
+        {/* Savdo (sales) — tenant-wide block from the top-level `sales`
+            field; period-scoped orders, current overdue receivables.
+            Hidden entirely when the backend doesn't send it (old cache). */}
+        {show('finance') && salesSummary && (
+          <SectionCard
+            icon={ShoppingBag}
+            title={t('Savdo', 'Продажи', 'Sales')}
+            chip="bg-emerald-50 text-emerald-600"
+            cells={[
+              { label: t('Buyurtmalar (davr)', 'Заказы (период)', 'Orders (period)'), value: fmtCompact(Number(salesSummary.orders_count) || 0) },
+              { label: t('Buyurtmalar summasi', 'Сумма заказов', 'Orders total'), value: fmtCompact(Number(salesSummary.orders_sum) || 0) },
+              {
+                label: t("Muddati o'tgan fakturalar", 'Просроченные счета', 'Overdue invoices'),
+                value: fmtCompact(Number(salesSummary.overdue_invoices) || 0),
+                cls: (Number(salesSummary.overdue_invoices) || 0) > 0 ? 'text-rose-600' : undefined,
+              },
+              {
+                label: t("Muddati o'tgan debitorka", 'Просроченная дебиторка', 'Overdue receivables'),
+                value: fmtCompact(Number(salesSummary.overdue_receivables) || 0),
+                cls: (Number(salesSummary.overdue_receivables) || 0) > 0 ? 'text-rose-600' : undefined,
+              },
+            ]}
+          />
+        )}
+
+        {/* Aktivlar (fixed assets) — tenant-wide NBV, this-month depreciation,
+            fleet status. Hidden when the backend doesn't send it (old cache). */}
+        {show('finance') && assetsSummary && (assetsSummary.total_count || 0) > 0 && (
+          <SectionCard
+            icon={MonitorCog}
+            title={t('Aktivlar', 'Активы', 'Assets')}
+            chip="bg-amber-50 text-amber-600"
+            cells={[
+              { label: t('Asosiy vositalar', 'Основные средства', 'Fixed assets'), value: fmtCompact(Number(assetsSummary.total_count) || 0) },
+              { label: t('Qoldiq qiymat', 'Остаточная стоимость', 'Net book value'), value: fmtCompact(Number(assetsSummary.total_book_value) || 0) },
+              { label: t('Oylik amortizatsiya', 'Амортизация за месяц', 'Monthly depreciation'), value: fmtCompact(Number(assetsSummary.month_depreciation) || 0) },
+              {
+                label: t('Foydalanishda / Konserv.', 'В эксплуатации / Конс.', 'In service / Conserved'),
+                value: `${Number(assetsSummary.in_service) || 0} / ${Number(assetsSummary.conserved) || 0}`,
+              },
+            ]}
+          />
+        )}
+
+        {/* Xarid (purchasing) */}
+        {show('inventory') && (
+          <SectionCard
+            icon={ShoppingCart}
+            title={t('Xarid', 'Закупки', 'Purchasing')}
+            chip="bg-sky-50 text-sky-600"
+            cells={[
+              { label: t('Davr xaridi', 'Закупки за период', 'Period purchases'), value: fmtCompact(aggOf(d => d.purchasesPeriodTotal || 0)) },
+              { label: t('Buyurtmalar', 'Заказы', 'Orders'), value: fmtCompact(aggOf(d => d.purchasesPeriodCount || 0)) },
+              {
+                label: t('Taʼminotchilarga qarz', 'Долг поставщикам', 'Owed to suppliers'),
+                value: fmtCompact(aggOf(d => d.purchaseAPTotal || 0)),
+              },
+              {
+                label: t('Kechikkan yetkazmalar', 'Просроченные поставки', 'Overdue deliveries'),
+                value: fmtCompact(aggOf(d => d.purchaseOverdueDeliveries || 0)),
+                cls: aggOf(d => d.purchaseOverdueDeliveries || 0) > 0 ? 'text-rose-600' : undefined,
               },
             ]}
           />

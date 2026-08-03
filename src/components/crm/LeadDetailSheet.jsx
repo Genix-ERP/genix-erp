@@ -11,13 +11,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import {
   Phone, Mail, Send, Pencil, Trash2, Trophy, XCircle, Sparkles, Copy,
   ListTodo, MessageSquare, ArrowRightLeft, Clock, PhoneCall, StickyNote,
-  CheckCircle2, Circle, Loader2, User, Building2, Handshake,
+  CheckCircle2, Circle, Loader2, User, Building2, Handshake, ShoppingBag,
 } from 'lucide-react';
 import { useTranslation } from '@/components/utils/translations';
 import { useToast } from '@/components/ui/use-toast';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { leadsService } from '@/api/services/leads';
 import { activitiesService } from '@/api/services/crm';
+import { orderStatusClass, orderStatusLabel } from '@/components/sales/orderStatus';
 import taskBoardsService from '@/api/services/taskBoards';
 import { formatDate, formatDateTime } from '@/utils/formatDate';
 
@@ -63,6 +64,8 @@ export default function LeadDetailSheet({
   const [lead, setLead] = useState(null);
   const [timeline, setTimeline] = useState([]);
   const [tasks, setTasks] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [creatingOrder, setCreatingOrder] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const [noteText, setNoteText] = useState('');
@@ -80,14 +83,16 @@ export default function LeadDetailSheet({
     if (!leadId) return;
     setLoading(true);
     try {
-      const [l, tl, tk] = await Promise.all([
+      const [l, tl, tk, so] = await Promise.all([
         leadsService.get(leadId),
         leadsService.getTimeline(leadId).catch(() => []),
         leadsService.getTasks(leadId).catch(() => []),
+        leadsService.listSalesOrders(leadId).catch(() => []),
       ]);
       setLead(l);
       setTimeline(tl);
       setTasks(tk);
+      setOrders(so);
     } catch (err) {
       console.warn('Failed to load lead:', err);
     } finally {
@@ -99,6 +104,7 @@ export default function LeadDetailSheet({
     setLead(null);
     setTimeline([]);
     setTasks([]);
+    setOrders([]);
     setAiSuggestion(null);
     setNoteText('');
     if (leadId) load();
@@ -181,6 +187,31 @@ export default function LeadDetailSheet({
       toast({ variant: 'destructive', title: t('error') || 'Error', description: err.response?.data?.error?.message || '' });
     } finally {
       setSavingTask(false);
+    }
+  };
+
+  // Won-deal handoff: draft a sales order linked to this lead's partner.
+  const createOrderFromLead = async () => {
+    if (!lead?.partner_id || creatingOrder) return;
+    setCreatingOrder(true);
+    try {
+      const order = await leadsService.createSalesOrder(lead.id);
+      toast({
+        title: t('success') || 'Muvaffaqiyat',
+        description: order?.order_number
+          ? `${t('lead_orders_title') || 'Buyurtmalar'}: ${order.order_number}`
+          : undefined,
+      });
+      const so = await leadsService.listSalesOrders(lead.id).catch(() => null);
+      if (so) setOrders(so);
+      onChanged?.();
+    } catch (err) {
+      const msg = err.response?.status === 400
+        ? (t('lead_not_won_yet') || "Lid hali yutilmagan — avval bitimni yakunlang")
+        : err.response?.data?.error?.message || '';
+      toast({ variant: 'destructive', title: t('error') || 'Error', description: msg });
+    } finally {
+      setCreatingOrder(false);
     }
   };
 
@@ -458,6 +489,58 @@ export default function LeadDetailSheet({
                         </span>
                         <span className="shrink-0 text-[11px] text-slate-400">
                           {task.board_name}{task.due_date ? ` · ${formatDate(task.due_date)}` : ''}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Sales orders (won-deal handoff) */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    {t('lead_orders_title') || 'Buyurtmalar'} {orders.length > 0 && `(${orders.length})`}
+                  </p>
+                  {lead.partner_id && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs text-[var(--genix-blue)]"
+                      onClick={createOrderFromLead}
+                      disabled={creatingOrder}
+                    >
+                      {creatingOrder
+                        ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                        : <ShoppingBag className="mr-1 h-3.5 w-3.5" />}
+                      {t('lead_create_order') || 'Buyurtma yaratish'}
+                    </Button>
+                  )}
+                </div>
+                {orders.length === 0 ? (
+                  <p className="rounded-lg border border-dashed border-slate-200 py-3 text-center text-xs text-slate-400">
+                    {lead.partner_id
+                      ? (t('lead_orders_empty') || "Bog'langan buyurtmalar yo'q")
+                      : (t('lead_not_won_yet') || "Buyurtma yaratish uchun avval bitimni yutilgan deb belgilang")}
+                  </p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {orders.map((order) => (
+                      <div key={order.id} className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                        <ShoppingBag className="h-4 w-4 shrink-0 text-slate-300" />
+                        <span className="min-w-0 flex-1 truncate font-mono font-medium text-slate-700">
+                          {order.order_number}
+                        </span>
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${orderStatusClass(order.status)}`}>
+                          {orderStatusLabel(t, order.status)}
+                        </span>
+                        <span className="shrink-0 text-[11px] text-slate-400">
+                          {order.order_date ? formatDate(order.order_date) : ''}
+                        </span>
+                        <span className="shrink-0 text-xs font-semibold text-slate-800 tabular-nums">
+                          {formatCurrency
+                            ? formatCurrency(Number(order.total_amount) || 0)
+                            : (Number(order.total_amount) || 0).toLocaleString()}
                         </span>
                       </div>
                     ))}
