@@ -74,6 +74,7 @@ import { toast } from 'sonner';
 // strip, lazy-mounted only when the corresponding tab is opened.
 import ProfitTax from '@/pages/ProfitTax';
 import TaxSummary from '@/pages/TaxSummary';
+import TaxSettings from '@/components/finance/TaxSettings';
 
 export default function TaxReports() {
   const { language } = useLanguage();
@@ -503,6 +504,7 @@ export default function TaxReports() {
             <TabsTrigger value="employee-taxes">{t('employee_taxes') || 'Xodim soliqlari'}</TabsTrigger>
             <TabsTrigger value="profit-tax">{t('profit_tax') || "Foyda solig'i"}</TabsTrigger>
             <TabsTrigger value="tax-summary">{t('tax_summary') || 'Umumiy soliq jamlanmasi'}</TabsTrigger>
+            <TabsTrigger value="settings">{t('tax_settings') || 'Sozlamalar'}</TabsTrigger>
           </TabsList>
 
           <div className="flex gap-2">
@@ -958,6 +960,12 @@ export default function TaxReports() {
             into one panel per §10 of TZ_Ish_Haqi_Soliq_Tolik. */}
         <TabsContent value="tax-summary">
           <TaxSummary />
+        </TabsContent>
+
+        {/* Tax constructor (genix_soliq_spec §2): enable/disable each tax with
+            mandatory/regime/optional rules + the 1-billion regime monitor. */}
+        <TabsContent value="settings">
+          {activeTab === 'settings' && <TaxSettings />}
         </TabsContent>
       </Tabs>
 
