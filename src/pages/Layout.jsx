@@ -87,24 +87,33 @@ import { useEmployeePermissions } from "@/components/contexts/EmployeePermission
 import ErrorBoundary from "@/components/ErrorBoundary";
 import apiClient from "@/api/client";
 
-// Navigation link that closes mobile sidebar on click
-function NavLink({ item, isActive }) {
+// Navigation link that closes mobile sidebar on click. Rendered through
+// SidebarMenuButton's asChild (Radix Slot), which forwards a ref plus merged
+// props (tooltip event handlers etc.) — so this must be a forwardRef
+// component that spreads them onto the underlying Link.
+const NavLink = React.forwardRef(function NavLink(
+  { item, isActive, className = '', onClick, ...rest },
+  ref
+) {
   const { setOpenMobile, isMobile, state } = useSidebar();
   // When the desktop sidebar is collapsed to the icon rail, drop the label,
   // badge and side padding so only the centred icon shows.
   const collapsed = state === 'collapsed' && !isMobile;
 
-  const handleClick = () => {
+  const handleClick = (e) => {
     if (isMobile) {
       setOpenMobile(false);
     }
+    onClick?.(e);
   };
 
   return (
     <Link
+      ref={ref}
+      {...rest}
       to={item.url}
       title={collapsed ? item.title : undefined}
-      className={`flex items-center w-full cursor-pointer py-3 ${
+      className={`${className} flex items-center w-full cursor-pointer py-3 ${
         collapsed ? 'justify-center px-0' : 'justify-between px-3'
       } ${
         isActive ? '!bg-gradient-to-r !from-[var(--genix-blue)]/20 !to-[var(--genix-purple)]/20 !text-[var(--genix-blue)] !font-semibold !shadow-md !border-l-4 !border-[var(--genix-blue)]' : ''
@@ -131,7 +140,7 @@ function NavLink({ item, isActive }) {
       )}
     </Link>
   );
-}
+});
 
 function LayoutContent({ children, currentPageName }) {
   const location = useLocation();

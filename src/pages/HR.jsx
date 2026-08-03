@@ -42,9 +42,11 @@ import {
   ChevronLeft,
   ChevronRight,
   CheckSquare,
+  Monitor,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import taskBoardsService from "@/api/services/taskBoards";
+import fixedAssetsV2Service from "@/api/services/fixedAssetsV2";
 
 // Import universal ERP components
 import {
@@ -119,6 +121,7 @@ export default function HR() {
   const [isAssessingRisk, setIsAssessingRisk] = useState(false);
   const [employeeDeductions, setEmployeeDeductions] = useState([]);
   const [employeeTasks, setEmployeeTasks] = useState([]);
+  const [employeeAssets, setEmployeeAssets] = useState([]);
   const [salaryCalc, setSalaryCalc] = useState(null);
   const [loadingDeductions, setLoadingDeductions] = useState(false);
   const { addAuditLog } = useAuditTrail('employees');
@@ -453,6 +456,11 @@ Only return the JSON, no other text.`;
     taskBoardsService.listEmployeeTasks(employee.id)
       .then((tasks) => setEmployeeTasks(Array.isArray(tasks) ? tasks : []))
       .catch(() => setEmployeeTasks([]));
+    // Held assets (moddiy javobgarlik) — best-effort, same pattern as tasks
+    setEmployeeAssets([]);
+    fixedAssetsV2Service.listEmployeeAssets(employee.id)
+      .then((rows) => setEmployeeAssets(Array.isArray(rows) ? rows : []))
+      .catch(() => setEmployeeAssets([]));
     // Load deductions and salary calculation
     setLoadingDeductions(true);
     try {
@@ -1313,6 +1321,44 @@ Only return the JSON, no other text.`;
                               {formatDate(task.due_date)}
                             </span>
                           )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Aktivlar Section — held fixed assets (moddiy javobgarlik).
+                    Red-tinted when the employee is terminated: the assets must
+                    be returned or reassigned (same pattern as Vazifalar). */}
+                {employeeAssets.length > 0 && (
+                  <div className="border-t pt-4 space-y-3">
+                    <h4 className="font-semibold text-sm text-violet-700 flex items-center gap-2">
+                      <Monitor className="w-4 h-4" />
+                      {t('fa_held_assets') === 'fa_held_assets' ? 'Biriktirilgan aktivlar' : t('fa_held_assets')} ({employeeAssets.length})
+                    </h4>
+                    {selectedEmployee.status === 'terminated' && (
+                      <div className="bg-red-50 border border-red-200 rounded p-2 text-xs text-red-700">
+                        {t('fa_return_assets_warning') === 'fa_return_assets_warning'
+                          ? "Xodim ishdan bo'shagan — biriktirilgan aktivlarni qaytarish yoki boshqa xodimga o'tkazish kerak."
+                          : t('fa_return_assets_warning')}
+                      </div>
+                    )}
+                    <div className="space-y-2 max-h-40 overflow-y-auto">
+                      {employeeAssets.map((a) => (
+                        <button
+                          key={a.id}
+                          onClick={() => { setShowViewModal(false); navigate('/assets'); }}
+                          className={`w-full flex items-center justify-between p-2 rounded text-sm text-left hover:bg-slate-100 ${
+                            selectedEmployee.status === 'terminated' ? 'bg-red-50 border border-red-200' : 'bg-slate-50'
+                          }`}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="truncate font-medium">{a.name}</p>
+                            <p className="text-xs text-slate-500 font-mono">{a.inventory_number}</p>
+                          </div>
+                          <span className="ml-2 text-xs text-slate-500 whitespace-nowrap tabular-nums">
+                            {formatCurrency(a.book_value)}
+                          </span>
                         </button>
                       ))}
                     </div>

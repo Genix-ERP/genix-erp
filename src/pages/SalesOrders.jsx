@@ -1,40 +1,28 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams, useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useModules } from '@/components/contexts/ModulesContext';
 import { useCustomers } from '@/components/contexts/CustomersContext';
 import { useSales } from '@/components/contexts/SalesContext';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
 import {
-  Plus, Search, ShoppingBag, TrendingUp, Package, DollarSign, Truck,
-  CheckCircle, FileText, Receipt, RotateCcw, Tag, BarChart3, Upload, Download, Eye, Printer, Trash2, X,
-  LayoutDashboard, Building2, Edit, ToggleLeft, ToggleRight, MessageSquareWarning, ChevronDown, Check
+  Plus, ShoppingBag, Receipt, RotateCcw, Tag, Printer, X,
+  LayoutDashboard, Building2, Settings, MessageSquareWarning, ChevronDown, Check
 } from 'lucide-react';
 import { format } from 'date-fns';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { salesService } from '@/api/services/sales';
+import { pricelistsService } from '@/api/services/pricelists';
 import { inventoryService } from '@/api/services/inventory';
+import contractsService from '@/api/services/contracts';
 import apiClient from '@/api/client';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -47,32 +35,50 @@ import { useFinancials } from '@/components/contexts/FinancialsContext';
 import { useInventory } from '@/components/contexts/InventoryContext';
 
 // Import sales components
-import QuotationsSection from '@/components/sales/QuotationsSection';
+import SalesDashboard from '@/components/sales/SalesDashboard';
 import Invoices from '@/components/sales/Invoices';
-import Discounts from '@/components/sales/Discounts';
-import DeliveryOrders from '@/components/sales/DeliveryOrders';
 import Orders from '@/components/sales/Orders';
-import Dropshipping from '@/components/sales/Dropshipping';
+import SalesSettingsTab from '@/components/sales/SalesSettingsTab';
+import { orderStatusClass } from '@/components/sales/orderStatus';
 
 // Import universal ERP components
 import {
   ImportModal,
   ExportModal,
-  ImportExportButtons,
   PrintPreviewModal,
   BatchPrintModal,
   useAuditTrail,
 } from '@/components/shared';
 import { useCompany } from '@/components/contexts/CompanyContext';
-import { formatPriceInput, parsePriceInput, formatAxisTick } from '@/utils/formatCurrency';
+import { getPrintCompanyConfig } from '@/components/sales/printConfig';
+import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
+
+// Savdo — 4 top tabs (dashboard · orders · invoices · settings). The old
+// page had 8: quotations and deliveries were order-flow surfaces split
+// off from Buyurtmalar, while discounts/carriers/dropshipping were
+// reference data masquerading as workflows. Old ?tab= URLs land on the
+// tab that now hosts that flow (the sub-tab is picked below).
+const LEGACY_TAB_MAP = {
+  quotations: 'orders',
+  deliveries: 'orders',
+  discounts: 'settings',
+  carriers: 'settings',
+  dropshipping: 'settings',
+};
+
+const TAB_STYLE =
+  'flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ' +
+  'data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] ' +
+  'data-[state=active]:text-white data-[state=active]:shadow-md ' +
+  'data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100';
 
 export default function SalesOrders() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { activeCompany } = useCompany();
-  const { canCreate, canUpdate, canDelete, canRead, MODULES } = usePermissions();
-  const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
+  const { canRead, MODULES } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
   const { salesOrders = [], createSalesOrder, updateSalesOrder, isLoading: ordersLoading, refreshData: refreshModulesData } = useModules();
   const { customers = [] } = useCustomers();
   const { getSetting } = useAdminSettings();
@@ -89,13 +95,9 @@ export default function SalesOrders() {
     : salesTaxRates.find(tr => tr.is_active !== false) || null;
   const defaultTaxPercent = defaultSalesTax?.rate || 0;
   const {
-    quotations = [],
-    invoices = [],
     returns = [],
-    discounts = [],
     isLoading: salesLoading,
     confirmSalesOrder,
-    getOrder,
     createInvoiceFromOrder,
     refreshData: refreshSalesData,
     applyDiscount,
@@ -108,11 +110,17 @@ export default function SalesOrders() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const location = useLocation();
-  const activeTab = searchParams.get("tab") || "dashboard";
+  const rawTab = searchParams.get("tab") || "dashboard";
+  const activeTab = LEGACY_TAB_MAP[rawTab] || rawTab;
   const setActiveTab = (tab) => setSearchParams({ tab }, { replace: true });
-  const [filteredOrders, setFilteredOrders] = useState([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+
+  // Old bookmarked URLs land on the sub-tab that now hosts that flow.
+  const initialOrdersSubtab = rawTab === 'quotations' ? 'quotations'
+    : rawTab === 'deliveries' ? 'deliveries'
+    : 'list';
+  const initialSettingsSubtab = rawTab === 'carriers' ? 'carriers'
+    : rawTab === 'dropshipping' ? 'dropshipping'
+    : 'discounts';
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
@@ -133,27 +141,8 @@ export default function SalesOrders() {
     return returns.filter(r => r.sales_order_id === orderId);
   }, [returns]);
 
-  // Check if an order already has an invoice
-  const orderHasInvoice = useCallback((orderId) => {
-    return invoices.some(inv => inv.sales_order_id === orderId && inv.status !== 'cancelled');
-  }, [invoices]);
-
   // Track newly created invoice to auto-open it
   const [newInvoiceId, setNewInvoiceId] = useState(null);
-
-  // Carrier state
-  const [showCarrierModal, setShowCarrierModal] = useState(false);
-  const [editingCarrier, setEditingCarrier] = useState(null);
-  const [newCarrier, setNewCarrier] = useState({
-    code: '',
-    name: '',
-    tracking_url: '',
-    phone: '+998',
-    email: '',
-    website: '',
-    notes: '',
-    is_active: true,
-  });
 
   // Export columns configuration
   const exportColumns = [
@@ -249,14 +238,7 @@ export default function SalesOrders() {
       ],
       // Show the order comment/note on the printout (TZ #1).
       notes: order.notes || order.comment || order.internal_notes || '',
-      customCompany: activeCompany ? {
-        name: activeCompany.company_name || localStorage.getItem("company_name") || "Yuksalish ERP",
-        address: localStorage.getItem("company_address") || "Toshkent, O'zbekiston",
-        phone: localStorage.getItem("company_phone") || "+998 XX XXX XX XX",
-        email: localStorage.getItem("company_email") || "info@genix.uz",
-        inn: localStorage.getItem("company_inn") || "123456789",
-        logo: localStorage.getItem("company_logo") || null,
-      } : null,
+      customCompany: activeCompany ? getPrintCompanyConfig(activeCompany) : null,
     };
   };
 
@@ -271,6 +253,7 @@ export default function SalesOrders() {
     vehicle_number: '',
     project_id: '',
     project_name: '',
+    contract_id: '',
     lines: [{ product_name: '', product_id: '', quantity: 1, unit_price: 0, description: '', lead_time_days: 0 }],
     subtotal: 0,
     tax_percent: 0,
@@ -323,17 +306,6 @@ export default function SalesOrders() {
   const [discountValidation, setDiscountValidation] = useState({ valid: false, message: '' });
   const [editingOrder, setEditingOrder] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [orderToDelete, setOrderToDelete] = useState(null);
-
-  // Stock warning modal for warehouse processing
-  const [showStockWarningModal, setShowStockWarningModal] = useState(false);
-  const [stockWarningDetails, setStockWarningDetails] = useState([]);
-  const [stockWarningOrderId, setStockWarningOrderId] = useState(null);
-  const [stockWarningFullOrder, setStockWarningFullOrder] = useState(null);
-  const [stockWarningInventory, setStockWarningInventory] = useState(null);
-  const [stockWarningTargetStatus, setStockWarningTargetStatus] = useState(null);
-  const [hasPartialStock, setHasPartialStock] = useState(false);
 
   // Products list for selection
   const [products, setProducts] = useState([]);
@@ -350,6 +322,9 @@ export default function SalesOrders() {
 
   // Carriers list for selection
   const [carriers, setCarriers] = useState([]);
+
+  // Income contracts per customer for the optional "Shartnoma" link
+  const [customerContracts, setCustomerContracts] = useState({}); // { customerId: contracts[] }
 
   // All intercompany projects (from orgs we sell to)
   const [allIntercompanyProjects, setAllIntercompanyProjects] = useState([]);
@@ -433,6 +408,38 @@ export default function SalesOrders() {
     fetchIntercompanyProjects();
   }, [customers]);
 
+  // Fetch the selected customer's income contracts (cached per customer).
+  // The contracts list endpoint filters by vendor_id (the counterparty
+  // contact — same contacts table sales-order customers come from) and
+  // direction; a defensive client-side filter keeps only that partner's rows.
+  const fetchCustomerContracts = useCallback(async (customerId) => {
+    if (!customerId) return;
+    try {
+      const { items } = await contractsService.list({ vendor_id: customerId, direction: 'income', limit: 100 });
+      const list = (Array.isArray(items) ? items : []).filter(
+        c => !c.vendor_id || c.vendor_id === customerId
+      );
+      setCustomerContracts(prev => ({ ...prev, [customerId]: list }));
+    } catch (error) {
+      // No contracts module access (403) or transient failure — hide gracefully
+      console.error('Failed to fetch customer contracts:', error);
+      setCustomerContracts(prev => ({ ...prev, [customerId]: [] }));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (newOrder.customer_id && customerContracts[newOrder.customer_id] === undefined) {
+      fetchCustomerContracts(newOrder.customer_id);
+    }
+  }, [newOrder.customer_id, customerContracts, fetchCustomerContracts]);
+
+  useEffect(() => {
+    const cid = editingOrder?.customer_id;
+    if (cid && customerContracts[cid] === undefined) {
+      fetchCustomerContracts(cid);
+    }
+  }, [editingOrder?.customer_id, customerContracts, fetchCustomerContracts]);
+
   // Calculate delivery date based on product lead times
   const calculateDeliveryDate = useCallback((orderLines, orderDate) => {
     const baseDate = orderDate ? new Date(orderDate) : new Date();
@@ -453,20 +460,6 @@ export default function SalesOrders() {
     deliveryDate.setDate(deliveryDate.getDate() + maxLeadTime);
     return deliveryDate.toISOString().split('T')[0];
   }, []);
-
-  useEffect(() => {
-    let filtered = salesOrders;
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(o => o.status === statusFilter);
-    }
-    if (searchQuery) {
-      filtered = filtered.filter(o =>
-        o.order_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        o.customer_name?.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-    setFilteredOrders(filtered);
-  }, [salesOrders, searchQuery, statusFilter]);
 
   // Calculate order totals from line items
   const calculateOrderTotals = (lines) => {
@@ -556,7 +549,54 @@ export default function SalesOrders() {
     return null;
   }, [getAvailableStock, t]);
 
+  // Monotonic per-line request tokens so stale get-price responses (product
+  // or quantity changed since the request went out) are dropped.
+  const priceReqSeqRef = useRef({});
+
+  // Resolve a line's unit price through the pricelist chain (explicit
+  // pricelist → customer's pricelist → tenant default → list_price) with
+  // qty breaks. Applies the price only if the line still shows the same
+  // product when the response arrives; marks the line so quantity changes
+  // re-resolve qty-break prices.
+  const resolveLinePrice = async ({ scope, setOrder, index, productId, customerId, quantity, listPrice }) => {
+    const key = `${scope}:${index}`;
+    const reqId = (priceReqSeqRef.current[key] || 0) + 1;
+    priceReqSeqRef.current[key] = reqId;
+    try {
+      const result = await pricelistsService.getProductPrice({
+        product_id: productId,
+        customer_id: customerId,
+        quantity: parseFloat(quantity) || 1,
+      });
+      if (priceReqSeqRef.current[key] !== reqId) return; // stale response
+      const price = result?.computed_price ?? result?.original_price ?? listPrice ?? 0;
+      const fromPricelist = Boolean(result?.pricelist_id);
+      setOrder(prev => {
+        const lines = [...(prev.lines || [])];
+        const line = lines[index];
+        // Product changed since the request was sent — ignore.
+        if (!line || line.product_id !== productId) return prev;
+        lines[index] = { ...line, unit_price: price, price_from_pricelist: fromPricelist };
+        return { ...prev, lines };
+      });
+      if (!price) warnPriceNotFound();
+    } catch (error) {
+      // Keep the synchronously-set list_price fallback on failure.
+      console.error('Failed to resolve pricelist price:', error);
+    }
+  };
+
+  // "Mahsulot narxi topilmadi" — fixed toast id so repeats replace instead of stacking.
+  const warnPriceNotFound = () => {
+    toast.warning(
+      t('price_not_found_warning') || "Mahsulot narxi topilmadi — narxni qo'lda kiriting",
+      { id: 'price-not-found' }
+    );
+  };
+
   const handleLineChange = (order, setOrder, index, field, value, isManualDelivery) => {
+    // Which modal owns this line — used to key in-flight price requests.
+    const scope = setOrder === setNewOrder ? 'new' : 'edit';
     const newLines = [...order.lines];
     newLines[index] = { ...newLines[index], [field]: value };
 
@@ -568,11 +608,14 @@ export default function SalesOrders() {
         const unitId = selectedProduct.sales_unit_id || selectedProduct.unit_id || null;
         const unitName = selectedProduct.sales_unit_name || selectedProduct.unit_name || '';
 
+        // Selling at cost is a margin leak — list_price or 0, never cost_price.
+        const fallbackPrice = selectedProduct.list_price ?? 0;
         newLines[index] = {
           ...newLines[index],
           product_name: selectedProduct.name,
           product_id: selectedProduct.id,
-          unit_price: selectedProduct.list_price || selectedProduct.cost_price || 0,
+          unit_price: fallbackPrice,
+          price_from_pricelist: false,
           lead_time_days: selectedProduct.lead_time_days || 0,
           unit_id: unitId,
           unit_name: unitName,
@@ -584,6 +627,21 @@ export default function SalesOrders() {
           packaging_name: null,
           packaging_unit_qty: null
         };
+
+        // Pricelist-aware autofill: only when a customer is chosen.
+        if (order.customer_id) {
+          resolveLinePrice({
+            scope,
+            setOrder,
+            index,
+            productId: selectedProduct.id,
+            customerId: order.customer_id,
+            quantity: newLines[index].quantity || 1,
+            listPrice: fallbackPrice,
+          });
+        } else if (!fallbackPrice) {
+          warnPriceNotFound();
+        }
 
         // Fetch variants if product has variants
         if (selectedProduct.has_variants) {
@@ -602,6 +660,14 @@ export default function SalesOrders() {
       }
     }
 
+    // Manual price edit wins: stop treating the line as pricelist-driven and
+    // invalidate any in-flight get-price request for it.
+    if (field === 'unit_price') {
+      newLines[index] = { ...newLines[index], price_from_pricelist: false };
+      const key = `${scope}:${index}`;
+      priceReqSeqRef.current[key] = (priceReqSeqRef.current[key] || 0) + 1;
+    }
+
     // If changing variant selection
     if (field === 'variant_id' && value) {
       const productId = newLines[index].product_id;
@@ -612,7 +678,8 @@ export default function SalesOrders() {
           ...newLines[index],
           variant_id: selectedVariant.id,
           variant_name: selectedVariant.variant_name,
-          unit_price: selectedVariant.list_price || newLines[index].unit_price
+          unit_price: selectedVariant.list_price || newLines[index].unit_price,
+          price_from_pricelist: false
         };
       }
     }
@@ -656,6 +723,24 @@ export default function SalesOrders() {
         packaging_qty: packagingQty,
         quantity: packagingQty * packagingUnitQty // Auto-calculate total quantity
       };
+    }
+
+    // Quantity changed on a pricelist-priced line — re-resolve for qty breaks.
+    if (
+      (field === 'quantity' || field === 'packaging_qty') &&
+      newLines[index].price_from_pricelist &&
+      newLines[index].product_id &&
+      order.customer_id
+    ) {
+      resolveLinePrice({
+        scope,
+        setOrder,
+        index,
+        productId: newLines[index].product_id,
+        customerId: order.customer_id,
+        quantity: newLines[index].quantity,
+        listPrice: newLines[index].product?.list_price ?? newLines[index].unit_price ?? 0,
+      });
     }
 
     setOrder({ ...order, lines: newLines });
@@ -787,6 +872,7 @@ export default function SalesOrders() {
       vehicle_number: newOrder.vehicle_number || undefined,
       project_id: newOrder.project_id || undefined,
       project_name: newOrder.project_name || undefined,
+      contract_id: newOrder.contract_id || undefined,
       subtotal,
       tax_amount: taxAmount,
       shipping_amount: shippingCost,
@@ -836,7 +922,21 @@ export default function SalesOrders() {
       console.error('Error creating sales order:', error);
       console.error('Error response:', error.response?.data);
       console.error('Order data sent:', orderData);
-      // You could add a toast notification here
+      const apiErr = error.response?.data?.error;
+      if (apiErr?.code === 'DISCOUNT_LIMIT_EXCEEDED') {
+        // 422 from the tenant's discount-limit policy — name the reason
+        // instead of a generic "couldn't create" failure.
+        toast.error(
+          t('discount_limit_exceeded_toast')
+          || "Chegirma ruxsat etilgan limitdan oshib ketdi"
+        );
+        return;
+      }
+      toast.error(
+        apiErr?.message
+        || t('error_creating_order')
+        || "Buyurtmani yaratib bo'lmadi"
+      );
     }
   };
 
@@ -877,6 +977,8 @@ export default function SalesOrders() {
         expected_date: editingOrder.delivery_date,
         warehouse_id: editingOrder.warehouse_id || undefined,
         carrier: editingOrder.carrier || undefined,
+        // "" clears the link server-side (NULL), a uuid sets it
+        contract_id: editingOrder.contract_id || '',
         subtotal,
         tax_amount: taxAmount,
         shipping_amount: shippingCost,
@@ -894,30 +996,30 @@ export default function SalesOrders() {
       try { await refreshModulesData?.(); } catch { /* non-blocking */ }
     } catch (error) {
       console.error('Error updating sales order:', error);
+      toast.error(
+        error.response?.data?.error?.message
+        || t('error_updating_order')
+        || "Buyurtmani yangilab bo'lmadi"
+      );
     }
   };
 
+  // "Delete" from the UI is a cancel: POST /sales-orders/:id/cancel.
+  // The backend owns the status lifecycle now — no DELETE, no PUT status.
   const handleDeleteOrder = async (orderId) => {
-    const id = orderId || orderToDelete?.id;
-    if (!id) return;
+    if (!orderId) return;
     try {
-      await salesService.cancelOrder(id);
-      await salesService.deleteOrder(id);
-      addAuditLog('delete', id, orderToDelete?.order_number || orderId);
+      await salesService.cancelOrder(orderId);
+      addAuditLog('cancel', orderId, orderId);
+      toast.success(t('order_cancelled') || 'Buyurtma bekor qilindi');
       await refreshModulesData();
     } catch (error) {
       console.error('Error cancelling order:', error);
-    }
-    setShowDeleteDialog(false);
-    setOrderToDelete(null);
-  };
-
-  const handleUpdatePaymentStatus = async (orderId, paymentStatus) => {
-    try {
-      await updateSalesOrder(orderId, { payment_status: paymentStatus });
-      addAuditLog('update', orderId, `Payment status: ${paymentStatus}`);
-    } catch (error) {
-      console.error('Failed to update payment status:', error);
+      toast.error(
+        error.response?.data?.error?.message
+        || t('error_cancelling_order')
+        || "Buyurtmani bekor qilib bo'lmadi"
+      );
     }
   };
 
@@ -933,6 +1035,7 @@ export default function SalesOrders() {
       vehicle_number: '',
       project_id: '',
       project_name: '',
+      contract_id: '',
       lines: [{ product_name: '', product_id: '', quantity: 1, unit_price: 0, description: '', lead_time_days: 0 }],
       subtotal: 0,
       tax_percent: defaultTaxPercent,
@@ -956,165 +1059,38 @@ export default function SalesOrders() {
     setAllIntercompanyProjects([]);
   };
 
-  // Helper: check stock for order lines, returns { issues, inStock, outOfStock }
-  const checkOrderStock = async (orderId) => {
-    let fullOrder;
-    try {
-      fullOrder = await getOrder(orderId);
-    } catch {
-      fullOrder = salesOrders.find(o => o.id === orderId);
-    }
-
-    const orderLines = fullOrder?.lines || fullOrder?.order_lines || [];
-
-    // Fetch fresh inventory data
-    let inventoryData = null;
-    try {
-      inventoryData = await inventoryService.listInventory() || [];
-    } catch {
-      inventoryData = null;
-    }
-
-    const inStock = [];
-    const outOfStock = [];
-
-    for (const line of orderLines) {
-      if (!line.product_id) continue;
-      const qty = parseFloat(line.quantity) || 0;
-
-      let available = 0;
-      if (inventoryData) {
-        const stockRecords = inventoryData.filter(inv =>
-          inv.product_id === line.product_id &&
-          (!fullOrder.warehouse_id || inv.warehouse_id === fullOrder.warehouse_id)
-        );
-        available = stockRecords.reduce((sum, s) => sum + (s.quantity_available ?? s.available_quantity ?? s.quantity_on_hand ?? s.quantity ?? 0), 0);
-      } else {
-        available = getAvailableStock(line.product_id, fullOrder.warehouse_id);
-      }
-
-      const product = products.find(p => p.id === line.product_id);
-      const lineInfo = {
-        ...line,
-        product_name: product?.name || line.product_name || line.description || line.product_id,
-        requested: qty,
-        available: Math.max(0, available),
-      };
-
-      if (qty > available) {
-        outOfStock.push(lineInfo);
-      } else {
-        inStock.push(lineInfo);
-      }
-    }
-
-    return { fullOrder, inventoryData, inStock, outOfStock };
-  };
-
+  // Only draft/quotation → confirmed remains a direct user action, and it
+  // goes through POST /confirm. Every other transition has its own flow
+  // (delivery validation sets shipped/delivered, /cancel cancels) — the
+  // backend rejects raw PUT status writes.
   const handleUpdateStatus = async (orderId, newStatus) => {
+    if (newStatus !== 'confirmed') return;
     try {
-      if (newStatus === 'confirmed') {
-        await confirmSalesOrder(orderId);
-      } else {
-        await updateSalesOrder(orderId, { status: newStatus });
-      }
+      await confirmSalesOrder(orderId);
       if (refreshSalesData) refreshSalesData();
       if (refreshModulesData) refreshModulesData();
     } catch (error) {
-      console.error('Failed to update status:', error);
-    }
-  };
-
-  // Handle partial fulfillment: process available items, create backorder for the rest
-  const handlePartialFulfillment = async () => {
-    if (!stockWarningOrderId || !stockWarningFullOrder) return;
-    try {
-      const fullOrder = stockWarningFullOrder;
-      const orderLines = fullOrder?.lines || fullOrder?.order_lines || [];
-      const outOfStockProductIds = new Set(stockWarningDetails.map(d => {
-        // Find the product_id from the original line
-        const line = orderLines.find(l =>
-          (products.find(p => p.id === l.product_id)?.name || l.product_name || l.description) === d.product_name
+      console.error('Failed to confirm order:', error);
+      const apiErr = error.response?.data?.error;
+      if (apiErr?.code === 'CREDIT_LIMIT_EXCEEDED') {
+        // 422 from the tenant's "block" credit policy — spell out the math
+        // (outstanding + order total vs the limit) so the seller knows
+        // exactly why the confirm was refused.
+        const d = apiErr.details || {};
+        toast.error(
+          (t('credit_limit_exceeded_toast')
+            || 'Kredit limiti oshdi: qarzdorlik {outstanding} + buyurtma {order_total} > limit {credit_limit}')
+            .replace('{outstanding}', formatCurrency(Number(d.outstanding) || 0))
+            .replace('{order_total}', formatCurrency(Number(d.order_total) || 0))
+            .replace('{credit_limit}', formatCurrency(Number(d.credit_limit) || 0))
         );
-        return line?.product_id;
-      }).filter(Boolean));
-
-      // Lines that can be fulfilled
-      const fulfillableLines = orderLines.filter(l => l.product_id && !outOfStockProductIds.has(l.product_id));
-      // Lines that need a backorder
-      const backorderLines = orderLines.filter(l => l.product_id && outOfStockProductIds.has(l.product_id));
-
-      if (fulfillableLines.length > 0) {
-        // Update the current order to only include fulfillable lines, then confirm/process
-        const fulfillableFormatted = fulfillableLines.map(line => ({
-          product_id: line.product_id,
-          description: line.description || line.product_name || '',
-          quantity: parseFloat(line.quantity) || 1,
-          unit_price: parseFloat(line.unit_price) || 0,
-          packaging_id: line.packaging_id || undefined,
-          packaging_qty: line.packaging_id ? (parseFloat(line.packaging_qty) || 1) : undefined,
-        }));
-
-        const newSubtotal = fulfillableFormatted.reduce((sum, l) => sum + l.quantity * l.unit_price, 0);
-
-        // First update lines, then apply the target status
-        await updateSalesOrder(stockWarningOrderId, {
-          lines: fulfillableFormatted,
-          subtotal: newSubtotal,
-          total_amount: newSubtotal + (parseFloat(fullOrder.tax_amount) || 0) + (parseFloat(fullOrder.shipping_cost || fullOrder.shipping_amount) || 0),
-        });
-
-        // Now apply the target status transition
-        if (stockWarningTargetStatus === 'confirmed') {
-          await confirmSalesOrder(stockWarningOrderId);
-        } else {
-          await updateSalesOrder(stockWarningOrderId, { status: stockWarningTargetStatus || 'processing' });
-        }
+        return;
       }
-
-      // Create a new backorder for out-of-stock items
-      if (backorderLines.length > 0) {
-        const backorderFormatted = backorderLines.map(line => ({
-          product_id: line.product_id,
-          description: line.description || line.product_name || '',
-          quantity: parseFloat(line.quantity) || 1,
-          unit_price: parseFloat(line.unit_price) || 0,
-          packaging_id: line.packaging_id || undefined,
-          packaging_qty: line.packaging_id ? (parseFloat(line.packaging_qty) || 1) : undefined,
-        }));
-
-        const backorderSubtotal = backorderFormatted.reduce((sum, l) => sum + l.quantity * l.unit_price, 0);
-        await createSalesOrder({
-          order_number: `${fullOrder.order_number || ''}-BO`,
-          organization_id: fullOrder.organization_id || activeCompany?.id,
-          customer_name: fullOrder.customer_name,
-          customer_id: fullOrder.customer_id || undefined,
-          order_date: new Date().toISOString().split('T')[0],
-          delivery_date: fullOrder.delivery_date || fullOrder.expected_date,
-          warehouse_id: fullOrder.warehouse_id || undefined,
-          subtotal: backorderSubtotal,
-          tax_amount: 0,
-          shipping_cost: 0,
-          total_amount: backorderSubtotal,
-          status: 'draft',
-          payment_status: 'unpaid',
-          lines: backorderFormatted,
-        });
-
-        toast.success(t('backorder_created') || 'Yangi buyurtma yaratildi');
-      }
-
-      setShowStockWarningModal(false);
-      setStockWarningOrderId(null);
-      setStockWarningFullOrder(null);
-      setStockWarningDetails([]);
-      setStockWarningTargetStatus(null);
-      setHasPartialStock(false);
-      if (refreshSalesData) refreshSalesData();
-      if (refreshModulesData) refreshModulesData();
-    } catch (error) {
-      console.error('Partial fulfillment error:', error);
-      toast.error(t('error') || 'Xatolik yuz berdi');
+      toast.error(
+        apiErr?.message
+        || t('error')
+        || 'Xatolik yuz berdi'
+      );
     }
   };
 
@@ -1143,6 +1119,33 @@ export default function SalesOrders() {
     }
   };
 
+  // "Yetkazilganini fakturalash" — partial invoice covering only
+  // delivered-but-uninvoiced quantities (?basis=delivered). Unlike the
+  // full-order invoice, several of these per order are allowed.
+  const handleCreateInvoiceDelivered = async (orderId) => {
+    try {
+      const newInvoice = await salesService.createInvoiceFromOrderDelivered(orderId);
+      toast.success(
+        t('invoice_bill_delivered_success')
+        || 'Yetkazilgan miqdor uchun hisob-faktura yaratildi'
+      );
+      if (refreshSalesData) refreshSalesData();
+      if (refreshModulesData) refreshModulesData();
+      if (newInvoice?.id) {
+        setNewInvoiceId(newInvoice.id);
+      }
+      setActiveTab('invoices');
+    } catch (error) {
+      console.error('Failed to create delivered-basis invoice:', error);
+      // 400 carries the reason (e.g. nothing delivered yet) — surface it.
+      toast.error(
+        error?.response?.data?.error?.message
+        || t('error_creating_invoice')
+        || 'Failed to create invoice'
+      );
+    }
+  };
+
   const handleViewOrder = async (order) => {
     try {
       // Fetch full order details including lines
@@ -1159,70 +1162,6 @@ export default function SalesOrders() {
       setOrderReturns(getOrderReturns(order.id));
       setShowDetailModal(true);
     }
-  };
-
-  // Carrier handlers
-  const handleCreateCarrier = async () => {
-    try {
-      const created = await inventoryService.createCarrier(newCarrier);
-      setCarriers(prev => [...prev, created]);
-      setShowCarrierModal(false);
-      resetCarrierForm();
-    } catch (error) {
-      console.error('Failed to create carrier:', error);
-      toast.error(t('error_creating_carrier') || 'Failed to create carrier');
-    }
-  };
-
-  const handleUpdateCarrier = async () => {
-    if (!editingCarrier) return;
-    try {
-      const updated = await inventoryService.updateCarrier(editingCarrier.id, editingCarrier);
-      setCarriers(prev => prev.map(c => c.id === editingCarrier.id ? updated : c));
-      setShowCarrierModal(false);
-      setEditingCarrier(null);
-    } catch (error) {
-      console.error('Failed to update carrier:', error);
-      toast.error(t('error_updating_carrier') || 'Failed to update carrier');
-    }
-  };
-
-  const handleEditCarrier = (carrier) => {
-    setEditingCarrier({ ...carrier });
-    setShowCarrierModal(true);
-  };
-
-  const handleToggleCarrierStatus = async (carrier) => {
-    try {
-      const updated = await inventoryService.updateCarrier(carrier.id, { is_active: !carrier.is_active });
-      setCarriers(prev => prev.map(c => c.id === carrier.id ? updated : c));
-    } catch (error) {
-      console.error('Failed to toggle carrier status:', error);
-    }
-  };
-
-  const handleDeleteCarrier = async (carrier) => {
-    if (!confirm((t('confirm_delete_carrier') || 'Are you sure you want to delete this carrier?'))) return;
-    try {
-      await inventoryService.deleteCarrier(carrier.id);
-      setCarriers(prev => prev.filter(c => c.id !== carrier.id));
-    } catch (error) {
-      console.error('Failed to delete carrier:', error);
-      toast.error(t('error_deleting_carrier') || 'Failed to delete carrier');
-    }
-  };
-
-  const resetCarrierForm = () => {
-    setNewCarrier({
-      code: '',
-      name: '',
-      tracking_url: '',
-      phone: '+998',
-      email: '',
-      website: '',
-      notes: '',
-      is_active: true,
-    });
   };
 
   // Enrich each order line with `alt_names` = other products in the
@@ -1285,57 +1224,6 @@ export default function SalesOrders() {
     }
   };
 
-  const getStatusColor = (status) => {
-    const colors = {
-      draft: 'bg-slate-100 text-slate-800',
-      quotation: 'bg-gray-100 text-gray-800',
-      confirmed: 'bg-blue-100 text-blue-800',
-      processing: 'bg-yellow-100 text-yellow-800',
-      shipped: 'bg-purple-100 text-purple-800',
-      delivered: 'bg-green-100 text-green-800',
-      cancelled: 'bg-red-100 text-red-800'
-    };
-    return colors[status] || colors.draft;
-  };
-
-  // Combined metrics from both contexts
-  const metrics = useMemo(() => ({
-    totalOrders: salesOrders?.length || 0,
-    totalRevenue: salesOrders?.reduce((sum, o) => sum + (o.total_amount || 0), 0) || 0,
-    activeOrders: salesOrders?.filter(o => ['draft', 'confirmed', 'processing', 'shipped'].includes(o.status)).length || 0,
-    avgOrderValue: salesOrders?.length > 0 ? salesOrders.reduce((sum, o) => sum + (o.total_amount || 0), 0) / salesOrders.length : 0,
-    totalQuotations: quotations?.length || 0,
-    pendingQuotations: quotations?.filter(q => q.status === 'sent').length || 0,
-    totalInvoices: invoices?.length || 0,
-    unpaidInvoices: invoices?.filter(i => i.payment_status !== 'paid').length || 0,
-    totalReturns: returns?.length || 0,
-    pendingReturns: returns?.filter(r => r.status === 'pending').length || 0,
-    activeDiscounts: discounts?.filter(d => d.status === 'active').length || 0,
-  }), [salesOrders, quotations, invoices, returns, discounts]);
-
-  const salesData = {};
-  salesOrders?.forEach(o => {
-    if (o.order_date) {
-      try {
-        const locale = language === 'ru' ? 'ru-RU' : language === 'uz' ? 'uz-UZ' : 'en-US';
-        const month = new Date(o.order_date).toLocaleDateString(locale, { month: 'short' });
-        salesData[month] = (salesData[month] || 0) + (o.total_amount || 0);
-      } catch (e) {
-        // Skip invalid dates
-      }
-    }
-  });
-  const chartData = Object.entries(salesData).slice(-6).map(([month, revenue]) => ({ month, revenue }));
-
-  // Tab badges
-  const tabCounts = {
-    orders: metrics.activeOrders,
-    quotations: metrics.pendingQuotations,
-    invoices: metrics.unpaidInvoices,
-    returns: metrics.pendingReturns,
-    discounts: metrics.activeDiscounts,
-  };
-
   // Loading state
   if (ordersLoading || salesLoading) {
     return (
@@ -1352,170 +1240,37 @@ export default function SalesOrders() {
     <div className="p-4 md:p-6 lg:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
       <div className="space-y-6">
 
-        {/* Main Content with Tabs - MOVED ABOVE STATS */}
+        {/* Main Content with Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="w-full bg-white/80 backdrop-blur-sm p-1.5 rounded-xl border border-slate-200/60 shadow-lg flex flex-wrap justify-start gap-1 h-auto">
-            <TabsTrigger value="dashboard" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
+            <TabsTrigger value="dashboard" className={TAB_STYLE}>
               <LayoutDashboard className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('dashboard') || 'Dashboard'}</span>
+              <span className="hidden sm:inline">{t('dashboard') || 'Asosiy panel'}</span>
             </TabsTrigger>
-            <TabsTrigger value="orders" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
+            <TabsTrigger value="orders" className={TAB_STYLE}>
               <ShoppingBag className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('orders')}</span>
-              {tabCounts.orders > 0 && (
-                <Badge className="ml-2 bg-blue-100 text-blue-800">{tabCounts.orders}</Badge>
-              )}
+              <span className="hidden sm:inline">{t('orders') || 'Buyurtmalar'}</span>
             </TabsTrigger>
-            <TabsTrigger value="quotations" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
-              <FileText className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('quotations')}</span>
-              {tabCounts.quotations > 0 && (
-                <Badge className="ml-2 bg-blue-100 text-blue-800">{tabCounts.quotations}</Badge>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="invoices" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
+            <TabsTrigger value="invoices" className={TAB_STYLE}>
               <Receipt className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('invoices')}</span>
-              {tabCounts.invoices > 0 && (
-                <Badge className="ml-2 bg-yellow-100 text-yellow-800">{tabCounts.invoices}</Badge>
-              )}
+              <span className="hidden sm:inline">{t('invoices') || 'Hisob-fakturalar'}</span>
             </TabsTrigger>
-            <TabsTrigger value="discounts" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
-              <Tag className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('discounts')}</span>
-              {tabCounts.discounts > 0 && (
-                <Badge className="ml-2 bg-blue-100 text-blue-800">{tabCounts.discounts}</Badge>
-              )}
+            <TabsTrigger value="settings" className={TAB_STYLE}>
+              <Settings className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('settings') || 'Sozlamalar'}</span>
             </TabsTrigger>
-            <TabsTrigger value="deliveries" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
-              <Truck className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('deliveries') || 'Deliveries'}</span>
-            </TabsTrigger>
-            <TabsTrigger value="carriers" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
-              <Building2 className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('carriers') || 'Carriers'}</span>
-            </TabsTrigger>
-            {getSetting('sales.dropshipping.enabled') && (
-            <TabsTrigger value="dropshipping" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
-              <Package className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('dropshipping') || 'Dropshipping'}</span>
-            </TabsTrigger>
-            )}
           </TabsList>
 
-          {/* Dashboard Tab - Stats */}
-          <TabsContent value="dashboard" className="space-y-6">
-            {/* Quick Stats */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                      <ShoppingBag className="w-5 h-5 text-blue-600" />
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-600">{t('orders')}</p>
-                      <p className="text-2xl font-bold text-slate-900">{metrics.totalOrders}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                      <DollarSign className="w-5 h-5 text-green-600" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs text-slate-600">{t('revenue')}</p>
-                      <p className="text-lg font-bold text-slate-900 truncate">{formatCurrencyCompact(metrics.totalRevenue)}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                      <FileText className="w-5 h-5 text-purple-600" />
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-600">{t('quotations')}</p>
-                      <p className="text-2xl font-bold text-slate-900">{metrics.totalQuotations}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
-                      <Receipt className="w-5 h-5 text-yellow-600" />
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-600">{t('unpaid')}</p>
-                      <p className="text-2xl font-bold text-slate-900">{metrics.unpaidInvoices}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
-                      <RotateCcw className="w-5 h-5 text-red-600" />
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-600">{t('returns')}</p>
-                      <p className="text-2xl font-bold text-slate-900">{metrics.totalReturns}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                      <Tag className="w-5 h-5 text-blue-600" />
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-600">{t('active_discounts')}</p>
-                      <p className="text-2xl font-bold text-slate-900">{metrics.activeDiscounts}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Sales Trend Chart */}
-            {chartData.length > 0 && (
-              <Card className="bg-white/80 backdrop-blur-sm">
-                <CardHeader>
-                  <CardTitle className="text-lg">{t('sales_trend')}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={250}>
-                    <LineChart data={chartData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="month" fontSize={12} />
-                      <YAxis fontSize={12} width={55} tickFormatter={formatAxisTick} />
-                      <Tooltip formatter={(value) => formatCurrency(value)} />
-                      <Line type="monotone" dataKey="revenue" stroke="#10b981" strokeWidth={3} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-            )}
+          {/* Dashboard Tab — DashboardKit + GET /sales-orders/stats */}
+          <TabsContent value="dashboard" className="mt-6">
+            <SalesDashboard t={t} language={language} onOpenTab={setActiveTab} />
           </TabsContent>
 
-          {/* Orders Tab */}
+          {/* Orders Tab — list · quotations · deliveries · returns */}
           <TabsContent value="orders" className="space-y-6">
             <Orders
+              key={initialOrdersSubtab}
+              initialSubtab={initialOrdersSubtab}
               onCreateOrder={() => setShowCreateModal(true)}
               onEditOrder={async (order) => {
                 try {
@@ -1536,6 +1291,7 @@ export default function SalesOrders() {
               onPrintOrder={handlePrintOrder}
               onUpdateStatus={handleUpdateStatus}
               onCreateInvoice={handleCreateInvoice}
+              onCreateInvoiceDelivered={handleCreateInvoiceDelivered}
               onDeleteOrder={handleDeleteOrder}
               showImportModal={showImportModal}
               setShowImportModal={setShowImportModal}
@@ -1546,104 +1302,16 @@ export default function SalesOrders() {
             />
           </TabsContent>
 
-          {/* Quotations Tab (with Pricelists and Templates sub-tabs) */}
-          <TabsContent value="quotations">
-            <QuotationsSection />
-          </TabsContent>
-
           {/* Invoices Tab */}
           <TabsContent value="invoices">
             <Invoices openInvoiceId={newInvoiceId} onInvoiceOpened={() => setNewInvoiceId(null)} />
           </TabsContent>
 
-          {/* Discounts Tab */}
-          <TabsContent value="discounts">
-            <Discounts />
+          {/* Settings Tab — discounts · carriers · pricelists · payment terms · templates · dropshipping */}
+          <TabsContent value="settings">
+            <SalesSettingsTab key={initialSettingsSubtab} initialSubtab={initialSettingsSubtab} />
           </TabsContent>
 
-          {/* Deliveries Tab */}
-          <TabsContent value="deliveries">
-            <DeliveryOrders />
-          </TabsContent>
-
-          {/* Carriers Tab */}
-          <TabsContent value="carriers" className="space-y-6">
-            <Card className="bg-white/80 backdrop-blur-sm">
-              <CardHeader className="border-b">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <CardTitle className="text-lg">{t('carriers') || 'Carriers'}</CardTitle>
-                  <Button onClick={() => setShowCarrierModal(true)} className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]">
-                    <Plus className="w-4 h-4 mr-2" /> {t('new_carrier') || 'New Carrier'}
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="p-0">
-                {carriers.length === 0 ? (
-                  <div className="text-center py-16">
-                    <Building2 className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                    <p className="text-slate-500">{t('no_carriers_found') || 'No carriers found'}</p>
-                    <Button onClick={() => setShowCarrierModal(true)} className="mt-4">{t('create_first_carrier') || 'Create First Carrier'}</Button>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-slate-50">
-                          <TableHead>{t('code') || 'Code'}</TableHead>
-                          <TableHead>{t('name') || 'Name'}</TableHead>
-                          <TableHead>{t('phone') || 'Phone'}</TableHead>
-                          <TableHead>{t('website') || 'Website'}</TableHead>
-                          <TableHead>{t('status') || 'Status'}</TableHead>
-                          <TableHead>{t('actions') || 'Actions'}</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {carriers.map((carrier) => (
-                          <TableRow key={carrier.id} className="hover:bg-slate-50">
-                            <TableCell className="font-mono text-sm">{carrier.code}</TableCell>
-                            <TableCell className="font-medium">{carrier.name}</TableCell>
-                            <TableCell className="text-sm">{carrier.phone || '-'}</TableCell>
-                            <TableCell className="text-sm">
-                              {carrier.website ? (
-                                <a href={carrier.website} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                                  {carrier.website}
-                                </a>
-                              ) : '-'}
-                            </TableCell>
-                            <TableCell>
-                              <Badge className={carrier.is_active ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-800'}>
-                                {carrier.is_active ? (t('active') || 'Active') : (t('inactive') || 'Inactive')}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex gap-1">
-                                <Button size="sm" variant="ghost" onClick={() => handleEditCarrier(carrier)} title={t('edit') || 'Edit'}>
-                                  <Edit className="w-4 h-4" />
-                                </Button>
-                                <Button size="sm" variant="ghost" onClick={() => handleToggleCarrierStatus(carrier)} title={carrier.is_active ? (t('deactivate') || 'Deactivate') : (t('activate') || 'Activate')}>
-                                  {carrier.is_active ? <ToggleRight className="w-4 h-4 text-green-600" /> : <ToggleLeft className="w-4 h-4 text-slate-400" />}
-                                </Button>
-                                <Button size="sm" variant="ghost" onClick={() => handleDeleteCarrier(carrier)} title={t('delete') || 'Delete'}>
-                                  <Trash2 className="w-4 h-4 text-red-500" />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Dropshipping Tab */}
-          {getSetting('sales.dropshipping.enabled') && (
-          <TabsContent value="dropshipping">
-            <Dropshipping />
-          </TabsContent>
-          )}
         </Tabs>
 
         {/* Create Order Modal */}
@@ -1674,6 +1342,7 @@ export default function SalesOrders() {
                         customer_name: customer?.company_name || customer?.name || '',
                         project_id: '',
                         project_name: '',
+                        contract_id: '',
                       });
                     }}
                     placeholder={t('select_customer') || 'Mijozni tanlang'}
@@ -1760,6 +1429,28 @@ export default function SalesOrders() {
                     </div>
                   );
                 })()}
+                {/* Optional contract link — the customer's income contracts */}
+                {newOrder.customer_id && (
+                  <div>
+                    <Label>{t('contract_select_label') || 'Shartnoma'}</Label>
+                    <Select
+                      value={newOrder.contract_id || 'none'}
+                      onValueChange={(value) => setNewOrder({ ...newOrder, contract_id: value === 'none' ? '' : value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={t('contract_none') || '—'} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">{t('contract_none') || '—'}</SelectItem>
+                        {(customerContracts[newOrder.customer_id] || []).map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.contract_number}{c.title ? ` — ${c.title}` : ''}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -2226,7 +1917,7 @@ export default function SalesOrders() {
         <ExportModal
           open={showExportModal}
           onClose={() => setShowExportModal(false)}
-          data={filteredOrders}
+          data={salesOrders}
           columns={exportColumns}
           entityName={t('sales_orders')}
           title={t('sales_orders')}
@@ -2268,7 +1959,7 @@ export default function SalesOrders() {
                   </div>
                   <div>
                     <p className="text-sm text-slate-500">{t('status') || 'Status'}</p>
-                    <Badge className={getStatusColor(selectedOrder.status)}>{t(selectedOrder.status)}</Badge>
+                    <Badge className={orderStatusClass(selectedOrder.status)}>{t(selectedOrder.status)}</Badge>
                   </div>
                   <div>
                     <p className="text-sm text-slate-500">{t('customer') || 'Customer'}</p>
@@ -2446,7 +2137,7 @@ export default function SalesOrders() {
         <BatchPrintModal
           open={showBatchPrint}
           onClose={() => setShowBatchPrint(false)}
-          documents={filteredOrders.map(o => ({
+          documents={salesOrders.map(o => ({
             id: o.id,
             name: o.order_number,
             number: o.order_number,
@@ -2478,7 +2169,8 @@ export default function SalesOrders() {
                         setEditingOrder({
                           ...editingOrder,
                           customer_id: value,
-                          customer_name: customer?.company_name || customer?.name || ''
+                          customer_name: customer?.company_name || customer?.name || '',
+                          contract_id: '',
                         });
                       }}
                     >
@@ -2506,6 +2198,39 @@ export default function SalesOrders() {
                     />
                   </div>
                 </div>
+
+                {/* Optional contract link — the customer's income contracts */}
+                {editingOrder.customer_id && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>{t('contract_select_label') || 'Shartnoma'}</Label>
+                      <Select
+                        value={editingOrder.contract_id || 'none'}
+                        onValueChange={(value) => setEditingOrder({ ...editingOrder, contract_id: value === 'none' ? '' : value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder={t('contract_none') || '—'} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">{t('contract_none') || '—'}</SelectItem>
+                          {(customerContracts[editingOrder.customer_id] || []).map((c) => (
+                            <SelectItem key={c.id} value={c.id}>
+                              {c.contract_number}{c.title ? ` — ${c.title}` : ''}
+                            </SelectItem>
+                          ))}
+                          {/* Keep an already-linked contract selectable even if it
+                              no longer appears in the active income list */}
+                          {editingOrder.contract_id
+                            && !(customerContracts[editingOrder.customer_id] || []).some(c => c.id === editingOrder.contract_id) && (
+                            <SelectItem value={editingOrder.contract_id}>
+                              {(t('contract_select_label') || 'Shartnoma')} · {String(editingOrder.contract_id).slice(0, 8)}…
+                            </SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -2825,204 +2550,6 @@ export default function SalesOrders() {
             </DialogContent>
           </Dialog>
         )}
-
-        {/* Delete Confirmation Dialog */}
-        <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>{t('confirm_delete')}</AlertDialogTitle>
-              <AlertDialogDescription>
-                {t('delete_order_confirm')} <strong>{orderToDelete?.order_number}</strong>? {t('action_cannot_undone')}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => { setShowDeleteDialog(false); setOrderToDelete(null); }}>
-                {t('cancel')}
-              </AlertDialogCancel>
-              <AlertDialogAction
-                onClick={handleDeleteOrder}
-                className="bg-red-600 hover:bg-red-700"
-              >
-                {t('delete')}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-
-        {/* Stock Warning Modal */}
-        <AlertDialog open={showStockWarningModal} onOpenChange={(open) => {
-          if (!open) {
-            setShowStockWarningModal(false);
-            setStockWarningOrderId(null);
-            setStockWarningFullOrder(null);
-            setStockWarningDetails([]);
-            setStockWarningTargetStatus(null);
-            setHasPartialStock(false);
-          }
-        }}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle className="flex items-center gap-2 text-amber-600">
-                <MessageSquareWarning className="w-5 h-5" />
-                {t('insufficient_stock')}
-              </AlertDialogTitle>
-              <AlertDialogDescription asChild>
-                <div className="space-y-3">
-                  <p className="text-sm text-slate-600">
-                    {hasPartialStock
-                      ? (t('partial_stock_message') || "Ba'zi mahsulotlar omborda mavjud emas. Mavjud mahsulotlarni tasdiqlab, qolganlar uchun yangi buyurtma yaratilsinmi?")
-                      : (t('cannot_confirm_order_stock'))
-                    }
-                  </p>
-                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
-                    {stockWarningDetails.map((item, i) => (
-                      <div key={i} className="flex items-center justify-between text-sm">
-                        <span className="font-medium text-slate-800">{item.product_name}</span>
-                        <div className="flex items-center gap-3">
-                          <span className="text-slate-500">{t('qty')}: {item.requested}</span>
-                          <span className={item.available <= 0 ? 'text-red-600 font-medium' : 'text-amber-600 font-medium'}>
-                            {t('available_stock')}: {item.available}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter className="flex gap-2">
-              <AlertDialogCancel onClick={() => {
-                setShowStockWarningModal(false);
-                setStockWarningOrderId(null);
-                setStockWarningFullOrder(null);
-                setStockWarningDetails([]);
-                setStockWarningTargetStatus(null);
-                setHasPartialStock(false);
-              }}>
-                {t('cancel')}
-              </AlertDialogCancel>
-              {hasPartialStock && (
-                <AlertDialogAction
-                  onClick={handlePartialFulfillment}
-                  className="bg-indigo-600 hover:bg-indigo-700"
-                >
-                  {t('confirm_available_create_backorder') || "Mavjudlarini tasdiqlash"}
-                </AlertDialogAction>
-              )}
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-
-        {/* Carrier Modal */}
-        <Dialog open={showCarrierModal} onOpenChange={(open) => { setShowCarrierModal(open); if (!open) { setEditingCarrier(null); resetCarrierForm(); } }}>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle>{editingCarrier ? (t('edit_carrier') || 'Edit Carrier') : (t('create_carrier') || 'Create Carrier')}</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>{t('code') || 'Code'} *</Label>
-                  <Input
-                    placeholder="e.g. DHL"
-                    value={editingCarrier ? editingCarrier.code : newCarrier.code}
-                    onChange={(e) => editingCarrier
-                      ? setEditingCarrier({...editingCarrier, code: e.target.value})
-                      : setNewCarrier({...newCarrier, code: e.target.value})
-                    }
-                  />
-                </div>
-                <div>
-                  <Label>{t('name') || 'Name'} *</Label>
-                  <Input
-                    placeholder="e.g. DHL Express"
-                    value={editingCarrier ? editingCarrier.name : newCarrier.name}
-                    onChange={(e) => editingCarrier
-                      ? setEditingCarrier({...editingCarrier, name: e.target.value})
-                      : setNewCarrier({...newCarrier, name: e.target.value})
-                    }
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>{t('phone') || 'Phone'}</Label>
-                  <Input
-                    placeholder="+998 90 123 45 67"
-                    value={editingCarrier ? (editingCarrier.phone || '') : newCarrier.phone}
-                    onChange={(e) => editingCarrier
-                      ? setEditingCarrier({...editingCarrier, phone: e.target.value})
-                      : setNewCarrier({...newCarrier, phone: e.target.value})
-                    }
-                  />
-                </div>
-                <div>
-                  <Label>{t('email') || 'Email'}</Label>
-                  <Input
-                    type="email"
-                    placeholder="support@carrier.com"
-                    value={editingCarrier ? (editingCarrier.email || '') : newCarrier.email}
-                    onChange={(e) => editingCarrier
-                      ? setEditingCarrier({...editingCarrier, email: e.target.value})
-                      : setNewCarrier({...newCarrier, email: e.target.value})
-                    }
-                  />
-                </div>
-              </div>
-
-              <div>
-                <Label>{t('website') || 'Website'}</Label>
-                <Input
-                  placeholder="https://www.carrier.com"
-                  value={editingCarrier ? (editingCarrier.website || '') : newCarrier.website}
-                  onChange={(e) => editingCarrier
-                    ? setEditingCarrier({...editingCarrier, website: e.target.value})
-                    : setNewCarrier({...newCarrier, website: e.target.value})
-                  }
-                />
-              </div>
-
-              <div>
-                <Label>{t('tracking_url') || 'Tracking URL'}</Label>
-                <Input
-                  placeholder="https://track.carrier.com/?id={tracking_number}"
-                  value={editingCarrier ? (editingCarrier.tracking_url || '') : newCarrier.tracking_url}
-                  onChange={(e) => editingCarrier
-                    ? setEditingCarrier({...editingCarrier, tracking_url: e.target.value})
-                    : setNewCarrier({...newCarrier, tracking_url: e.target.value})
-                  }
-                />
-                <p className="text-xs text-slate-500 mt-1">{t('tracking_url_hint') || 'Use {tracking_number} as placeholder'}</p>
-              </div>
-
-              <div>
-                <Label>{t('notes') || 'Notes'}</Label>
-                <Input
-                  placeholder={t('notes_placeholder') || 'Additional notes...'}
-                  value={editingCarrier ? (editingCarrier.notes || '') : newCarrier.notes}
-                  onChange={(e) => editingCarrier
-                    ? setEditingCarrier({...editingCarrier, notes: e.target.value})
-                    : setNewCarrier({...newCarrier, notes: e.target.value})
-                  }
-                />
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <Button variant="outline" onClick={() => { setShowCarrierModal(false); setEditingCarrier(null); resetCarrierForm(); }} className="flex-1">
-                  {t('cancel')}
-                </Button>
-                <Button
-                  onClick={editingCarrier ? handleUpdateCarrier : handleCreateCarrier}
-                  className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-                  disabled={editingCarrier ? (!editingCarrier.code || !editingCarrier.name) : (!newCarrier.code || !newCarrier.name)}
-                >
-                  {editingCarrier ? (t('save_changes') || 'Save Changes') : (t('create') || 'Create')}
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
 
       </div>
     </div>
