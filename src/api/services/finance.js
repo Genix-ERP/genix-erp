@@ -385,6 +385,14 @@ export const financeService = {
     return response.data.data;
   },
 
+  // One-call Moliya dashboard: totals, cash position + daily series, monthly
+  // flow, category-enriched expense breakdown, open AR/AP. Period-aware
+  // ({ period_from, period_to }); defaults to the current month server-side.
+  async getFinanceDashboard(params = {}) {
+    const response = await apiClient.get('/reports/finance-dashboard', { params });
+    return response.data.data;
+  },
+
   async getCashFlow(params = {}) {
     const response = await apiClient.get('/reports/cash-flow', { params });
     return response.data.data;

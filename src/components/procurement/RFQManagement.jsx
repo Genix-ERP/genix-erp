@@ -60,13 +60,11 @@ export default function RFQManagement() {
   const { t } = useTranslation(language);
   const {
     rfqs,
-    purchaseOrders,
     suppliers,
     createRFQ,
     updateRFQ,
     deleteRFQ,
     selectRFQWinner,
-    updatePurchaseOrder,
     isLoading,
   } = useProcurement();
   const { canCreate } = usePermissions();
@@ -112,26 +110,10 @@ export default function RFQManagement() {
     fetchProducts();
   }, []);
 
-  // Map draft Purchase Orders as RFQ items
-  const draftPOsAsRFQs = useMemo(() => {
-    return (purchaseOrders || [])
-      .filter(po => po.status === 'draft')
-      .map(po => ({
-        id: po.id,
-        rfq_number: po.po_number || po.order_number,
-        title: po.vendor_name || po.supplier_name || '-',
-        description: `${formatCurrency(po.total_amount)} — ${po.lines?.length || 0} ${language === 'uz' ? 'qator' : 'lines'}`,
-        deadline: po.expected_delivery_date,
-        status: 'draft',
-        invitation_count: 1,
-        response_count: 0,
-        _isPO: true, // marker to distinguish from real RFQs
-        _poData: po,
-      }));
-  }, [purchaseOrders, formatCurrency, language]);
-
-  // Merge RFQs + draft POs
-  const allRFQs = useMemo(() => [...rfqs, ...draftPOsAsRFQs], [rfqs, draftPOsAsRFQs]);
+  // Only real RFQs. The old version synthesized pseudo-RFQ rows from every
+  // draft purchase order and merged them in, so the list and its stat
+  // counters mixed two entity types (docs/xarid-audit.md §5).
+  const allRFQs = rfqs;
 
   // Filter RFQs
   const filteredRFQs = useMemo(() => {
@@ -419,14 +401,9 @@ export default function RFQManagement() {
                   {filteredRFQs.map((rfq) => (
                     <TableRow key={rfq.id} className="hover:bg-slate-50">
                       <TableCell>
-                        <div className="flex items-center gap-1.5">
-                          <code className="text-xs bg-slate-100 px-2 py-1 rounded">
-                            {rfq.rfq_number}
-                          </code>
-                          {rfq._isPO && (
-                            <Badge className="bg-orange-100 text-orange-700 text-[10px] px-1.5 py-0">PO</Badge>
-                          )}
-                        </div>
+                        <code className="text-xs bg-slate-100 px-2 py-1 rounded">
+                          {rfq.rfq_number}
+                        </code>
                       </TableCell>
                       <TableCell>
                         <div>
@@ -460,8 +437,8 @@ export default function RFQManagement() {
                           <Button
                             size="icon"
                             variant="ghost"
-                            onClick={() => rfq._isPO ? null : handleViewDetails(rfq)}
-                            title={rfq._isPO ? (t('purchase_order') || 'Purchase Order') : (t('view') || 'View')}
+                            onClick={() => handleViewDetails(rfq)}
+                            title={t('view') || 'View'}
                           >
                             <Eye className="w-4 h-4" />
                           </Button>
@@ -469,10 +446,7 @@ export default function RFQManagement() {
                             <Button
                               size="icon"
                               variant="ghost"
-                              onClick={() => rfq._isPO
-                                ? updatePurchaseOrder(rfq.id, { status: 'sent' })
-                                : handleSendRFQ(rfq)
-                              }
+                              onClick={() => handleSendRFQ(rfq)}
                               title={t('send') || "Yuborish"}
                             >
                               <Send className="w-4 h-4" />
