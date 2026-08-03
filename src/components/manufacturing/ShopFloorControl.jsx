@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,11 +25,15 @@ import {
   RefreshCw,
   Star,
 } from 'lucide-react';
-import { Trash2, Paperclip, Upload, FileText, Image, X } from 'lucide-react';
+import { Trash2, Paperclip, Upload, FileText, Image, X, Monitor } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useLanguage } from '@/components/contexts/LanguageContext';
+import { useTranslation } from '@/components/utils/translations';
 import { useManufacturing } from '@/components/contexts/ManufacturingContext';
 import { useInventory } from '@/components/contexts/InventoryContext';
 import { workOrdersService, productionOrdersService } from '@/api/services/manufacturing';
+import { getApiErrorMessage } from '@/utils/apiError';
+import QCReasonPicker, { composeDefectReason } from './QCReasonPicker';
 import { toast } from 'sonner';
 import apiClient from '@/api/client';
 import { format, differenceInMinutes, parseISO } from 'date-fns';
@@ -225,6 +229,7 @@ function KanbanColumn({ title, count, headerColor, titleColor, countColor, workO
 
 export default function ShopFloorControl({ isActive }) {
   const { language } = useLanguage();
+  const { t } = useTranslation(language);
   const { workOrders, workCenters, productionOrders, manufacturingCategories, startWorkOrder, pauseWorkOrder, completeWorkOrder, refreshData } = useManufacturing();
   const { refreshData: refreshInventory, products, warehouses } = useInventory();
 
@@ -255,7 +260,7 @@ export default function ShopFloorControl({ isActive }) {
       setDefaultCategory(catId);
       toast.success(language === 'uz' ? 'Standart filter saqlandi' : language === 'ru' ? 'Фильтр по умолчанию сохранён' : 'Default filter saved');
     } catch {
-      toast.error('Failed to save default');
+      toast.error(language === 'uz' ? "Standart filterni saqlab bo'lmadi" : language === 'ru' ? 'Не удалось сохранить фильтр по умолчанию' : 'Failed to save default filter');
     }
   };
   const [activeWorkOrder, setActiveWorkOrder] = useState(null);
@@ -263,12 +268,13 @@ export default function ShopFloorControl({ isActive }) {
   const [showPauseModal, setShowPauseModal] = useState(false);
   const [timeLogs, setTimeLogs] = useState([]);
   const [currentTimer, setCurrentTimer] = useState(null);
-  const autoCompletedRef = useRef(new Set()); // guard against firing multiple times
 
   const [completionData, setCompletionData] = useState({
     quantity_produced: 0,
     quantity_scrapped: 0,
     notes: '',
+    qc_reason: '',
+    qc_text: '',
   });
 
   const [pauseData, setPauseData] = useState({
@@ -351,55 +357,17 @@ export default function ShopFloorControl({ isActive }) {
     );
   }, [filteredWorkOrders]);
 
-  // Build a map of "last work order id per PO" so the timer effect can skip
-  // auto-completion for the final stage — the operator should always be
-  // forced to confirm output manually via the Tugatish button + Final Output
-  // modal so good/scrap and shortfall reason are captured.
-  const lastWoIdsByPO = useMemo(() => {
-    const byPo = new Map(); // poId -> wo with max sequence
-    (availableWorkOrders || []).forEach(wo => {
-      const poId = wo.production_order_id;
-      if (!poId) return;
-      const cur = byPo.get(poId);
-      if (!cur || (wo.sequence || 0) > (cur.sequence || 0)) {
-        byPo.set(poId, wo);
-      }
-    });
-    return new Set(Array.from(byPo.values()).map(wo => wo.id));
-  }, [availableWorkOrders]);
-
-  // Timer effect — tick every second and auto-complete when planned duration is reached.
-  // Intentionally skips the LAST work order of each MO: the user wants to
-  // press Tugatish manually for the final stage so they can enter actual
-  // good / scrap quantities and a shortfall reason. Non-final stages still
-  // auto-complete on time so the line keeps flowing.
+  // Display tick — re-render once a second while something is in progress so
+  // the elapsed-time counters stay live. This effect is DISPLAY ONLY: work
+  // orders are never completed from the browser. Completion is always the
+  // operator pressing Tugatish (the old auto-complete-on-elapsed block was
+  // removed — it double-fired across open tabs and belongs server-side).
   useEffect(() => {
     const hasInProgress = availableWorkOrders.some(wo => wo.status === 'in_progress');
     if (!hasInProgress) return;
-    const interval = setInterval(() => {
-      setCurrentTimer(Date.now());
-
-      // Auto-complete any in_progress work order whose planned duration has elapsed
-      availableWorkOrders.forEach(wo => {
-        if (wo.status !== 'in_progress' || !wo.actual_start || !wo.expected_duration_minutes) return;
-        if (autoCompletedRef.current.has(wo.id)) return;
-        if (lastWoIdsByPO.has(wo.id)) return; // last stage: wait for manual Tugatish
-        const elapsed = differenceInMinutes(new Date(), parseISO(wo.actual_start));
-        if (elapsed >= wo.expected_duration_minutes) {
-          autoCompletedRef.current.add(wo.id);
-          completeWorkOrder(wo.id, {
-            quantity_produced: wo.quantity_to_produce || 0,
-            quantity_scrapped: 0,
-            actual_duration: elapsed,
-            notes: '',
-          }).then(() => { refreshData(); refreshInventory(); }).catch(() => {
-            autoCompletedRef.current.delete(wo.id); // retry next tick if failed
-          });
-        }
-      });
-    }, 1000);
+    const interval = setInterval(() => setCurrentTimer(Date.now()), 1000);
     return () => clearInterval(interval);
-  }, [availableWorkOrders, completeWorkOrder, refreshData, lastWoIdsByPO]);
+  }, [availableWorkOrders]);
 
   // Rows: group all work orders (including completed) by production order, sorted by sequence
   // Each row = one manufacturing order, steps shown horizontally in order
@@ -523,6 +491,8 @@ export default function ShopFloorControl({ isActive }) {
       quantity_produced: workOrder.quantity_to_produce || 0,
       quantity_scrapped: 0,
       notes: '',
+      qc_reason: '',
+      qc_text: '',
     });
     setShowCompleteModal(true);
   };
@@ -531,27 +501,45 @@ export default function ShopFloorControl({ isActive }) {
     if (!activeWorkOrder) return;
 
     const poId = activeWorkOrder.production_order_id;
+    const woId = activeWorkOrder.id;
 
     // Capture values before closing the modal
     const produced = parseFloat(completionData.quantity_produced) || 0;
     const scrapped = parseFloat(completionData.quantity_scrapped) || 0;
     const notes = completionData.notes;
     const shortfallReason = completionData.shortfall_reason || '';
+    const defectReason = composeDefectReason(t, completionData.qc_reason, completionData.qc_text);
 
     // Close the complete modal first to avoid overlap with split modal
     setShowCompleteModal(false);
-    setCompletionData({ quantity_produced: 0, quantity_scrapped: 0, notes: '', shortfall_reason: '' });
+    setCompletionData({ quantity_produced: 0, quantity_scrapped: 0, notes: '', shortfall_reason: '', qc_reason: '', qc_text: '' });
 
     try {
       const timeSpent = calculateTimeSpent(activeWorkOrder);
 
-      await completeWorkOrder(activeWorkOrder.id, {
+      await completeWorkOrder(woId, {
         quantity_produced: produced,
         scrap_quantity: scrapped,
         actual_duration: timeSpent.totalMinutes,
         notes: notes,
         ...(shortfallReason ? { shortfall_reason: shortfallReason } : {}),
       });
+
+      // Scrap → one QC inspection row (011 quality_checks made real).
+      // Non-fatal: the completion already posted; QC failure only toasts.
+      if (scrapped > 0) {
+        try {
+          await workOrdersService.qualityCheck(woId, {
+            quantity_inspected: produced + scrapped,
+            quantity_passed: produced,
+            quantity_failed: scrapped,
+            ...(defectReason ? { defect_reason: defectReason } : {}),
+          });
+        } catch (qcErr) {
+          console.error('Failed to record quality check:', qcErr);
+          toast.error(getApiErrorMessage(qcErr, t('kiosk_action_failed')));
+        }
+      }
 
       refreshData();
       refreshInventory();
@@ -983,6 +971,13 @@ export default function ShopFloorControl({ isActive }) {
           <p className="text-slate-600 mt-1">{labels.subtitle}</p>
         </div>
         <div className="flex gap-2">
+          <Button asChild variant="outline" className="gap-2">
+            {/* Plain link so long-press / middle-click "open in new tab" works on the shop tablet */}
+            <Link to="/manufacturing/kiosk">
+              <Monitor className="w-4 h-4" />
+              {t('kiosk_button')}
+            </Link>
+          </Button>
           <Select value={selectedWorkCenter} onValueChange={setSelectedWorkCenter}>
             <SelectTrigger className="w-48">
               <SelectValue placeholder={labels.all_work_centers} />
@@ -1301,6 +1296,15 @@ export default function ShopFloorControl({ isActive }) {
                 </div>
               ) : null;
             })()}
+
+            {/* Brak sababi → QC inspection row (shared with kiosk) */}
+            {(parseFloat(completionData.quantity_scrapped) || 0) > 0 && (
+              <QCReasonPicker
+                reason={completionData.qc_reason}
+                text={completionData.qc_text}
+                onChange={({ reason, text }) => setCompletionData({ ...completionData, qc_reason: reason, qc_text: text })}
+              />
+            )}
 
             <div className="space-y-2">
               <Label>{language === 'uz' ? "Izohlar" : language === 'ru' ? "Примечания" : "Notes"}</Label>

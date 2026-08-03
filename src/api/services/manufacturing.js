@@ -121,8 +121,17 @@ export const productionOrdersService = {
     return response.data.data;
   },
 
-  async getStats(companyId) {
-    const response = await apiClient.get('/production-orders/stats');
+  // params: { from?: 'YYYY-MM-DD', to?: 'YYYY-MM-DD' } — server defaults to
+  // the current month when omitted.
+  async getStats(params = {}) {
+    const response = await apiClient.get('/production-orders/stats', { params });
+    return response.data.data;
+  },
+
+  // Server-side Hisobot aggregation (totals / by_product / by_category /
+  // scrap_pareto). Same ?from&to window semantics as getStats.
+  async getReport(params = {}) {
+    const response = await apiClient.get('/production-orders/report', { params });
     return response.data.data;
   },
 
@@ -140,6 +149,29 @@ export const productionOrdersService = {
     const response = await apiClient.get(`/production-orders/${id}/split-outputs`);
     return response.data.data || [];
   }
+};
+
+// =====================================================
+// MRP SERVICE — server-side netting engine (Ishlab chiqarish v2).
+// Recommendations are DRAFT proposals; /execute creates a draft purchase
+// requisition or draft production order that a human still approves.
+// =====================================================
+export const mrpService = {
+  async run() {
+    const response = await apiClient.post('/mrp/run');
+    return response.data.data;
+  },
+
+  // params: { status?: 'pending'|'all'|..., type?: 'purchase'|'manufacture' }
+  async listRecommendations(params = {}) {
+    const response = await apiClient.get('/mrp/recommendations', { params });
+    return response.data.data || [];
+  },
+
+  async executeRecommendation(id) {
+    const response = await apiClient.post(`/mrp/recommendations/${id}/execute`);
+    return response.data.data;
+  },
 };
 
 // =====================================================
@@ -183,6 +215,14 @@ export const workOrdersService = {
 
   async complete(id, data) {
     const response = await apiClient.post(`/work-orders/${id}/complete`, data);
+    return response.data.data;
+  },
+
+  // One inspection row per call (011 quality_checks). Payload:
+  // { quantity_inspected (required >0), quantity_passed, quantity_failed,
+  //   defect_reason?, notes? }
+  async qualityCheck(id, data) {
+    const response = await apiClient.post(`/work-orders/${id}/quality-check`, data);
     return response.data.data;
   },
 

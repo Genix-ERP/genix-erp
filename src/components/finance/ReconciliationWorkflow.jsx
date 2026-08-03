@@ -285,7 +285,7 @@ export default function ReconciliationWorkflow({ bankAccount, onClose }) {
                       </TableCell>
                       <TableCell>
                         <Badge className={rec.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}>
-                          {rec.status === 'completed' ? (language === 'uz' ? 'Yakunlangan' : 'Completed') : (language === 'uz' ? 'Qoralama' : 'Draft')}
+                          {rec.status === 'completed' ? (language === 'uz' ? 'Yakunlangan' : 'Completed') : (language === 'uz' ? 'Yangi' : 'Draft')}
                         </Badge>
                       </TableCell>
                       <TableCell>
