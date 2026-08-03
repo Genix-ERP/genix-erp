@@ -1,286 +1,388 @@
-import React, { useState, useEffect } from 'react';
-import { InvokeLLM } from '@/api/integrations';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Factory,
-  CheckCircle,
-  TrendingUp,
-  Cog,
-  Brain
+  ComposedChart, BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+  Legend, ResponsiveContainer, Cell, ReferenceLine,
+} from 'recharts';
+import {
+  Factory, CheckCircle2, CalendarClock, Percent, Timer, Wallet,
+  BarChart3, Layers, Gauge, PackageSearch, AlertTriangle, RotateCcw,
 } from 'lucide-react';
-import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { useManufacturing } from '@/components/contexts/ManufacturingContext';
-import { useLanguage } from '@/components/contexts/LanguageContext';
-import { useTranslation } from '@/components/utils/translations';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
+import { productionOrdersService } from '@/api/services/manufacturing';
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { formatAxisTick } from '@/utils/formatCurrency';
+import { formatDate } from '@/utils/formatDate';
+import { getApiErrorMessage } from '@/utils/apiError';
+import {
+  PAL, StatTile, ChartCard, EmptyNote, GlassTooltip, Segmented,
+} from '@/components/shared/DashboardKit';
 
-const COLORS = ['#0ea5e9', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444'];
+const iso = (d) => d.toISOString().split('T')[0];
 
-export default function ManufacturingDashboard() {
-  const { language } = useLanguage();
-  const { t } = useTranslation(language);
-  const {
-    productionOrders,
-    workCenters,
-    loading,
-    activeProductionOrders,
-    activeProductionOrdersCount,
-    completedToday,
-    averageUtilization,
-  } = useManufacturing();
+// Period pills → [from, to] for GET /production-orders/stats.
+const rangeToDates = (range) => {
+  const now = new Date();
+  switch (range) {
+    case 'last_month': {
+      const from = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const to = new Date(now.getFullYear(), now.getMonth(), 0);
+      return { from: iso(from), to: iso(to) };
+    }
+    case 'quarter':
+      return { from: iso(new Date(now.getFullYear(), now.getMonth() - 2, 1)), to: iso(now) };
+    case 'year':
+      return { from: iso(new Date(now.getFullYear(), 0, 1)), to: iso(now) };
+    case 'month':
+    default:
+      return { from: iso(new Date(now.getFullYear(), now.getMonth(), 1)), to: iso(now) };
+  }
+};
 
-  const [productionData, setProductionData] = useState([]);
-  const [workCenterUtilization, setWorkCenterUtilization] = useState([]);
-  const [aiInsights, setAiInsights] = useState([]);
+// 'YYYY-MM-DD' → 'DD.MM' without going through Date/locale APIs — the app
+// convention is dd.mm in every language (no en-US "Jul 3" labels).
+const shortDay = (dateStr) => {
+  const [, m, d] = String(dateStr || '').split('-');
+  return m && d ? `${d}.${m}` : String(dateStr || '');
+};
+
+// Status → bar color. Matches the badge colors used across the module
+// (identity is carried by the axis label; color is a redundant cue).
+const STATUS_BAR_COLORS = {
+  draft: '#94A3B8',
+  confirmed: PAL[0].c,
+  in_progress: PAL[4].c,
+  paused: PAL[1].c,
+  completed: PAL[2].c,
+  done: PAL[2].c,
+  cancelled: '#DC2626',
+};
+
+export default function ManufacturingDashboard({ t, language, onOpenTab }) {
+  const { formatCurrencyCompact } = useCurrencyFormatter();
+  const [range, setRange] = useState('month');
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
-    generateAIInsights();
-  }, []);
+    let alive = true;
+    setLoading(true);
+    setError(null);
+    productionOrdersService
+      .getStats(rangeToDates(range))
+      .then((data) => { if (alive) setStats(data); })
+      .catch((e) => {
+        console.error('Failed to load production stats:', e);
+        if (alive) { setStats(null); setError(getApiErrorMessage(e, t('mfg_stats_error'))); }
+      })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [range, reloadKey]);
 
-  useEffect(() => {
-    if (!loading) {
-      // Production trend — build 30 day buckets (today and the 29 preceding
-      // days), then fill in quantity_produced from any production order
-      // whose actual_end falls inside the window. 30 days is wide enough
-      // to actually show activity for low-volume factories (a 7-day window
-      // is almost always empty if production is monthly), but still narrow
-      // enough that the bars are meaningful and don't flatten under a
-      // single huge spike from a year ago.
-      const DAYS_WINDOW = 30;
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const windowStart = new Date(today);
-      windowStart.setDate(windowStart.getDate() - (DAYS_WINDOW - 1)); // inclusive of today
-      const dayKey = (d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const retry = useCallback(() => setReloadKey((k) => k + 1), []);
 
-      const buckets = [];
-      for (let i = 0; i < DAYS_WINDOW; i++) {
-        const d = new Date(windowStart);
-        d.setDate(windowStart.getDate() + i);
-        buckets.push({ day: dayKey(d), quantity: 0 });
-      }
-      productionOrders.forEach(order => {
-        if (!order.actual_end) return;
-        const endDate = new Date(order.actual_end);
-        endDate.setHours(0, 0, 0, 0);
-        if (endDate < windowStart || endDate > today) return;
-        const key = dayKey(endDate);
-        const bucket = buckets.find(b => b.day === key);
-        if (bucket) bucket.quantity += (order.quantity_produced || 0);
-      });
-      setProductionData(buckets);
+  const totals = stats?.totals || {};
 
-      // Work center utilization
-      const utilization = workCenters.map(wc => ({
-        name: wc.name,
-        utilization: wc.current_utilization || 0,
-        oee: wc.oee_target || 0
-      }));
-      setWorkCenterUtilization(utilization);
-    }
-  }, [productionOrders, workCenters, loading]);
+  const daily = useMemo(
+    () => (stats?.daily_series || []).map((p) => ({ ...p, label: shortDay(p.date) })),
+    [stats]
+  );
+  const hasDaily = daily.some((p) => (p.planned || 0) > 0 || (p.produced || 0) > 0);
 
-  const generateAIInsights = async () => {
-    try {
-      const insights = await InvokeLLM({
-        prompt: `As a manufacturing AI analyst, provide 3 actionable insights for production optimization:
-        1. Equipment efficiency and maintenance recommendations
-        2. Production scheduling optimization opportunities
-        3. Quality improvement suggestions
+  const statusData = useMemo(
+    () => (stats?.status_counts || []).map((s) => {
+      // t() returns the KEY itself when a translation is missing, so compare
+      // against the key to fall back to the raw status (a `||` never fires).
+      const key = `status_${s.status}`;
+      const label = t(key);
+      return { ...s, label: label === key ? s.status : label };
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [stats, language]
+  );
+  const hasStatusData = statusData.some((s) => (s.count || 0) > 0);
 
-        Each insight should include confidence level, impact assessment, and specific action.`,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            insights: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  title: { type: "string" },
-                  description: { type: "string" },
-                  confidence: { type: "number" },
-                  impact: { type: "string" },
-                  action: { type: "string" }
-                }
-              }
-            }
-          }
-        }
-      });
-      setAiInsights(insights.insights || []);
-    } catch (error) {
-      console.error('Error generating AI insights:', error);
-    }
-  };
+  const wcLoad = stats?.work_center_load || [];
+  const lateOrders = stats?.late_orders || [];
+  const shortages = stats?.shortages || [];
+
+  const scrapRate = Number(totals.scrap_rate || 0);
+  const overdueCount = totals.overdue_orders ?? 0;
+
+  const RANGE_OPTIONS = [
+    { id: 'month', label: t('range_this_month') },
+    { id: 'last_month', label: t('range_last_month') },
+    { id: 'quarter', label: t('range_3_months') },
+    { id: 'year', label: t('range_this_year') },
+  ];
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-16">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-slate-800 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-slate-600">{t('loading_manufacturing_data') || 'Loading manufacturing data...'}</p>
+      <div className="space-y-6">
+        <div className="flex justify-end"><Skeleton className="h-8 w-64 rounded-lg" /></div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+          {[0, 1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-[104px] rounded-2xl" />)}
         </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <Skeleton className="h-[300px] rounded-2xl lg:col-span-2" />
+          <Skeleton className="h-[300px] rounded-2xl" />
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Skeleton className="h-[280px] rounded-2xl" />
+          <Skeleton className="h-[280px] rounded-2xl" />
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="glass-card rounded-2xl border border-slate-200/60 bg-white/80 shadow-sm">
+        <EmptyNote
+          icon={AlertTriangle}
+          text={error}
+          cta={(
+            <Button size="sm" variant="outline" onClick={retry} className="gap-1.5">
+              <RotateCcw className="w-4 h-4" />
+              {t('retry')}
+            </Button>
+          )}
+        />
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      
-      {/* Key Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                <Factory className="w-6 h-6 text-blue-600" />
-              </div>
-              <Badge className="bg-blue-50 text-blue-700 border-blue-200">Active</Badge>
-            </div>
-            <p className="text-3xl font-bold text-slate-900 mb-1">
-              {/* Prefer the stats-driven count (covers tenants with >1000 orders);
-                  fall back to the local list length when stats aren't available. */}
-              {typeof activeProductionOrdersCount === 'number'
-                ? activeProductionOrdersCount
-                : (activeProductionOrders?.length || 0)}
-            </p>
-            <p className="text-sm text-slate-600">{t('production_orders') || 'Production Orders'}</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-                <CheckCircle className="w-6 h-6 text-green-600" />
-              </div>
-              <Badge className="bg-green-50 text-green-700 border-green-200">{t('today') || 'Today'}</Badge>
-            </div>
-            <p className="text-3xl font-bold text-slate-900 mb-1">{completedToday?.length || 0}</p>
-            <p className="text-sm text-slate-600">{t('completed_today') || 'Completed Today'}</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-                <Cog className="w-6 h-6 text-purple-600" />
-              </div>
-              <Badge className="bg-purple-50 text-purple-700 border-purple-200">{t('utilization') || 'Utilization'}</Badge>
-            </div>
-            <p className="text-3xl font-bold text-slate-900 mb-1">{Math.round(averageUtilization || 0)}%</p>
-            <p className="text-sm text-slate-600">{t('avg_work_center_utilization') || 'Avg Work Center Utilization'}</p>
-          </CardContent>
-        </Card>
-
+      {/* Period selector */}
+      <div className="flex items-center justify-end">
+        <Segmented options={RANGE_OPTIONS} value={range} onChange={setRange} />
       </div>
 
-      {/* Charts Row */}
+      {/* KPI tiles */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+        <StatTile
+          label={t('mfg_kpi_active_orders')}
+          value={totals.active_orders ?? 0}
+          sub={`${t('mfg_kpi_draft')}: ${totals.draft_orders ?? 0}`}
+          icon={Factory}
+          chip="bg-[#E6F1FB] text-[#0C447C]"
+          onClick={() => onOpenTab('execute', 'orders')}
+        />
+        <StatTile
+          label={t('mfg_kpi_completed_period')}
+          value={totals.completed_period ?? 0}
+          sub={`${totals.quantity_produced ?? 0} ${t('mfg_unit_pcs')}`}
+          icon={CheckCircle2}
+          chip="bg-[#E1F5EE] text-[#085041]"
+          onClick={() => onOpenTab('execute', 'orders')}
+        />
+        <StatTile
+          label={t('mfg_kpi_overdue')}
+          value={overdueCount}
+          icon={CalendarClock}
+          chip={overdueCount > 0 ? 'bg-red-50 text-red-600' : 'bg-[#FAEEDA] text-[#633806]'}
+          valueCls={overdueCount > 0 ? 'text-red-600' : 'text-slate-900'}
+          onClick={() => onOpenTab('execute', 'orders')}
+        />
+        <StatTile
+          label={t('mfg_kpi_scrap_rate')}
+          value={`${scrapRate.toFixed(1)}%`}
+          sub={`${totals.quantity_scrapped ?? 0} ${t('mfg_unit_pcs')}`}
+          icon={Percent}
+          chip={scrapRate > 5 ? 'bg-red-50 text-red-600' : 'bg-[#FAECE7] text-[#712B13]'}
+          valueCls={scrapRate > 5 ? 'text-red-600' : 'text-slate-900'}
+        />
+        <StatTile
+          label={t('mfg_kpi_otd')}
+          value={`${Number(totals.otd_rate || 0).toFixed(0)}%`}
+          icon={Timer}
+          chip="bg-[#E6F1FB] text-[#0C447C]"
+        />
+        <StatTile
+          label={t('mfg_kpi_wip')}
+          value={formatCurrencyCompact(totals.wip_value || 0)}
+          icon={Wallet}
+          chip="bg-[#EEEDFE] text-[#3C3489]"
+        />
+      </div>
+
+      {/* Charts: plan-vs-actual + status distribution */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <ChartCard title={t('mfg_chart_plan_fact')} icon={BarChart3} className="min-h-[300px] lg:col-span-2">
+          {hasDaily ? (
+            <ResponsiveContainer width="100%" height={240}>
+              <ComposedChart data={daily} margin={{ left: 6, right: 6, top: 6, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                <XAxis
+                  dataKey="label" fontSize={11} tickLine={false} axisLine={false}
+                  tick={{ fill: '#64748B' }} interval="preserveStartEnd" minTickGap={24}
+                />
+                <YAxis fontSize={11} tickFormatter={formatAxisTick} tickLine={false} axisLine={false} tick={{ fill: '#94A3B8' }} width={44} />
+                <Tooltip content={<GlassTooltip />} cursor={{ fill: 'rgba(148,163,184,0.08)' }} />
+                <Legend
+                  verticalAlign="top"
+                  height={26}
+                  iconType="circle"
+                  iconSize={8}
+                  formatter={(v) => <span className="text-xs text-slate-500">{v}</span>}
+                />
+                <Bar
+                  dataKey="produced"
+                  name={t('mfg_chart_produced')}
+                  fill={PAL[0].c}
+                  radius={[4, 4, 0, 0]}
+                  maxBarSize={28}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="planned"
+                  name={t('mfg_chart_planned')}
+                  stroke={PAL[1].c}
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{ r: 4 }}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          ) : (
+            <EmptyNote icon={BarChart3} text={t('mfg_dash_empty_series')} />
+          )}
+        </ChartCard>
+
+        <ChartCard title={t('mfg_chart_status_dist')} icon={Layers} className="min-h-[300px]">
+          {hasStatusData ? (
+            <ResponsiveContainer width="100%" height={Math.max(220, statusData.length * 38)}>
+              <BarChart data={statusData} layout="vertical" margin={{ left: 6, right: 16, top: 4, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E2E8F0" />
+                <XAxis type="number" allowDecimals={false} fontSize={11} tickLine={false} axisLine={false} tick={{ fill: '#94A3B8' }} />
+                <YAxis
+                  dataKey="label" type="category" fontSize={12} width={110}
+                  tickLine={false} axisLine={false}
+                  tick={{ fill: '#334155' }}
+                />
+                <Tooltip content={<GlassTooltip />} cursor={{ fill: 'rgba(148,163,184,0.08)' }} />
+                <Bar dataKey="count" name={t('mfg_chart_orders_axis')} radius={[0, 4, 4, 0]} maxBarSize={22}>
+                  {statusData.map((s, i) => (
+                    <Cell key={i} fill={STATUS_BAR_COLORS[s.status] || '#94A3B8'} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <EmptyNote icon={Layers} text={t('mfg_dash_empty_status')} />
+          )}
+        </ChartCard>
+      </div>
+
+      {/* Work center load + late orders */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
-        {/* Production Trend */}
-        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-blue-600" />
-              {t('production_trend_last_30_days') || 'Production Trend (Last 30 Days)'}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {productionData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={250}>
-                <LineChart data={productionData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  {/* interval=4 → show every 5th label so 30 daily ticks fit cleanly */}
-                  <XAxis dataKey="day" stroke="#64748b" fontSize={12} interval={4} />
-                  <YAxis stroke="#64748b" fontSize={12} />
-                  <Tooltip />
-                  <Line
-                    type="monotone"
-                    dataKey="quantity"
-                    name={t('quantity') || 'Quantity'}
-                    stroke="#0ea5e9"
-                    strokeWidth={2}
-                    dot={{ fill: '#0ea5e9' }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-[250px] flex items-center justify-center text-slate-500">
-                {t('no_production_data_available') || 'No production data available'}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <ChartCard title={t('mfg_chart_wc_load')} icon={Gauge} className="min-h-[280px]">
+          {wcLoad.length > 0 ? (
+            <ResponsiveContainer width="100%" height={Math.max(220, wcLoad.length * 38)}>
+              <BarChart data={wcLoad} layout="vertical" margin={{ left: 6, right: 16, top: 4, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E2E8F0" />
+                <XAxis
+                  type="number" fontSize={11} tickLine={false} axisLine={false}
+                  tick={{ fill: '#94A3B8' }} tickFormatter={(v) => `${v}%`}
+                  domain={[0, (max) => Math.max(110, Math.ceil(max / 10) * 10)]}
+                />
+                <YAxis
+                  dataKey="name" type="category" fontSize={12} width={130}
+                  tickLine={false} axisLine={false}
+                  tick={{ fill: '#334155' }}
+                  tickFormatter={(v) => (String(v).length > 16 ? `${String(v).slice(0, 15)}…` : v)}
+                />
+                <Tooltip
+                  content={<GlassTooltip format={(v) => `${Math.round(Number(v) || 0)}%`} />}
+                  cursor={{ fill: 'rgba(148,163,184,0.08)' }}
+                />
+                <ReferenceLine x={100} stroke="#DC2626" strokeDasharray="4 4" />
+                <Bar dataKey="load_percent" name={t('mfg_chart_load_pct')} radius={[0, 4, 4, 0]} maxBarSize={22}>
+                  {wcLoad.map((wc, i) => (
+                    <Cell key={i} fill={(wc.load_percent || 0) > 100 ? '#DC2626' : PAL[0].c} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <EmptyNote icon={Gauge} text={t('mfg_dash_empty_wc')} />
+          )}
+        </ChartCard>
 
-        {/* Work Center Utilization */}
-        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Cog className="w-5 h-5 text-purple-600" />
-              {t('work_center_utilization') || 'Work Center Utilization'}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {workCenterUtilization.length > 0 ? (
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={workCenterUtilization}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="name" stroke="#64748b" fontSize={12} />
-                  <YAxis stroke="#64748b" fontSize={12} />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="utilization" fill="#8b5cf6" name={t('utilization_percent') || 'Utilization %'} radius={[8, 8, 0, 0]} />
-                  <Bar dataKey="oee" fill="#0ea5e9" name={t('oee_percent') || 'OEE %'} radius={[8, 8, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-[250px] flex items-center justify-center text-slate-500">
-                {t('no_work_center_data_available') || 'No work center data available'}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <ChartCard title={t('mfg_late_orders_title')} icon={CalendarClock} className="min-h-[280px]">
+          {lateOrders.length > 0 ? (
+            <div className="divide-y divide-slate-100">
+              {lateOrders.map((o, i) => (
+                <button
+                  key={`${o.code}-${i}`}
+                  onClick={() => onOpenTab('execute', 'orders')}
+                  className="w-full flex items-center justify-between gap-3 py-2.5 px-1 text-left hover:bg-slate-50/70 rounded-lg transition-colors"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-slate-800 font-mono truncate">{o.code}</p>
+                    <p className="text-xs text-slate-500 truncate">{o.product_name}</p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-red-50 text-red-600 text-[11px] font-semibold whitespace-nowrap">
+                      +{o.days_late ?? 0} {t('mfg_days_late_short')}
+                    </span>
+                    <p className="text-xs text-slate-500 mt-1 tabular-nums">{formatDate(o.scheduled_end)}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <EmptyNote icon={CalendarClock} text={t('mfg_late_orders_empty')} />
+          )}
+        </ChartCard>
       </div>
 
-      {/* AI Insights */}
-      {aiInsights.length > 0 && (
-        <div>
-          <div className="flex items-center gap-2 mb-4">
-            <Brain className="w-6 h-6 text-purple-600" />
-            <h3 className="text-xl font-bold text-slate-900">{t('ai_manufacturing_insights') || 'AI Manufacturing Insights'}</h3>
-            <Badge className="bg-purple-50 text-purple-700 border-purple-200">{t('ai_generated_insights') || 'AI-Generated Insights'}</Badge>
+      {/* Critical material shortages (MRP-lite preview) */}
+      <ChartCard title={t('mfg_shortages_title')} icon={PackageSearch}>
+        {shortages.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-[11px] uppercase tracking-wider text-slate-400">
+                  <th className="py-2 pr-3 font-semibold">{t('product')}</th>
+                  <th className="py-2 pr-3 font-semibold text-right">{t('mrp_col_required')}</th>
+                  <th className="py-2 pr-3 font-semibold text-right">{t('mrp_col_on_hand')}</th>
+                  <th className="py-2 font-semibold text-right">{t('mrp_col_missing')}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {shortages.map((s, i) => (
+                  <tr key={`${s.product_name}-${i}`}>
+                    <td className="py-2.5 pr-3 text-slate-800 truncate max-w-[220px]">{s.product_name}</td>
+                    <td className="py-2.5 pr-3 text-right tabular-nums text-slate-600">{s.required ?? 0}</td>
+                    <td className="py-2.5 pr-3 text-right tabular-nums text-slate-600">{s.on_hand ?? 0}</td>
+                    <td className="py-2.5 text-right tabular-nums font-semibold text-red-600">{s.missing ?? 0}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="mt-3 text-right">
+              <Button size="sm" variant="outline" onClick={() => onOpenTab('plan', 'mrp')}>
+                {t('mfg_open_mrp')}
+              </Button>
+            </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {aiInsights.map((insight, index) => (
-              <Card key={index} className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg hover:shadow-xl transition-shadow">
-                <CardHeader>
-                  <div className="flex items-start justify-between mb-2">
-                    <CardTitle className="text-base font-bold text-slate-900">{insight.title}</CardTitle>
-                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                      {Math.round(insight.confidence * 100)}{t('percent_confident') || '% confident'}
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <p className="text-sm text-slate-600 leading-relaxed">{insight.description}</p>
-                  <div className="p-3 bg-blue-50 rounded-lg border border-blue-100">
-                    <p className="text-xs font-semibold text-blue-900 mb-1">{t('impact') || 'Impact'}</p>
-                    <p className="text-sm text-blue-700">{insight.impact}</p>
-                  </div>
-                  <div className="p-3 bg-purple-50 rounded-lg border border-purple-100">
-                    <p className="text-xs font-semibold text-purple-900 mb-1">{t('recommended_action') || 'Recommended Action'}</p>
-                    <p className="text-sm text-purple-700">{insight.action}</p>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      )}
-
+        ) : (
+          <EmptyNote
+            icon={PackageSearch}
+            text={t('mfg_shortages_empty')}
+            cta={(
+              <Button size="sm" variant="outline" onClick={() => onOpenTab('plan', 'mrp')}>
+                {t('mfg_open_mrp')}
+              </Button>
+            )}
+          />
+        )}
+      </ChartCard>
     </div>
   );
 }

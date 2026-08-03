@@ -7,7 +7,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, Trash2, Download, Edit, Calculator, FileText, Search } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
+import { useTranslation } from '@/components/utils/translations';
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { inventoryService, costCalculationsService } from '@/api/services';
+import { getApiErrorMessage } from '@/utils/apiError';
 import { toast } from 'sonner';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -117,6 +120,8 @@ function emptyForm() {
 
 export default function CostCalculation() {
   const { language } = useLanguage();
+  const { t } = useTranslation(language);
+  const { formatCurrency } = useCurrencyFormatter();
   const tx = T[language] || T.en;
 
   const [calcs, setCalcs] = useState([]);
@@ -200,7 +205,7 @@ export default function CostCalculation() {
       setProductSearch('');
       setShowModal(true);
     } catch (e) {
-      toast.error('Failed to load calculation');
+      toast.error(getApiErrorMessage(e, t('mfg_calc_load_failed')));
     }
   }
 
@@ -237,7 +242,7 @@ export default function CostCalculation() {
 
   async function handleSave() {
     if (!form.name || !form.product_name) {
-      toast.error('Fill in the required fields');
+      toast.error(t('fill_required_fields'));
       return;
     }
     setSaving(true);
@@ -255,15 +260,15 @@ export default function CostCalculation() {
       };
       if (editingId) {
         await costCalculationsService.update(editingId, payload);
-        toast.success('Updated');
+        toast.success(t('updated'));
       } else {
         await costCalculationsService.create(payload);
-        toast.success('Saved');
+        toast.success(t('saved'));
       }
       setShowModal(false);
       loadCalcs();
     } catch (e) {
-      toast.error('Failed to save');
+      toast.error(getApiErrorMessage(e, t('mfg_calc_save_failed')));
     } finally {
       setSaving(false);
     }
@@ -273,10 +278,10 @@ export default function CostCalculation() {
     if (!confirm(tx.delete_confirm)) return;
     try {
       await costCalculationsService.delete(id);
-      toast.success('Deleted');
+      toast.success(t('deleted'));
       loadCalcs();
     } catch (e) {
-      toast.error('Failed to delete');
+      toast.error(getApiErrorMessage(e, t('mfg_calc_delete_failed')));
     }
   }
 
@@ -413,7 +418,7 @@ export default function CostCalculation() {
                     <div className="text-right">
                       <p className="text-xs text-slate-400">{tx.total_with_profit}</p>
                       <p className="text-xl font-bold text-blue-600">
-                        {fmtMoney(calc.total_with_profit)} <span className="text-sm font-normal">so'm</span>
+                        {formatCurrency(calc.total_with_profit || 0)}
                       </p>
                     </div>
                     <div className="flex items-center gap-2 mt-1">
@@ -624,15 +629,15 @@ export default function CostCalculation() {
             <div className="bg-slate-50 rounded-xl p-4 space-y-2 border border-slate-200">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-slate-500">{tx.material_cost}</span>
-                <span className="font-medium">{fmtMoney(materialCost)} so'm</span>
+                <span className="font-medium">{formatCurrency(materialCost)}</span>
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-slate-500">{tx.profit_pct}: {form.profit_percent}%</span>
-                <span className="font-medium text-green-600">+ {fmtMoney(totalWithProfit - totalCost)} so'm</span>
+                <span className="font-medium text-green-600">+ {formatCurrency(totalWithProfit - totalCost)}</span>
               </div>
               <div className="border-t border-slate-200 pt-2 flex items-center justify-between">
                 <span className="font-semibold text-slate-700">{tx.total_with_profit}</span>
-                <span className="text-xl font-bold text-blue-600">{fmtMoney(totalWithProfit)} so'm</span>
+                <span className="text-xl font-bold text-blue-600">{formatCurrency(totalWithProfit)}</span>
               </div>
             </div>
 

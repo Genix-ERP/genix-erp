@@ -37,6 +37,7 @@ const Notifications = lazyRetry(() => import('./Notifications'));
 const AdminPanel = lazyRetry(() => import('./AdminPanel'));
 const AdminSettings = lazyRetry(() => import('./AdminSettings'));
 const Manufacturing = lazyRetry(() => import('./Manufacturing'));
+const ManufacturingKiosk = lazyRetry(() => import('@/components/manufacturing/KioskMode'));
 const Procurement = lazyRetry(() => import('./Procurement'));
 const Tasks = lazyRetry(() => import('./Tasks'));
 const TaskBoard = lazyRetry(() => import('./TaskBoard'));
@@ -250,6 +251,8 @@ function PagesContent() {
                 <Route path="adminpanel" element={<AdminRoute><AdminPanel /></AdminRoute>} />
                 <Route path="adminsettings" element={<AdminRoute><AdminSettings /></AdminRoute>} />
                 <Route path="manufacturing" element={<ModuleRoute moduleId="manufacturing"><Manufacturing /></ModuleRoute>} />
+                {/* Ustaxona kiosk — tablet-first shop-floor terminal (B3) */}
+                <Route path="manufacturing/kiosk" element={<ModuleRoute moduleId="manufacturing"><ManufacturingKiosk /></ModuleRoute>} />
                 <Route path="procurement" element={<ModuleRoute moduleId="purchase"><Procurement /></ModuleRoute>} />
                 <Route path="tasks" element={<ModuleRoute moduleId="tasks"><Tasks /></ModuleRoute>} />
                 <Route path="tasks/:boardId" element={<ModuleRoute moduleId="tasks"><TaskBoard /></ModuleRoute>} />
