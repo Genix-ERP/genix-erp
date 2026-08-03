@@ -169,6 +169,9 @@ button:focus-visible {
 
 /* Genix Brand Variables */
 :root {
+  /* --genix-blue was referenced by 10+ tab gradients but never defined,
+     so those gradients silently rendered transparent. Defined here once. */
+  --genix-blue: #4A6CF7;
   --genix-purple: #6C5CE7;
   --genix-purple-light: #A29BFE;
   --genix-teal: #00CEC9;

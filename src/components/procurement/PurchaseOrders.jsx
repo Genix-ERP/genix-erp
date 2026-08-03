@@ -68,8 +68,9 @@ import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import PurchaseReturns from './PurchaseReturns';
 import BlanketOrders from './BlanketOrders';
 import LandedCosts from './LandedCosts';
+import GoodsReceipt from './GoodsReceipt';
 
-export default function PurchaseOrders() {
+export default function PurchaseOrders({ initialSubtab = 'orders' }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { canCreate, canUpdate, MODULES } = usePermissions();
@@ -103,7 +104,7 @@ export default function PurchaseOrders() {
   const { refreshData: refreshInventory } = useInventory();
   const { activeCompany } = useCompany();
 
-  const [activeTab, setActiveTab] = useState('orders');
+  const [activeTab, setActiveTab] = useState(initialSubtab);
   const [filteredOrders, setFilteredOrders] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -938,7 +939,9 @@ export default function PurchaseOrders() {
       //   "Status 'received' cannot be set via generic update."
       // Without this guard, every save on a received PO 500s because
       // the form preserves the existing 'received' value as-is.
-      const STATUS_BLOCKED_VIA_GENERIC = new Set(['received', 'partial']);
+      // 'cancelled' goes through POST /:id/cancel (state-machine guard +
+      // stock check) — the PO is cancelled, NOT deleted, so its history stays.
+      const STATUS_BLOCKED_VIA_GENERIC = new Set(['received', 'partial', 'cancelled']);
       if (
         editPO.status &&
         editPO.status !== editPO._originalStatus &&
@@ -983,8 +986,8 @@ export default function PurchaseOrders() {
       if (Object.keys(updates).length > 0) {
         await updatePurchaseOrder(editPO.id, updates);
       }
-      if (editPO.status === 'cancelled') {
-        await deletePurchaseOrder(editPO.id);
+      if (editPO.status === 'cancelled' && editPO._originalStatus !== 'cancelled') {
+        await procurementService.cancelOrder(editPO.id);
       }
       setShowEditModal(false);
       setEditPO(null);
@@ -1011,10 +1014,10 @@ export default function PurchaseOrders() {
   };
 
   const updatePOStatus = async (poId, newStatus) => {
-    const updates = { status: newStatus };
-    await updatePurchaseOrder(poId, updates);
     if (newStatus === 'cancelled') {
-      await deletePurchaseOrder(poId);
+      await procurementService.cancelOrder(poId);
+    } else {
+      await updatePurchaseOrder(poId, { status: newStatus });
     }
     fetchOrders();
   };
@@ -1057,6 +1060,10 @@ export default function PurchaseOrders() {
           <TabsTrigger value="orders" className="data-[state=active]:bg-white">
             <ClipboardList className="w-4 h-4 mr-2" />
             {t('orders') || 'Orders'}
+          </TabsTrigger>
+          <TabsTrigger value="receipts" className="data-[state=active]:bg-white">
+            <Package className="w-4 h-4 mr-2" />
+            {t('receiving') || 'Qabul qilish'}
           </TabsTrigger>
           <TabsTrigger value="blanket-orders" className="data-[state=active]:bg-white">
             <Layers className="w-4 h-4 mr-2" />
@@ -1275,6 +1282,12 @@ export default function PurchaseOrders() {
         {/* Blanket Orders Tab */}
         <TabsContent value="blanket-orders" className="mt-4">
           <BlanketOrders />
+        </TabsContent>
+
+        {/* Receiving Tab — GR documents live WITH the orders they receive
+            (Tovar qabulxonasi is no longer a separate top-level destination) */}
+        <TabsContent value="receipts" className="mt-4">
+          <GoodsReceipt />
         </TabsContent>
 
         {/* Returns Tab */}
@@ -2293,17 +2306,15 @@ export default function PurchaseOrders() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {language === 'uz' ? "Buyurtmani o'chirish" : 'Delete Purchase Order'}
+              {t('po_delete_title') || "Buyurtmani o'chirish"}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {language === 'uz'
-                ? `Haqiqatan ham "${deleteConfirm?.po_number || deleteConfirm?.order_number || ''}" buyurtmani o'chirmoqchimisiz? Bu amalni qaytarib bo'lmaydi.`
-                : `Are you sure you want to delete order "${deleteConfirm?.po_number || deleteConfirm?.order_number || ''}"? This action cannot be undone.`
-              }
+              {(t('po_delete_message') || `"{number}" buyurtmani o'chirmoqchimisiz? Bu amalni qaytarib bo'lmaydi.`)
+                .replace('{number}', deleteConfirm?.po_number || deleteConfirm?.order_number || '')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>{language === 'uz' ? 'Bekor qilish' : 'Cancel'}</AlertDialogCancel>
+            <AlertDialogCancel>{t('cancel') || 'Bekor qilish'}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-red-600 hover:bg-red-700 text-white"
               onClick={async () => {
@@ -2314,7 +2325,7 @@ export default function PurchaseOrders() {
                 }
               }}
             >
-              {language === 'uz' ? "O'chirish" : 'Delete'}
+              {t('delete') || "O'chirish"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
