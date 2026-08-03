@@ -22,6 +22,7 @@ import { MODULES } from "@/config/permissions";
 import { contactsService } from '@/api/services';
 import financeService from "@/api/services/finance";
 import { formatDate, formatDateTime } from '@/utils/formatDate';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 // Fix share URLs: replace backend's FRONTEND_URL with actual browser origin
 const fixShareUrl = (url) => {
@@ -498,7 +499,7 @@ export default function ActSverka() {
       }
     } catch (err) {
       console.error('Send failed:', err);
-      setSendResult({ error: err?.response?.data?.error || "Yuborishda xatolik yuz berdi" });
+      setSendResult({ error: getApiErrorMessage(err, "Yuborishda xatolik yuz berdi") });
     } finally {
       setIsSending(false);
     }
@@ -517,7 +518,7 @@ export default function ActSverka() {
       }
     } catch (err) {
       console.error('Reminder failed:', err);
-      setReminderResult({ error: err?.response?.data?.error || "Eslatma yuborishda xatolik" });
+      setReminderResult({ error: getApiErrorMessage(err, "Eslatma yuborishda xatolik") });
     } finally {
       setIsReminding(false);
     }

@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { hrService } from "@/api/services/hr";
-import { aiService } from "@/api/services/ai";
 import apiClient from "@/api/client";
 import { formatPhoneInput, parsePhoneInput, formatPriceInput, parsePriceInput } from "@/utils/formatCurrency";
 import { useToast } from "@/components/ui/use-toast";
-import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,8 +41,16 @@ import {
   ChevronRight,
   CheckSquare,
   Monitor,
+  BarChart3,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Clock,
+  CalendarDays,
+  FileText,
+  UserPlus,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import taskBoardsService from "@/api/services/taskBoards";
 import fixedAssetsV2Service from "@/api/services/fixedAssetsV2";
 
@@ -86,6 +92,16 @@ import { useInstalledApps } from "@/components/contexts/InstalledAppsContext";
 import { useEmployeePermissions, AVAILABLE_MODULES } from "@/components/contexts/EmployeePermissionsContext";
 import { PERMISSION_MATRIX } from "@/config/permissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { getApiErrorMessage } from '@/utils/apiError';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { StatTile, EmptyNote } from '@/components/shared/DashboardKit';
+import HRAnalyticsTab from '@/components/hr/HRAnalyticsTab';
+
+// Hoisted once, same string the other rebuilt modules use (SalesOrders,
+// Procurement, Inventory) — the single deliberate gradient signature.
+const TAB_STYLE = "text-xs md:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md transition-all duration-200";
+
+const LEGACY_TAB_MAP = { employees: 'employees', departments: 'departments', job_positions: 'job_positions', analytics: 'analytics' };
 
 export default function HR() {
   const { language } = useLanguage();
@@ -106,7 +122,15 @@ export default function HR() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalEmployees, setTotalEmployees] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+  const [sortBy, setSortBy] = useState('hire_date');
+  const [sortOrder, setSortOrder] = useState('DESC');
+  const [isLoadingList, setIsLoadingList] = useState(true);
+  const [hrStats, setHrStats] = useState(null);
+  const [isLoadingStats, setIsLoadingStats] = useState(true);
   const pageSize = 20;
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = LEGACY_TAB_MAP[searchParams.get('tab')] || 'employees';
+  const setActiveTab = (tab) => setSearchParams(tab === 'employees' ? {} : { tab }, { replace: true });
   const [showAddModal, setShowAddModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -118,7 +142,6 @@ export default function HR() {
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submittingRef = useRef(false);
-  const [isAssessingRisk, setIsAssessingRisk] = useState(false);
   const [employeeDeductions, setEmployeeDeductions] = useState([]);
   const [employeeTasks, setEmployeeTasks] = useState([]);
   const [employeeAssets, setEmployeeAssets] = useState([]);
@@ -154,42 +177,55 @@ export default function HR() {
   ];
 
   const handleImport = async (data) => {
+    let ok = 0;
+    let failed = 0;
     for (const row of data) {
       const employeeData = {
         full_name: row.full_name,
         email: row.email,
         phone: row.phone || '',
         job_title: row.job_title,
-        department: row.department || 'general',
+        department: row.department || '',
         hire_date: row.hire_date || new Date().toISOString().split('T')[0],
         salary: parseFloat(row.salary) || 0,
         status: row.status || 'active',
         performance_score: row.performance_score ? parseFloat(row.performance_score) : 3,
         turnover_risk: row.turnover_risk || 'low',
       };
-      hrService.createEmployee(employeeData);
+      try {
+        await hrService.createEmployee(employeeData);
+        ok++;
+      } catch {
+        failed++;
+      }
     }
-    addAuditLog('create', 'batch', `${data.length} employees imported`);
+    addAuditLog('create', 'batch', `${ok} employees imported, ${failed} failed`);
+    toast({
+      title: t('import_finished') || 'Import yakunlandi',
+      description: `${ok} ${t('import_ok_count') || 'ta qatordan muvaffaqiyatli'}${failed ? `, ${failed} ${t('import_fail_count') || 'ta xato'}` : ''}`,
+      variant: failed ? 'destructive' : undefined,
+    });
     loadEmployees();
+    loadStats();
   };
 
   const generatePrintConfig = (employee) => ({
     template: 'payslip',
-    title: 'Xodim ma\'lumotlari',
+    title: t('employee_details') || "Xodim ma'lumotlari",
     documentNumber: employee.id,
     documentDate: formatDate(),
     headerFields: [
-      { label: 'Xodim', value: employee.full_name },
-      { label: 'Lavozim', value: employee.job_title },
-      { label: "Bo'lim", value: employee.department || '-' },
-      { label: 'Email', value: employee.email },
-      { label: 'Telefon', value: employee.phone },
-      { label: 'Ishga kirgan', value: employee.hire_date },
+      { label: t('table_header_employee') || 'Xodim', value: employee.full_name },
+      { label: t('job_title') || 'Lavozim', value: employee.job_title },
+      { label: t('department') || "Bo'lim", value: employee.department || '-' },
+      { label: t('email') || 'Email', value: employee.email },
+      { label: t('phone') || 'Telefon', value: employee.phone },
+      { label: t('hire_date') || 'Ishga kirgan', value: employee.hire_date },
     ],
     tableColumns: [],
     tableData: [],
     totals: [
-      { label: 'Oylik maosh', value: formatCurrency(employee.salary || 0), bold: true },
+      { label: t('salary') || 'Oylik maosh', value: formatCurrency(employee.salary || 0), bold: true },
     ],
   });
 
@@ -259,84 +295,24 @@ export default function HR() {
     }
   };
 
-  // AI-based turnover risk assessment
-  const assessTurnoverRisk = useCallback(async (employeesList) => {
-    if (!employeesList || employeesList.length === 0) return employeesList;
-
-    setIsAssessingRisk(true);
+  // Server-side stats: KPI cards and the Tahlillar tab read one endpoint —
+  // never derived from the paginated page again (old P0 bug).
+  const loadStats = useCallback(async () => {
+    setIsLoadingStats(true);
     try {
-      const employeeData = employeesList.map(emp => ({
-        id: emp.id,
-        full_name: emp.full_name,
-        department: emp.department,
-        hire_date: emp.hire_date,
-        performance_score: emp.performance_score,
-        salary: emp.salary,
-        status: emp.status,
-        tenure_months: Math.floor((new Date() - new Date(emp.hire_date)) / (1000 * 60 * 60 * 24 * 30))
-      }));
-
-      const prompt = `As an HR AI analyst, assess the turnover risk for each employee based on their data.
-
-Employee Data:
-${JSON.stringify(employeeData, null, 2)}
-
-Risk Factors to Consider:
-- Low performance score (1-2) = higher risk
-- Very short tenure (<6 months) or medium tenure (1-2 years) = higher risk (new hires adjusting or employees seeking growth)
-- Long tenure (>5 years) with low performance = medium risk
-- High performers with long tenure = low risk
-- Department patterns (some departments may have higher turnover)
-
-Return a JSON object with employee IDs and their assessed risk levels:
-{ "assessments": [{ "id": "employee-uuid", "risk": "low|medium|high", "reason": "brief reason" }] }
-
-Only return the JSON, no other text.`;
-
-      const result = await aiService.chat(prompt, null, { type: 'hr_risk_assessment' });
-
-      let assessments = [];
-      if (result?.assessments) {
-        assessments = result.assessments;
-      } else if (typeof result?.message === 'string') {
-        try {
-          // Try to extract JSON from the response
-          const jsonMatch = result.message.match(/\{[\s\S]*\}/);
-          if (jsonMatch) {
-            const parsed = JSON.parse(jsonMatch[0]);
-            if (parsed.assessments) {
-              assessments = parsed.assessments;
-            }
-          }
-        } catch (e) {
-          // Could not parse AI risk assessment response
-        }
-      }
-
-      // Update employees with AI-assessed risk
-      if (assessments.length > 0) {
-        const updatedEmployees = employeesList.map(emp => {
-          const assessment = assessments.find(a => a.id === emp.id);
-          if (assessment) {
-            return { ...emp, turnover_risk: assessment.risk, risk_reason: assessment.reason };
-          }
-          return emp;
-        });
-        return updatedEmployees;
-      }
-
-      return employeesList;
+      const stats = await hrService.getEmployeeStats();
+      setHrStats(stats);
     } catch (error) {
-      console.error("Error assessing turnover risk:", error);
-      return employeesList;
+      console.error("Error loading HR stats:", error);
     } finally {
-      setIsAssessingRisk(false);
+      setIsLoadingStats(false);
     }
   }, []);
 
   const loadEmployees = useCallback(async () => {
+    setIsLoadingList(true);
     try {
-      const params = { sort_by: 'hire_date', sort_order: 'DESC', page: currentPage, limit: pageSize };
+      const params = { sort_by: sortBy, sort_order: sortOrder, page: currentPage, limit: pageSize };
       if (searchQuery) params.search = searchQuery;
       if (statusFilter !== 'all') params.status = statusFilter;
       if (departmentFilter !== 'all') params.department = departmentFilter;
@@ -356,7 +332,7 @@ Only return the JSON, no other text.`;
         job_position_id: emp.job_position_id || '',
         job_position_name: emp.job_position_name || '',
         department_id: emp.department_id || '',
-        department: emp.department || 'other',
+        department: emp.department || '',
         hire_date: emp.hire_date,
         salary: emp.salary || 0,
         status: emp.status || 'active',
@@ -364,14 +340,14 @@ Only return the JSON, no other text.`;
         turnover_risk: emp.turnover_risk || 'low',
         permission: emp.permission || 'basic'
       }));
-
-      // Run AI turnover risk assessment
-      const assessedEmployees = await assessTurnoverRisk(mapped);
-      setEmployees(assessedEmployees);
+      setEmployees(mapped);
     } catch (error) {
       console.error("Error loading employees:", error);
+      toast({ title: t('error') || 'Xato', description: getApiErrorMessage(error, t('loading_error') || 'Yuklashda xatolik'), variant: 'destructive' });
+    } finally {
+      setIsLoadingList(false);
     }
-  }, [assessTurnoverRisk, currentPage, searchQuery, statusFilter, departmentFilter]);
+  }, [currentPage, searchQuery, statusFilter, departmentFilter, sortBy, sortOrder]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleAddEmployee = async () => {
     if (submittingRef.current) return;
@@ -435,6 +411,7 @@ Only return the JSON, no other text.`;
         turnover_risk: 'low', permission: 'important', organization_ids: activeCompany?.id ? [activeCompany.id] : []
       });
       await loadEmployees();
+      loadStats();
     } catch (error) {
       console.error("Error adding employee:", error);
       toast({
@@ -478,7 +455,7 @@ Only return the JSON, no other text.`;
   };
 
   const handleCancelDeduction = async (employeeId, deductionId) => {
-    const reason = prompt("Bekor qilish sababi:");
+    const reason = prompt(t('hr_cancel_reason_prompt') || 'Bekor qilish sababi:');
     if (!reason) return;
     try {
       await hrService.cancelDeduction(employeeId, deductionId, { reason });
@@ -487,9 +464,9 @@ Only return the JSON, no other text.`;
       setEmployeeDeductions(deductions || []);
       const salary = await hrService.calculateSalary(employeeId).catch(() => null);
       setSalaryCalc(salary);
-      toast({ title: "Kamomad bekor qilindi" });
+      toast({ title: t('hr_deduction_cancelled_toast') || 'Kamomad bekor qilindi' });
     } catch (err) {
-      toast({ title: "Xatolik", description: err.response?.data?.message || 'Xatolik yuz berdi', variant: 'destructive' });
+      toast({ title: t('error') || 'Xatolik', description: getApiErrorMessage(err), variant: 'destructive' });
     }
   };
 
@@ -541,7 +518,6 @@ Only return the JSON, no other text.`;
         turnover_risk: selectedEmployee.turnover_risk,
         permission: selectedEmployee.permission
       };
-      console.log('[HR Update] Sending employeeData:', JSON.stringify(employeeData, null, 2));
 
       await hrService.updateEmployee(selectedEmployee.id, employeeData);
 
@@ -584,9 +560,14 @@ Only return the JSON, no other text.`;
       setShowEditModal(false);
       setSelectedEmployee(null);
       await loadEmployees();
+      loadStats();
     } catch (error) {
       console.error("Error updating employee:", error);
-      toast.error("Failed to update employee: " + (error.response?.data?.error?.message || error.message || "Unknown error"));
+      toast({
+        title: t('error') || 'Xato',
+        description: getApiErrorMessage(error, t('update_employee_error') || 'Xodimni yangilashda xatolik'),
+        variant: 'destructive',
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -805,6 +786,7 @@ Only return the JSON, no other text.`;
       setShowDeleteDialog(false);
       setSelectedEmployee(null);
       await loadEmployees();
+      loadStats();
     } catch (error) {
       console.error("Error deleting employee:", error);
       toast({
@@ -831,6 +813,10 @@ Only return the JSON, no other text.`;
 
   useEffect(() => {
     loadEmployees();
+  }, [loadEmployees]);
+
+  useEffect(() => {
+    loadStats();
     // Load organizations for company assignment
     apiClient.get('/organizations').then(res => {
       setOrganizations(res.data?.data || res.data || []);
@@ -843,7 +829,7 @@ Only return the JSON, no other text.`;
     }).catch(() => {});
     // Load job positions
     refreshJobPositions();
-  }, [loadEmployees]);
+  }, [loadStats, refreshDepartments, refreshJobPositions]);
 
   // Server handles search/status/department filtering; just sync filteredEmployees
   useEffect(() => {
@@ -855,85 +841,115 @@ Only return the JSON, no other text.`;
     setCurrentPage(1);
   }, [searchQuery, departmentFilter, statusFilter]);
   
-  const metrics = {
-    totalEmployees: totalEmployees || employees.length,
-    activeEmployees: employees.filter(e => e.status === 'active').length,
-    totalSalaries: employees.filter(e => e.status === 'active').reduce((sum, e) => sum + (parseFloat(e.salary) || 0), 0),
+  const kpiLoading = isLoadingStats && !hrStats;
+
+  const toggleSort = (field) => {
+    if (sortBy === field) {
+      setSortOrder(o => (o === 'ASC' ? 'DESC' : 'ASC'));
+    } else {
+      setSortBy(field);
+      setSortOrder(field === 'hire_date' ? 'DESC' : 'ASC');
+    }
+    setCurrentPage(1);
+  };
+
+  const SortIcon = ({ field }) => {
+    if (sortBy !== field) return <ArrowUpDown className="w-3.5 h-3.5 ml-1 text-slate-300" />;
+    return sortOrder === 'ASC'
+      ? <ArrowUp className="w-3.5 h-3.5 ml-1 text-slate-600" />
+      : <ArrowDown className="w-3.5 h-3.5 ml-1 text-slate-600" />;
+  };
+
+  const resolveDepartment = (e) =>
+    departments.find(d => d.id === e.department_id)?.name || e.department || '';
+
+  const initialsOf = (name) => {
+    const parts = (name || '').trim().split(/\s+/);
+    return ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase() || '?';
   };
 
   return (
-    <div className="p-6 md:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
-      <div className="max-w-7xl mx-auto space-y-8">
+    <div className="p-4 md:p-6 lg:p-8 bg-slate-50 min-h-screen">
+      <div className="max-w-7xl mx-auto space-y-6">
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6">
-          <Card className="bg-white border-slate-200/60 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 overflow-hidden group">
-            <CardContent className="p-6">
-              <div className="flex items-start justify-between mb-2">
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-slate-600 mb-1">{t('total_employees')}</p>
-                  <p className="text-3xl font-bold text-slate-900 tracking-tight">{metrics.totalEmployees}</p>
-                </div>
-                <div className="bg-blue-100 p-3 rounded-xl shadow-sm group-hover:scale-110 transition-transform duration-300">
-                  <Users className="w-6 h-6 text-blue-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="bg-white border-slate-200/60 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 overflow-hidden group">
-            <CardContent className="p-6">
-              <div className="flex items-start justify-between mb-2">
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-slate-600 mb-1">{t('active_employees')}</p>
-                  <p className="text-3xl font-bold text-slate-900 tracking-tight">{metrics.activeEmployees}</p>
-                </div>
-                <div className="bg-green-100 p-3 rounded-xl shadow-sm group-hover:scale-110 transition-transform duration-300">
-                  <UserCheck className="w-6 h-6 text-green-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="bg-white border-slate-200/60 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 overflow-hidden group">
-            <CardContent className="p-6">
-              <div className="flex items-start justify-between mb-2">
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-slate-600 mb-1">{t('total_salaries') || 'Total Salaries'}</p>
-                  <p className="text-3xl font-bold text-slate-900 tracking-tight">{formatCurrencyCompact(metrics.totalSalaries)}</p>
-                </div>
-                <div className="bg-emerald-100 p-3 rounded-xl shadow-sm group-hover:scale-110 transition-transform duration-300">
-                  <DollarSign className="w-6 h-6 text-emerald-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        {/* Quick links to the HR sub-pages (Davomat / Ta'til / Shartnomalar) */}
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button variant="outline" size="sm" className="bg-white" onClick={() => navigate('/attendance')}>
+            <Clock className="w-4 h-4 mr-1.5" />
+            {t('attendance') || 'Davomat'}
+          </Button>
+          <Button variant="outline" size="sm" className="bg-white" onClick={() => navigate('/leave-management')}>
+            <CalendarDays className="w-4 h-4 mr-1.5" />
+            {t('leave_management') || "Ta'tillar"}
+          </Button>
+          <Button variant="outline" size="sm" className="bg-white" onClick={() => navigate('/employee-contracts')}>
+            <FileText className="w-4 h-4 mr-1.5" />
+            {t('employee_contracts') || 'Mehnat shartnomalari'}
+          </Button>
         </div>
 
+        {/* KPI tiles — served by GET /employees/stats, never page-derived */}
+        {kpiLoading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            {[0, 1, 2, 3].map(i => (
+              <div key={i} className="glass-card rounded-2xl border border-slate-200/60 bg-white/80 p-5 h-24 animate-pulse" />
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            <StatTile
+              label={t('total_employees') || 'Jami xodimlar'}
+              value={hrStats ? hrStats.total : totalEmployees}
+              sub={hrStats?.hired_this_month ? `+${hrStats.hired_this_month} ${t('hr_this_month') || 'shu oyda'}` : null}
+              icon={Users}
+              chip="bg-blue-50 text-blue-600"
+              onClick={() => { setStatusFilter('all'); setDepartmentFilter('all'); setSearchQuery(''); setActiveTab('employees'); }}
+            />
+            <StatTile
+              label={t('active_employees') || 'Faol xodimlar'}
+              value={hrStats ? hrStats.active : '—'}
+              sub={hrStats?.on_leave ? `${hrStats.on_leave} ${t('on_leave') || "ta'tilda"}` : null}
+              icon={UserCheck}
+              chip="bg-emerald-50 text-emerald-600"
+              onClick={() => { setStatusFilter('active'); setActiveTab('employees'); }}
+            />
+            <StatTile
+              label={t('hr_month_flow') || 'Bu oy: qabul / ketgan'}
+              value={hrStats ? `+${hrStats.hired_this_month || 0} / −${hrStats.exits_this_month || 0}` : '—'}
+              sub={hrStats ? `${t('hr_prev_month') || "O'tgan oy"}: +${hrStats.hired_prev_month || 0}` : null}
+              icon={UserPlus}
+              chip="bg-violet-50 text-violet-600"
+              onClick={() => setActiveTab('analytics')}
+            />
+            <StatTile
+              label={t('hr_salary_fund') || 'Maosh fondi (faol)'}
+              value={hrStats ? formatCurrencyCompact(hrStats.salary_fund || 0) : '—'}
+              sub={hrStats?.avg_salary ? `${t('hr_avg_salary') || "O'rtacha"}: ${formatCurrencyCompact(hrStats.avg_salary)}` : null}
+              icon={DollarSign}
+              chip="bg-amber-50 text-amber-600"
+              onClick={() => setActiveTab('analytics')}
+            />
+          </div>
+        )}
+
         {/* Main Content Tabs */}
-        <Tabs defaultValue="employees" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 bg-white/80 backdrop-blur-sm p-1 md:p-2 rounded-xl border border-slate-200/60 shadow-lg">
-            <TabsTrigger
-              value="employees"
-              className="text-xs md:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md transition-all duration-200"
-            >
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="bg-white p-1.5 rounded-xl border border-slate-200 flex flex-wrap justify-start gap-1 h-auto w-full">
+            <TabsTrigger value="employees" className={TAB_STYLE}>
               <Users className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
-              <span className="hidden sm:inline">{t('employees') || 'Employees'}</span>
-              <span className="sm:hidden">{t('employees') || 'Employees'}</span>
+              {t('employees') || 'Xodimlar'}
             </TabsTrigger>
-            <TabsTrigger
-              value="departments"
-              className="text-xs md:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md transition-all duration-200"
-            >
+            <TabsTrigger value="analytics" className={TAB_STYLE}>
+              <BarChart3 className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
+              {t('hr_analytics') || 'Tahlillar'}
+            </TabsTrigger>
+            <TabsTrigger value="departments" className={TAB_STYLE}>
               <FolderTree className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
-              <span className="hidden sm:inline">{t('departments') || 'Departments'}</span>
-              <span className="sm:hidden">{t('departments') || 'Departments'}</span>
+              {t('departments') || "Bo'limlar"}
             </TabsTrigger>
-            <TabsTrigger
-              value="job_positions"
-              className="text-xs md:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md transition-all duration-200"
-            >
+            <TabsTrigger value="job_positions" className={TAB_STYLE}>
               <Briefcase className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
-              <span className="hidden sm:inline">{t('job_positions') || 'Job Positions'}</span>
-              <span className="sm:hidden">{t('job_positions') || 'Job Positions'}</span>
+              {t('job_positions') || 'Lavozimlar'}
             </TabsTrigger>
           </TabsList>
 
@@ -987,29 +1003,78 @@ Only return the JSON, no other text.`;
         </Card>
 
         {/* Employee Directory */}
-        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+        <Card className="glass-card rounded-2xl border-slate-200/60 bg-white/80 shadow-sm">
           <CardHeader><CardTitle>{t('employee_directory_title')}</CardTitle></CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>{t('table_header_employee')}</TableHead>
+                  <TableHead>
+                    <button type="button" className="inline-flex items-center hover:text-slate-900" onClick={() => toggleSort('first_name')}>
+                      {t('table_header_employee')}<SortIcon field="first_name" />
+                    </button>
+                  </TableHead>
                   <TableHead>{t('table_header_department')}</TableHead>
-                  <TableHead>{t('table_header_hire_date')}</TableHead>
-                  <TableHead>{t('table_header_status')}</TableHead>
+                  <TableHead>
+                    <button type="button" className="inline-flex items-center hover:text-slate-900" onClick={() => toggleSort('hire_date')}>
+                      {t('table_header_hire_date')}<SortIcon field="hire_date" />
+                    </button>
+                  </TableHead>
+                  <TableHead>
+                    <button type="button" className="inline-flex items-center hover:text-slate-900" onClick={() => toggleSort('status')}>
+                      {t('table_header_status')}<SortIcon field="status" />
+                    </button>
+                  </TableHead>
                   <TableHead className="text-right">{t('actions') || 'Actions'}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
+                {isLoadingList && filteredEmployees.length === 0 && (
+                  [0, 1, 2, 3, 4].map(i => (
+                    <TableRow key={`sk-${i}`}>
+                      <TableCell colSpan={5}>
+                        <div className="h-10 rounded-lg bg-slate-100 animate-pulse" />
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+                {!isLoadingList && filteredEmployees.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5}>
+                      <EmptyNote
+                        icon={Users}
+                        text={
+                          searchQuery || statusFilter !== 'all' || departmentFilter !== 'all'
+                            ? (t('hr_empty_filtered') || "Filtrga mos xodim topilmadi — filtrlarni o'zgartiring")
+                            : (t('hr_empty') || "Hali xodim yo'q — birinchisini qo'shing")
+                        }
+                        cta={canCreate(MODULES.HR) && !searchQuery ? (
+                          <Button size="sm" onClick={() => setShowAddModal(true)} className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white hover:opacity-90">
+                            <Plus className="w-4 h-4 mr-1.5" />{t('add_employee') || "Xodim qo'shish"}
+                          </Button>
+                        ) : null}
+                      />
+                    </TableCell>
+                  </TableRow>
+                )}
                 {filteredEmployees.map(e => (
-                  <TableRow key={e.id}>
+                  <TableRow key={e.id} className="cursor-pointer hover:bg-slate-50/80" onClick={() => handleViewEmployee(e)}>
                     <TableCell>
-                      <div>
-                        <p className="font-medium">{e.full_name}</p>
-                        <p className="text-sm text-slate-500">{e.job_title}</p>
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 shrink-0 rounded-full bg-gradient-to-br from-[var(--genix-blue)] to-[var(--genix-purple)] text-white text-xs font-semibold flex items-center justify-center">
+                          {initialsOf(e.full_name)}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-medium truncate">{e.full_name}</p>
+                          <p className="text-sm text-slate-500 truncate">{e.job_position_name || e.job_title}</p>
+                        </div>
                       </div>
                     </TableCell>
-                    <TableCell><Badge variant="outline">{e.department || '-'}</Badge></TableCell>
+                    <TableCell>
+                      {resolveDepartment(e)
+                        ? <Badge variant="outline">{resolveDepartment(e)}</Badge>
+                        : <span className="text-slate-400">—</span>}
+                    </TableCell>
                     <TableCell>{formatDate(e.hire_date)}</TableCell>
                     <TableCell>
                       <Badge className={
@@ -1021,7 +1086,7 @@ Only return the JSON, no other text.`;
                         {t(e.status)}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right" onClick={(ev) => ev.stopPropagation()}>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
@@ -1061,20 +1126,22 @@ Only return the JSON, no other text.`;
                 ))}
               </TableBody>
             </Table>
-            {totalPages > 1 && (
+            {totalEmployees > 0 && (
               <div className="flex items-center justify-between px-4 py-3 border-t mt-2">
-                <span className="text-sm text-slate-600">
-                  {t('showing') || 'Showing'} {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, totalEmployees)} {t('of') || 'of'} {totalEmployees}
+                <span className="text-sm text-slate-600 tabular-nums">
+                  {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, totalEmployees)} / {totalEmployees}
                 </span>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>
-                    <ChevronLeft className="w-4 h-4" />
-                  </Button>
-                  <span className="text-sm font-medium">{currentPage} / {totalPages}</span>
-                  <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}>
-                    <ChevronRight className="w-4 h-4" />
-                  </Button>
-                </div>
+                {totalPages > 1 && (
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>
+                      <ChevronLeft className="w-4 h-4" />
+                    </Button>
+                    <span className="text-sm font-medium tabular-nums">{currentPage} / {totalPages}</span>
+                    <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}>
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
           </CardContent>
@@ -1082,14 +1149,16 @@ Only return the JSON, no other text.`;
 
         {/* Add Employee Modal */}
         <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-xl">
             <DialogHeader>
               <DialogTitle>{t('add_employee')}</DialogTitle>
             </DialogHeader>
-            <div className="overflow-y-auto max-h-[70vh] pr-1">
+            {/* -mx/px pair keeps input borders and focus rings out of the
+                scroll container's clip edge */}
+            <div className="overflow-y-auto max-h-[70vh] px-1 -mx-1">
             <div className="space-y-3 py-2">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-2 space-y-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="sm:col-span-2 space-y-1">
                   <Label className="text-xs">{t('full_name')} *</Label>
                   <Input
                     value={newEmployee.full_name}
@@ -1173,7 +1242,7 @@ Only return the JSON, no other text.`;
                   </Select>
                 </div>
                 {userCompanies.length > 0 && (
-                  <div className="col-span-2 space-y-1">
+                  <div className="sm:col-span-2 space-y-1">
                     <Label className="text-xs">{t('companies') || 'Kompaniyalar'}</Label>
                     {userCompanies.length === 1 ? (
                       <Input value={userCompanies[0].company_name || userCompanies[0].name} disabled className="bg-slate-50" />
@@ -1234,12 +1303,12 @@ Only return the JSON, no other text.`;
           </DialogContent>
         </Dialog>
 
-        {/* View Employee Modal */}
-        <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
-          <DialogContent className="max-w-xl">
-            <DialogHeader>
-              <DialogTitle>{t('employee_details') || 'Employee Details'}</DialogTitle>
-            </DialogHeader>
+        {/* Employee 360 drawer */}
+        <Sheet open={showViewModal} onOpenChange={setShowViewModal}>
+          <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto">
+            <SheetHeader>
+              <SheetTitle>{t('employee_details') || 'Employee Details'}</SheetTitle>
+            </SheetHeader>
             {selectedEmployee && (
               <div className="space-y-6 py-4">
                 <div className="flex items-center gap-4">
@@ -1370,7 +1439,7 @@ Only return the JSON, no other text.`;
                   <div className="border-t pt-4 space-y-3">
                     <h4 className="font-semibold text-sm text-orange-700 flex items-center gap-2">
                       <DollarSign className="w-4 h-4" />
-                      Kamomadlar ({employeeDeductions.filter(d => d.status === 'pending').length} kutilmoqda)
+                      {t('hr_deductions') || 'Kamomadlar'} ({employeeDeductions.filter(d => d.status === 'pending').length} {t('hr_deduction_pending_short') || 'kutilmoqda'})
                     </h4>
                     <div className="space-y-2 max-h-40 overflow-y-auto">
                       {employeeDeductions.map(d => (
@@ -1383,9 +1452,9 @@ Only return the JSON, no other text.`;
                           <div className="flex-1 min-w-0">
                             <p className="truncate font-medium">{d.reason}</p>
                             <p className="text-xs text-slate-500">
-                              {d.status === 'pending' ? 'Kutilmoqda' :
-                               d.status === 'deducted' ? 'Ushlab olingan' :
-                               d.status === 'cancelled' ? 'Bekor qilingan' : d.status}
+                              {d.status === 'pending' ? (t('hr_deduction_pending') || 'Kutilmoqda') :
+                               d.status === 'deducted' ? (t('hr_deduction_deducted') || 'Ushlab olingan') :
+                               d.status === 'cancelled' ? (t('hr_deduction_cancelled') || 'Bekor qilingan') : d.status}
                             </p>
                           </div>
                           <div className="flex items-center gap-2 ml-2">
@@ -1409,15 +1478,15 @@ Only return the JSON, no other text.`;
                     {salaryCalc && (
                       <div className="bg-blue-50 border border-blue-200 rounded p-3 space-y-1">
                         <div className="flex justify-between text-sm">
-                          <span>Asosiy maosh:</span>
+                          <span>{t('hr_base_salary') || 'Asosiy maosh'}:</span>
                           <span className="font-medium">{formatCurrency(salaryCalc.base_salary)}</span>
                         </div>
                         <div className="flex justify-between text-sm text-red-600">
-                          <span>Kamomadlar:</span>
+                          <span>{t('hr_deductions') || 'Kamomadlar'}:</span>
                           <span className="font-medium">-{formatCurrency(salaryCalc.total_deduction)}</span>
                         </div>
                         <div className="flex justify-between text-sm font-bold border-t pt-1">
-                          <span>To'lanadigan:</span>
+                          <span>{t('hr_net_payable') || "To'lanadigan"}:</span>
                           <span className="text-green-700">{formatCurrency(salaryCalc.net_salary)}</span>
                         </div>
                       </div>
@@ -1444,12 +1513,12 @@ Only return the JSON, no other text.`;
                 </div>
               </div>
             )}
-          </DialogContent>
-        </Dialog>
+          </SheetContent>
+        </Sheet>
 
         {/* Edit Employee Modal */}
         <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-xl">
             <DialogHeader>
               <DialogTitle>{t('edit_employee') || 'Edit Employee'}</DialogTitle>
               <DialogDescription className="sr-only">{t('edit_employee_description') || 'Edit employee details'}</DialogDescription>
@@ -1874,6 +1943,10 @@ Only return the JSON, no other text.`;
             filename={`employee_${selectedEmployee.id}`}
           />
         )}
+          </TabsContent>
+
+          <TabsContent value="analytics" className="mt-6">
+            <HRAnalyticsTab stats={hrStats} loading={isLoadingStats} />
           </TabsContent>
 
           <TabsContent value="departments">

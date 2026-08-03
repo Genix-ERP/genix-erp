@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/number-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -797,10 +798,9 @@ export default function CustomerFollowups() {
             </div>
             <div className="space-y-2">
               <Label>{t('promised_amount') || 'Promised Amount'}</Label>
-              <Input
-                type="number"
+              <NumberInput
                 value={promiseForm.promised_amount}
-                onChange={(e) => setPromiseForm(prev => ({ ...prev, promised_amount: e.target.value }))}
+                onChange={(raw) => setPromiseForm(prev => ({ ...prev, promised_amount: raw }))}
               />
             </div>
             <div className="space-y-2">

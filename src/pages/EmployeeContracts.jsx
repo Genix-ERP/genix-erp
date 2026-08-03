@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +26,7 @@ import {
   Users,
   FileSignature,
   CalendarClock,
+  ArrowLeft,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -68,6 +70,7 @@ const CONTRACT_STATUS = {
 };
 
 export default function EmployeeContracts() {
+  const navigate = useNavigate();
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { employees } = useHR();
@@ -314,8 +317,12 @@ export default function EmployeeContracts() {
   return (
     <div className="p-6 md:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
       <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header with Action Button */}
-        <div className="flex justify-end">
+        {/* Header: back to HR + action button */}
+        <div className="flex items-center justify-between gap-2">
+          <Button variant="outline" size="sm" className="bg-white" onClick={() => navigate('/hr')}>
+            <ArrowLeft className="w-4 h-4 mr-1.5" />
+            {t('hr') || 'Xodimlar boshqaruvi'}
+          </Button>
           {canCreate(MODULES.HR) && (
             <Button
               onClick={() => setShowCreateModal(true)}

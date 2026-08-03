@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/number-input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -954,12 +955,11 @@ export default function AccountsPayable() {
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="text-sm font-medium mb-1 block">{t('subtotal')} *</label>
-                <Input
-                  type="number"
+                <NumberInput
                   placeholder="0"
                   value={newBill.subtotal}
-                  onChange={(e) => {
-                    const subtotal = parseFloat(e.target.value) || 0;
+                  onChange={(raw) => {
+                    const subtotal = parseFloat(raw) || 0;
                     const tax = subtotal * 0.1;
                     setNewBill({...newBill, subtotal, tax_amount: tax, total_amount: subtotal + tax});
                   }}
@@ -968,8 +968,7 @@ export default function AccountsPayable() {
               </div>
               <div>
                 <label className="text-sm font-medium mb-1 block">{t('tax') || 'Tax'}</label>
-                <Input
-                  type="number"
+                <NumberInput
                   placeholder="0"
                   value={newBill.tax_amount}
                   disabled
@@ -977,8 +976,7 @@ export default function AccountsPayable() {
               </div>
               <div>
                 <label className="text-sm font-medium mb-1 block">{t('total')}</label>
-                <Input
-                  type="number"
+                <NumberInput
                   placeholder="0"
                   value={newBill.total_amount}
                   disabled

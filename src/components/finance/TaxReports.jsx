@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
@@ -634,7 +635,7 @@ export default function TaxReports() {
 
                 <Select value={yearFilter} onValueChange={setYearFilter}>
                   <SelectTrigger className="w-32">
-                    <SelectValue placeholder={t('year') || 'Year'} />
+                    <SelectValue placeholder={language === 'ru' ? 'Год' : language === 'uz' ? 'Yil' : 'Year'} />
                   </SelectTrigger>
                   <SelectContent>
                     {[0, 1, 2, 3, 4].map(i => {
@@ -1255,10 +1256,9 @@ export default function TaxReports() {
             </div>
             <div>
               <Label className="text-xs">{t('payment_amount') || "To'lov summasi"} *</Label>
-              <Input
-                type="number" min={0} step="0.01"
+              <NumberInput
                 value={taxPaymentDialog.amount ?? ''}
-                onChange={(e) => setTaxPaymentDialog((p) => ({ ...p, amount: e.target.value }))}
+                onChange={(raw) => setTaxPaymentDialog((p) => ({ ...p, amount: raw }))}
                 className="font-mono"
               />
             </div>
