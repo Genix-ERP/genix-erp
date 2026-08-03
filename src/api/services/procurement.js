@@ -109,6 +109,20 @@ export const procurementService = {
     return response.data.data;
   },
 
+  // Dashboard stats — one call for tiles, charts and mini-tables
+  // (same contract shape as GET /inventory/stats and /expenses/stats).
+  async getOrderStats(params = {}) {
+    const response = await apiClient.get('/purchase-orders/stats', { params });
+    return response.data.data;
+  },
+
+  // Cancel via the dedicated endpoint: state-machine guard + received-stock
+  // check server-side. Cancelling never deletes the order.
+  async cancelOrder(id) {
+    const response = await apiClient.post(`/purchase-orders/${id}/cancel`);
+    return response.data.data;
+  },
+
   async getOrder(id) {
     const response = await apiClient.get(`/purchase-orders/${id}`);
     return response.data.data;

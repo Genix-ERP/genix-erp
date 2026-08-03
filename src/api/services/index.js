@@ -5,7 +5,6 @@ export { default as contactsService } from './contacts';
 export { default as inventoryService } from './inventory';
 export { default as financeService } from './finance';
 export { default as salesService } from './sales';
-export { default as purchaseService } from './purchase';
 export { default as procurementService } from './procurement';
 export { default as paymentTermsService } from './paymentTerms';
 export { default as pricelistsService } from './pricelists';

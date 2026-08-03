@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { hrService, purchaseService, salesService, financeService, procurementService } from '@/api/services';
+import { hrService, salesService, financeService, procurementService } from '@/api/services';
 import { useCompany } from './CompanyContext';
 import { useEmployeePermissions } from './EmployeePermissionsContext';
 import { checkBackendHealth } from '@/config/dataMode';
@@ -101,7 +101,7 @@ export function ModulesProvider({ children }) {
         payrollsData
       ] = await Promise.all([
         allow('hr')          ? hrService.listEmployees().catch(err => { console.warn('Employees API error:', err); return []; })            : skip(),
-        allow('purchase')    ? purchaseService.listOrders().catch(err => { console.warn('PO API error:', err); return []; })                : skip(),
+        allow('purchase')    ? procurementService.listOrders().catch(err => { console.warn('PO API error:', err); return []; })                : skip(),
         allow('sales')       ? salesService.listOrders({ page_size: 1000 }).catch(err => { console.warn('SO API error:', err); return []; }) : skip(),
         allow('contracts') || allow('purchase')
                              ? procurementService.listContracts().catch(err => { console.warn('Contracts API error:', err); return []; })   : skip(),
@@ -224,7 +224,7 @@ export function ModulesProvider({ children }) {
 
   // Purchase Order CRUD - API only
   const createPurchaseOrder = useCallback(async (data) => {
-    const result = await purchaseService.createOrder(data);
+    const result = await procurementService.createOrder(data);
     if (result && result.id) {
       setPurchaseOrders(prev => [result, ...prev]);
       return result;
@@ -233,7 +233,7 @@ export function ModulesProvider({ children }) {
   }, []);
 
   const updatePurchaseOrder = useCallback(async (id, data) => {
-    const result = await purchaseService.updateOrder(id, data);
+    const result = await procurementService.updateOrder(id, data);
     if (result) {
       setPurchaseOrders(prev => prev.map(p => p.id === id ? result : p));
       return result;
@@ -242,7 +242,7 @@ export function ModulesProvider({ children }) {
   }, []);
 
   const deletePurchaseOrder = useCallback(async (id) => {
-    await purchaseService.deleteOrder(id);
+    await procurementService.deleteOrder(id);
     setPurchaseOrders(prev => prev.filter(p => p.id !== id));
   }, []);
 
