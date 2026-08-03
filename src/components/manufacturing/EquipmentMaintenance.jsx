@@ -45,6 +45,10 @@ import {
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useManufacturing } from '@/components/contexts/ManufacturingContext';
+import { fixedAssetsV2Service } from '@/api/services/fixedAssetsV2';
+import { getApiErrorMessage } from '@/utils/apiError';
+import { Link } from 'react-router-dom';
+import { toast } from 'sonner';
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { format, parseISO, differenceInDays, addDays, addMonths, isBefore } from 'date-fns';
@@ -83,6 +87,9 @@ export default function EquipmentMaintenance() {
   const [activeTab, setActiveTab] = useState('equipment');
   const [equipment, setEquipment] = useState([]);
   const [maintenanceTasks, setMaintenanceTasks] = useState([]);
+  // True only until the FIRST load resolves — post-mutation reloads refresh
+  // in place without flashing the whole tab back to a spinner.
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showCreateEquipmentModal, setShowCreateEquipmentModal] = useState(false);
@@ -106,7 +113,14 @@ export default function EquipmentMaintenance() {
     maintenance_interval_days: 30,
     last_maintenance: '',
     status: 'operational',
+    asset_id: '',
   });
+
+  // Fixed assets for the optional "Asos vosita" link (B7). Non-blocking.
+  const [assets, setAssets] = useState([]);
+  useEffect(() => {
+    fixedAssetsV2Service.listAssets().then(data => setAssets(Array.isArray(data) ? data : [])).catch(() => {});
+  }, []);
 
   const [newTask, setNewTask] = useState({
     equipment_id: '',
@@ -173,10 +187,13 @@ export default function EquipmentMaintenance() {
       }
     } catch (error) {
       console.error('Failed to load equipment data:', error);
+      toast.error(getApiErrorMessage(error, t('equipment_load_failed')));
+    } finally {
+      setLoading(false);
     }
   };
 
-  useEffect(() => { reloadData(); }, []);
+  useEffect(() => { reloadData(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Calculate task status based on date
   const getTaskStatus = (task) => {
@@ -230,12 +247,14 @@ export default function EquipmentMaintenance() {
         warranty_expiry: newEquipment.warranty_expiry || undefined,
         maintenance_interval_days: newEquipment.maintenance_interval_days,
         status: newEquipment.status,
+        asset_id: newEquipment.asset_id || undefined,
       });
       await reloadData();
       setShowCreateEquipmentModal(false);
       resetEquipmentForm();
     } catch (error) {
       console.error('Failed to create equipment:', error);
+      toast.error(getApiErrorMessage(error, t('equipment_create_failed')));
     } finally {
       setIsSubmitting(false);
     }
@@ -256,6 +275,7 @@ export default function EquipmentMaintenance() {
       resetTaskForm();
     } catch (error) {
       console.error('Failed to create maintenance task:', error);
+      toast.error(getApiErrorMessage(error, t('maintenance_task_create_failed')));
     } finally {
       setIsSubmitting(false);
     }
@@ -278,6 +298,7 @@ export default function EquipmentMaintenance() {
       resetTaskForm();
     } catch (error) {
       console.error('Failed to update maintenance task:', error);
+      toast.error(getApiErrorMessage(error, t('maintenance_task_update_failed')));
     } finally {
       setIsSubmitting(false);
     }
@@ -319,6 +340,7 @@ export default function EquipmentMaintenance() {
       setSelectedItem(null);
     } catch (error) {
       console.error('Failed to complete maintenance task:', error);
+      toast.error(getApiErrorMessage(error, t('maintenance_task_complete_failed')));
     } finally {
       setIsSubmitting(false);
     }
@@ -334,6 +356,7 @@ export default function EquipmentMaintenance() {
       await reloadData();
     } catch (error) {
       console.error('Failed to delete:', error);
+      toast.error(getApiErrorMessage(error, t('equipment_delete_failed')));
     } finally {
       setShowDeleteDialog(false);
       setSelectedItem(null);
@@ -353,6 +376,7 @@ export default function EquipmentMaintenance() {
       maintenance_interval_days: 30,
       last_maintenance: '',
       status: 'operational',
+      asset_id: '',
     });
   };
 
@@ -367,6 +391,17 @@ export default function EquipmentMaintenance() {
       priority: 'medium',
     });
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-slate-800 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-600">{t('loading')}...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -510,6 +545,11 @@ export default function EquipmentMaintenance() {
                             <div>
                               <p className="font-medium">{eq.name}</p>
                               <p className="text-sm text-slate-500">{eq.code}</p>
+                              {eq.asset_name && (
+                                <p className="text-xs text-slate-400 truncate max-w-[180px]" title={t('asset_link_label')}>
+                                  ↳ {eq.asset_name}
+                                </p>
+                              )}
                             </div>
                           </TableCell>
                           <TableCell>
@@ -822,6 +862,31 @@ export default function EquipmentMaintenance() {
                 onChange={e => setNewEquipment({ ...newEquipment, maintenance_interval_days: parseInt(e.target.value) || 30 })}
                 placeholder="30"
               />
+            </div>
+
+            {/* Asos vosita — optional link to the Aktivlar register (B7) */}
+            <div className="space-y-2">
+              <Label>{t('asset_link_label')}</Label>
+              <Select
+                value={newEquipment.asset_id || 'none'}
+                onValueChange={value => setNewEquipment({ ...newEquipment, asset_id: value === 'none' ? '' : value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={t('asset_link_none')} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">{t('asset_link_none')}</SelectItem>
+                  {assets.map(a => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {`${a.inventory_number ? `${a.inventory_number} — ` : ''}${a.name}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-slate-400">
+                {t('asset_link_hint')}{' '}
+                <Link to="/assets" className="text-blue-500 hover:underline">Aktivlar →</Link>
+              </p>
             </div>
 
             <div className="flex justify-end gap-3 pt-4">

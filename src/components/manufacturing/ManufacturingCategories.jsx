@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Plus, Edit, Trash2, Tag } from 'lucide-react';
 import { useManufacturing } from '@/components/contexts/ManufacturingContext';
 import { useLanguage } from '@/components/contexts/LanguageContext';
+import { getApiErrorMessage } from '@/utils/apiError';
 import { toast } from 'sonner';
 
 export default function ManufacturingCategories() {
@@ -50,7 +51,8 @@ export default function ManufacturingCategories() {
       }
       setShowModal(false);
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to save category');
+      // data.error is an OBJECT on most endpoints — never toast it raw.
+      toast.error(getApiErrorMessage(err));
     }
   };
 
@@ -59,7 +61,7 @@ export default function ManufacturingCategories() {
     try {
       await deleteManufacturingCategory(cat.id);
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to delete category');
+      toast.error(getApiErrorMessage(err));
     }
   };
 

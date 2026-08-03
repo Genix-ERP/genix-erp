@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import apiClient from '@/api/client';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,7 +21,13 @@ import { useHR } from '@/components/contexts/HRContext';
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { equipmentService } from '@/api/services/manufacturing';
+import { fixedAssetsV2Service } from '@/api/services/fixedAssetsV2';
+import { getApiErrorMessage } from '@/utils/apiError';
 import { toast } from 'sonner';
+
+// Explicit zero UUID clears asset_id on update (backend treats uuid.Nil as
+// SET NULL); a real id links the work center to the fa_assets register.
+const ZERO_UUID = '00000000-0000-0000-0000-000000000000';
 
 const COLORS = ['#0ea5e9', '#8b5cf6', '#10b981', '#f59e0b'];
 
@@ -28,6 +35,10 @@ export default function WorkCenters() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { formatCurrency } = useCurrencyFormatter();
+  // Hourly-tariff amounts always go through the tenant currency formatter —
+  // no literal "so'm/soat" strings (audit loc-30). Only the /hour unit is local.
+  const hourUnit = language === 'ru' ? 'час' : language === 'en' ? 'hr' : 'soat';
+  const perHour = (v) => `${formatCurrency(v || 0)}/${hourUnit}`;
   const { workCenters, workOrders, loading, createWorkCenter, updateWorkCenter, deleteWorkCenter } = useManufacturing();
   const { activeCompany } = useCompany();
   const { employees: allEmployees = [] } = useHR();
@@ -42,6 +53,14 @@ export default function WorkCenters() {
   useEffect(() => {
     equipmentService.list().then(data => setEquipment(data)).catch(() => {});
   }, []);
+
+  // Fixed assets for the optional "Asos vosita" link (B7). Non-blocking —
+  // if the Aktivlar module is unavailable the select just stays empty.
+  const [assets, setAssets] = useState([]);
+  useEffect(() => {
+    fixedAssetsV2Service.listAssets().then(data => setAssets(Array.isArray(data) ? data : [])).catch(() => {});
+  }, []);
+  const assetLabel = (a) => `${a.inventory_number ? `${a.inventory_number} — ` : ''}${a.name}`;
 
   // Get equipment for a specific work center
   const getEquipmentForWorkCenter = (workCenterId) => {
@@ -81,6 +100,7 @@ export default function WorkCenters() {
     labor_rate_type: 'monthly',
     cost_method: 'capacity',
     require_operator: false,
+    asset_id: '',
   });
   const [selectedEquipmentIds, setSelectedEquipmentIds] = useState([]);
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState([]);
@@ -227,6 +247,7 @@ export default function WorkCenters() {
         labor_rate_type: newWorkCenter.labor_rate_type || 'monthly',
         cost_method: newWorkCenter.cost_method || 'capacity',
         require_operator: newWorkCenter.require_operator || false,
+        ...(newWorkCenter.asset_id ? { asset_id: newWorkCenter.asset_id } : {}),
       };
 
       const createdWC = await createWorkCenter(wcData);
@@ -243,8 +264,7 @@ export default function WorkCenters() {
       resetForm();
     } catch (error) {
       console.error('Error creating work center:', error);
-      const errorMsg = error.response?.data?.error || error.response?.data?.message || error.message || 'Unknown error';
-      toast.error(`Failed to create work center: ${errorMsg}`);
+      toast.error(getApiErrorMessage(error, t('failed_to_create_work_center')));
     }
   };
 
@@ -268,6 +288,7 @@ export default function WorkCenters() {
       electricity_rate: '',
       annual_maintenance: '',
       operator_monthly_salary: '',
+      asset_id: '',
     });
     setSelectedEquipmentIds([]);
   };
@@ -306,6 +327,7 @@ export default function WorkCenters() {
       labor_rate_type: wc.labor_rate_type || 'monthly',
       cost_method: wc.cost_method || 'capacity',
       require_operator: wc.require_operator || false,
+      asset_id: wc.asset_id || '',
     });
     // Load currently assigned equipment IDs
     const assignedIds = getEquipmentForWorkCenter(wc.id).map(eq => eq.id);
@@ -346,6 +368,8 @@ export default function WorkCenters() {
         labor_rate_type: newWorkCenter.labor_rate_type || 'monthly',
         cost_method: newWorkCenter.cost_method || 'capacity',
         require_operator: newWorkCenter.require_operator || false,
+        // Zero UUID clears the link server-side; a real id sets it.
+        asset_id: newWorkCenter.asset_id || ZERO_UUID,
       };
 
       await updateWorkCenter(selectedWorkCenter.id, wcData);
@@ -359,8 +383,7 @@ export default function WorkCenters() {
       resetForm();
     } catch (error) {
       console.error('Error updating work center:', error);
-      const errorMsg = error.response?.data?.error || error.response?.data?.message || error.message || 'Unknown error';
-      toast.error(`Failed to update work center: ${errorMsg}`);
+      toast.error(getApiErrorMessage(error, t('failed_to_update_work_center')));
     }
   };
 
@@ -372,8 +395,7 @@ export default function WorkCenters() {
       await deleteWorkCenter(wc.id);
     } catch (error) {
       console.error('Error deleting work center:', error);
-      const errorMsg = error.response?.data?.error || error.response?.data?.message || error.message || 'Unknown error';
-      toast.error(`Failed to delete work center: ${errorMsg}`);
+      toast.error(getApiErrorMessage(error, t('failed_to_delete_work_center')));
     }
   };
 
@@ -659,9 +681,7 @@ export default function WorkCenters() {
                   readOnly
                   disabled
                   className="bg-slate-50 text-slate-700 cursor-not-allowed font-semibold"
-                  value={calculatedCosts.total > 0
-                    ? `${calculatedCosts.total.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat`
-                    : '0 so\'m/soat'}
+                  value={perHour(calculatedCosts.total)}
                 />
                 <p className="text-[10px] text-slate-500">Quyidagi komponentlardan avtomatik hisoblanadi.</p>
               </div>
@@ -754,32 +774,55 @@ export default function WorkCenters() {
                   <div className="space-y-1 text-sm font-mono">
                     <div className="flex justify-between">
                       <span className="text-slate-600">Amortizatsiya:</span>
-                      <span className="font-medium">{calculatedCosts.depreciation.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat</span>
+                      <span className="font-medium">{perHour(calculatedCosts.depreciation)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-600">Elektr:</span>
-                      <span className="font-medium">{calculatedCosts.electricity.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat</span>
+                      <span className="font-medium">{perHour(calculatedCosts.electricity)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-600">Ta'mirlash:</span>
-                      <span className="font-medium">{calculatedCosts.maintenance.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat</span>
+                      <span className="font-medium">{perHour(calculatedCosts.maintenance)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-600">Operator:</span>
-                      <span className="font-medium">{calculatedCosts.labor.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat</span>
+                      <span className="font-medium">{perHour(calculatedCosts.labor)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-600">Boshqa:</span>
-                      <span className="font-medium">{calculatedCosts.overhead.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat</span>
+                      <span className="font-medium">{perHour(calculatedCosts.overhead)}</span>
                     </div>
                     <div className="border-t border-slate-300 my-1"></div>
                     <div className="flex justify-between font-bold text-slate-900">
                       <span>JAMI TARIF:</span>
-                      <span>{calculatedCosts.total.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat</span>
+                      <span>{perHour(calculatedCosts.total)}</span>
                     </div>
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* Asos vosita — optional link to the Aktivlar register (B7) */}
+            <div className="space-y-2 pt-4 border-t border-slate-100">
+              <LabelWithHelp label={t('asset_link_label')} helpText={t('asset_link_hint')} />
+              <Select
+                value={newWorkCenter.asset_id || 'none'}
+                onValueChange={(v) => setNewWorkCenter({ ...newWorkCenter, asset_id: v === 'none' ? '' : v })}
+              >
+                <SelectTrigger id="wc_asset">
+                  <SelectValue placeholder={t('asset_link_none')} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">{t('asset_link_none')}</SelectItem>
+                  {assets.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>{assetLabel(a)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-slate-400">
+                {t('asset_link_hint')}{' '}
+                <Link to="/assets" className="text-blue-500 hover:underline">Aktivlar →</Link>
+              </p>
             </div>
 
             {/* Equipment Selection */}
@@ -1010,9 +1053,7 @@ export default function WorkCenters() {
                   readOnly
                   disabled
                   className="bg-slate-50 text-slate-700 cursor-not-allowed font-semibold"
-                  value={calculatedCosts.total > 0
-                    ? `${calculatedCosts.total.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat`
-                    : '0 so\'m/soat'}
+                  value={perHour(calculatedCosts.total)}
                 />
                 <p className="text-[10px] text-slate-500">Quyidagi komponentlardan avtomatik hisoblanadi.</p>
               </div>
@@ -1105,32 +1146,55 @@ export default function WorkCenters() {
                   <div className="space-y-1 text-sm font-mono">
                     <div className="flex justify-between">
                       <span className="text-slate-600">Amortizatsiya:</span>
-                      <span className="font-medium">{calculatedCosts.depreciation.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat</span>
+                      <span className="font-medium">{perHour(calculatedCosts.depreciation)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-600">Elektr:</span>
-                      <span className="font-medium">{calculatedCosts.electricity.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat</span>
+                      <span className="font-medium">{perHour(calculatedCosts.electricity)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-600">Ta'mirlash:</span>
-                      <span className="font-medium">{calculatedCosts.maintenance.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat</span>
+                      <span className="font-medium">{perHour(calculatedCosts.maintenance)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-600">Operator:</span>
-                      <span className="font-medium">{calculatedCosts.labor.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat</span>
+                      <span className="font-medium">{perHour(calculatedCosts.labor)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-600">Boshqa:</span>
-                      <span className="font-medium">{calculatedCosts.overhead.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat</span>
+                      <span className="font-medium">{perHour(calculatedCosts.overhead)}</span>
                     </div>
                     <div className="border-t border-slate-300 my-1"></div>
                     <div className="flex justify-between font-bold text-slate-900">
                       <span>JAMI TARIF:</span>
-                      <span>{calculatedCosts.total.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat</span>
+                      <span>{perHour(calculatedCosts.total)}</span>
                     </div>
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* Asos vosita — optional link to the Aktivlar register (B7) */}
+            <div className="space-y-2 pt-4 border-t border-slate-100">
+              <LabelWithHelp label={t('asset_link_label')} helpText={t('asset_link_hint')} />
+              <Select
+                value={newWorkCenter.asset_id || 'none'}
+                onValueChange={(v) => setNewWorkCenter({ ...newWorkCenter, asset_id: v === 'none' ? '' : v })}
+              >
+                <SelectTrigger id="edit_wc_asset">
+                  <SelectValue placeholder={t('asset_link_none')} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">{t('asset_link_none')}</SelectItem>
+                  {assets.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>{assetLabel(a)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-slate-400">
+                {t('asset_link_hint')}{' '}
+                <Link to="/assets" className="text-blue-500 hover:underline">Aktivlar →</Link>
+              </p>
             </div>
 
             {/* Equipment Selection for Edit */}
@@ -1350,6 +1414,13 @@ export default function WorkCenters() {
                 </div>
               </div>
 
+              {selectedWorkCenter.asset_name && (
+                <div className="space-y-1">
+                  <p className="text-xs text-slate-500">{t('asset_link_label')}</p>
+                  <p className="font-medium">{selectedWorkCenter.asset_name}</p>
+                </div>
+              )}
+
               {/* Cost Breakdown in View Modal */}
               {(() => {
                 const wc = selectedWorkCenter;
@@ -1380,28 +1451,28 @@ export default function WorkCenters() {
                       <div className="space-y-1 text-sm font-mono">
                         <div className="flex justify-between">
                           <span className="text-slate-600">Amortizatsiya:</span>
-                          <span className="font-medium">{depreciation.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat</span>
+                          <span className="font-medium">{perHour(depreciation)}</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-slate-600">Elektr:</span>
-                          <span className="font-medium">{electricity.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat</span>
+                          <span className="font-medium">{perHour(electricity)}</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-slate-600">Ta'mirlash:</span>
-                          <span className="font-medium">{maintenance.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat</span>
+                          <span className="font-medium">{perHour(maintenance)}</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-slate-600">Operator:</span>
-                          <span className="font-medium">{labor.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat</span>
+                          <span className="font-medium">{perHour(labor)}</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-slate-600">Boshqa:</span>
-                          <span className="font-medium">{overhead.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat</span>
+                          <span className="font-medium">{perHour(overhead)}</span>
                         </div>
                         <div className="border-t border-slate-300 my-1"></div>
                         <div className="flex justify-between font-bold text-slate-900">
                           <span>JAMI TARIF:</span>
-                          <span>{total.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat</span>
+                          <span>{perHour(total)}</span>
                         </div>
                       </div>
                     </div>

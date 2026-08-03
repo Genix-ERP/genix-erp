@@ -329,12 +329,82 @@ export const TRIGGER_EVENTS = [
       { key: 'depreciable_base', labelKey: 'wf_f_total_amount', type: 'number' },
     ],
   },
+  // Qurilish (construction) — 2026-08-03 hardening
+  {
+    value: 'construction.project_created', labelKey: 'evt_construction_project_created', descKey: 'evt_construction_project_created_desc',
+    category: 'construction', icon: ClipboardList, scheduled: false,
+    fields: [
+      { key: 'code', labelKey: 'wf_f_project_code', type: 'text' },
+      { key: 'name', labelKey: 'wf_f_project_name', type: 'text' },
+      { key: 'region', labelKey: 'region', type: 'text' },
+    ],
+  },
+  {
+    value: 'construction.project_status_changed', labelKey: 'evt_construction_status_changed', descKey: 'evt_construction_status_changed_desc',
+    category: 'construction', icon: ClipboardList, scheduled: false,
+    fields: [
+      { key: 'name', labelKey: 'wf_f_project_name', type: 'text' },
+      {
+        key: 'new_status', labelKey: 'status', type: 'select',
+        options: ['draft', 'planning', 'approved', 'in_progress', 'on_hold', 'completed', 'cancelled'],
+      },
+      {
+        key: 'old_status', labelKey: 'wf_f_old_status', type: 'select',
+        options: ['draft', 'planning', 'approved', 'in_progress', 'on_hold', 'completed', 'cancelled'],
+      },
+    ],
+  },
+  {
+    value: 'construction.project_commissioned', labelKey: 'evt_construction_commissioned', descKey: 'evt_construction_commissioned_desc',
+    category: 'construction', icon: ClipboardList, scheduled: false,
+    fields: [
+      { key: 'name', labelKey: 'wf_f_project_name', type: 'text' },
+      { key: 'capitalized_amount', labelKey: 'wf_f_total_amount', type: 'number' },
+    ],
+  },
+  {
+    value: 'construction.act_approved', labelKey: 'evt_construction_act_approved', descKey: 'evt_construction_act_approved_desc',
+    category: 'construction', icon: FileSignature, scheduled: false,
+    fields: [
+      { key: 'act_number', labelKey: 'wf_f_act_number', type: 'text' },
+      { key: 'act_type', labelKey: 'wf_f_act_type', type: 'select', options: ['forma2', 'ks2', 'ks3', 'hidden_work'] },
+      { key: 'project_name', labelKey: 'wf_f_project_name', type: 'text' },
+      { key: 'total_amount', labelKey: 'wf_f_total_amount', type: 'number' },
+    ],
+  },
+  {
+    value: 'construction.act_signed', labelKey: 'evt_construction_act_signed', descKey: 'evt_construction_act_signed_desc',
+    category: 'construction', icon: FileSignature, scheduled: false,
+    fields: [
+      { key: 'act_number', labelKey: 'wf_f_act_number', type: 'text' },
+      { key: 'act_type', labelKey: 'wf_f_act_type', type: 'select', options: ['forma2', 'ks2', 'ks3', 'hidden_work'] },
+      { key: 'project_name', labelKey: 'wf_f_project_name', type: 'text' },
+    ],
+  },
+  {
+    value: 'construction.material_request_approved', labelKey: 'evt_construction_mr_approved', descKey: 'evt_construction_mr_approved_desc',
+    category: 'construction', icon: Package, scheduled: false,
+    fields: [
+      { key: 'project_name', labelKey: 'wf_f_project_name', type: 'text' },
+      { key: 'total_expense', labelKey: 'wf_f_total_amount', type: 'number' },
+    ],
+  },
+  {
+    value: 'construction.budget_overrun', labelKey: 'evt_construction_budget_overrun', descKey: 'evt_construction_budget_overrun_desc',
+    category: 'construction', icon: AlertTriangle, scheduled: true,
+    fields: [
+      { key: 'name', labelKey: 'wf_f_project_name', type: 'text' },
+      { key: 'budget', labelKey: 'wf_f_total_amount', type: 'number' },
+      { key: 'actual', labelKey: 'wf_f_actual_amount', type: 'number' },
+      { key: 'overrun_pct', labelKey: 'wf_f_overrun_pct', type: 'number' },
+    ],
+  },
 ];
 
 export const EVENT_BY_VALUE = Object.fromEntries(TRIGGER_EVENTS.map((e) => [e.value, e]));
 
 // Module grouping order for the trigger picker
-export const EVENT_CATEGORIES = ['inventory', 'sales', 'purchase', 'crm', 'tasks', 'hr', 'contracts', 'expenses', 'assets'];
+export const EVENT_CATEGORIES = ['inventory', 'sales', 'purchase', 'crm', 'tasks', 'hr', 'contracts', 'expenses', 'assets', 'construction'];
 
 export const CATEGORY_LABEL_KEYS = {
   inventory: 'inventory',
@@ -346,6 +416,7 @@ export const CATEGORY_LABEL_KEYS = {
   contracts: 'contracts',
   expenses: 'expenses',
   assets: 'assets',
+  construction: 'construction',
 };
 
 export const OPERATORS = [

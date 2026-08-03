@@ -10,6 +10,14 @@ export const constructionService = {
     return response.data.data;
   },
 
+  // One-call, org-aware portfolio stats (v2 /stats contract): status counts,
+  // contract vs actual totals, 6-month spend series, and per-project
+  // computed readiness (cost-weighted, same math as the stages overview).
+  async getProjectStats(params = {}) {
+    const response = await apiClient.get('/construction/projects/stats', { params });
+    return response.data.data;
+  },
+
   async getProject(id) {
     const response = await apiClient.get(`/construction/projects/${id}`);
     return response.data.data;
@@ -201,19 +209,8 @@ export const constructionService = {
     await apiClient.delete(`/construction/smeta-items/${id}`);
   },
 
-  // =====================================================
-  // SMETA RESOURCES (Future)
-  // =====================================================
-
-  async listResources(itemId) {
-    const response = await apiClient.get(`/construction/smeta-items/${itemId}/resources`);
-    return response.data.data;
-  },
-
-  async createResource(itemId, data) {
-    const response = await apiClient.post(`/construction/smeta-items/${itemId}/resources`, data);
-    return response.data.data;
-  },
+  // (Dead "SMETA RESOURCES (Future)" wrappers removed in the 2026-08 cleanup —
+  // the /construction/smeta-items/:id/resources endpoints never existed.)
 
   // =====================================================
   // DAILY REPORTS (Future)
@@ -226,11 +223,6 @@ export const constructionService = {
 
   async createDailyReport(projectId, data) {
     const response = await apiClient.post(`/construction/projects/${projectId}/daily-reports`, data);
-    return response.data.data;
-  },
-
-  async verifyDailyReport(id, data) {
-    const response = await apiClient.put(`/construction/daily-reports/${id}/verify`, data);
     return response.data.data;
   },
 
@@ -248,27 +240,12 @@ export const constructionService = {
     await apiClient.delete(`/construction/daily-reports/${id}`);
   },
 
-  // =====================================================
-  // WORK PROGRESS (KS-2) (Future)
-  // =====================================================
-
-  async recordProgress(projectId, data) {
-    const response = await apiClient.post(`/construction/projects/${projectId}/progress`, data);
-    return response.data.data;
-  },
-
-  async verifyProgress(id, data) {
-    const response = await apiClient.put(`/construction/progress/${id}/verify`, data);
-    return response.data.data;
-  },
-
-  async getPlanVsActual(projectId) {
-    const response = await apiClient.get(`/construction/projects/${projectId}/plan-vs-actual`);
-    return response.data.data;
-  },
+  // (Dead "WORK PROGRESS (KS-2) (Future)" wrappers removed in the 2026-08
+  // cleanup — the /progress, /progress/:id/verify and /plan-vs-actual
+  // endpoints never existed; real progress lives in the works 3-role flow.)
 
   // =====================================================
-  // MATERIAL REQUESTS (Future)
+  // MATERIAL REQUESTS
   // =====================================================
 
   async listMaterialRequests(projectId) {
@@ -666,37 +643,12 @@ export const constructionService = {
     await apiClient.delete(`/construction/project-vendors/${id}`);
   },
 
-  async getVendorSummary(id) {
-    const response = await apiClient.get(`/construction/project-vendors/${id}/summary`);
-    return response.data.data;
-  },
+  // (Dead getVendorSummary + "MATERIAL DELIVERIES (Future)" wrappers removed
+  // in the 2026-08 cleanup — those endpoints never existed; deliveries flow
+  // through Ombor stock operations instead.)
 
   // =====================================================
-  // MATERIAL DELIVERIES (Future)
-  // =====================================================
-
-  async listDeliveries(projectId) {
-    const response = await apiClient.get(`/construction/projects/${projectId}/deliveries`);
-    return response.data.data;
-  },
-
-  async createDelivery(projectId, data) {
-    const response = await apiClient.post(`/construction/projects/${projectId}/deliveries`, data);
-    return response.data.data;
-  },
-
-  async receiveDelivery(id, data) {
-    const response = await apiClient.put(`/construction/deliveries/${id}/receive`, data);
-    return response.data.data;
-  },
-
-  async inspectDelivery(id, data) {
-    const response = await apiClient.put(`/construction/deliveries/${id}/inspect`, data);
-    return response.data.data;
-  },
-
-  // =====================================================
-  // SITE WAREHOUSES (Future)
+  // SITE WAREHOUSES
   // =====================================================
 
   async listSiteWarehouses(projectId) {
@@ -709,10 +661,8 @@ export const constructionService = {
     return response.data.data;
   },
 
-  async getSiteInventory(warehouseId) {
-    const response = await apiClient.get(`/construction/site-warehouses/${warehouseId}/inventory`);
-    return response.data.data;
-  },
+  // (Dead getSiteInventory wrapper removed in the 2026-08 cleanup — the
+  // /construction/site-warehouses/:id/inventory endpoint never existed.)
 
   // =====================================================
   // PROJECT TEAM MEMBERS
@@ -742,24 +692,9 @@ export const constructionService = {
     return response.data.data;
   },
 
-  // =====================================================
-  // VENDOR PAYMENTS (Future)
-  // =====================================================
-
-  async listVendorPayments(vendorId) {
-    const response = await apiClient.get(`/construction/project-vendors/${vendorId}/payments`);
-    return response.data.data;
-  },
-
-  async createPaymentMilestone(vendorId, data) {
-    const response = await apiClient.post(`/construction/project-vendors/${vendorId}/payments`, data);
-    return response.data.data;
-  },
-
-  async recordPayment(id, data) {
-    const response = await apiClient.put(`/construction/vendor-payments/${id}/pay`, data);
-    return response.data.data;
-  },
+  // (Dead "VENDOR PAYMENTS (Future)" wrappers removed in the 2026-08 cleanup —
+  // the construction_vendor_payments table has no routes; sub payments will
+  // arrive with the S5 retention build instead.)
 
   // =====================================================
   // WBS (Work Breakdown Structure)
@@ -1601,10 +1536,10 @@ export const constructionService = {
     return response.data.data;
   },
 
-  // Resource-NORMA consolidation: planned normative quantities of resources
-  // (materials, equipment, labor) aggregated across all estimate sections, per
-  // block, each group tagged with its `type` so the UI can filter by resource
-  // type. Mirrors the Material yig'indisi report but Plan/NORMA-based.
+  // Resource-NORMA consolidation: planned normative quantities of every
+  // resource kind aggregated per block, each group tagged with `type`
+  // (material/cable/installed/equipment/labor) and the owning subcontractor.
+  // Backend: GetResourceConsolidationReport (implemented 2026-08, 5-to'plam).
   async getResourceConsolidationReport(projectId) {
     const response = await apiClient.get(`/construction/projects/${projectId}/reports/resource-consolidation`);
     return response.data.data;

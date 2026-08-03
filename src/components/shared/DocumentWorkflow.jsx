@@ -32,7 +32,7 @@ import { format } from "date-fns";
 // Universal Document Status Configuration
 export const DOCUMENT_STATUSES = {
   // Generic statuses
-  draft: { label: "Qoralama", color: "bg-slate-100 text-slate-800", icon: Clock },
+  draft: { label: "Yangi", color: "bg-slate-100 text-slate-800", icon: Clock },
   pending_approval: { label: "Tasdiqlash kutilmoqda", color: "bg-yellow-100 text-yellow-800", icon: Clock },
   approved: { label: "Tasdiqlangan", color: "bg-green-100 text-green-800", icon: CheckCircle },
   rejected: { label: "Rad etilgan", color: "bg-red-100 text-red-800", icon: XCircle },

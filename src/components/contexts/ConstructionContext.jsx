@@ -3,6 +3,7 @@ import { useCompany } from './CompanyContext';
 import { useInstalledApps } from './InstalledAppsContext';
 import { useEmployeePermissions } from './EmployeePermissionsContext';
 import { constructionService } from '@/api/services/construction';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 const ConstructionContext = createContext();
 
@@ -25,6 +26,7 @@ export const ConstructionProvider = ({ children }) => {
   const [projects, setProjects] = useState([]);
   const [selectedProject, setSelectedProject] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(null);
 
   // Smeta state
   const [sections, setSections] = useState([]);
@@ -77,10 +79,13 @@ export const ConstructionProvider = ({ children }) => {
   const loadProjects = useCallback(async (params = {}) => {
     try {
       setLoading(true);
+      setLoadError(null);
       const data = await constructionService.listProjects(params);
       setProjects(data || []);
     } catch (error) {
       console.error('Error loading construction projects:', error);
+      // Keep the error visible: a failed load must not look like an empty tenant.
+      setLoadError(getApiErrorMessage(error));
       setProjects([]);
     } finally {
       setLoading(false);
@@ -284,7 +289,9 @@ export const ConstructionProvider = ({ children }) => {
     return {
       total: projects.length,
       draft: projects.filter(p => p.status === PROJECT_STATUS.DRAFT).length,
+      planning: projects.filter(p => p.status === PROJECT_STATUS.PLANNING).length,
       inProgress: projects.filter(p => p.status === PROJECT_STATUS.IN_PROGRESS).length,
+      onHold: projects.filter(p => p.status === PROJECT_STATUS.ON_HOLD).length,
       completed: projects.filter(p => p.status === PROJECT_STATUS.COMPLETED).length,
       totalContractAmount: projects.reduce((sum, p) => sum + (p.contract_amount?.Float64 || 0), 0),
       totalSmeta: projects.reduce((sum, p) => sum + (p.total_smeta || 0), 0),
@@ -316,6 +323,7 @@ export const ConstructionProvider = ({ children }) => {
     setSelectedSection,
     items,
     loading,
+    loadError,
     projectDashboard,
 
     // Constants
@@ -348,7 +356,7 @@ export const ConstructionProvider = ({ children }) => {
     getProjectsByStatus,
     getProjectStats,
     getSectionTotals,
-  }), [projects, selectedProject, sections, selectedSection, items, loading, projectDashboard, loadProjects, getProject, createProject, updateProject, deleteProject, loadProjectDashboard, loadSections, createSection, updateSection, deleteSection, loadItems, createItem, updateItem, deleteItem, getProjectsByStatus, getProjectStats, getSectionTotals]);
+  }), [projects, selectedProject, sections, selectedSection, items, loading, loadError, projectDashboard, loadProjects, getProject, createProject, updateProject, deleteProject, loadProjectDashboard, loadSections, createSection, updateSection, deleteSection, loadItems, createItem, updateItem, deleteItem, getProjectsByStatus, getProjectStats, getSectionTotals]);
 
   return (
     <ConstructionContext.Provider value={value}>

@@ -320,7 +320,7 @@ export default function Payments({ side } = {}) {
     const statusLabels = {
       confirmed: language === 'ru' ? 'Подтверждён' : language === 'uz' ? 'Tasdiqlangan' : 'Confirmed',
       posted: language === 'ru' ? 'Проведён' : language === 'uz' ? 'O\'tkazilgan' : 'Posted',
-      draft: language === 'ru' ? 'Черновик' : language === 'uz' ? 'Qoralama' : 'Draft',
+      draft: language === 'ru' ? 'Черновик' : language === 'uz' ? 'Yangi' : 'Draft',
       cancelled: language === 'ru' ? 'Отменён' : language === 'uz' ? 'Bekor qilingan' : 'Cancelled',
     };
 
