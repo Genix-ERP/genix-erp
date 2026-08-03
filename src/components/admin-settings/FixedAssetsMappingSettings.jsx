@@ -43,6 +43,7 @@ export default function FixedAssetsMappingSettings() {
 
   const [categories, setCategories] = useState([]);
   const [departments, setDepartments] = useState([]);
+  const [settings, setSettings] = useState(null);
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -55,6 +56,7 @@ export default function FixedAssetsMappingSettings() {
       ]);
       setCategories(mapping?.categories || []);
       setDepartments(mapping?.departments || []);
+      setSettings(mapping?.settings || null);
       setAccounts(accts || []);
     } catch {
       /* leave empty */
@@ -91,7 +93,7 @@ export default function FixedAssetsMappingSettings() {
     }
     setSaving(true);
     try {
-      await fixedAssetsV2Service.updateMapping({ categories, departments });
+      await fixedAssetsV2Service.updateMapping({ categories, departments, settings });
       toast.success(t('mapping_saved') || 'Maplashtirish saqlandi');
       load();
     } catch (e) {
@@ -177,6 +179,43 @@ export default function FixedAssetsMappingSettings() {
         </div>
         <Button variant="outline" size="sm" onClick={addDep} className="mt-3 gap-1"><Plus className="w-4 h-4" />{t('add_department') || "Bo'lim"}</Button>
       </SettingsSection>
+
+      {settings && (
+        <SettingsSection
+          title={t('fa_lifecycle_accounts') || 'Lifecycle hisoblari'}
+          description={t('fa_lifecycle_accounts_desc') || "Xarid, to'lov, foydalanishga topshirish va chiqarish provodkalarida ishlatiladigan hisoblar. NSBU standart kodlari default — kerak bo'lsa o'z ish rejangizga moslang."}
+          icon={Landmark}
+          defaultOpen={false}
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {[
+              ['acquisition_account', t('fa_acct_acquisition') || "Kapital qo'yilma (0810)"],
+              ['ap_account', t('fa_acct_ap') || "Ta'minotchilar (6010)"],
+              ['cash_account', t('fa_acct_cash') || 'Kassa (5010)'],
+              ['bank_account', t('fa_acct_bank') || 'Bank (5110)'],
+              ['vat_input_account', t('fa_acct_vat') || 'QQS hisobga olish (4410)'],
+              ['disposal_account', t('fa_acct_disposal') || 'Chiqib ketish tranzit (9210)'],
+              ['disposal_gain_account', t('fa_acct_gain') || 'Chiqarishdan foyda (9310)'],
+              ['disposal_loss_account', t('fa_acct_loss') || 'Chiqarishdan zarar (9490)'],
+              ['disposal_receivable_account', t('fa_acct_receivable') || 'Sotish debitori (4790)'],
+            ].map(([key, label]) => (
+              <div key={key} className="space-y-1">
+                <span className="text-xs text-slate-500">{label}</span>
+                <select
+                  value={settings[key] || ''}
+                  onChange={(e) => setSettings((s) => ({ ...s, [key]: e.target.value }))}
+                  className="w-full h-9 rounded-md border border-slate-200 bg-white px-2 text-sm"
+                >
+                  <option value="">—</option>
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.code}>{a.code} — {a.name}</option>
+                  ))}
+                </select>
+              </div>
+            ))}
+          </div>
+        </SettingsSection>
+      )}
 
       <div className="mt-4">
         <Button onClick={handleSave} disabled={saving} className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white">

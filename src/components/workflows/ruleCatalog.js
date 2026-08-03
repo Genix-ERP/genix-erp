@@ -3,7 +3,7 @@
 import {
   Package, FileText, Users, AlertTriangle, Clock, ShoppingCart,
   CreditCard, Truck, UserPlus, FileSignature, ArrowRightLeft, ClipboardList,
-  Receipt,
+  Receipt, Monitor,
 } from 'lucide-react';
 
 // field.type: 'number' | 'text' | 'select' (with options)
@@ -280,12 +280,54 @@ export const TRIGGER_EVENTS = [
       { key: 'total_net', labelKey: 'wf_f_total_amount', type: 'number' },
     ],
   },
+  // Aktivlar (fixed assets) — 2026-08-03 rebuild
+  {
+    value: 'assets.commissioned', labelKey: 'evt_asset_commissioned', descKey: 'evt_asset_commissioned_desc',
+    category: 'assets', icon: Monitor, scheduled: false,
+    fields: [
+      { key: 'inventory_number', labelKey: 'wf_f_inventory_number', type: 'text' },
+      { key: 'asset_name', labelKey: 'wf_f_asset_name', type: 'text' },
+      { key: 'cost', labelKey: 'wf_f_total_amount', type: 'number' },
+    ],
+  },
+  {
+    value: 'assets.depreciation_posted', labelKey: 'evt_asset_depr_posted', descKey: 'evt_asset_depr_posted_desc',
+    category: 'assets', icon: Monitor, scheduled: false,
+    fields: [
+      { key: 'period', labelKey: 'wf_f_period', type: 'text' },
+      { key: 'total_amount', labelKey: 'wf_f_total_amount', type: 'number' },
+      { key: 'asset_count', labelKey: 'wf_f_asset_count', type: 'number' },
+    ],
+  },
+  {
+    value: 'assets.disposed', labelKey: 'evt_asset_disposed', descKey: 'evt_asset_disposed_desc',
+    category: 'assets', icon: Monitor, scheduled: false,
+    fields: [
+      { key: 'inventory_number', labelKey: 'wf_f_inventory_number', type: 'text' },
+      { key: 'asset_name', labelKey: 'wf_f_asset_name', type: 'text' },
+      {
+        key: 'disposal_type', labelKey: 'wf_f_disposal_type', type: 'select',
+        options: ['sale', 'writeoff'],
+      },
+      { key: 'gain_loss', labelKey: 'wf_f_gain_loss', type: 'number' },
+      { key: 'sale_price', labelKey: 'wf_f_sale_price', type: 'number' },
+    ],
+  },
+  {
+    value: 'assets.fully_depreciated', labelKey: 'evt_asset_fully_depreciated', descKey: 'evt_asset_fully_depreciated_desc',
+    category: 'assets', icon: Monitor, scheduled: false,
+    fields: [
+      { key: 'inventory_number', labelKey: 'wf_f_inventory_number', type: 'text' },
+      { key: 'asset_name', labelKey: 'wf_f_asset_name', type: 'text' },
+      { key: 'depreciable_base', labelKey: 'wf_f_total_amount', type: 'number' },
+    ],
+  },
 ];
 
 export const EVENT_BY_VALUE = Object.fromEntries(TRIGGER_EVENTS.map((e) => [e.value, e]));
 
 // Module grouping order for the trigger picker
-export const EVENT_CATEGORIES = ['inventory', 'sales', 'purchase', 'crm', 'tasks', 'hr', 'contracts'];
+export const EVENT_CATEGORIES = ['inventory', 'sales', 'purchase', 'crm', 'tasks', 'hr', 'contracts', 'expenses', 'assets'];
 
 export const CATEGORY_LABEL_KEYS = {
   inventory: 'inventory',
@@ -295,6 +337,8 @@ export const CATEGORY_LABEL_KEYS = {
   tasks: 'tasks',
   hr: 'hr',
   contracts: 'contracts',
+  expenses: 'expenses',
+  assets: 'assets',
 };
 
 export const OPERATORS = [

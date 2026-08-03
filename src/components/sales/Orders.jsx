@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useModules } from '@/components/contexts/ModulesContext';
-import { useCustomers } from '@/components/contexts/CustomersContext';
 import { useSales } from '@/components/contexts/SalesContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,13 +21,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import {
-  Plus, Search, ShoppingBag, Package, Truck,
-  CheckCircle, FileText, Receipt, RotateCcw, Upload, Download, Eye, Printer, X,
-  ClipboardList, MessageSquareWarning, CreditCard, ChevronLeft, ChevronRight, Edit, SlidersHorizontal
+  Plus, Search, ShoppingBag, Truck,
+  CheckCircle, FileText, Receipt, RotateCcw, Eye, Printer, X,
+  ClipboardList, MessageSquareWarning, ChevronLeft, ChevronRight, Edit, SlidersHorizontal,
+  PackageCheck
 } from 'lucide-react';
 import apiClient from '@/api/client';
 import { format } from 'date-fns';
-import { salesService } from '@/api/services/sales';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { usePermissions } from "@/hooks/usePermissions";
@@ -37,22 +35,20 @@ import { MODULES } from "@/config/permissions";
 
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import Returns from './Returns';
-import PaymentTerms from './PaymentTerms';
-import {
-  ImportModal,
-  ExportModal,
-  ImportExportButtons,
-  PrintPreviewModal,
-  BatchPrintModal,
-} from '@/components/shared';
+import Quotations from './Quotations';
+import DeliveryOrders from './DeliveryOrders';
+import { orderStatusClass } from './orderStatus';
+import { ImportExportButtons } from '@/components/shared';
 
 export default function Orders({
+  initialSubtab = 'list',
   onCreateOrder,
   onEditOrder,
   onViewOrder,
   onPrintOrder,
   onUpdateStatus,
   onCreateInvoice,
+  onCreateInvoiceDelivered,
   onDeleteOrder,
   showImportModal,
   setShowImportModal,
@@ -64,14 +60,14 @@ export default function Orders({
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { formatCurrency } = useCurrencyFormatter();
-  const { canCreate, canUpdate, canDelete, isSuperAdmin } = usePermissions();
-  const { salesOrders = [], isLoading: ordersLoading } = useModules();
+  const { canCreate, canUpdate, isSuperAdmin } = usePermissions();
+  const { isLoading: ordersLoading } = useModules();
   const {
     invoices = [],
     returns = [],
   } = useSales();
 
-  const [activeTab, setActiveTab] = useState('list');
+  const [activeTab, setActiveTab] = useState(initialSubtab);
   const [filteredOrders, setFilteredOrders] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -153,19 +149,6 @@ export default function Orders({
     setFilteredOrders(paginatedOrders);
   }, [paginatedOrders]);
 
-  const getStatusColor = (status) => {
-    const statusColors = {
-      draft: 'bg-slate-100 text-slate-800',
-      quotation: 'bg-blue-100 text-blue-800',
-      confirmed: 'bg-purple-100 text-purple-800',
-      processing: 'bg-yellow-100 text-yellow-800',
-      shipped: 'bg-indigo-100 text-indigo-800',
-      delivered: 'bg-green-100 text-green-800',
-      cancelled: 'bg-red-100 text-red-800'
-    };
-    return statusColors[status] || 'bg-slate-100 text-slate-800';
-  };
-
   const handleDeleteConfirm = async () => {
     if (orderToDelete && onDeleteOrder) {
       await onDeleteOrder(orderToDelete.id);
@@ -175,31 +158,26 @@ export default function Orders({
     setOrderToDelete(null);
   };
 
-  // Export columns configuration
-  const exportColumns = [
-    { key: 'order_number', label: t('order_number') || 'Order #' },
-    { key: 'customer_name', label: t('customer') || 'Customer' },
-    { key: 'order_date', label: t('date') || 'Date' },
-    { key: 'total_amount', label: t('amount') || 'Amount' },
-    { key: 'status', label: t('status') || 'Status' },
-  ];
-
   return (
     <div className="space-y-6">
-      {/* Sub-tabs for Orders List and Returns */}
+      {/* Sub-tabs: Buyurtmalar · Takliflar · Yetkazib berishlar · Qaytarishlar */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="w-fit bg-slate-100/80 p-1 rounded-lg">
+        <TabsList className="w-fit bg-slate-100/80 p-1 rounded-lg flex-wrap h-auto">
           <TabsTrigger value="list" className="data-[state=active]:bg-white">
             <ClipboardList className="w-4 h-4 mr-2" />
-            {t('list') || 'List'}
+            {t('orders') || 'Buyurtmalar'}
+          </TabsTrigger>
+          <TabsTrigger value="quotations" className="data-[state=active]:bg-white">
+            <FileText className="w-4 h-4 mr-2" />
+            {t('sales_subtab_quotations') || 'Takliflar'}
+          </TabsTrigger>
+          <TabsTrigger value="deliveries" className="data-[state=active]:bg-white">
+            <Truck className="w-4 h-4 mr-2" />
+            {t('deliveries') || 'Yetkazib berishlar'}
           </TabsTrigger>
           <TabsTrigger value="returns" className="data-[state=active]:bg-white">
             <RotateCcw className="w-4 h-4 mr-2" />
-            {t('returns') || 'Returns'}
-          </TabsTrigger>
-          <TabsTrigger value="payment-terms" className="data-[state=active]:bg-white">
-            <CreditCard className="w-4 h-4 mr-2" />
-            {t('paymentTerms') || 'Payment Terms'}
+            {t('returns') || 'Qaytarishlar'}
           </TabsTrigger>
         </TabsList>
 
@@ -333,34 +311,29 @@ export default function Orders({
                           )}
                           {colOn('status') && (
                             <TableCell>
-                              <Badge className={getStatusColor(order.status)}>{t(order.status) || order.status}</Badge>
+                              <Badge className={orderStatusClass(order.status)}>{t(order.status) || order.status}</Badge>
                             </TableCell>
                           )}
                           <TableCell>
                             <div className="flex gap-1 flex-wrap">
+                              {/* Status lifecycle: confirm via POST /confirm, cancel via
+                                  POST /cancel; shipped/delivered are driven by delivery
+                                  validation — the backend rejects direct PUT status writes. */}
                               {canUpdate(MODULES.SALES) && (order.status === 'draft' || order.status === 'quotation') && onUpdateStatus && (
                                 <Button size="sm" variant="ghost" onClick={() => onUpdateStatus(order.id, 'confirmed')} title={t('confirm') || 'Tasdiqlash'}>
                                   <CheckCircle className="w-4 h-4 text-purple-600" />
                                 </Button>
                               )}
-                              {canUpdate(MODULES.SALES) && order.status === 'confirmed' && onUpdateStatus && (
-                                <Button size="sm" variant="ghost" onClick={() => onUpdateStatus(order.id, 'processing')} title={t('start_processing') || 'Ishlov berishni boshlash'}>
-                                  <Package className="w-4 h-4 text-yellow-600" />
-                                </Button>
-                              )}
-                              {canUpdate(MODULES.SALES) && order.status === 'processing' && onUpdateStatus && (
-                                <Button size="sm" variant="ghost" onClick={() => onUpdateStatus(order.id, 'shipped')} title={t('mark_shipped') || 'Jo\'natildi'}>
-                                  <Truck className="w-4 h-4 text-indigo-600" />
-                                </Button>
-                              )}
-                              {canUpdate(MODULES.SALES) && order.status === 'shipped' && onUpdateStatus && (
-                                <Button size="sm" variant="ghost" onClick={() => onUpdateStatus(order.id, 'delivered')} title={t('mark_delivered') || 'Yetkazildi'}>
-                                  <CheckCircle className="w-4 h-4 text-green-600" />
-                                </Button>
-                              )}
                               {canCreate(MODULES.SALES) && ['confirmed', 'processing', 'shipped', 'delivered'].includes(order.status) && !orderHasInvoice(order) && onCreateInvoice && (
                                 <Button size="sm" variant="ghost" onClick={() => onCreateInvoice(order.id)} title={t('create_invoice') || 'Create Invoice'}>
                                   <Receipt className="w-4 h-4 text-green-600" />
+                                </Button>
+                              )}
+                              {/* Delivered-basis partial invoice (?basis=delivered) —
+                                  multiple per order allowed, so no has_invoice gate. */}
+                              {canCreate(MODULES.SALES) && ['processing', 'shipped', 'delivered'].includes(order.status) && onCreateInvoiceDelivered && (
+                                <Button size="sm" variant="ghost" onClick={() => onCreateInvoiceDelivered(order.id)} title={t('invoice_bill_delivered') || 'Yetkazilganini fakturalash'}>
+                                  <PackageCheck className="w-4 h-4 text-emerald-600" />
                                 </Button>
                               )}
                               {onViewOrder && (
@@ -389,7 +362,7 @@ export default function Orders({
                                   variant="ghost"
                                   className="text-red-600 hover:text-red-700"
                                   onClick={() => { setOrderToDelete(order); setShowDeleteDialog(true); }}
-                                  title={language === 'uz' ? 'Bekor qilish' : 'Cancel Order'}
+                                  title={t('cancel_order_title') || 'Buyurtmani bekor qilish'}
                                 >
                                   <X className="w-4 h-4" />
                                 </Button>
@@ -422,14 +395,19 @@ export default function Orders({
           </Card>
         </TabsContent>
 
+        {/* Quotations Tab */}
+        <TabsContent value="quotations" className="mt-4">
+          <Quotations />
+        </TabsContent>
+
+        {/* Deliveries Tab */}
+        <TabsContent value="deliveries" className="mt-4">
+          <DeliveryOrders />
+        </TabsContent>
+
         {/* Returns Tab */}
         <TabsContent value="returns" className="mt-4">
           <Returns />
-        </TabsContent>
-
-        {/* Payment Terms Tab */}
-        <TabsContent value="payment-terms" className="mt-4">
-          <PaymentTerms />
         </TabsContent>
       </Tabs>
 
@@ -438,12 +416,10 @@ export default function Orders({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {language === 'uz' ? 'Buyurtmani bekor qilish' : 'Cancel Order'}
+              {t('cancel_order_title') || 'Buyurtmani bekor qilish'}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {language === 'uz'
-                ? 'Haqiqatan ham bu buyurtmani bekor qilmoqchimisiz?'
-                : 'Are you sure you want to cancel this order?'}
+              {t('cancel_order_confirm') || 'Haqiqatan ham bu buyurtmani bekor qilmoqchimisiz?'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           {orderToDelete && (
@@ -463,10 +439,10 @@ export default function Orders({
             </div>
           )}
           <AlertDialogFooter>
-            <AlertDialogCancel>{language === 'uz' ? 'Ortga' : 'Back'}</AlertDialogCancel>
+            <AlertDialogCancel>{t('back') || 'Orqaga'}</AlertDialogCancel>
             <AlertDialogAction onClick={handleDeleteConfirm} className="bg-red-600 hover:bg-red-700">
               <X className="w-4 h-4 mr-2" />
-              {language === 'uz' ? 'Bekor qilish' : 'Cancel Order'}
+              {t('cancel_order_action') || 'Bekor qilish'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

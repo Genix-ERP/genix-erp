@@ -18,7 +18,6 @@ import { usePermissions } from "@/hooks/usePermissions";
 import financeService from "@/api/services/finance";
 import GeneralLedgerView from "./GeneralLedgerView";
 import JournalManagement from "./JournalManagement";
-import FixedAssets from "./FixedAssets";
 
 const getAccountTypes = (t) => [
   { value: 'asset', label: t('asset') || 'Aktiv', icon: DollarSign, color: 'bg-blue-100 text-blue-800' },
@@ -526,13 +525,6 @@ export default function ChartOfAccounts() {
             <BookOpen className="w-4 h-4" />
             {t('journals') || 'Journals'}
           </TabsTrigger>
-          <TabsTrigger
-            value="fixed-assets"
-            className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
-          >
-            <Building2 className="w-4 h-4" />
-            {t('fixed_assets') || 'Asosiy vositalar'}
-          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="coa" className="mt-4 space-y-6">
@@ -1025,10 +1017,6 @@ export default function ChartOfAccounts() {
 
         <TabsContent value="journals" className="mt-4">
           <JournalManagement />
-        </TabsContent>
-
-        <TabsContent value="fixed-assets" className="mt-4">
-          <FixedAssets />
         </TabsContent>
       </Tabs>
     </div>

@@ -624,6 +624,7 @@ export function ProcurementProvider({ children }) {
           warehouse_id: poData.warehouse_id || undefined,
           vehicle_number: poData.vehicle_number || undefined,
           requires_shipping: poData.requires_shipping !== undefined ? poData.requires_shipping : true,
+          construction_project_id: poData.construction_project_id ? Number(poData.construction_project_id) : undefined,
           subtotal: poData.subtotal || 0,
           tax_amount: poData.tax_amount || 0,
           total_amount: poData.total_amount || 0,

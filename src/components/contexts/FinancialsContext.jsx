@@ -22,8 +22,6 @@ const FISCAL_YEARS_KEY = 'genix_fiscal_years';
 const FISCAL_PERIODS_KEY = 'genix_fiscal_periods';
 const BUDGETS_KEY = 'genix_budgets';
 const BUDGET_LINES_KEY = 'genix_budget_lines';
-const FIXED_ASSETS_KEY = 'genix_fixed_assets';
-const DEPRECIATION_ENTRIES_KEY = 'genix_depreciation_entries';
 const CASH_REGISTERS_KEY = 'genix_cash_registers';
 const CASH_ORDERS_KEY = 'genix_cash_orders';
 const RECONCILIATION_ACTS_KEY = 'genix_reconciliation_acts';
@@ -150,19 +148,6 @@ const sampleBudgetLines = [
   { id: 'bl_3', budget_id: 'bud_1', account_id: 'acc_13', planned_amount: 50000000, actual_amount: 8000000, notes: 'Utilities' },
 ];
 
-const sampleFixedAssets = [
-  { id: 'fa_1', code: 'FA-001', name: 'Office Building', category: 'buildings', acquisition_date: '2020-01-15', acquisition_cost: 5000000000, salvage_value: 500000000, useful_life_months: 480, depreciation_method: 'straight_line', accumulated_depreciation: 468750000, status: 'active', location: 'Tashkent HQ', serial_number: '' },
-  { id: 'fa_2', code: 'FA-002', name: 'Company Vehicle - Toyota Camry', category: 'vehicles', acquisition_date: '2023-06-01', acquisition_cost: 350000000, salvage_value: 50000000, useful_life_months: 60, depreciation_method: 'straight_line', accumulated_depreciation: 95000000, status: 'active', location: 'Garage', serial_number: 'VIN123456789' },
-  { id: 'fa_3', code: 'FA-003', name: 'Server Equipment', category: 'computers', acquisition_date: '2024-01-10', acquisition_cost: 80000000, salvage_value: 5000000, useful_life_months: 36, depreciation_method: 'straight_line', accumulated_depreciation: 25000000, status: 'active', location: 'Server Room', serial_number: 'SRV-2024-001' },
-  { id: 'fa_4', code: 'FA-004', name: 'Office Furniture Set', category: 'furniture', acquisition_date: '2022-03-20', acquisition_cost: 45000000, salvage_value: 0, useful_life_months: 84, depreciation_method: 'straight_line', accumulated_depreciation: 18214286, status: 'active', location: 'Main Office', serial_number: '' },
-];
-
-const sampleDepreciationEntries = [
-  { id: 'de_1', asset_id: 'fa_1', period: '2025-01', amount: 9375000, depreciation_date: '2025-01-31', method: 'straight_line' },
-  { id: 'de_2', asset_id: 'fa_2', period: '2025-01', amount: 5000000, depreciation_date: '2025-01-31', method: 'straight_line' },
-  { id: 'de_3', asset_id: 'fa_3', period: '2025-01', amount: 2083333, depreciation_date: '2025-01-31', method: 'straight_line' },
-];
-
 const sampleCashRegisters = [
   { id: 'cr_1', name: 'Asosiy kassa', code: 'KASSA-01', currency: 'UZS', limit_amount: 50000000, current_balance: 12500000, is_active: true },
   { id: 'cr_2', name: 'Filial kassa', code: 'KASSA-02', currency: 'UZS', limit_amount: 30000000, current_balance: 5000000, is_active: true },
@@ -211,8 +196,6 @@ export function FinancialsProvider({ children }) {
   const [fiscalPeriods, setFiscalPeriods] = useState([]);
   const [budgets, setBudgets] = useState([]);
   const [budgetLines, setBudgetLines] = useState([]);
-  const [fixedAssets, setFixedAssets] = useState([]);
-  const [depreciationEntries, setDepreciationEntries] = useState([]);
   const [cashRegisters, setCashRegisters] = useState([]);
   const [cashOrders, setCashOrders] = useState([]);
   const [reconciliationActs, setReconciliationActs] = useState([]);
@@ -284,8 +267,6 @@ export function FinancialsProvider({ children }) {
     setFiscalPeriods(getData(FISCAL_PERIODS_KEY, sampleFiscalPeriods));
     setBudgets(getData(BUDGETS_KEY, sampleBudgets));
     setBudgetLines(getData(BUDGET_LINES_KEY, sampleBudgetLines));
-    setFixedAssets(getData(FIXED_ASSETS_KEY, sampleFixedAssets));
-    setDepreciationEntries(getData(DEPRECIATION_ENTRIES_KEY, sampleDepreciationEntries));
     // Finance extra modules
     setCashRegisters(getData(CASH_REGISTERS_KEY, sampleCashRegisters));
     setCashOrders(getData(CASH_ORDERS_KEY, sampleCashOrders));
@@ -319,8 +300,6 @@ export function FinancialsProvider({ children }) {
       initIfEmpty(FISCAL_PERIODS_KEY, sampleFiscalPeriods);
       initIfEmpty(BUDGETS_KEY, sampleBudgets);
       initIfEmpty(BUDGET_LINES_KEY, sampleBudgetLines);
-      initIfEmpty(FIXED_ASSETS_KEY, sampleFixedAssets);
-      initIfEmpty(DEPRECIATION_ENTRIES_KEY, sampleDepreciationEntries);
       // Finance extra modules
       initIfEmpty(CASH_REGISTERS_KEY, sampleCashRegisters);
       initIfEmpty(CASH_ORDERS_KEY, sampleCashOrders);
@@ -349,7 +328,7 @@ export function FinancialsProvider({ children }) {
           const sales   = allow('sales');
           const purch   = allow('purchase');
 
-          const [entries, invoicesResponse, accountsData, paymentsData, taxRatesData, accountTypesData, vendorBillsData, bankAccountsData, cashTransactionsData, currenciesData, exchangeRatesData, fiscalYearsData, fiscalPeriodsData, budgetsData, budgetLinesData, fixedAssetsData, journalsData, cashRegistersData, cashOrdersData, reconciliationActsData, exchangeDiffsData, paymentJournalsData] = await Promise.all([
+          const [entries, invoicesResponse, accountsData, paymentsData, taxRatesData, accountTypesData, vendorBillsData, bankAccountsData, cashTransactionsData, currenciesData, exchangeRatesData, fiscalYearsData, fiscalPeriodsData, budgetsData, budgetLinesData, journalsData, cashRegistersData, cashOrdersData, reconciliationActsData, exchangeDiffsData, paymentJournalsData] = await Promise.all([
             finance ? financeService.listJournalEntries({ limit: 1000 }).catch(() => []) : skip(),
             sales   ? salesService.listInvoices().catch(() => [])                         : skip(),
             finance ? financeService.listAccounts({ organization_id: activeCompany.id, limit: 500 }).catch(() => []) : skip(),
@@ -365,7 +344,6 @@ export function FinancialsProvider({ children }) {
             finance ? financeService.listFiscalPeriods().catch(() => [])                  : skip(),
             finance ? financeService.listBudgets().catch(() => [])                        : skip(),
             finance ? financeService.listBudgetLines().catch(() => [])                    : skip(),
-            (finance || allow('assets')) ? financeService.listFixedAssets().catch(() => []) : skip(),
             finance ? financeService.listJournals().catch(() => [])                       : skip(),
             finance ? financeService.listCashRegisters().catch(() => [])                  : skip(),
             finance ? financeService.listCashOrders().catch(() => [])                     : skip(),
@@ -421,8 +399,6 @@ export function FinancialsProvider({ children }) {
           // Set budgets and budget lines from backend
           setBudgets(budgetsData || []);
           setBudgetLines(budgetLinesData || []);
-          // Set fixed assets from backend
-          setFixedAssets(fixedAssetsData || []);
           // Finance extra modules
           setCashRegisters(cashRegistersData || []);
           // Merge backend cash orders with localStorage (backend is stub, returns empty)
@@ -1459,122 +1435,9 @@ export function FinancialsProvider({ children }) {
     };
   }, [budgetLines]);
 
-  // ==================== FIXED ASSETS CRUD ====================
-  const createFixedAsset = useCallback(async (assetData) => {
-    try {
-      const newAsset = await financeService.createFixedAsset(assetData);
-      setFixedAssets(prev => [newAsset, ...prev]);
-      return newAsset;
-    } catch (error) {
-      console.error('Failed to create fixed asset:', error);
-      throw error;
-    }
-  }, []);
-
-  const updateFixedAsset = useCallback(async (id, assetData) => {
-    try {
-      const updated = await financeService.updateFixedAsset(id, assetData);
-      setFixedAssets(prev => prev.map(fa => fa.id === id ? updated : fa));
-      return updated;
-    } catch (error) {
-      console.error('Failed to update fixed asset:', error);
-      throw error;
-    }
-  }, []);
-
-  const deleteFixedAsset = useCallback(async (id) => {
-    try {
-      await financeService.deleteFixedAsset(id);
-      setFixedAssets(prev => prev.filter(fa => fa.id !== id));
-    } catch (error) {
-      console.error('Failed to delete fixed asset:', error);
-      throw error;
-    }
-  }, []);
-
-  const disposeFixedAsset = useCallback(async (id, disposalData) => {
-    try {
-      const disposed = await financeService.disposeFixedAsset(id, disposalData);
-      setFixedAssets(prev => prev.map(fa => fa.id === id ? disposed : fa));
-      return disposed;
-    } catch (error) {
-      console.error('Failed to dispose fixed asset:', error);
-      throw error;
-    }
-  }, []);
-
-  // ==================== DEPRECIATION ENTRIES CRUD ====================
-  const createDepreciationEntry = useCallback(async (entryData) => {
-    const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(DEPRECIATION_ENTRIES_KEY, companyId);
-    const assetsKey = getStorageKey(FIXED_ASSETS_KEY, companyId);
-    const newEntry = { id: `de_${Date.now()}`, ...entryData, created_at: new Date().toISOString() };
-    const updatedEntries = [...depreciationEntries, newEntry];
-    localStorage.setItem(storageKey, JSON.stringify(updatedEntries));
-    setDepreciationEntries(updatedEntries);
-    // Update asset accumulated depreciation
-    const updatedAssets = fixedAssets.map(fa =>
-      fa.id === entryData.asset_id
-        ? { ...fa, accumulated_depreciation: (fa.accumulated_depreciation || 0) + entryData.amount }
-        : fa
-    );
-    localStorage.setItem(assetsKey, JSON.stringify(updatedAssets));
-    setFixedAssets(updatedAssets);
-    return newEntry;
-  }, [depreciationEntries, fixedAssets, activeCompany]);
-
-  const getDepreciationEntriesByAsset = useCallback(async (assetId) => {
-    try {
-      return await financeService.getDepreciationEntries(assetId);
-    } catch (error) {
-      console.error('Failed to get depreciation entries:', error);
-      throw error;
-    }
-  }, []);
-
-  const calculateMonthlyDepreciation = useCallback((asset) => {
-    if (!asset || asset.status !== 'active') return 0;
-    const depreciableAmount = asset.acquisition_cost - (asset.salvage_value || 0);
-    const remainingValue = depreciableAmount - (asset.accumulated_depreciation || 0);
-    if (remainingValue <= 0) return 0;
-
-    switch (asset.depreciation_method) {
-      case 'straight_line':
-        return depreciableAmount / asset.useful_life_months;
-      case 'declining_balance': {
-        const rate = 1 / asset.useful_life_months;
-        const currentValue = asset.acquisition_cost - (asset.accumulated_depreciation || 0);
-        return Math.min(currentValue * rate, remainingValue);
-      }
-      case 'double_declining': {
-        const rate = 2 / asset.useful_life_months;
-        const currentValue = asset.acquisition_cost - (asset.accumulated_depreciation || 0);
-        return Math.min(currentValue * rate, remainingValue);
-      }
-      case 'sum_of_years': {
-        const totalMonths = asset.useful_life_months;
-        const sumOfYears = (totalMonths * (totalMonths + 1)) / 2;
-        const monthsUsed = Math.floor((new Date() - new Date(asset.acquisition_date)) / (1000 * 60 * 60 * 24 * 30));
-        const remainingMonths = Math.max(totalMonths - monthsUsed, 1);
-        return (depreciableAmount * remainingMonths) / sumOfYears;
-      }
-      default:
-        return depreciableAmount / asset.useful_life_months;
-    }
-  }, []);
-
-  const runDepreciationForPeriod = useCallback(async (period) => {
-    try {
-      const result = await financeService.runDepreciation({ period });
-      // Reload fixed assets to get updated accumulated_depreciation
-      const assetsData = await financeService.listFixedAssets();
-      setFixedAssets(assetsData || []);
-      return result;
-    } catch (error) {
-      console.error('Failed to run depreciation:', error);
-      throw error;
-    }
-  }, []);
+  // Fixed assets moved to the unified v2 module ('@/api/services/fixedAssetsV2',
+  // pages/Assets.jsx). The legacy CRUD + client-side depreciation engine that
+  // lived here was removed with the 453 migration (2026-08-03).
 
   // ========== Cash Registers (Kassa) ==========
   const createCashRegister = useCallback(async (data) => {
@@ -1724,8 +1587,6 @@ export function FinancialsProvider({ children }) {
     fiscalPeriods, createFiscalPeriod, createFiscalPeriods, closeFiscalPeriod, reopenFiscalPeriod, getFiscalPeriodsByYear,
     budgets, createBudget, updateBudget, deleteBudget, activateBudget,
     budgetLines, createBudgetLine, updateBudgetLine, deleteBudgetLine, getBudgetLinesByBudget, getBudgetVariance,
-    fixedAssets, createFixedAsset, updateFixedAsset, deleteFixedAsset, disposeFixedAsset,
-    depreciationEntries, createDepreciationEntry, getDepreciationEntriesByAsset, calculateMonthlyDepreciation, runDepreciationForPeriod,
     cashRegisters, createCashRegister,
     cashOrders, createCashOrder, confirmCashOrder, deleteCashOrder, getCashBook,
     reconciliationActs, createReconciliationAct, updateReconciliationAct, deleteReconciliationAct, bulkGenerateReconciliation, refreshReconciliationAct, exportReconciliationAct,
@@ -1751,7 +1612,7 @@ export function FinancialsProvider({ children }) {
       receivables: financeSettings.defaultReceivablesAccount,
       payables: financeSettings.defaultPayablesAccount
     })
-  }), [journalEntries, journalLines, createJournalEntry, updateJournalEntry, deleteJournalEntry, cancelJournalEntry, postJournalEntry, reverseJournalEntry, resetJournalEntryToDraft, listJournalEntries, getJournalLines, createJournalLine, accounts, accountTypes, createAccount, updateAccount, deleteAccount, getAccountTransactions, payments, createPayment, confirmPayment, taxRates, createTaxRate, updateTaxRate, deleteTaxRate, journals, createJournal, updateJournal, deleteJournal, bankAccounts, createBankAccount, updateBankAccount, deleteBankAccount, bankTransactions, loadBankTransactions, getBankTransactionsByAccount, createBankTransaction, reconcileBankTransaction, cashTransactions, createCashTransaction, updateCashTransaction, deleteCashTransaction, getCashBalance, currencies, createCurrency, updateCurrency, deleteCurrency, exchangeRates, setExchangeRate, getLatestExchangeRate, convertCurrency, vendorBills, createVendorBill, updateVendorBill, listVendorBills, postVendorBill, payVendorBill, customerInvoices, createCustomerInvoice, updateCustomerInvoice, listCustomerInvoices, financialTransactions, listFinancialTransactions, fiscalYears, createFiscalYear, updateFiscalYear, closeFiscalYear, deleteFiscalYear, fiscalPeriods, createFiscalPeriod, createFiscalPeriods, closeFiscalPeriod, reopenFiscalPeriod, getFiscalPeriodsByYear, budgets, createBudget, updateBudget, deleteBudget, activateBudget, budgetLines, createBudgetLine, updateBudgetLine, deleteBudgetLine, getBudgetLinesByBudget, getBudgetVariance, fixedAssets, createFixedAsset, updateFixedAsset, deleteFixedAsset, disposeFixedAsset, depreciationEntries, createDepreciationEntry, getDepreciationEntriesByAsset, calculateMonthlyDepreciation, runDepreciationForPeriod, cashRegisters, createCashRegister, cashOrders, createCashOrder, confirmCashOrder, deleteCashOrder, getCashBook, reconciliationActs, createReconciliationAct, updateReconciliationAct, deleteReconciliationAct, bulkGenerateReconciliation, refreshReconciliationAct, exportReconciliationAct, exchangeDiffs, syncExchangeRates, revalueCurrency, getBalanceSheet, getIncomeStatement, getCashFlow, getTrialBalance, getGeneralLedger, getAgingReceivables, getAgingPayables, isLoading, backendAvailable, error, loadData, financeSettings]);
+  }), [journalEntries, journalLines, createJournalEntry, updateJournalEntry, deleteJournalEntry, cancelJournalEntry, postJournalEntry, reverseJournalEntry, resetJournalEntryToDraft, listJournalEntries, getJournalLines, createJournalLine, accounts, accountTypes, createAccount, updateAccount, deleteAccount, getAccountTransactions, payments, createPayment, confirmPayment, taxRates, createTaxRate, updateTaxRate, deleteTaxRate, journals, createJournal, updateJournal, deleteJournal, bankAccounts, createBankAccount, updateBankAccount, deleteBankAccount, bankTransactions, loadBankTransactions, getBankTransactionsByAccount, createBankTransaction, reconcileBankTransaction, cashTransactions, createCashTransaction, updateCashTransaction, deleteCashTransaction, getCashBalance, currencies, createCurrency, updateCurrency, deleteCurrency, exchangeRates, setExchangeRate, getLatestExchangeRate, convertCurrency, vendorBills, createVendorBill, updateVendorBill, listVendorBills, postVendorBill, payVendorBill, customerInvoices, createCustomerInvoice, updateCustomerInvoice, listCustomerInvoices, financialTransactions, listFinancialTransactions, fiscalYears, createFiscalYear, updateFiscalYear, closeFiscalYear, deleteFiscalYear, fiscalPeriods, createFiscalPeriod, createFiscalPeriods, closeFiscalPeriod, reopenFiscalPeriod, getFiscalPeriodsByYear, budgets, createBudget, updateBudget, deleteBudget, activateBudget, budgetLines, createBudgetLine, updateBudgetLine, deleteBudgetLine, getBudgetLinesByBudget, getBudgetVariance, cashRegisters, createCashRegister, cashOrders, createCashOrder, confirmCashOrder, deleteCashOrder, getCashBook, reconciliationActs, createReconciliationAct, updateReconciliationAct, deleteReconciliationAct, bulkGenerateReconciliation, refreshReconciliationAct, exportReconciliationAct, exchangeDiffs, syncExchangeRates, revalueCurrency, getBalanceSheet, getIncomeStatement, getCashFlow, getTrialBalance, getGeneralLedger, getAgingReceivables, getAgingPayables, isLoading, backendAvailable, error, loadData, financeSettings]);
 
   return (
     <FinancialsContext.Provider value={value}>

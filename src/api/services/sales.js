@@ -7,6 +7,9 @@ export const salesService = {
     return response.data.data;
   },
 
+  // Savdo dashboard — org-scoped, period-aware stats in one call
+  getStats: (params) => apiClient.get('/sales-orders/stats', { params }).then(r => r.data.data ?? r.data),
+
   // Quotations
   async listQuotations(params = {}) {
     const response = await apiClient.get('/quotations', { params });
@@ -77,6 +80,16 @@ export const salesService = {
     return response.data.data;
   },
 
+  // Partial invoice covering delivered-but-uninvoiced quantities only
+  // (?basis=delivered). Multiple such invoices per order are allowed;
+  // the backend 400s with a message when nothing is invoiceable.
+  async createInvoiceFromOrderDelivered(orderId) {
+    const response = await apiClient.post(`/sales-orders/${orderId}/invoice`, null, {
+      params: { basis: 'delivered' },
+    });
+    return response.data.data;
+  },
+
   // Sales Invoices
   async listInvoices(params = {}) {
     const response = await apiClient.get('/sales-invoices', { params });
@@ -104,11 +117,6 @@ export const salesService = {
 
   async sendInvoice(id) {
     const response = await apiClient.post(`/sales-invoices/${id}/send`);
-    return response.data.data;
-  },
-
-  async resetInvoiceToDraft(id) {
-    const response = await apiClient.post(`/sales-invoices/${id}/reset-to-draft`);
     return response.data.data;
   },
 

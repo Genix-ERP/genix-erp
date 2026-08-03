@@ -123,6 +123,13 @@ export const procurementService = {
     return response.data.data;
   },
 
+  // Per-supplier aggregates: spend, open POs, AP balance (GL 6010),
+  // avg delivery days, on-time rate, returns, rating.
+  async getSupplierKPIs(params = {}) {
+    const response = await apiClient.get('/purchase-orders/supplier-kpis', { params });
+    return response.data.data;
+  },
+
   async getOrder(id) {
     const response = await apiClient.get(`/purchase-orders/${id}`);
     return response.data.data;
