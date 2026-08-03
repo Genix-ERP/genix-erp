@@ -288,7 +288,9 @@ function LayoutContent({ children, currentPageName }) {
       url: createPageUrl("HR"),
       icon: Briefcase,
       badge: null,
-      moduleId: 'hr'
+      moduleId: 'hr',
+      // HR subpages must keep the sidebar item highlighted
+      aliases: ['/leave-management', '/attendance', '/employee-contracts'],
     },
     'manufacturing': {
       title: t("manufacturing"),
@@ -525,7 +527,8 @@ function LayoutContent({ children, currentPageName }) {
               <SidebarGroupContent>
                 <SidebarMenu className="space-y-1">
                   {navigationItems.map((item) => {
-                    const isActive = location.pathname === item.url;
+                    const isActive = location.pathname === item.url ||
+                      item.aliases?.some(a => location.pathname === a || location.pathname.startsWith(a + '/'));
                     return (
                       <SidebarMenuItem key={item.url}>
                         <SidebarMenuButton
@@ -561,6 +564,9 @@ function LayoutContent({ children, currentPageName }) {
                      currentPageName === 'AIAssistant' ? t('ai_assistant') :
                      currentPageName === 'DirectorDashboard' ? t('director_dashboard') :
                      currentPageName === 'Customers' ? t('crm') /* sidebar says CRM — the header must match */ :
+                     currentPageName === 'LeaveManagement' ? t('leave_management') :
+                     currentPageName === 'Attendance' ? t('attendance') :
+                     currentPageName === 'EmployeeContracts' ? t('employee_contracts') :
                      (t(currentPageName?.toLowerCase()) || t("dashboard"))}
                   </h1>
                 </div>

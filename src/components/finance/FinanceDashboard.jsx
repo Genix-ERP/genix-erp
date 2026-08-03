@@ -18,6 +18,7 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatAxisTick } from '@/utils/formatCurrency';
+import { formatDate } from '@/utils/formatDate';
 import financeService from "@/api/services/finance";
 
 // Fixed-order categorical palette for the expense donut (dataviz-validated:
@@ -63,6 +64,10 @@ function presetRange(preset) {
 }
 
 const PERIOD_PRESETS = ['this_month', 'last_month', 'quarter', 'year', 'all_time'];
+// Preset ids feed presetRange(); 'quarter'/'year' have no standalone
+// translations (the bare "year" key is a lowercase unit word), so their
+// pill labels borrow the fully-translated this_quarter/this_year keys.
+const PERIOD_LABEL_KEYS = { quarter: 'this_quarter', year: 'this_year' };
 
 export default function FinanceDashboard() {
   const { language } = useLanguage();
@@ -160,12 +165,12 @@ export default function FinanceDashboard() {
                 : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
             }`}
           >
-            {t(p) || p}
+            {t(PERIOD_LABEL_KEYS[p] || p)}
           </button>
         ))}
         {data && (
           <span className="ml-auto text-xs text-slate-500 tabular-nums">
-            {data.period_from} — {data.period_to}
+            {formatDate(data.period_from)} — {formatDate(data.period_to)}
           </span>
         )}
       </div>

@@ -2,7 +2,7 @@
 // catalog in genix-backend/internal/handler/workflow_engine.go.
 import {
   Package, FileText, Users, AlertTriangle, Clock, ShoppingCart,
-  CreditCard, Truck, UserPlus, FileSignature, ArrowRightLeft, ClipboardList,
+  CreditCard, Truck, UserPlus, UserMinus, FileSignature, ArrowRightLeft, ClipboardList,
   Receipt, Monitor,
 } from 'lucide-react';
 
@@ -176,6 +176,13 @@ export const TRIGGER_EVENTS = [
     fields: [
       { key: 'employee_name', labelKey: 'wf_f_employee_name', type: 'text' },
       { key: 'position', labelKey: 'wf_f_position', type: 'text' },
+    ],
+  },
+  {
+    value: 'employee.terminated', labelKey: 'evt_employee_terminated', descKey: 'evt_employee_terminated_desc',
+    category: 'hr', icon: UserMinus, scheduled: false,
+    fields: [
+      { key: 'employee_name', labelKey: 'wf_f_employee_name', type: 'text' },
     ],
   },
   {

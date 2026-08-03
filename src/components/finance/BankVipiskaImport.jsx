@@ -14,6 +14,7 @@ import { useFinancials } from '@/components/contexts/FinancialsContext';
 import AccountCombobox from '@/components/shared/AccountCombobox';
 import financeService from '@/api/services/finance';
 import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 // Bank vipiska import. Phase 1: upload + auto-classify + review. Phase 2: edit
 // the detected accounts, then Verify & Post each operation (creates the journal
@@ -75,7 +76,7 @@ export default function BankVipiskaImport() {
     }
   };
 
-  const errMsg = (err) => err?.response?.data?.error || err?.response?.data?.message || err?.message;
+  const errMsg = (err) => getApiErrorMessage(err, '');
 
   const patchRow = (id, patch) => setRows(rs => rs.map(r => (r.id === id ? { ...r, ...patch } : r)));
 

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/number-input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -19,6 +20,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { MODULES } from "@/config/permissions";
 import { useAlertModal } from "@/hooks/useAlertModal";
+import { getApiErrorMessage } from '@/utils/apiError';
 import AlertModal from "@/components/shared/AlertModal";
 
 const AGING_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'];
@@ -180,7 +182,7 @@ export default function AccountsReceivable() {
         notes: ''
       });
     } catch (err) {
-      const errorMsg = err.response?.data?.error?.message || err.response?.data?.error || err.message || 'Failed to create invoice';
+      const errorMsg = getApiErrorMessage(err, 'Failed to create invoice');
       console.error('Invoice creation error:', err.response?.data || err);
       showError(errorMsg, 'Invoice yaratish xatosi');
     }
@@ -578,12 +580,11 @@ export default function AccountsReceivable() {
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="text-sm font-medium mb-1 block">{t('subtotal')} *</label>
-                <Input
-                  type="number"
+                <NumberInput
                   placeholder="0"
                   value={newInvoice.subtotal}
-                  onChange={(e) => {
-                    const subtotal = parseFloat(e.target.value) || 0;
+                  onChange={(raw) => {
+                    const subtotal = parseFloat(raw) || 0;
                     const tax = subtotal * 0.1; // 10% tax
                     setNewInvoice({...newInvoice, subtotal, tax_amount: tax, total_amount: subtotal + tax});
                   }}
@@ -592,8 +593,7 @@ export default function AccountsReceivable() {
               </div>
               <div>
                 <label className="text-sm font-medium mb-1 block">{t('tax') || 'Tax'}</label>
-                <Input
-                  type="number"
+                <NumberInput
                   placeholder="0"
                   value={newInvoice.tax_amount}
                   disabled
@@ -601,9 +601,8 @@ export default function AccountsReceivable() {
               </div>
               <div>
                 <label className="text-sm font-medium mb-1 block">{t('total')}</label>
-                <Input
-                  type="number"
-                  placeholder="0.00"
+                <NumberInput
+                  placeholder="0"
                   value={newInvoice.total_amount}
                   disabled
                   className="font-bold"

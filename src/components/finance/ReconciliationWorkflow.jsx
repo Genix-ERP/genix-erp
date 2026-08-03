@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/number-input";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -321,12 +322,10 @@ export default function ReconciliationWorkflow({ bankAccount, onClose }) {
               </div>
               <div>
                 <label className="text-sm font-medium">{language === 'uz' ? 'Yakuniy balans' : 'Statement Ending Balance'}</label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  placeholder="0.00"
+                <NumberInput
+                  placeholder="0"
                   value={newReconciliation.statement_ending_balance}
-                  onChange={(e) => setNewReconciliation(prev => ({ ...prev, statement_ending_balance: e.target.value }))}
+                  onChange={(raw) => setNewReconciliation(prev => ({ ...prev, statement_ending_balance: raw }))}
                 />
               </div>
               <div>

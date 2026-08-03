@@ -336,7 +336,7 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
 
         ${cashFlow ? `
         <h2>${language === 'uz' ? 'Pul Oqimi' : 'Cash Flow Statement'}</h2>
-        <p style="color:#64748b;font-size:12px">${cashFlow.period_from} - ${cashFlow.period_to}</p>
+        <p style="color:#64748b;font-size:12px">${formatDate(cashFlow.period_from)} - ${formatDate(cashFlow.period_to)}</p>
         <table>
           <tr><th></th><th class="amount">${language === 'uz' ? 'Summa' : 'Amount'}</th></tr>
           <tr><td>${language === 'uz' ? 'Boshlang\'ich qoldiq' : 'Opening Cash Balance'}</td><td class="amount">${formatCurrency(cashFlow.opening_cash_balance)}</td></tr>
@@ -731,7 +731,7 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
                   {language === 'uz' ? 'Buxgalteriya Balansi' : 'Balance Sheet'}
                 </CardTitle>
                 <Badge variant="outline">
-                  {language === 'uz' ? 'Sana' : 'As of'}: {balanceSheet?.as_of_date || getDateParams(period).as_of_date}
+                  {language === 'uz' ? 'Sana' : 'As of'}: {formatDate(balanceSheet?.as_of_date || getDateParams(period).as_of_date)}
                 </Badge>
               </div>
             </CardHeader>
@@ -852,7 +852,7 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
                         {language === 'uz' ? 'Davr' : 'Period'}
                       </p>
                       <p className="text-sm font-medium text-slate-700">
-                        {cashFlow.period_from} - {cashFlow.period_to}
+                        {formatDate(cashFlow.period_from)} - {formatDate(cashFlow.period_to)}
                       </p>
                     </div>
                   </div>
