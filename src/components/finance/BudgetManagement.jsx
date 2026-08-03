@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/number-input";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
@@ -810,9 +811,9 @@ export default function BudgetManagement() {
                           {MONTHS.map((m, n) => (
                             <div key={n}>
                               <p className="text-[10px] text-slate-400 text-center">{m}</p>
-                              <Input type="number" className="text-xs px-1 py-1 h-7"
+                              <NumberInput className="text-xs px-1 py-1 h-7"
                                 value={line[`period_${n+1}`] || ''}
-                                onChange={e => updateLine(idx, `period_${n+1}`, parseFloat(e.target.value) || 0)} />
+                                onChange={raw => updateLine(idx, `period_${n+1}`, parseFloat(raw) || 0)} />
                             </div>
                           ))}
                         </div>
@@ -821,8 +822,8 @@ export default function BudgetManagement() {
                     ) : (
                       <div className="flex items-center gap-3">
                         <Label className="text-xs w-20">{t('total_amount') || 'Total'}</Label>
-                        <Input type="number" className="w-40 text-sm" value={line.budgeted_amount || ''}
-                          onChange={e => updateLine(idx, 'budgeted_amount', parseFloat(e.target.value) || 0)} />
+                        <NumberInput className="w-40 text-sm" value={line.budgeted_amount || ''}
+                          onChange={raw => updateLine(idx, 'budgeted_amount', parseFloat(raw) || 0)} />
                       </div>
                     )}
                     {wizardData.approach === 'zero_based' && (
@@ -1183,7 +1184,7 @@ export default function BudgetManagement() {
                 <TableBody>
                   {(cashFlowData.calendar || []).filter(d => d.inflows > 0 || d.outflows > 0 || d.is_negative).map((day, i) => (
                     <TableRow key={i} className={day.is_negative ? 'bg-red-50' : ''}>
-                      <TableCell className="font-mono text-sm">{day.date}</TableCell>
+                      <TableCell className="font-mono text-sm">{formatDate(day.date)}</TableCell>
                       <TableCell className="text-right text-green-700 font-medium">{day.inflows > 0 ? formatCurrency(day.inflows) : '—'}</TableCell>
                       <TableCell className="text-right text-red-700 font-medium">{day.outflows > 0 ? formatCurrency(day.outflows) : '—'}</TableCell>
                       <TableCell className={`text-right font-bold ${day.is_negative ? 'text-red-700' : 'text-slate-800'}`}>{formatCurrency(day.running_balance)}</TableCell>

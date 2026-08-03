@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/number-input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -817,10 +818,9 @@ export default function CashRegister() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium">{t('amount') || 'Amount'}</label>
-                <Input
-                  type="number"
+                <NumberInput
                   value={newOrder.amount}
-                  onChange={(e) => setNewOrder({ ...newOrder, amount: e.target.value })}
+                  onChange={(raw) => setNewOrder({ ...newOrder, amount: raw })}
                   placeholder="0"
                 />
               </div>

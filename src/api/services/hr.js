@@ -7,6 +7,12 @@ export const hrService = {
     return response.data.data;
   },
 
+  // One-call HR dashboard stats (KPI + Tahlillar tab)
+  async getEmployeeStats() {
+    const response = await apiClient.get('/employees/stats');
+    return response.data.data;
+  },
+
   async getEmployee(id) {
     const response = await apiClient.get(`/employees/${id}`);
     return response.data.data;

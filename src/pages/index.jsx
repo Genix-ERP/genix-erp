@@ -122,7 +122,11 @@ function _getCurrentPage(url) {
         urlLastPart = urlLastPart.split('?')[0];
     }
 
-    const pageName = Object.keys(PAGES).find(page => page.toLowerCase() === urlLastPart.toLowerCase());
+    // Hyphenated routes (employee-contracts, leave-management) must resolve
+    // to their CamelCase page keys — comparing without the hyphens. Before
+    // this, they fell back to Dashboard and the header showed "Asosiy panel".
+    const normalized = urlLastPart.toLowerCase().replace(/-/g, '');
+    const pageName = Object.keys(PAGES).find(page => page.toLowerCase() === normalized);
     return pageName || Object.keys(PAGES)[0];
 }
 

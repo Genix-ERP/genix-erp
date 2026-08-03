@@ -24,6 +24,7 @@ import { contactsService } from "@/api/services";
 import financeService from "@/api/services/finance";
 import FinanceVendorBills from "@/components/finance/FinanceVendorBills";
 import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 export default function Payments({ side } = {}) {
   // When `side` is 'customer' or 'vendor', this instance renders ONLY that side
@@ -269,7 +270,7 @@ export default function Payments({ side } = {}) {
           await confirmPayment(created.id);
           try { await refreshSalesData(); } catch {}
         } catch (confirmErr) {
-          const message = confirmErr?.response?.data?.error || confirmErr?.response?.data?.message || confirmErr?.message || "To'lovni tasdiqlashda xatolik yuz berdi";
+          const message = getApiErrorMessage(confirmErr, "To'lovni tasdiqlashda xatolik yuz berdi");
           toast.error(message);
           return;
         }
@@ -277,7 +278,7 @@ export default function Payments({ side } = {}) {
       setShowCreateModal(false);
     } catch (error) {
       console.error('Error creating payment:', error);
-      const message = error?.response?.data?.error || error?.response?.data?.message || error?.message || "To'lov yaratishda xatolik yuz berdi";
+      const message = getApiErrorMessage(error, "To'lov yaratishda xatolik yuz berdi");
       toast.error(message);
     } finally {
       setIsSaving(false);
@@ -293,7 +294,7 @@ export default function Payments({ side } = {}) {
       // Refresh invoices from SalesContext so the invoice list updates
       try { await refreshSalesData(); } catch {}
     } catch (err) {
-      const message = err?.response?.data?.error || err?.response?.data?.message || err?.message || "To'lovni tasdiqlashda xatolik yuz berdi";
+      const message = getApiErrorMessage(err, "To'lovni tasdiqlashda xatolik yuz berdi");
       toast.error(message);
     }
   };
