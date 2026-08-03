@@ -50,7 +50,7 @@ export default function Reconcile() {
       setBalances(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Failed to load partner balances:', err);
-      toast.error(err?.response?.data?.error || err?.message || tr('Yuklab bo\'lmadi', 'Не удалось загрузить', 'Failed to load'));
+      toast.error(err?.response?.data?.error?.message || err?.response?.data?.message || err?.message || tr('Yuklab bo\'lmadi', 'Не удалось загрузить', 'Failed to load'));
       setBalances([]);
     } finally {
       setLoading(false);
@@ -66,7 +66,7 @@ export default function Reconcile() {
       setLedger(data || null);
     } catch (err) {
       console.error('Failed to load partner ledger:', err);
-      toast.error(err?.response?.data?.error || err?.message || tr('Yuklab bo\'lmadi', 'Не удалось загрузить', 'Failed to load'));
+      toast.error(err?.response?.data?.error?.message || err?.response?.data?.message || err?.message || tr('Yuklab bo\'lmadi', 'Не удалось загрузить', 'Failed to load'));
       setLedger(null);
     } finally {
       setLedgerLoading(false);
@@ -107,7 +107,7 @@ export default function Reconcile() {
       try { await refreshSalesData(); } catch { /* ignore */ }
       try { await refreshFinancials(); } catch { /* ignore */ }
     } catch (err) {
-      toast.error(err?.response?.data?.error || err?.message || tr('Xatolik', 'Ошибка', 'Error'));
+      toast.error(err?.response?.data?.error?.message || err?.response?.data?.message || err?.message || tr('Xatolik', 'Ошибка', 'Error'));
     } finally {
       setApplying(false);
     }
