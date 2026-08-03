@@ -21,6 +21,9 @@ import ProductCombobox from "@/components/shared/ProductCombobox";
 import QuickProductModal from "@/components/shared/QuickProductModal";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { inventoryService } from '@/api/services/inventory';
+import { constructionService } from '@/api/services/construction';
+import { fixedAssetsV2Service } from '@/api/services/fixedAssetsV2';
+import { PrintButton, PrintPreviewModal } from '@/components/shared';
 import apiClient from '@/api/client';
 import { Switch } from "@/components/ui/switch";
 import {
@@ -46,6 +49,7 @@ import {
   ChevronLeft,
   ChevronRight,
   SlidersHorizontal,
+  Landmark,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useSearchParams } from 'react-router-dom';
@@ -150,6 +154,52 @@ export default function PurchaseOrders({ initialSubtab = 'orders' }) {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [editPO, setEditPO] = useState(null);
   const [detailPO, setDetailPO] = useState(null);
+  // "Aktivga aylantirish" — capitalize a received PO line into the fixed-asset
+  // register (reclass posting, no second supplier debt; audit finding #10).
+  const [capLine, setCapLine] = useState(null);
+  const [capMapping, setCapMapping] = useState(null);
+  const [capForm, setCapForm] = useState({ category_id: '', department_id: '', useful_life_months: '', cost: '', name: '' });
+  const [capBusy, setCapBusy] = useState(false);
+
+  const openCapitalize = async (line) => {
+    setCapLine(line);
+    const lineTotal = line.line_total || (line.quantity || 0) * (line.unit_price || 0);
+    setCapForm({
+      category_id: '', department_id: '',
+      useful_life_months: '',
+      cost: String(lineTotal || ''),
+      name: line.product_name || line.description || '',
+    });
+    if (!capMapping) {
+      try { setCapMapping(await fixedAssetsV2Service.getMapping()); } catch { setCapMapping({ categories: [], departments: [] }); }
+    }
+  };
+
+  const submitCapitalize = async () => {
+    if (!capForm.category_id || !capForm.department_id || !(parseInt(capForm.useful_life_months, 10) > 0) || !(parseFloat(capForm.cost) > 0)) {
+      toast({ title: t('fill_required') || "Majburiy maydonlarni to'ldiring", variant: 'destructive' });
+      return;
+    }
+    setCapBusy(true);
+    try {
+      const r = await fixedAssetsV2Service.createFromPO({
+        purchase_order_id: detailPO.id,
+        line_id: capLine?.id || '',
+        name: capForm.name,
+        category_id: capForm.category_id,
+        department_id: capForm.department_id,
+        useful_life_months: parseInt(capForm.useful_life_months, 10),
+        cost: parseFloat(capForm.cost),
+      });
+      toast({ title: t('po_capitalized_ok') || 'Aktiv yaratildi (ombordan kapitallashtirildi)', description: r?.inventory_number });
+      setCapLine(null);
+    } catch (e) {
+      const err = e?.response?.data?.error;
+      toast({ title: err?.message_uz || err?.message || 'Xatolik', variant: 'destructive' });
+    } finally {
+      setCapBusy(false);
+    }
+  };
   const [detailPOLines, setDetailPOLines] = useState([]);
   const [orderReturns, setOrderReturns] = useState([]);
   const [purchaseReturns, setPurchaseReturns] = useState([]);
@@ -198,8 +248,24 @@ export default function PurchaseOrders({ initialSubtab = 'orders' }) {
     payment_terms: 'net_30',
     vehicle_number: '',
     requires_shipping: true,
+    construction_project_id: '',
     lines: [{ product_id: '', product_name: '', quantity: 1, unit_price: 0, lead_time_days: 0 }]
   });
+
+  // Construction projects for the optional PO ↔ obyekt link (migration 450):
+  // received lines then feed the object's actual cost.
+  const [constructionProjects, setConstructionProjects] = useState([]);
+  useEffect(() => {
+    constructionService.listProjects({ limit: 200 })
+      .then((data) => {
+        const list = Array.isArray(data) ? data : data?.items || [];
+        setConstructionProjects(list.filter(pr => pr.status !== 'completed' && pr.status !== 'cancelled'));
+      })
+      .catch(() => setConstructionProjects([]));
+  }, []);
+
+  // Print preview (shared jsPDF template — same pattern as vendor bills)
+  const [showPrintPreview, setShowPrintPreview] = useState(false);
 
   // Pre-fill default tax from settings
   useEffect(() => {
@@ -1411,6 +1477,29 @@ export default function PurchaseOrders({ initialSubtab = 'orders' }) {
               </div>
             </div>
 
+            {/* Obyekt (optional): received lines feed the object's actual cost */}
+            {constructionProjects.length > 0 && (
+              <div>
+                <label className="text-sm font-medium mb-1 block">{t('construction_object') || 'Qurilish obyekti'} <span className="text-xs text-slate-400">({t('optional') || 'ixtiyoriy'})</span></label>
+                <Select
+                  value={newPO.construction_project_id ? String(newPO.construction_project_id) : '__none__'}
+                  onValueChange={(value) => setNewPO({...newPO, construction_project_id: value === '__none__' ? '' : value})}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('select_object') || 'Obyekt tanlang'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">{t('no_object') || 'Obyektsiz'}</SelectItem>
+                    {constructionProjects.map((pr) => (
+                      <SelectItem key={pr.id} value={String(pr.id)}>
+                        {pr.code ? `${pr.code} — ${pr.name}` : pr.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium mb-1 block">{t('order_date') || 'Order Date'} *</label>
@@ -2137,6 +2226,11 @@ export default function PurchaseOrders({ initialSubtab = 'orders' }) {
                   {t('has_returns') || 'Has Returns'}
                 </Badge>
               )}
+              {detailPO && (
+                <span className="ml-auto mr-6">
+                  <PrintButton onClick={() => setShowPrintPreview(true)} label={t('print') || 'Chop etish'} />
+                </span>
+              )}
             </DialogTitle>
           </DialogHeader>
           {detailPO && (
@@ -2199,9 +2293,21 @@ export default function PurchaseOrders({ initialSubtab = 'orders' }) {
                           )}
                           <p className="text-xs text-slate-500">{t('quantity')}: {line.quantity}{line.unit_name ? ` ${line.unit_name}` : ''}</p>
                         </div>
-                        <div className="text-right">
-                          <span className="font-medium">{formatCurrency((line.quantity || 0) * (line.unit_price || 0))}</span>
-                          <p className="text-xs text-slate-500">{formatCurrency(line.unit_price || 0)} x {line.quantity}</p>
+                        <div className="text-right flex items-center gap-3">
+                          <div>
+                            <span className="font-medium">{formatCurrency((line.quantity || 0) * (line.unit_price || 0))}</span>
+                            <p className="text-xs text-slate-500">{formatCurrency(line.unit_price || 0)} x {line.quantity}</p>
+                          </div>
+                          {['received', 'partial'].includes(detailPO.status) && canCreate(MODULES.ASSETS) && (
+                            <Button
+                              size="sm" variant="outline" className="shrink-0"
+                              title={t('po_capitalize') || 'Aktivga aylantirish'}
+                              onClick={() => openCapitalize(line)}
+                            >
+                              <Landmark className="w-4 h-4 mr-1" />
+                              {t('po_capitalize_short') || 'Aktivga'}
+                            </Button>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -2301,6 +2407,48 @@ export default function PurchaseOrders({ initialSubtab = 'orders' }) {
         </DialogContent>
       </Dialog>
 
+      {/* Print Preview — shared jsPDF template (buxgalter print form) */}
+      {detailPO && (
+        <PrintPreviewModal
+          open={showPrintPreview}
+          onClose={() => setShowPrintPreview(false)}
+          filename={`${detailPO.po_number || detailPO.order_number || 'PO'}`}
+          config={{
+            template: 'invoice',
+            title: t('purchase_order') || 'Xarid buyurtmasi',
+            documentNumber: detailPO.po_number || detailPO.order_number || '',
+            documentDate: (detailPO.order_date || '').toString().split('T')[0],
+            dateLabel: t('order_date') || 'Sana',
+            headerFields: [
+              { label: t('supplier') || 'Yetkazib beruvchi', value: detailPO.supplier_name || detailPO.vendor_name || '-' },
+              { label: t('delivery_date') || 'Yetkazish sanasi', value: (detailPO.expected_delivery_date || detailPO.expected_date || '-').toString().split('T')[0] },
+              { label: t('status') || 'Holat', value: t(detailPO.status) || detailPO.status || '-' },
+            ],
+            tableColumns: [
+              { key: 'name', label: t('product') || 'Mahsulot', width: 70 },
+              { key: 'qty', label: t('quantity') || 'Miqdor', align: 'right', width: 22 },
+              { key: 'received', label: t('received') || 'Qabul', align: 'right', width: 22 },
+              { key: 'price', label: t('unit_price') || 'Narx', align: 'right', width: 32 },
+              { key: 'total', label: t('amount') || 'Summa', align: 'right', width: 34 },
+            ],
+            tableData: (detailPOLines || []).map((l) => ({
+              name: l.product_name || l.description || '-',
+              qty: String(l.quantity ?? ''),
+              received: String(l.quantity_received ?? 0),
+              price: formatCurrency(l.unit_price || 0),
+              total: formatCurrency(l.line_total || (l.quantity || 0) * (l.unit_price || 0)),
+            })),
+            totals: [
+              ...(detailPO.tax_amount > 0 ? [
+                { label: t('subtotal') || 'Oraliq summa', value: formatCurrency(detailPO.subtotal || 0) },
+                { label: t('tax') || 'QQS', value: formatCurrency(detailPO.tax_amount || 0) },
+              ] : []),
+              { label: t('total') || 'Jami', value: formatCurrency(detailPO.total_amount || 0), bold: true },
+            ],
+          }}
+        />
+      )}
+
       {/* Delete Confirmation Modal */}
       <AlertDialog open={!!deleteConfirm} onOpenChange={(open) => !open && setDeleteConfirm(null)}>
         <AlertDialogContent>
@@ -2348,6 +2496,76 @@ export default function PurchaseOrders({ initialSubtab = 'orders' }) {
         }}
         t={t}
       />
+
+      {/* "Aktivga aylantirish" — capitalize a received line into fa_assets.
+          The backend posts a reclass (Дт 0810 / Кт inventory), NOT a second
+          purchase, so the supplier debt is never doubled. */}
+      <Dialog open={!!capLine} onOpenChange={(o) => !o && setCapLine(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t('po_capitalize') || 'Aktivga aylantirish'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">{t('name') || 'Nomi'} *</label>
+              <Input value={capForm.name} onChange={(e) => setCapForm((f) => ({ ...f, name: e.target.value }))} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">{t('category') || 'Kategoriya'} *</label>
+                <Select
+                  value={capForm.category_id}
+                  onValueChange={(v) => {
+                    const cat = (capMapping?.categories || []).find((c) => c.id === v);
+                    setCapForm((f) => ({
+                      ...f, category_id: v,
+                      useful_life_months: f.useful_life_months || (cat?.default_useful_life_months ? String(cat.default_useful_life_months) : ''),
+                    }));
+                  }}
+                >
+                  <SelectTrigger><SelectValue placeholder={t('select') || 'Tanlang'} /></SelectTrigger>
+                  <SelectContent>
+                    {(capMapping?.categories || []).filter((c) => c.is_active !== false && c.depreciable !== false).map((c) => (
+                      <SelectItem key={c.id} value={c.id}>{c.name_uz}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">{t('fa_cost_center') || "Bo'lim"} *</label>
+                <Select value={capForm.department_id} onValueChange={(v) => setCapForm((f) => ({ ...f, department_id: v }))}>
+                  <SelectTrigger><SelectValue placeholder={t('select') || 'Tanlang'} /></SelectTrigger>
+                  <SelectContent>
+                    {(capMapping?.departments || []).filter((d) => d.is_active !== false).map((d) => (
+                      <SelectItem key={d.id} value={d.id}>{d.name_uz}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">{t('cost') || 'Tannarx'} *</label>
+                <Input type="number" min="0" value={capForm.cost} onChange={(e) => setCapForm((f) => ({ ...f, cost: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">{t('fa_useful_life') || 'Muddat'} ({t('fa_months') || 'oy'}) *</label>
+                <Input type="number" min="1" value={capForm.useful_life_months} onChange={(e) => setCapForm((f) => ({ ...f, useful_life_months: e.target.value }))} />
+              </div>
+            </div>
+            <p className="text-xs text-slate-400">
+              {t('po_capitalize_note') || "Ombordan kapital qo'yilmaga reklassifikatsiya qilinadi — ta'minotchi qarzi ikkilanmaydi. Keyin Aktivlar sahifasida foydalanishga topshirasiz."}
+            </p>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setCapLine(null)} disabled={capBusy}>{t('cancel') || 'Bekor qilish'}</Button>
+            <Button onClick={submitCapitalize} disabled={capBusy}>
+              {capBusy && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              {t('po_capitalize') || 'Aktivga aylantirish'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

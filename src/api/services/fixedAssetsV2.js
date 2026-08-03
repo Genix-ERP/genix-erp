@@ -29,9 +29,49 @@ export const fixedAssetsV2Service = {
     const r = await apiClient.post(`/assets/${id}/reactivate`, { date });
     return r.data.data;
   },
-  async disposeAsset(id, disposal_date, reason) {
-    const r = await apiClient.post(`/assets/${id}/dispose`, { disposal_date, reason });
+  // payload: { disposal_date, disposal_type: 'sale'|'writeoff', sale_price, reason }
+  async disposeAsset(id, payload) {
+    const r = await apiClient.post(`/assets/${id}/dispose`, payload);
     return r.data.data;
+  },
+  // Operational fields only (name, serial, location, notes, assigned_employee_id,
+  // construction_object_id, department_id) — money goes through changeParams.
+  async updateAsset(id, payload) {
+    const r = await apiClient.patch(`/assets/${id}`, payload);
+    return r.data.data;
+  },
+  async getStats() {
+    const r = await apiClient.get('/assets/stats');
+    return r.data.data;
+  },
+  async getEntries(id) {
+    const r = await apiClient.get(`/assets/${id}/entries`);
+    return r.data.data || [];
+  },
+  async reconcile() {
+    const r = await apiClient.get('/assets/reconcile');
+    return r.data.data;
+  },
+  // Capitalize a received PO line: draft asset + Дт 0820 / Кт inventory reclass
+  // (no second supplier-debt posting).
+  async createFromPO(payload) {
+    const r = await apiClient.post('/assets/from-po', payload);
+    return r.data.data;
+  },
+  // Non-disposed assets held by one employee (moddiy javobgarlik list).
+  async listEmployeeAssets(employeeId) {
+    const r = await apiClient.get(`/employees/${employeeId}/assets`);
+    return r.data.data || [];
+  },
+  // Maintenance (457): regular_to|minor_repair are expensed, capital_repair|
+  // modernization capitalize (cost += amount, optional life extension).
+  async recordMaintenance(id, payload) {
+    const r = await apiClient.post(`/assets/${id}/maintenance`, payload);
+    return r.data.data;
+  },
+  async listMaintenance(id) {
+    const r = await apiClient.get(`/assets/${id}/maintenance`);
+    return r.data.data || [];
   },
   async changeParams(id, payload) {
     const r = await apiClient.post(`/assets/${id}/change-params`, payload);
@@ -48,6 +88,11 @@ export const fixedAssetsV2Service = {
   },
 
   // ---- Depreciation runs ----
+  // Returns { runs, unposted_gaps, suggested_period }.
+  async listRuns() {
+    const r = await apiClient.get('/depreciation/runs');
+    return r.data.data;
+  },
   async createRun(period) {
     const r = await apiClient.post('/depreciation/runs', { period });
     return r.data.data;

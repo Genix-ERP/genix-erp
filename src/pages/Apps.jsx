@@ -113,10 +113,10 @@ const appsList = [
     id: 'assets',
     nameKey: 'app_assets_name',
     descriptionKey: 'app_assets_description',
-    version: '1.0',
+    version: '2.0',
     icon: Monitor,
     color: '#f59e0b',
-    permissionModule: MODULES.INVENTORY
+    permissionModule: MODULES.ASSETS
   },
   {
     id: 'expenses',

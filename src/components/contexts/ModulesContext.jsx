@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { hrService, salesService, financeService, procurementService } from '@/api/services';
+import fixedAssetsV2Service from '@/api/services/fixedAssetsV2';
 import { useCompany } from './CompanyContext';
 import { useEmployeePermissions } from './EmployeePermissionsContext';
 import { checkBackendHealth } from '@/config/dataMode';
@@ -108,7 +109,7 @@ export function ModulesProvider({ children }) {
         allow('expenses') || allow('finance')
                              ? financeService.listExpenses().catch(err => { console.warn('Expenses API error:', err); return []; })         : skip(),
         allow('assets') || allow('finance')
-                             ? financeService.listFixedAssets().catch(err => { console.warn('Assets API error:', err); return []; })        : skip(),
+                             ? fixedAssetsV2Service.listAssets().catch(err => { console.warn('Assets API error:', err); return []; })      : skip(),
         allow('hr') || allow('payroll')
                              ? hrService.listPayrollPeriods().catch(err => { console.warn('Payroll API error:', err); return []; })         : skip()
       ]);
@@ -147,18 +148,15 @@ export function ModulesProvider({ children }) {
         category: e.category || e.category_name || '',
       }));
       setExpenses(mappedExpenses);
-      // Map backend asset fields to frontend expected fields
+      // v2 register fields are canonical; alias the few legacy names readers use.
       const rawAssets = toArray(assetsData);
       const mappedAssets = rawAssets.map(a => ({
         ...a,
-        asset_name: a.name || a.asset_name,
-        asset_code: a.code || a.asset_code,
-        asset_category: a.category_name || a.category || a.asset_category || 'equipment',
-        purchase_date: a.acquisition_date || a.purchase_date,
-        purchase_cost: a.acquisition_cost || a.purchase_cost || 0,
-        useful_life_years: a.useful_life_months ? Math.round(a.useful_life_months / 12) : (a.useful_life_years || 5),
-        salvage_value: a.salvage_value || 0,
-        current_value: a.current_value || a.acquisition_cost || a.purchase_cost || 0,
+        asset_name: a.name,
+        asset_code: a.inventory_number,
+        asset_category: a.category_name,
+        purchase_cost: a.cost || 0,
+        current_value: a.book_value ?? a.cost ?? 0,
       }));
       setAssets(mappedAssets);
       // Map backend payroll period fields to frontend expected fields
@@ -270,94 +268,9 @@ export function ModulesProvider({ children }) {
     setSalesOrders(prev => prev.filter(s => s.id !== id));
   }, []);
 
-  // Asset CRUD (Fixed Assets) - API only
-  const createAsset = useCallback(async (data) => {
-    const apiData = {
-      code: data.asset_code || data.code,
-      name: data.asset_name || data.name,
-      description: data.description,
-      category_id: data.category_id,
-      category: data.asset_category || data.category,
-      serial_number: data.serial_number,
-      acquisition_date: data.purchase_date || data.acquisition_date,
-      acquisition_cost: data.purchase_cost || data.acquisition_cost || 0,
-      salvage_value: data.salvage_value || 0,
-      useful_life_months: (data.useful_life_years || 5) * 12,
-      depreciation_method: data.depreciation_method || 'straight_line',
-      location: data.location,
-      custodian_name: data.custodian_name,
-      warranty_expiry: data.warranty_expiry,
-      notes: data.notes,
-      supplier_id: data.supplier_id,
-      supplier_name: data.supplier_name,
-      payment_method: data.payment_method,
-    };
-    const result = await financeService.createFixedAsset(apiData);
-    if (result && result.id) {
-      const mappedResult = {
-        ...result,
-        asset_name: result.name,
-        asset_category: result.category_name || result.category,
-        purchase_date: result.acquisition_date,
-        purchase_cost: result.acquisition_cost,
-        useful_life_years: Math.round(result.useful_life_months / 12)
-      };
-      setAssets(prev => [mappedResult, ...prev]);
-      return mappedResult;
-    }
-    throw new Error('Failed to create asset');
-  }, []);
-
-  const updateAsset = useCallback(async (id, data) => {
-    const apiData = {
-      name: data.asset_name || data.name,
-      description: data.description,
-      category_id: data.category_id,
-      serial_number: data.serial_number,
-      acquisition_date: data.purchase_date || data.acquisition_date,
-      acquisition_cost: data.purchase_cost || data.acquisition_cost,
-      salvage_value: data.salvage_value,
-      useful_life_months: data.useful_life_years ? data.useful_life_years * 12 : data.useful_life_months,
-      depreciation_method: data.depreciation_method,
-      location: data.location,
-      custodian_name: data.custodian_name,
-      warranty_expiry: data.warranty_expiry,
-      status: data.status,
-      notes: data.notes
-    };
-    const result = await financeService.updateFixedAsset(id, apiData);
-    if (result) {
-      const mappedResult = {
-        ...result,
-        asset_name: result.name,
-        asset_category: result.category_name || result.category,
-        purchase_date: result.acquisition_date,
-        purchase_cost: result.acquisition_cost,
-        useful_life_years: Math.round(result.useful_life_months / 12)
-      };
-      setAssets(prev => prev.map(a => a.id === id ? mappedResult : a));
-      return mappedResult;
-    }
-    throw new Error('Failed to update asset');
-  }, []);
-
-  const deleteAsset = useCallback(async (id) => {
-    await financeService.deleteFixedAsset(id);
-    setAssets(prev => prev.filter(a => a.id !== id));
-  }, []);
-
-  const disposeAsset = useCallback(async (id, disposalData) => {
-    const result = await financeService.disposeFixedAsset(id, {
-      disposal_date: disposalData.disposal_date,
-      disposal_amount: disposalData.disposal_amount,
-      disposal_reason: disposalData.disposal_reason
-    });
-    if (result) {
-      setAssets(prev => prev.map(a => a.id === id ? { ...a, ...result, status: 'disposed' } : a));
-      return result;
-    }
-    throw new Error('Failed to dispose asset');
-  }, []);
+  // Asset CRUD moved to the unified v2 module (pages/Assets.jsx +
+  // '@/api/services/fixedAssetsV2'); the read-only list above stays for
+  // cross-module consumers.
 
   // Expense CRUD - API only.
   // v2: employee_id + status (draft|submitted) are forwarded on create;
@@ -709,7 +622,6 @@ export function ModulesProvider({ children }) {
     // Sales Order methods
     createSalesOrder, updateSalesOrder, deleteSalesOrder,
     // Asset methods
-    createAsset, updateAsset, deleteAsset, disposeAsset,
     // Expense methods
     createExpense, updateExpense, deleteExpense, approveExpense, recognizeExpense,
     // Payroll methods
@@ -729,7 +641,7 @@ export function ModulesProvider({ children }) {
     deleteEmployeePermissions,
     // Refresh
     refreshData: loadData
-  }), [employees, purchaseOrders, salesOrders, assets, expenses, payrolls, contracts, isLoading, backendAvailable, createEmployee, updateEmployee, deleteEmployee, createPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder, createSalesOrder, updateSalesOrder, deleteSalesOrder, createAsset, updateAsset, deleteAsset, disposeAsset, createExpense, updateExpense, deleteExpense, approveExpense, createPayroll, updatePayroll, deletePayroll, processPayroll, createContract, updateContract, deleteContract, permissions, getEmployeePermissions, setEmployeePermissions, updateModulePermission, hasPermission, setModuleFullAccess, deleteEmployeePermissions, loadData]);
+  }), [employees, purchaseOrders, salesOrders, assets, expenses, payrolls, contracts, isLoading, backendAvailable, createEmployee, updateEmployee, deleteEmployee, createPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder, createSalesOrder, updateSalesOrder, deleteSalesOrder, createExpense, updateExpense, deleteExpense, approveExpense, createPayroll, updatePayroll, deletePayroll, processPayroll, createContract, updateContract, deleteContract, permissions, getEmployeePermissions, setEmployeePermissions, updateModulePermission, hasPermission, setModuleFullAccess, deleteEmployeePermissions, loadData]);
 
   return (
     <ModulesContext.Provider value={value}>

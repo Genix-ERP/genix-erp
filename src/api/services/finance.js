@@ -707,91 +707,9 @@ export const financeService = {
     return response.data.data;
   },
 
-  // Asset Categories
-  async listAssetCategories(params = {}) {
-    const response = await apiClient.get('/asset-categories', { params });
-    return response.data.data;
-  },
-
-  // Fixed Assets
-  async listFixedAssets(params = {}) {
-    const response = await apiClient.get('/fixed-assets', { params });
-    return response.data.data;
-  },
-
-  async getFixedAsset(id) {
-    const response = await apiClient.get(`/fixed-assets/${id}`);
-    return response.data.data;
-  },
-
-  async createFixedAsset(data) {
-    const response = await apiClient.post('/fixed-assets', data);
-    return response.data.data;
-  },
-
-  async updateFixedAsset(id, data) {
-    const response = await apiClient.put(`/fixed-assets/${id}`, data);
-    return response.data.data;
-  },
-
-  async deleteFixedAsset(id) {
-    await apiClient.delete(`/fixed-assets/${id}`);
-  },
-
-  async disposeFixedAsset(id, data) {
-    const response = await apiClient.post(`/fixed-assets/${id}/dispose`, data);
-    return response.data.data;
-  },
-
-  async getDepreciationEntries(id) {
-    const response = await apiClient.get(`/fixed-assets/${id}/depreciation`);
-    return response.data.data;
-  },
-
-  async runDepreciation(data) {
-    const response = await apiClient.post('/run-depreciation', data);
-    return response.data;
-  },
-
-  async recordMaintenance(assetId, data) {
-    const response = await apiClient.post(`/fixed-assets/${assetId}/maintenance`, data);
-    return response.data.data;
-  },
-
-  async listMaintenance(assetId) {
-    const response = await apiClient.get(`/fixed-assets/${assetId}/maintenance`);
-    return response.data.data;
-  },
-
-  async recordAssetPayment(assetId, data) {
-    const response = await apiClient.post(`/fixed-assets/${assetId}/payments`, data);
-    return response.data.data;
-  },
-
-  async listAssetPayments(assetId) {
-    const response = await apiClient.get(`/fixed-assets/${assetId}/payments`);
-    return response.data.data;
-  },
-
-  async createAssetCategory(data) {
-    const response = await apiClient.post('/asset-categories', data);
-    return response.data.data;
-  },
-
-  async updateAssetCategory(id, data) {
-    const response = await apiClient.put(`/asset-categories/${id}`, data);
-    return response.data.data;
-  },
-
-  async deleteAssetCategory(id) {
-    const response = await apiClient.delete(`/asset-categories/${id}`);
-    return response.data.data;
-  },
-
-  async getAssetDashboard() {
-    const response = await apiClient.get('/fixed-assets/dashboard');
-    return response.data.data;
-  },
+  // Fixed assets moved to the unified v2 register — use
+  // '@/api/services/fixedAssetsV2'. The legacy /fixed-assets, /asset-categories
+  // and /run-depreciation endpoints were removed by migration 453 (2026-08-03).
 
   // Purchase Invoices (Vendor Bills)
   async listPurchaseInvoices(params = {}) {

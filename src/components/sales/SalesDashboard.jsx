@@ -1,30 +1,20 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
+  ComposedChart, BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+  Legend, ResponsiveContainer, Cell,
 } from 'recharts';
 import {
-  ShoppingCart, Clock, AlertTriangle, Wallet, BarChart3, Building2, Truck, Plus,
+  ShoppingBag, Wallet, AlertTriangle, Truck, BarChart3, Users, Receipt, Plus,
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { procurementService } from '@/api/services/procurement';
+import { salesService } from '@/api/services/sales';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatAxisTick } from '@/utils/formatCurrency';
 import {
   PAL, StatTile, ChartCard, EmptyNote, GlassTooltip, Segmented,
 } from '@/components/shared/DashboardKit';
-
-// Backend statuses → chip meta. Human words, no PO jargon.
-export const PO_STATUS_META = {
-  draft: { tKey: 'po_status_draft', className: 'bg-slate-100 text-slate-700' },
-  pending_approval: { tKey: 'po_status_pending_approval', className: 'bg-amber-50 text-amber-700' },
-  approved: { tKey: 'po_status_approved', className: 'bg-blue-50 text-blue-700' },
-  ordered: { tKey: 'po_status_ordered', className: 'bg-indigo-50 text-indigo-700' },
-  partial: { tKey: 'po_status_partial', className: 'bg-violet-50 text-violet-700' },
-  received: { tKey: 'po_status_received', className: 'bg-emerald-50 text-emerald-700' },
-  cancelled: { tKey: 'po_status_cancelled', className: 'bg-red-50 text-red-600' },
-};
+import { ORDER_STATUS_STYLES } from './orderStatus';
 
 const MONTHS = {
   uz: ['Yan', 'Fev', 'Mar', 'Apr', 'May', 'Iyn', 'Iyl', 'Avg', 'Sen', 'Okt', 'Noy', 'Dek'],
@@ -34,7 +24,7 @@ const MONTHS = {
 
 const iso = (d) => d.toISOString().split('T')[0];
 
-// Period pills → [from, to] for the stats endpoint (order_date window).
+// Period pills → [from, to] for GET /sales-orders/stats (order_date window).
 const rangeToDates = (range) => {
   const now = new Date();
   switch (range) {
@@ -53,8 +43,8 @@ const rangeToDates = (range) => {
   }
 };
 
-export function StatusChip({ status, t }) {
-  const meta = PO_STATUS_META[status] || PO_STATUS_META.draft;
+function StatusChip({ status, t }) {
+  const meta = ORDER_STATUS_STYLES[status] || ORDER_STATUS_STYLES.draft;
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap ${meta.className}`}>
       {t(meta.tKey) || status}
@@ -62,8 +52,7 @@ export function StatusChip({ status, t }) {
   );
 }
 
-export default function ProcurementDashboard({ t, language, onOpenTab }) {
-  const navigate = useNavigate();
+export default function SalesDashboard({ t, language, onOpenTab }) {
   const { formatCurrencyCompact } = useCurrencyFormatter();
   const [range, setRange] = useState('month');
   const [stats, setStats] = useState(null);
@@ -72,10 +61,10 @@ export default function ProcurementDashboard({ t, language, onOpenTab }) {
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    procurementService
-      .getOrderStats(rangeToDates(range))
+    salesService
+      .getStats(rangeToDates(range))
       .then((data) => { if (alive) setStats(data); })
-      .catch((e) => { console.error('Failed to load purchase stats:', e); if (alive) setStats(null); })
+      .catch((e) => { console.error('Failed to load sales stats:', e); if (alive) setStats(null); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [range]);
@@ -92,11 +81,11 @@ export default function ProcurementDashboard({ t, language, onOpenTab }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [stats, language]
   );
-  const suppliers = stats?.top_suppliers || [];
+  const customers = stats?.top_customers || [];
   const recent = stats?.recent_orders || [];
-  const upcoming = stats?.upcoming_deliveries || [];
-  const hasAnyOrders = recent.length > 0;
-  const hasMonthlyData = monthly.some((p) => p.value > 0);
+  const overdue = stats?.overdue_invoices || [];
+  const hasMonthlyData = monthly.some((p) => (p.orders_sum || 0) > 0 || (p.paid_sum || 0) > 0);
+  const unpaidOver30 = totals.unpaid_over_30d || 0;
 
   const RANGE_OPTIONS = [
     { id: 'month', label: t('range_this_month') || 'Bu oy' },
@@ -140,61 +129,84 @@ export default function ProcurementDashboard({ t, language, onOpenTab }) {
       {/* Stat tiles */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <StatTile
-          label={t('po_stat_orders') || 'Buyurtmalar'}
+          label={t('sales_dashboard_orders') || 'Buyurtmalar'}
           value={totals.orders_count ?? 0}
           sub={formatCurrencyCompact(totals.orders_sum || 0)}
-          icon={ShoppingCart}
+          icon={ShoppingBag}
           chip="bg-[#E6F1FB] text-[#0C447C]"
           onClick={() => onOpenTab('orders')}
         />
         <StatTile
-          label={t('po_stat_pending') || 'Kutilmoqda'}
-          value={totals.pending_count ?? 0}
-          sub={formatCurrencyCompact(totals.pending_sum || 0)}
-          icon={Clock}
-          chip="bg-[#FAEEDA] text-[#633806]"
-          onClick={() => onOpenTab('orders')}
-        />
-        <StatTile
-          label={t('po_stat_overdue') || 'Kechikkan yetkazmalar'}
-          value={totals.overdue_count ?? 0}
-          sub={totals.overdue_count > 0 ? (t('po_overdue_hint') || 'Muddati o‘tgan') : ' '}
-          icon={AlertTriangle}
-          chip="bg-red-50 text-red-600"
-          valueCls={totals.overdue_count > 0 ? 'text-red-600' : 'text-slate-900'}
-          onClick={() => onOpenTab('orders')}
-        />
-        <StatTile
-          label={t('po_stat_payable') || 'Yetkazib beruvchilarga qarz'}
-          value={formatCurrencyCompact(totals.payable_total || 0)}
+          label={t('sales_dashboard_revenue_paid') || "Daromad (to'langan)"}
+          value={formatCurrencyCompact(totals.revenue_paid || 0)}
           icon={Wallet}
+          chip="bg-[#E1F5EE] text-[#085041]"
+          onClick={() => onOpenTab('invoices')}
+        />
+        <StatTile
+          label={t('sales_dashboard_unpaid') || "To'lanmagan"}
+          value={formatCurrencyCompact(totals.unpaid_total || 0)}
+          sub={unpaidOver30 > 0
+            ? `${t('sales_dashboard_unpaid_over30') || '30+ kun'}: ${formatCurrencyCompact(unpaidOver30)}`
+            : ' '}
+          icon={AlertTriangle}
+          chip={unpaidOver30 > 0 ? 'bg-red-50 text-red-600' : 'bg-[#FAEEDA] text-[#633806]'}
+          valueCls={unpaidOver30 > 0 ? 'text-red-600' : 'text-slate-900'}
+          onClick={() => onOpenTab('invoices')}
+        />
+        <StatTile
+          label={t('sales_dashboard_undelivered') || 'Yetkazilmagan buyurtmalar'}
+          value={totals.undelivered_orders ?? 0}
+          icon={Truck}
           chip="bg-[#EEEDFE] text-[#3C3489]"
-          onClick={() => navigate('/financials?tab=receivables&sub=vendors')}
+          onClick={() => onOpenTab('orders')}
         />
       </div>
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ChartCard title={t('po_chart_dynamics') || 'Xaridlar dinamikasi'} icon={BarChart3} className="min-h-[300px]">
+        <ChartCard title={t('sales_dynamics') || 'Savdo dinamikasi'} icon={BarChart3} className="min-h-[300px]">
           {hasMonthlyData ? (
             <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={monthly} margin={{ left: 6, right: 6, top: 6, bottom: 0 }}>
+              <ComposedChart data={monthly} margin={{ left: 6, right: 6, top: 6, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                 <XAxis dataKey="label" fontSize={12} tickLine={false} axisLine={false} tick={{ fill: '#64748B' }} />
                 <YAxis fontSize={11} tickFormatter={formatAxisTick} tickLine={false} axisLine={false} tick={{ fill: '#94A3B8' }} width={52} />
                 <Tooltip content={<GlassTooltip format={formatCurrencyCompact} />} cursor={{ fill: 'rgba(148,163,184,0.08)' }} />
-                <Bar dataKey="value" name={t('po_chart_purchases') || 'Xaridlar'} fill={PAL[0].c} radius={[4, 4, 0, 0]} maxBarSize={44} />
-              </BarChart>
+                <Legend
+                  verticalAlign="top"
+                  height={26}
+                  iconType="circle"
+                  iconSize={8}
+                  formatter={(v) => <span className="text-xs text-slate-500">{v}</span>}
+                />
+                <Bar
+                  dataKey="orders_sum"
+                  name={t('sales_chart_orders') || 'Buyurtmalar'}
+                  fill={PAL[0].c}
+                  radius={[4, 4, 0, 0]}
+                  maxBarSize={44}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="paid_sum"
+                  name={t('sales_chart_paid') || "To'langan"}
+                  stroke={PAL[2].c}
+                  strokeWidth={2}
+                  dot={{ r: 3, fill: PAL[2].c, strokeWidth: 2, stroke: '#fff' }}
+                  activeDot={{ r: 4 }}
+                />
+              </ComposedChart>
             </ResponsiveContainer>
           ) : (
-            <EmptyNote icon={BarChart3} text={t('po_chart_dynamics_empty') || "Oxirgi 6 oyda xaridlar bo'lmagan"} />
+            <EmptyNote icon={BarChart3} text={t('sales_dynamics_empty') || "Oxirgi 6 oyda savdo bo'lmagan"} />
           )}
         </ChartCard>
 
-        <ChartCard title={t('po_chart_top_suppliers') || 'Top yetkazib beruvchilar'} icon={Building2} className="min-h-[300px]">
-          {suppliers.length > 0 ? (
-            <ResponsiveContainer width="100%" height={Math.max(220, suppliers.length * 38)}>
-              <BarChart data={suppliers} layout="vertical" margin={{ left: 6, right: 16, top: 4, bottom: 4 }}>
+        <ChartCard title={t('top_customers') || 'Top mijozlar'} icon={Users} className="min-h-[300px]">
+          {customers.length > 0 ? (
+            <ResponsiveContainer width="100%" height={Math.max(220, customers.length * 38)}>
+              <BarChart data={customers} layout="vertical" margin={{ left: 6, right: 16, top: 4, bottom: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E2E8F0" />
                 <XAxis type="number" fontSize={11} tickFormatter={formatAxisTick} tickLine={false} axisLine={false} tick={{ fill: '#94A3B8' }} />
                 <YAxis
@@ -204,44 +216,44 @@ export default function ProcurementDashboard({ t, language, onOpenTab }) {
                   tickFormatter={(v) => (v.length > 16 ? `${v.slice(0, 15)}…` : v)}
                 />
                 <Tooltip content={<GlassTooltip format={formatCurrencyCompact} />} cursor={{ fill: 'rgba(148,163,184,0.08)' }} />
-                <Bar dataKey="value" name={t('po_chart_spend') || 'Xarid summasi'} radius={[0, 4, 4, 0]} maxBarSize={22}>
-                  {suppliers.map((s, i) => (
-                    <Cell key={i} fill={s.name === 'Boshqa' ? '#94A3B8' : PAL[i % PAL.length].c} />
+                <Bar dataKey="total" name={t('sales_chart_orders') || 'Savdo summasi'} radius={[0, 4, 4, 0]} maxBarSize={22}>
+                  {customers.map((c, i) => (
+                    <Cell key={i} fill={c.name === 'Boshqa' ? '#94A3B8' : PAL[i % PAL.length].c} />
                   ))}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
           ) : (
-            <EmptyNote icon={Building2} text={t('po_chart_suppliers_empty') || "Bu davrda yetkazib beruvchilardan xarid bo'lmagan"} />
+            <EmptyNote icon={Users} text={t('top_customers_empty') || "Bu davrda mijozlarga savdo bo'lmagan"} />
           )}
         </ChartCard>
       </div>
 
-      {/* Recent orders + upcoming deliveries */}
+      {/* Recent orders + overdue invoices (the daily chase list) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ChartCard title={t('recent_orders') || "So'nggi buyurtmalar"} icon={ShoppingCart}>
-          {hasAnyOrders ? (
+        <ChartCard title={t('recent_orders') || "So'nggi buyurtmalar"} icon={ShoppingBag}>
+          {recent.length > 0 ? (
             <div className="divide-y divide-slate-100">
-              {recent.map((po) => (
+              {recent.map((o) => (
                 <button
-                  key={po.id}
+                  key={o.id}
                   onClick={() => onOpenTab('orders')}
                   className="w-full flex items-center justify-between gap-3 py-2.5 px-1 text-left hover:bg-slate-50/70 rounded-lg transition-colors"
                 >
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-slate-800 font-mono truncate">{po.order_number}</p>
-                    <p className="text-xs text-slate-500 truncate">{po.vendor_name}</p>
+                    <p className="text-sm font-medium text-slate-800 font-mono truncate">{o.order_number}</p>
+                    <p className="text-xs text-slate-500 truncate">{o.customer_name}</p>
                   </div>
                   <div className="text-right shrink-0">
-                    <StatusChip status={po.status} t={t} />
-                    <p className="text-xs text-slate-500 mt-1 tabular-nums">{formatCurrencyCompact(po.total_amount || 0)}</p>
+                    <StatusChip status={o.status} t={t} />
+                    <p className="text-xs text-slate-500 mt-1 tabular-nums">{formatCurrencyCompact(o.total_amount || 0)}</p>
                   </div>
                 </button>
               ))}
             </div>
           ) : (
             <EmptyNote
-              icon={ShoppingCart}
+              icon={ShoppingBag}
               text={t('po_empty_orders') || "Hali buyurtmalar yo'q"}
               cta={(
                 <Button size="sm" onClick={() => onOpenTab('orders')} className="gap-1.5">
@@ -253,41 +265,43 @@ export default function ProcurementDashboard({ t, language, onOpenTab }) {
           )}
         </ChartCard>
 
-        <ChartCard title={t('po_upcoming_deliveries') || 'Kutilayotgan yetkazmalar'} icon={Truck}>
-          {upcoming.length > 0 ? (
+        <ChartCard title={t('overdue_invoices') || "Muddati o'tgan hisob-fakturalar"} icon={Receipt}>
+          {overdue.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-[11px] uppercase tracking-wider text-slate-400">
-                    <th className="py-2 pr-3 font-semibold">{t('order') || 'Buyurtma'}</th>
-                    <th className="py-2 pr-3 font-semibold">{t('supplier') || 'Yetkazib beruvchi'}</th>
-                    <th className="py-2 pr-3 font-semibold">{t('po_expected_date') || 'Kutilgan sana'}</th>
+                    <th className="py-2 pr-3 font-semibold">{t('invoice_number') || 'Hisob-faktura'}</th>
+                    <th className="py-2 pr-3 font-semibold">{t('customer') || 'Mijoz'}</th>
+                    <th className="py-2 pr-3 font-semibold">{t('due_date') || 'Muddat'}</th>
                     <th className="py-2 font-semibold text-right">{t('amount') || 'Summa'}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {upcoming.map((po) => (
+                  {overdue.map((inv) => (
                     <tr
-                      key={po.id}
-                      className={`cursor-pointer hover:bg-slate-50/70 ${po.overdue ? 'bg-red-50/60' : ''}`}
-                      onClick={() => onOpenTab('orders')}
+                      key={inv.id}
+                      className="cursor-pointer hover:bg-slate-50/70"
+                      onClick={() => onOpenTab('invoices')}
                     >
-                      <td className="py-2.5 pr-3 font-mono text-slate-800">{po.order_number}</td>
-                      <td className="py-2.5 pr-3 text-slate-600 truncate max-w-[160px]">{po.vendor_name}</td>
-                      <td className={`py-2.5 pr-3 tabular-nums ${po.overdue ? 'text-red-600 font-semibold' : 'text-slate-600'}`}>
-                        {fmtDate(po.expected_date)}
-                        {po.overdue && (
-                          <span className="ml-1.5 text-[10px] font-semibold uppercase">{t('po_overdue_chip') || 'kechikkan'}</span>
-                        )}
+                      <td className="py-2.5 pr-3 font-mono text-slate-800">{inv.invoice_number}</td>
+                      <td className="py-2.5 pr-3 text-slate-600 truncate max-w-[140px]">{inv.customer_name}</td>
+                      <td className="py-2.5 pr-3 tabular-nums text-slate-600">
+                        {fmtDate(inv.due_date)}
+                        <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full bg-red-50 text-red-600 text-[10px] font-semibold whitespace-nowrap">
+                          +{inv.days_overdue} {t('days_overdue_short') || 'kun'}
+                        </span>
                       </td>
-                      <td className="py-2.5 text-right tabular-nums text-slate-700">{formatCurrencyCompact(po.total_amount || 0)}</td>
+                      <td className="py-2.5 text-right tabular-nums font-medium text-red-600">
+                        {formatCurrencyCompact(inv.amount_due || 0)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           ) : (
-            <EmptyNote icon={Truck} text={t('po_upcoming_empty') || "Kutilayotgan yetkazmalar yo'q"} />
+            <EmptyNote icon={Receipt} text={t('sales_overdue_empty') || "Muddati o'tgan hisob-fakturalar yo'q"} />
           )}
         </ChartCard>
       </div>
