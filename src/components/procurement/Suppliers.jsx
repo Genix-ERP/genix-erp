@@ -47,7 +47,6 @@ import {
   Upload,
   Download,
   BarChart3,
-  Tag,
   Receipt,
 } from "lucide-react";
 import {
@@ -69,7 +68,6 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { MODULES } from "@/config/permissions";
 import SupplierPerformance from "./SupplierPerformance";
-import VendorPricelist from "./VendorPricelist";
 import VendorBills from "./VendorBills";
 
 export default function Suppliers() {
@@ -316,10 +314,6 @@ export default function Suppliers() {
             <BarChart3 className="w-4 h-4 mr-2" />
             {t('performance') || 'Performance'}
           </TabsTrigger>
-          <TabsTrigger value="pricelist" className="data-[state=active]:bg-white">
-            <Tag className="w-4 h-4 mr-2" />
-            {t('pricelist') || 'Pricelist'}
-          </TabsTrigger>
           <TabsTrigger value="bills" className="data-[state=active]:bg-white">
             <Receipt className="w-4 h-4 mr-2" />
             {t('bills') || 'Bills'}
@@ -539,10 +533,6 @@ export default function Suppliers() {
           <SupplierPerformance />
         </TabsContent>
 
-        {/* Pricelist Tab */}
-        <TabsContent value="pricelist" className="mt-4">
-          <VendorPricelist />
-        </TabsContent>
 
         {/* Bills Tab */}
         <TabsContent value="bills" className="mt-4">

@@ -5,8 +5,6 @@ import {
   LayoutDashboard,
   ArrowDownCircle,
   ArrowUpCircle,
-  ListTree,
-  CreditCard,
   Landmark,
   Bell,
   RefreshCw,
@@ -15,16 +13,13 @@ import {
   Percent,
   BookOpen,
   Clock,
-  Receipt,
-  TrendingUp,
-  Calculator,
-  Scale
+  Scale,
+  ListTree,
+  Users,
 } from "lucide-react";
 
 import FinanceDashboard from "@/components/finance/FinanceDashboard";
 import CustomerFollowups from "@/components/finance/CustomerFollowups";
-import AccountsPayable from "@/components/finance/AccountsPayable";
-import AccountsReceivable from "@/components/finance/AccountsReceivable";
 import ChartOfAccounts from "@/components/finance/ChartOfAccounts";
 import Payments from "@/components/finance/Payments";
 import Reconcile from "@/components/finance/Reconcile";
@@ -33,44 +28,55 @@ import RecurringJournalEntries from "@/components/finance/RecurringJournalEntrie
 import FinancialReports from "@/components/finance/FinancialReports";
 import ActSverka from "@/components/finance/ActSverka";
 import TaxReports from "@/components/finance/TaxReports";
-// Profit-tax calculator — §8.1 "Фойда солиғи / Солиқ ҳисоби" tab of
-// ТЗ_Ish_Haqi_Soliq_Tolik.docx. Mounted here as a tab inside Financials
-// (not a standalone sidebar page); see Layout.jsx for the rationale.
-import ProfitTax from "@/pages/ProfitTax";
-// TaxSummary — director-level dashboard aggregating the 8 TZ-listed
-// taxes for a period. Sits next to ProfitTax; each is useful on its own
-// but TaxSummary is the "headline" view that shows Kompaniya soliqlari
-// rates actually driving numbers.
-import TaxSummary from "@/pages/TaxSummary";
 import GeneralLedger from "@/components/finance/GeneralLedger";
 import AgedReceivables from "@/components/finance/AgedReceivables";
 import AgedPayables from "@/components/finance/AgedPayables";
 import AccountCard from "@/components/finance/AccountCard";
-import FinanceVendorBills from "@/components/finance/FinanceVendorBills";
+import AccountsReceivable from "@/components/finance/AccountsReceivable";
+import AccountsPayable from "@/components/finance/AccountsPayable";
 
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
-import { usePermissions } from "@/hooks/usePermissions";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 
 const tabTriggerClass = "flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100 data-[state=inactive]:hover:text-slate-900";
+const subTabTriggerClass = "flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 data-[state=inactive]:text-slate-600";
+
+// 12 tabs → 6 (docs/moliya-audit.md §3). Old ?tab= values keep working:
+// each legacy value maps onto its new home (tab + sub-tab).
+const LEGACY_TAB_MAP = {
+  accounts: { tab: "accounting", sub: "chart" },
+  "journal-entries": { tab: "accounting", sub: "journal" },
+  "account-card": { tab: "accounting", sub: "card" },
+  recurring: { tab: "accounting", sub: "recurring" },
+  payments: { tab: "receivables", sub: "customers" },
+  "vendor-bills": { tab: "receivables", sub: "vendors" },
+  reconcile: { tab: "receivables", sub: "match" },
+  reconciliation: { tab: "receivables", sub: "akt" },
+  bank: { tab: "cashflow" },
+  "tax-reports": { tab: "taxes" },
+};
 
 export default function Financials() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
   const { refreshData } = useFinancials();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const activeTab = searchParams.get("tab") || "dashboard";
+  const rawTab = searchParams.get("tab") || "dashboard";
+  const legacy = LEGACY_TAB_MAP[rawTab];
+  const activeTab = legacy ? legacy.tab : rawTab;
+  const activeSub = legacy?.sub || searchParams.get("sub") || undefined;
 
-  // Refresh financial data when navigating to Financials page
   useEffect(() => {
     refreshData();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleTabChange = (value) => {
     setSearchParams({ tab: value }, { replace: true });
+  };
+  const handleSubChange = (value) => {
+    setSearchParams({ tab: activeTab, sub: value }, { replace: true });
   };
 
   return (
@@ -79,78 +85,37 @@ export default function Financials() {
 
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
           <TabsList className="w-full bg-white/80 backdrop-blur-sm p-1.5 rounded-xl border border-slate-200/60 shadow-lg flex flex-wrap justify-start gap-1 h-auto">
-            {/* 1. Boshqaruv paneli */}
+            {/* 1. Asosiy panel */}
             <TabsTrigger value="dashboard" className={tabTriggerClass}>
               <LayoutDashboard className="w-4 h-4" />
               <span className="hidden sm:inline">{t('dashboard')}</span>
             </TabsTrigger>
 
-            {/* 2. Buxgalteriya */}
-            <TabsTrigger value="accounts" className={tabTriggerClass}>
-              <ListTree className="w-4 h-4" />
+            {/* 2. Pul oqimi — bank/kassa accounts, transactions, reconciliation */}
+            <TabsTrigger value="cashflow" className={tabTriggerClass}>
+              <Landmark className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('pul_oqimi') || 'Pul oqimi'}</span>
+            </TabsTrigger>
+
+            {/* 3. Qarzdorlik — AR + AP + aging + akt sverka + follow-ups */}
+            <TabsTrigger value="receivables" className={tabTriggerClass}>
+              <Users className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('qarzdorlik') || 'Qarzdorlik'}</span>
+            </TabsTrigger>
+
+            {/* 4. Buxgalteriya — chart, journal entries, kartochka, recurring */}
+            <TabsTrigger value="accounting" className={tabTriggerClass}>
+              <BookOpen className="w-4 h-4" />
               <span className="hidden sm:inline">{t('accounting') || 'Buxgalteriya'}</span>
             </TabsTrigger>
 
-            {/* 3. Jurnal yozuvlari */}
-            <TabsTrigger value="journal-entries" className={tabTriggerClass}>
-              <BookOpen className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('journal_entries') || 'Jurnal yozuvlari'}</span>
-            </TabsTrigger>
-
-            {/* 3.5. Hisob kartochkasi */}
-            <TabsTrigger value="account-card" className={tabTriggerClass}>
-              <FileText className="w-4 h-4" />
-              <span className="hidden sm:inline">{language === 'ru' ? 'Карточка счёта' : language === 'uz' ? 'Kartochka' : 'Account Card'}</span>
-            </TabsTrigger>
-
-            {/* 4. Customer (invoices + payments) */}
-            <TabsTrigger value="payments" className={tabTriggerClass}>
-              <ArrowDownCircle className="w-4 h-4" />
-              <span className="hidden sm:inline">{language === 'ru' ? 'Клиент' : language === 'uz' ? 'Mijoz' : 'Customer'}</span>
-            </TabsTrigger>
-
-            {/* 5. Vendor (bills + payments) */}
-            <TabsTrigger value="vendor-bills" className={tabTriggerClass}>
-              <ArrowUpCircle className="w-4 h-4" />
-              <span className="hidden sm:inline">{language === 'ru' ? 'Поставщик' : language === 'uz' ? 'Yetkazib beruvchi' : 'Vendor'}</span>
-            </TabsTrigger>
-
-            {/* 5b. Reconcile (Odoo-style) */}
-            <TabsTrigger value="reconcile" className={tabTriggerClass}>
-              <Scale className="w-4 h-4" />
-              <span className="hidden sm:inline">{language === 'ru' ? 'Сопоставление' : language === 'uz' ? 'Solishtirish' : 'Reconcile'}</span>
-            </TabsTrigger>
-
-            {/* 6. Akt sverka */}
-            <TabsTrigger value="reconciliation" className={tabTriggerClass}>
-              <FileCheck className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('reconciliation_act') || 'Akt sverka'}</span>
-            </TabsTrigger>
-
-            {/* 7. Bank */}
-            <TabsTrigger value="bank" className={tabTriggerClass}>
-              <Landmark className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('bank')}</span>
-            </TabsTrigger>
-
-            {/* 8. Qaytariladigan */}
-            <TabsTrigger value="recurring" className={tabTriggerClass}>
-              <RefreshCw className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('recurring') || 'Qaytariladigan'}</span>
-            </TabsTrigger>
-
-            {/* 13. Soliq hisobotlari — Profit tax (§8.1) and Tax
-                summary (§10) used to live as their own top-level
-                tabs but now nest inside Tax Reports as sub-tabs
-                (Overview / Report Periods / Transactions /
-                Employee taxes / Profit tax / Tax summary). One
-                place for all tax data. */}
-            <TabsTrigger value="tax-reports" className={tabTriggerClass}>
+            {/* 5. Soliq */}
+            <TabsTrigger value="taxes" className={tabTriggerClass}>
               <Percent className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('tax_reports') || 'Soliq hisobotlari'}</span>
+              <span className="hidden sm:inline">{t('taxes') || 'Soliq'}</span>
             </TabsTrigger>
 
-            {/* 15. Hisobotlar */}
+            {/* 6. Hisobotlar */}
             <TabsTrigger value="reports" className={tabTriggerClass}>
               <FileText className="w-4 h-4" />
               <span className="hidden sm:inline">{t('reports') || 'Hisobotlar'}</span>
@@ -160,105 +125,118 @@ export default function Financials() {
           <TabsContent value="dashboard" className="mt-6">
             <FinanceDashboard />
           </TabsContent>
-          <TabsContent value="accounts" className="mt-6">
-            <ChartOfAccounts />
-          </TabsContent>
-          <TabsContent value="journal-entries" className="mt-6">
-            <GeneralLedger />
-          </TabsContent>
-          <TabsContent value="account-card" className="mt-6">
-            <AccountCard />
-          </TabsContent>
-          <TabsContent value="payments" className="mt-6">
-            <Payments side="customer" />
-          </TabsContent>
-          <TabsContent value="vendor-bills" className="mt-6">
-            <Payments side="vendor" />
-          </TabsContent>
-          <TabsContent value="reconcile" className="mt-6">
-            <Reconcile />
-          </TabsContent>
-          <TabsContent value="reconciliation" className="mt-6">
-            <ActSverka />
-          </TabsContent>
-          <TabsContent value="bank" className="mt-6">
+
+          <TabsContent value="cashflow" className="mt-6">
             <BankReconciliation />
           </TabsContent>
-          <TabsContent value="recurring" className="mt-6">
-            <RecurringJournalEntries />
-          </TabsContent>
-          <TabsContent value="tax-reports" className="mt-6">
-            <TaxReports />
-          </TabsContent>
-          {/* "profit-tax" and "tax-summary" tabs were merged into the
-              Tax Reports component (rendered as sub-tabs there). The
-              standalone TabsContent slots are kept commented out for
-              reference only — not mounted anywhere now. */}
-          <TabsContent value="reports" className="mt-6">
-            <Tabs defaultValue="financial-reports" className="w-full">
-              <TabsList className="bg-white/60 p-1 rounded-lg border border-slate-200/60 shadow-sm mb-4">
-                <TabsTrigger
-                  value="financial-reports"
-                  className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 data-[state=inactive]:text-slate-600"
-                >
-                  <FileText className="w-4 h-4" />
-                  {t('reports') || 'Reports'}
-                </TabsTrigger>
-                <TabsTrigger
-                  value="payables"
-                  className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 data-[state=inactive]:text-slate-600"
-                >
+
+          <TabsContent value="receivables" className="mt-6">
+            <Tabs value={activeSub || "customers"} onValueChange={handleSubChange} className="w-full">
+              <TabsList className="bg-white/60 p-1 rounded-lg border border-slate-200/60 shadow-sm mb-4 flex flex-wrap justify-start gap-1 h-auto">
+                <TabsTrigger value="customers" className={subTabTriggerClass}>
                   <ArrowDownCircle className="w-4 h-4" />
-                  {t('payables_ap')}
+                  {t('customers') || 'Mijozlar'}
                 </TabsTrigger>
-                <TabsTrigger
-                  value="receivables"
-                  className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 data-[state=inactive]:text-slate-600"
-                >
+                <TabsTrigger value="vendors" className={subTabTriggerClass}>
                   <ArrowUpCircle className="w-4 h-4" />
-                  {t('receivables_ar')}
+                  {t('vendors') || 'Yetkazib beruvchilar'}
                 </TabsTrigger>
-                <TabsTrigger
-                  value="aged-receivables"
-                  className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 data-[state=inactive]:text-slate-600"
-                >
+                <TabsTrigger value="ar-list" className={subTabTriggerClass}>
+                  <FileText className="w-4 h-4" />
+                  {t('receivables_ar') || 'Debitorlik'}
+                </TabsTrigger>
+                <TabsTrigger value="ap-list" className={subTabTriggerClass}>
+                  <FileText className="w-4 h-4" />
+                  {t('payables_ap') || 'Kreditorlik'}
+                </TabsTrigger>
+                <TabsTrigger value="aging" className={subTabTriggerClass}>
                   <Clock className="w-4 h-4" />
-                  {t('aged_receivables') || 'Aged Receivables'}
+                  {t('aging_tab') || "Muddati o'tgan"}
                 </TabsTrigger>
-                <TabsTrigger
-                  value="aged-payables"
-                  className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 data-[state=inactive]:text-slate-600"
-                >
-                  <Clock className="w-4 h-4" />
-                  {t('aged_payables') || 'Aged Payables'}
+                <TabsTrigger value="akt" className={subTabTriggerClass}>
+                  <FileCheck className="w-4 h-4" />
+                  {t('reconciliation_act') || 'Akt sverka'}
                 </TabsTrigger>
-                <TabsTrigger
-                  value="followups"
-                  className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 data-[state=inactive]:text-slate-600"
-                >
+                <TabsTrigger value="match" className={subTabTriggerClass}>
+                  <Scale className="w-4 h-4" />
+                  {language === 'ru' ? 'Сопоставление' : language === 'uz' ? 'Solishtirish' : 'Reconcile'}
+                </TabsTrigger>
+                <TabsTrigger value="followups" className={subTabTriggerClass}>
                   <Bell className="w-4 h-4" />
-                  {t('followups') || 'Follow-ups'}
+                  {t('followups') || 'Eslatmalar'}
                 </TabsTrigger>
               </TabsList>
-              <TabsContent value="financial-reports">
-                <FinancialReports />
+              <TabsContent value="customers">
+                <Payments side="customer" />
               </TabsContent>
-              <TabsContent value="payables">
-                <AccountsPayable />
+              <TabsContent value="vendors">
+                <Payments side="vendor" />
               </TabsContent>
-              <TabsContent value="receivables">
+              <TabsContent value="ar-list">
                 <AccountsReceivable />
               </TabsContent>
-              <TabsContent value="aged-receivables">
-                <AgedReceivables />
+              <TabsContent value="ap-list">
+                <AccountsPayable />
               </TabsContent>
-              <TabsContent value="aged-payables">
+              <TabsContent value="aging" className="space-y-8">
+                <AgedReceivables />
                 <AgedPayables />
+              </TabsContent>
+              <TabsContent value="akt">
+                <ActSverka />
+              </TabsContent>
+              <TabsContent value="match">
+                <Reconcile />
               </TabsContent>
               <TabsContent value="followups">
                 <CustomerFollowups />
               </TabsContent>
             </Tabs>
+          </TabsContent>
+
+          <TabsContent value="accounting" className="mt-6">
+            <Tabs value={activeSub || "chart"} onValueChange={handleSubChange} className="w-full">
+              <TabsList className="bg-white/60 p-1 rounded-lg border border-slate-200/60 shadow-sm mb-4 flex flex-wrap justify-start gap-1 h-auto">
+                <TabsTrigger value="chart" className={subTabTriggerClass}>
+                  <ListTree className="w-4 h-4" />
+                  {t('chart_of_accounts_tab') || 'Hisoblar rejasi'}
+                </TabsTrigger>
+                <TabsTrigger value="journal" className={subTabTriggerClass}>
+                  <BookOpen className="w-4 h-4" />
+                  {t('journal_entries') || 'Jurnal yozuvlari'}
+                </TabsTrigger>
+                <TabsTrigger value="card" className={subTabTriggerClass}>
+                  <FileText className="w-4 h-4" />
+                  {language === 'ru' ? 'Карточка счёта' : language === 'uz' ? 'Kartochka' : 'Account Card'}
+                </TabsTrigger>
+                {/* "Qaytariladigan" was a mistranslation — these are RECURRING
+                    journal templates, so the tab now says "Takrorlanuvchi". */}
+                <TabsTrigger value="recurring" className={subTabTriggerClass}>
+                  <RefreshCw className="w-4 h-4" />
+                  {t('takrorlanuvchi') || 'Takrorlanuvchi'}
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="chart">
+                <ChartOfAccounts />
+              </TabsContent>
+              <TabsContent value="journal">
+                <GeneralLedger />
+              </TabsContent>
+              <TabsContent value="card">
+                <AccountCard />
+              </TabsContent>
+              <TabsContent value="recurring">
+                <RecurringJournalEntries />
+              </TabsContent>
+            </Tabs>
+          </TabsContent>
+
+          <TabsContent value="taxes" className="mt-6">
+            <TaxReports />
+          </TabsContent>
+
+          <TabsContent value="reports" className="mt-6">
+            <FinancialReports />
           </TabsContent>
         </Tabs>
       </div>
