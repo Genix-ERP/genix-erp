@@ -432,24 +432,33 @@ function pickWorkHierarchySheet(workbook) {
     // has a bare integer in col A because numbering restarts within
     // each ТРУДОВЫЕ РЕСУРСЫ / СТРОИТЕЛЬНЫЕ МАШИНЫ … bucket.
     let score = 0;
-    let prevA = '';
-    let prevC = '';
     for (let i = 0; i < Math.min(rows.length, 200); i++) {
       const row = rows[i];
-      if (!row) { prevA = ''; prevC = ''; continue; }
+      if (!row) continue;
       const colA = row[0] != null ? String(row[0]).trim() : '';
       const colB = row[1] != null ? String(row[1]).trim() : '';
       const colC = row[2] != null ? String(row[2]).trim() : '';
+      const colD = row[3] != null ? String(row[3]).trim() : '';
       if (/^\d+\.\d+$/.test(colA)) {
         score++;
-      } else if (
-        !colA && !colB && colC && colC.length > 3
-        && /^\d+$/.test(prevA) && prevC && prevC.length > 3
-      ) {
+      } else if (!colA && !colB && colC && colC.length > 3 && colD) {
+        // Resource sub-row: no item number, no catalog code, but a real
+        // name AND a unit of measure (ЧЕЛ.-Ч / МАШ.-Ч / М3 / Т …).
+        //
+        // The UOM is what separates a true resource line from a wrapped
+        // continuation-text row. The previous rule instead required the
+        // PREVIOUS row to hold a bare integer, which scored only the
+        // FIRST resource under each work — so a единич sheet with ~2000
+        // resources scored ~20 while a works-only ВОР sheet scored ~28
+        // on its no-UOM continuation rows. ВОР won, parseEdinich parsed
+        // the works-only sheet, and every work imported with "0 resurs".
+        // Counting every UOM-bearing sub-row makes the real hierarchy
+        // sheet win by a wide margin (134 vs 0 on the Саттепо family)
+        // while a flat XLS resource catalog — whose rows carry bare
+        // integers in col A — still scores 0 and keeps ВОР the winner
+        // for the Юксалиш Тип-3 layout.
         score++;
       }
-      prevA = colA;
-      prevC = colC;
     }
     if (score > bestScore) {
       bestScore = score;
