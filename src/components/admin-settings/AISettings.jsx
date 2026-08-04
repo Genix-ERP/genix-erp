@@ -62,10 +62,18 @@ export default function AISettings() {
   };
 
   const handleSave = async () => {
+    // Guard against Chrome autofilling an email/username into this field: it
+    // ignores autoComplete="off" on inputs it heuristically treats as email, and
+    // a non-URL endpoint silently breaks every AI call once saved.
+    const ep = endpoint.trim();
+    if (ep && !/^https?:\/\//i.test(ep)) {
+      toast.error(t('ai_endpoint_invalid') || "Endpoint to'liq URL bo'lishi kerak (https://...)");
+      return;
+    }
     setSaving(true);
     try {
       // api_key blank → backend keeps the existing stored key.
-      await adminSettingsService.updateAISettings({ provider, model: model.trim(), endpoint: endpoint.trim(), api_key: apiKey.trim() });
+      await adminSettingsService.updateAISettings({ provider, model: model.trim(), endpoint: ep, api_key: apiKey.trim() });
       toast.success(t('ai_settings_saved') || 'AI sozlamalari saqlandi');
       if (apiKey.trim()) {
         setHasKey(true);
@@ -140,11 +148,18 @@ export default function AISettings() {
               label={t('ai_endpoint') || 'Endpoint (ixtiyoriy)'}
               description={t('ai_endpoint_hint') || "Bo'sh qoldirsangiz provayderning standart manzili ishlatiladi. OpenAI-mos endpoint (masalan Google Gemini yoki Azure) uchun to'liq URL kiriting."}
             >
+              {/* type=url + an explicit non-email-looking name so Chrome's
+                  autofill heuristics don't drop the account email in here;
+                  data-*-ignore opts out of the common password managers. */}
               <Input
+                type="url"
+                name="ai-provider-endpoint"
                 value={endpoint}
                 onChange={(e) => setEndpoint(e.target.value)}
                 placeholder="https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
                 autoComplete="off"
+                data-lpignore="true"
+                data-1p-ignore="true"
               />
             </SettingsField>
 
