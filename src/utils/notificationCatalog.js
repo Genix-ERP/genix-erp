@@ -42,6 +42,32 @@ export const NOTIFICATION_TEMPLATES = {
     fields: ['product_name', 'quantity'],
     format: { quantity: 'number' },
   },
+  // ── Material zayavkalari (Qurilish v2) ────────────────────────────────
+  material_request_created: {
+    titleKey: 'notif_mr_created_title',
+    bodyKey: 'notif_mr_created_body',
+    fields: ['request_number'],
+  },
+  material_request_issued: {
+    titleKey: 'notif_mr_issued_title',
+    bodyKey: 'notif_mr_issued_body',
+    fields: ['request_number'],
+  },
+  material_request_rejected: {
+    titleKey: 'notif_mr_rejected_title',
+    bodyKey: 'notif_mr_rejected_body',
+    fields: ['request_number', 'reason'],
+  },
+  material_request_purchase: {
+    titleKey: 'notif_mr_purchase_title',
+    bodyKey: 'notif_mr_purchase_body',
+    fields: ['request_number', 'pr_number'],
+  },
+  material_request_arrived: {
+    titleKey: 'notif_mr_arrived_title',
+    bodyKey: 'notif_mr_arrived_body',
+    fields: ['request_number', 'po_number'],
+  },
   // ── Vazifalar (task management) ───────────────────────────────────────
   task_assigned: {
     titleKey: 'notif_task_assigned_title',

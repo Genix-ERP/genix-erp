@@ -129,6 +129,11 @@ export default function NotificationBell() {
       navigate(`${createPageUrl('Customers')}?tab=leads&lead_id=${data.lead_id}`);
       return;
     }
+    // Material zayavkalari (Qurilish v2): zayavka detaliga olib boradi.
+    if (typeof n.type === 'string' && n.type.startsWith('material_request_') && data?.material_request_id) {
+      navigate(`/construction?view=requests&mrId=${data.material_request_id}`);
+      return;
+    }
     // Fallback: just go to the full notifications page.
     navigate(createPageUrl('Notifications'));
   };
