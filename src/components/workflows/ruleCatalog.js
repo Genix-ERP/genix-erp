@@ -390,6 +390,32 @@ export const TRIGGER_EVENTS = [
     ],
   },
   {
+    value: 'construction.material_request_created', labelKey: 'evt_construction_mr_created', descKey: 'evt_construction_mr_created_desc',
+    category: 'construction', icon: Package, scheduled: false,
+    fields: [
+      { key: 'request_number', labelKey: 'wf_f_order_number', type: 'text' },
+      { key: 'project_name', labelKey: 'wf_f_project_name', type: 'text' },
+      { key: 'priority', labelKey: 'wf_f_priority', type: 'text' },
+    ],
+  },
+  {
+    value: 'construction.material_request_issued', labelKey: 'evt_construction_mr_issued', descKey: 'evt_construction_mr_issued_desc',
+    category: 'construction', icon: Package, scheduled: false,
+    fields: [
+      { key: 'request_number', labelKey: 'wf_f_order_number', type: 'text' },
+      { key: 'project_name', labelKey: 'wf_f_project_name', type: 'text' },
+      { key: 'total_value', labelKey: 'wf_f_total_amount', type: 'number' },
+    ],
+  },
+  {
+    value: 'construction.material_request_rejected', labelKey: 'evt_construction_mr_rejected', descKey: 'evt_construction_mr_rejected_desc',
+    category: 'construction', icon: Package, scheduled: false,
+    fields: [
+      { key: 'request_number', labelKey: 'wf_f_order_number', type: 'text' },
+      { key: 'reason', labelKey: 'wf_f_reason', type: 'text' },
+    ],
+  },
+  {
     value: 'construction.budget_overrun', labelKey: 'evt_construction_budget_overrun', descKey: 'evt_construction_budget_overrun_desc',
     category: 'construction', icon: AlertTriangle, scheduled: true,
     fields: [

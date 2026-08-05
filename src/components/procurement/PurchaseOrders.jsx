@@ -50,6 +50,7 @@ import {
   ChevronRight,
   SlidersHorizontal,
   Landmark,
+  FileText,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useSearchParams } from 'react-router-dom';
@@ -73,6 +74,7 @@ import PurchaseReturns from './PurchaseReturns';
 import BlanketOrders from './BlanketOrders';
 import LandedCosts from './LandedCosts';
 import GoodsReceipt from './GoodsReceipt';
+import PurchaseRequisitions from '@/components/procurement/PurchaseRequisitions';
 
 export default function PurchaseOrders({ initialSubtab = 'orders' }) {
   const { language } = useLanguage();
@@ -1131,6 +1133,10 @@ export default function PurchaseOrders({ initialSubtab = 'orders' }) {
             <Package className="w-4 h-4 mr-2" />
             {t('receiving') || 'Qabul qilish'}
           </TabsTrigger>
+          <TabsTrigger value="requisitions" className="data-[state=active]:bg-white">
+            <FileText className="w-4 h-4 mr-2" />
+            {t('pr_title') || "So'rovlar"}
+          </TabsTrigger>
           <TabsTrigger value="blanket-orders" className="data-[state=active]:bg-white">
             <Layers className="w-4 h-4 mr-2" />
             {t('blanket_orders') || 'Blanket Orders'}
@@ -1354,6 +1360,11 @@ export default function PurchaseOrders({ initialSubtab = 'orders' }) {
             (Tovar qabulxonasi is no longer a separate top-level destination) */}
         <TabsContent value="receipts" className="mt-4">
           <GoodsReceipt />
+        </TabsContent>
+
+        {/* Requisitions Tab — zayavkalardan/MRPdan kelgan ichki so'rovlar */}
+        <TabsContent value="requisitions" className="mt-4">
+          <PurchaseRequisitions />
         </TabsContent>
 
         {/* Returns Tab */}
