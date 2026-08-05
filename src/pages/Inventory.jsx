@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Package,
@@ -7,10 +7,13 @@ import {
   CalendarClock,
   BarChart3,
   Settings,
+  Inbox,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import InventoryDashboard from "@/components/inventory/InventoryDashboard";
+import MaterialRequestsPanel from "@/components/construction/material-requests/MaterialRequestsPanel";
+import materialRequestsService from "@/api/services/materialRequests";
 import InventoryDocuments from "@/components/inventory/InventoryDocuments";
 import InventorySettings from "@/components/inventory/InventorySettings";
 import Products from "@/components/inventory/Products";
@@ -67,10 +70,25 @@ export default function Inventory() {
     return "warehouses";
   }, [rawTab]);
 
+  // «Kiruvchi zayavkalar» badge — ochiq zayavkalar soni (60s yangilanadi).
+  // Ruxsat bo'lmasa (403) badge ko'rinmaydi, tab esa qoladi.
+  const [inboxCount, setInboxCount] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    const fetchCount = () =>
+      materialRequestsService.stats()
+        .then((s) => { if (!cancelled) setInboxCount(s?.inbox_count || 0); })
+        .catch(() => {});
+    fetchCount();
+    const timer = setInterval(fetchCount, 60000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, []);
+
   const TABS = [
     { value: "dashboard", icon: LayoutDashboard, label: t("dashboard") },
     { value: "products", icon: Package, label: t("products") },
     { value: "documents", icon: FileText, label: t("inv_tab_documents") },
+    { value: "requests", icon: Inbox, label: t("inv_tab_requests") || "Zayavkalar", badge: inboxCount },
     { value: "planning", icon: CalendarClock, label: t("planning") },
     { value: "reports", icon: BarChart3, label: t("reports") },
     { value: "settings", icon: Settings, label: t("inv_tab_settings") },
@@ -81,10 +99,15 @@ export default function Inventory() {
       <div className="space-y-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="w-full bg-white p-1.5 rounded-xl border border-slate-200 flex flex-wrap justify-start gap-1 h-auto">
-            {TABS.map(({ value, icon: Icon, label }) => (
+            {TABS.map(({ value, icon: Icon, label, badge }) => (
               <TabsTrigger key={value} value={value} className={TAB_STYLE}>
                 <Icon className="w-4 h-4" />
                 <span className="hidden sm:inline">{label}</span>
+                {badge > 0 && (
+                  <span className="ml-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
+                    {badge > 99 ? "99+" : badge}
+                  </span>
+                )}
               </TabsTrigger>
             ))}
           </TabsList>
@@ -104,6 +127,10 @@ export default function Inventory() {
 
           <TabsContent value="documents" className="mt-6">
             <InventoryDocuments t={t} language={language} initialSection={initialDocSection} />
+          </TabsContent>
+
+          <TabsContent value="requests" className="mt-6">
+            <MaterialRequestsPanel mode="warehouse" />
           </TabsContent>
 
           <TabsContent value="planning" className="mt-6">
