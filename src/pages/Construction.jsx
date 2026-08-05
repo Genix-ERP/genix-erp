@@ -87,6 +87,7 @@ import { ActivityLogPanel } from '@/components/shared/ActivityLog';
 import { WBSTree } from '@/components/construction/WBSTree';
 // Lazy-load heavy tab components so they're only fetched when the user
 // opens the relevant section. This reduces initial bundle size by ~60%.
+const MaterialRequestsPanel = lazy(() => import('@/components/construction/material-requests/MaterialRequestsPanel'));
 const ActivityTab = lazy(() => import('@/components/construction/tabs/ActivityTab'));
 const EstimatesTab = lazy(() => import('@/components/construction/tabs/EstimatesTab'));
 // Smeta boshqaruvi — focused per-estimate view: KPI cards (labor / machine /
@@ -804,11 +805,11 @@ const ProjectDetailView = ({
       // margin numbers when smeta totals weren't loaded yet. The
       // FinancialTab.jsx file was deleted in the 2026-08 cleanup.
     ]},
-    // Materiallar hidden for now — uncomment to bring it back.
-    // { key: 'materiallar', label: t('nav_materials') || 'Materiallar', icon: Package, subs: [
-    //   { key: 'forms', label: 'Forma' },
-    //   { key: 'material_usage', label: t('nav_material_usage') || 'Material sarfi' },
-    // ]},
+    // Materiallar — zayavkalar v2 bilan qayta ochildi (2026-08). Eski
+    // forms/material_usage sub-pillari emas, faqat zayavkalar oqimi.
+    { key: 'materiallar', label: t('nav_materials') || 'Materiallar', icon: Package, subs: [
+      { key: 'material_requests', label: t('construction_view_requests') || 'Material zayavkalari' },
+    ]},
     { key: 'hujjatlar', label: t('nav_documents') || 'Hujjatlar', icon: FileText, subs: [
       { key: 'forms', label: t('nav_forms') || 'Formalar' },
       { key: 'acts', label: t('nav_acts') || 'Aktlar' },
@@ -2761,6 +2762,11 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
           <SubcontractorsTab project={project} buildings={buildings} wbsItems={wbsTree} />
         )}
 
+        {/* Material zayavkalari (loyiha ko'lami) */}
+        {activeTab === 'material_requests' && (
+          <MaterialRequestsPanel mode="project" projectId={project.id} />
+        )}
+
         {/* Forms (Forma 2/3/19) Tab */}
         {activeTab === 'forms' && (
           <FormsTab project={project} />
@@ -4307,6 +4313,16 @@ export default function Construction() {
   const selectedProject = selectedProjectId
     ? projects.find((p) => String(p.id) === String(selectedProjectId)) || null
     : null;
+  // Sahifa darajasidagi segment: «Loyihalar | Material zayavkalari».
+  // Bildirishnoma deep-linklari ?view=requests&mrId=N bilan keladi.
+  const activeView = searchParams.get('view') || 'projects';
+  const setActiveView = (view) => setSearchParams((prev) => {
+    const next = new URLSearchParams(prev);
+    if (view === 'projects') next.delete('view');
+    else next.set('view', view);
+    next.delete('projectId');
+    return next;
+  }, { replace: true });
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showProjectModal, setShowProjectModal] = useState(false);
@@ -4836,6 +4852,36 @@ export default function Construction() {
   return (
     <div className="min-h-screen bg-slate-50/50">
       <div className="mx-auto max-w-[1600px] px-4 md:px-6 lg:px-8 py-6 md:py-8 space-y-8">
+        {/* Sahifa segmenti: Loyihalar | Material zayavkalari (6.1-bo'lim) */}
+        <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-xl p-1 w-fit">
+          {[
+            { key: 'projects', label: t('construction_view_projects') || 'Loyihalar' },
+            { key: 'requests', label: t('construction_view_requests') || 'Material zayavkalari' },
+          ].map((v) => (
+            <button
+              key={v.key}
+              type="button"
+              onClick={() => setActiveView(v.key)}
+              className={cn(
+                'px-4 py-2 rounded-lg text-sm font-medium transition-all',
+                activeView === v.key
+                  ? 'bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white shadow-md'
+                  : 'text-slate-600 hover:bg-slate-100'
+              )}
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
+
+        {activeView === 'requests' && (
+          <Suspense fallback={<div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" /></div>}>
+            <MaterialRequestsPanel mode="construction" />
+          </Suspense>
+        )}
+
+        {activeView === 'projects' && (
+        <>
         {/* Stats: clickable status filter cards + summary metrics */}
         <div className="space-y-3">
           {/* Status filter — segmented cards, one per dropdown status so the
@@ -4900,6 +4946,8 @@ export default function Construction() {
           t={t}
           PROJECT_STATUS={PROJECT_STATUS}
         />
+        </>
+        )}
       </div>
 
       {/* Project Modal */}

@@ -64,7 +64,10 @@ export default function Procurement() {
   const setActiveTab = (tab) => setSearchParams({ tab }, { replace: true });
 
   // Old bookmarked URLs land on the sub-surface that now hosts that flow.
-  const initialOrdersSubtab = rawTab === 'goods-receipt' ? 'receipts' : 'orders';
+  const initialOrdersSubtab =
+    rawTab === 'goods-receipt' ? 'receipts'
+    : rawTab === 'requisitions' ? 'requisitions'
+    : 'orders';
   const initialPriceSub = useMemo(() => {
     if (rawTab === 'rfq') return 'rfq';
     if (rawTab === 'price-history') return 'history';
