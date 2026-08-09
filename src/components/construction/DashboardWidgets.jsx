@@ -19,6 +19,7 @@ import { format, differenceInDays, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatDate } from '@/utils/formatDate';
 
 // ─────────────────────────────────────────────
@@ -102,10 +103,17 @@ const PROJECT_STATUSES = [
   { value: 'completed',   tkey: 'completed',   fallback: 'Tugallangan',    cls: 'bg-emerald-100 text-emerald-700' },
 ];
 
-export function ProgressWidget({ project, onStatusChange }) {
+export function ProgressWidget({ project, progressData, onStatusChange }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const progress = Math.max(0, Math.min(100, Number(project.progress_percent) || 0));
+  // v2: the ONE progress number is the server-computed cost-weighted
+  // readiness from /progress (qurilish-v2 conventions §2). The manual
+  // progress_percent column is a dead fallback for when the endpoint
+  // fails or hasn't answered yet.
+  const progress = Math.max(0, Math.min(100,
+    Number(progressData?.project_pct ?? project.progress_percent) || 0));
+  const progressLabel = Math.round(progress);
+  const stages = Array.isArray(progressData?.stages) ? progressData.stages : [];
 
   // Resolve current status — fall back to first option (draft) so the
   // Select always has a defined value and the trigger never goes blank.
@@ -166,7 +174,7 @@ export function ProgressWidget({ project, onStatusChange }) {
       <div className="mb-6">
         <div className="flex items-baseline gap-2 mb-3">
           <span className="text-4xl font-semibold text-slate-900 tabular-nums leading-none">
-            {progress}
+            {progressLabel}
           </span>
           <span className="text-lg font-medium text-slate-400 leading-none">%</span>
         </div>
@@ -175,35 +183,85 @@ export function ProgressWidget({ project, onStatusChange }) {
             className={cn('h-full rounded-full transition-all duration-500', barColor)}
             style={{ width: `${progress}%` }}
             role="progressbar"
-            aria-valuenow={progress}
+            aria-valuenow={progressLabel}
             aria-valuemin="0"
             aria-valuemax="100"
           />
         </div>
       </div>
 
-      {/* Sections column was removed at user request — the breakdown
-         lives in the dedicated tabs and didn't earn its slot here.
-         "Jamoa" was relabeled to "Ishchi soni" so the metric reads as a
-         headcount rather than a generic team-name. */}
-      <dl className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-100">
-        <div>
-          <dt className="text-xs font-medium text-slate-500 mb-1.5">
-            {t('buildings') || 'Binolar'}
-          </dt>
-          <dd className="text-xl font-semibold text-slate-900 tabular-nums leading-none">
-            {project.buildings_count || 0}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs font-medium text-slate-500 mb-1.5">
-            {t('worker_count') || 'Ishchi soni'}
-          </dt>
-          <dd className="text-xl font-semibold text-slate-900 tabular-nums leading-none">
-            {project.team_count || 0}
-          </dd>
-        </div>
-      </dl>
+      {progressData ? (
+        <>
+          {/* v2 counters — stages and confirmed/total works straight from
+             the /progress payload, replacing the old buildings/headcount
+             pair (those live in the info card now). */}
+          <dl className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-100">
+            <div>
+              <dt className="text-xs font-medium text-slate-500 mb-1.5">
+                {t('nav_stages') || 'Bosqichlar'}
+              </dt>
+              <dd className="text-xl font-semibold text-slate-900 tabular-nums leading-none">
+                {stages.length}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs font-medium text-slate-500 mb-1.5">
+                {t('ov_works_confirmed') || 'Tasdiqlangan ishlar'}
+              </dt>
+              <dd className="text-xl font-semibold text-slate-900 tabular-nums leading-none">
+                {Number(progressData.works_confirmed) || 0}
+                <span className="text-sm font-medium text-slate-400">
+                  /{Number(progressData.works_total) || 0}
+                </span>
+              </dd>
+            </div>
+          </dl>
+          {/* Compact stage strip — up to 6 stages as thin muted rows. */}
+          {stages.length > 0 && (
+            <div className="mt-4 space-y-1.5 pt-3 border-t border-slate-100">
+              {stages.slice(0, 6).map((s, i) => {
+                const pct = Math.max(0, Math.min(100, Number(s.pct) || 0));
+                return (
+                  <div key={i} className="flex items-center gap-2">
+                    <span className="w-2/5 truncate text-xs text-slate-500" title={s.name}>
+                      {s.name}
+                    </span>
+                    <div className="h-1 flex-1 rounded-full bg-slate-100 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-[var(--genix-blue)]"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <span className="w-9 shrink-0 text-right text-[11px] font-medium text-slate-500 tabular-nums">
+                      {Math.round(pct)}%
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      ) : (
+        // Fallback counters while /progress is loading or unavailable.
+        <dl className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-100">
+          <div>
+            <dt className="text-xs font-medium text-slate-500 mb-1.5">
+              {t('buildings') || 'Binolar'}
+            </dt>
+            <dd className="text-xl font-semibold text-slate-900 tabular-nums leading-none">
+              {project.buildings_count || 0}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs font-medium text-slate-500 mb-1.5">
+              {t('worker_count') || 'Ishchi soni'}
+            </dt>
+            <dd className="text-xl font-semibold text-slate-900 tabular-nums leading-none">
+              {project.team_count || 0}
+            </dd>
+          </div>
+        </dl>
+      )}
     </Panel>
   );
 }
@@ -286,9 +344,75 @@ function Row({ label, value, bold, valueClass }) {
 }
 
 // ─────────────────────────────────────────────
+// Budget Mini Widget — reja (smeta) vs fakt (CEL)
+// ─────────────────────────────────────────────
+// Overview byudjet-mini per qurilish-v2 conventions §5: reja = smeta jami,
+// fakt = approved expense lines (pul), foiz = fakt/reja. Threshold colors
+// mirror BudgetTab's legend: <90% normal · 90–100% diqqat · >100% oshdi.
+export function BudgetMiniWidget({ progressData }) {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
+  const { formatCurrency } = useCurrencyFormatter();
+
+  const smetaTotal = Number(progressData?.smeta_total) || 0;
+  const actualCost = Number(progressData?.actual_cost) || 0;
+  const variance = smetaTotal - actualCost;
+  const pctUsed = smetaTotal > 0 ? (actualCost / smetaTotal) * 100 : 0;
+  const barColor =
+    pctUsed > 100 ? 'bg-red-500' : pctUsed >= 90 ? 'bg-amber-500' : 'bg-emerald-500';
+
+  return (
+    <Panel className="h-full">
+      <PanelHeader
+        title={t('ov_budget_title') || 'Byudjet'}
+        icon={DollarSign}
+        iconClass="text-emerald-500"
+      />
+      <div className="px-5 pb-5">
+        {smetaTotal === 0 ? (
+          <p className="py-8 text-center text-sm text-slate-400">
+            {t('ov_budget_empty') || 'Smeta hali kiritilmagan'}
+          </p>
+        ) : (
+          <div className="space-y-3">
+            <Row label={t('rf_plan') || 'Reja'} value={formatCurrency(smetaTotal)} bold />
+            <Row
+              label={t('rf_fact') || 'Fakt'}
+              value={formatCurrency(actualCost)}
+              valueClass="text-amber-600"
+            />
+            <Row
+              label={t('variance') || "Og'ish"}
+              value={`${variance >= 0 ? '+' : ''}${formatCurrency(variance)}`}
+              valueClass={variance >= 0 ? 'text-emerald-600' : 'text-red-600'}
+            />
+            <div className="pt-3 border-t border-slate-100">
+              <div className="flex justify-between items-baseline mb-1.5">
+                <span className="text-xs font-medium text-slate-500">
+                  {t('budget_status') || 'Byudjet holati'}
+                </span>
+                <span className="text-xs font-semibold text-slate-900 tabular-nums">
+                  {pctUsed.toFixed(1)}%
+                </span>
+              </div>
+              <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                <div
+                  className={cn('h-full rounded-full transition-all', barColor)}
+                  style={{ width: `${Math.min(100, pctUsed)}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </Panel>
+  );
+}
+
+// ─────────────────────────────────────────────
 // Timeline Widget — minimal, no saturated colors
 // ─────────────────────────────────────────────
-export function TimelineWidget({ project }) {
+export function TimelineWidget({ project, progressData }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
 
@@ -299,10 +423,17 @@ export function TimelineWidget({ project }) {
 
   const totalDays = startDate && endDate ? Math.max(0, differenceInDays(endDate, startDate)) : 0;
   const daysElapsed = startDate ? differenceInDays(today, startDate) : 0;
-  const daysRemaining = endDate ? differenceInDays(endDate, today) : 0;
-  const percentElapsed =
-    totalDays > 0 ? Math.min(100, Math.max(0, (daysElapsed / totalDays) * 100)) : 0;
-  const currentProgress = Number(project.progress_percent) || 0;
+  // Server-computed values from /progress win; the calendar math below is
+  // only the fallback. With both real progress (cost-weighted) and real
+  // elapsed %, the "Kechikish xavfi" badge compares like with like.
+  const daysRemaining = progressData?.days_left != null
+    ? Number(progressData.days_left) || 0
+    : endDate ? differenceInDays(endDate, today) : 0;
+  const percentElapsed = progressData?.elapsed_pct != null
+    ? Math.min(100, Math.max(0, Number(progressData.elapsed_pct) || 0))
+    : totalDays > 0 ? Math.min(100, Math.max(0, (daysElapsed / totalDays) * 100)) : 0;
+  const currentProgress = Math.round(
+    Number(progressData?.project_pct ?? project.progress_percent) || 0);
 
   const hasDates = !!(startDate && endDate);
   const notStarted = !actualStart && currentProgress === 0;
@@ -535,10 +666,35 @@ export function QuickActionsWidget({ onAction }) {
 // ─────────────────────────────────────────────
 // Alerts Widget
 // ─────────────────────────────────────────────
-export function AlertsWidget({ project, sections = [], vendors = [], acts = [] }) {
+export function AlertsWidget({ project, sections = [], vendors = [], acts = [], progressData, onNavigate }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const alerts = [];
+
+  // v2 /progress-driven alerts first — they're the actionable ones.
+  // Overdue works: clicking the row jumps to the Ish grafigi tab.
+  const overdueWorks = Number(progressData?.works_overdue) || 0;
+  if (overdueWorks > 0) {
+    alerts.push({
+      type: 'warning',
+      title: (t('ov_alert_overdue') || "{n} ta ishning muddati o'tgan")
+        .replace('{n}', String(overdueWorks)),
+      description: t('nav_work_schedule') || 'Ish grafigi',
+      icon: Clock,
+      go: onNavigate ? () => onNavigate('grafik', 'work_schedule') : undefined,
+    });
+  }
+  // Fakt (approved expense lines) exceeded the smeta plan.
+  const v2Smeta = Number(progressData?.smeta_total) || 0;
+  const v2Actual = Number(progressData?.actual_cost) || 0;
+  if (v2Smeta > 0 && v2Actual > v2Smeta) {
+    alerts.push({
+      type: 'error',
+      title: t('ov_alert_budget') || 'Fakt xarajat smetadan oshdi',
+      description: t('nav_budget') || 'Byudjet',
+      icon: DollarSign,
+    });
+  }
 
   // Acts whose period_to deadline is within the next 5 days and still
   // in an actionable state (draft / submitted). One alert per act,
@@ -651,8 +807,19 @@ export function AlertsWidget({ project, sections = [], vendors = [], acts = [] }
             warning: 'text-amber-600',
             info: 'text-blue-600',
           };
+          // Alerts with a `go` handler render as buttons so the user can
+          // jump straight to the relevant tab.
+          const Wrapper = alert.go ? 'button' : 'div';
           return (
-            <div key={index} className={cn('rounded-lg border px-3 py-2.5', tone[alert.type])}>
+            <Wrapper
+              key={index}
+              {...(alert.go ? { type: 'button', onClick: alert.go } : {})}
+              className={cn(
+                'rounded-lg border px-3 py-2.5',
+                alert.go && 'w-full text-left cursor-pointer transition-shadow hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400',
+                tone[alert.type]
+              )}
+            >
               <div className="flex items-start gap-2">
                 <Icon className={cn('w-4 h-4 mt-0.5 shrink-0', iconTone[alert.type])} strokeWidth={2} />
                 <div className="min-w-0">
@@ -660,7 +827,7 @@ export function AlertsWidget({ project, sections = [], vendors = [], acts = [] }
                   <p className="text-xs opacity-75 mt-0.5">{alert.description}</p>
                 </div>
               </div>
-            </div>
+            </Wrapper>
           );
         })}
       </div>
@@ -672,6 +839,7 @@ export default {
   StatsCard,
   ProgressWidget,
   FinancialWidget,
+  BudgetMiniWidget,
   TimelineWidget,
   TeamWidget,
   VendorsWidget,
