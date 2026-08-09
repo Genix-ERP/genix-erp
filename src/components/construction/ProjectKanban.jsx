@@ -85,7 +85,7 @@ const PortalAwareItem = ({ provided, snapshot, children }) => {
 };
 
 // Project Card (visual only — drag is handled by the Draggable wrapper)
-function ProjectCard({ project, onView, onEdit, formatCurrency, t }) {
+function ProjectCard({ project, progress, onView, onEdit, formatCurrency, t }) {
   return (
     <Card
       onClick={() => onView(project)}
@@ -148,9 +148,9 @@ function ProjectCard({ project, onView, onEdit, formatCurrency, t }) {
         <div className="mb-2">
           <div className="flex justify-between text-xs mb-1">
             <span className="text-slate-500">{t('progress') || 'Progress'}</span>
-            <span className="font-medium">{project.progress_percent || 0}%</span>
+            <span className="font-medium">{progress}%</span>
           </div>
-          <Progress value={project.progress_percent || 0} className="h-1.5" />
+          <Progress value={progress} className="h-1.5" />
         </div>
 
         {project.planned_end_date && (
@@ -165,7 +165,7 @@ function ProjectCard({ project, onView, onEdit, formatCurrency, t }) {
 }
 
 // Kanban Column — a Droppable target for one status
-function KanbanColumn({ column, projects, onView, onEdit, formatCurrency, t }) {
+function KanbanColumn({ column, projects, readinessById, onView, onEdit, formatCurrency, t }) {
   const columnProjects = projects.filter((p) => p.status === column.id);
 
   return (
@@ -195,21 +195,31 @@ function KanbanColumn({ column, projects, onView, onEdit, formatCurrency, t }) {
                 <p>{t('no_projects') || "Loyihalar yo'q"}</p>
               </div>
             ) : (
-              columnProjects.map((project, index) => (
-                <Draggable key={project.id} draggableId={String(project.id)} index={index}>
-                  {(dp, ds) => (
-                    <PortalAwareItem provided={dp} snapshot={ds}>
-                      <ProjectCard
-                        project={project}
-                        onView={onView}
-                        onEdit={onEdit}
-                        formatCurrency={formatCurrency}
-                        t={t}
-                      />
-                    </PortalAwareItem>
-                  )}
-                </Draggable>
-              ))
+              columnProjects.map((project, index) => {
+                // Same progress source as the grid cards: computed
+                // cost-weighted readiness from /projects/stats, falling
+                // back to the manual progress_percent column.
+                const computed = readinessById ? readinessById[project.id] : undefined;
+                const progress = typeof computed === 'number'
+                  ? Math.round(computed)
+                  : (Number(project.progress_percent) || 0);
+                return (
+                  <Draggable key={project.id} draggableId={String(project.id)} index={index}>
+                    {(dp, ds) => (
+                      <PortalAwareItem provided={dp} snapshot={ds}>
+                        <ProjectCard
+                          project={project}
+                          progress={progress}
+                          onView={onView}
+                          onEdit={onEdit}
+                          formatCurrency={formatCurrency}
+                          t={t}
+                        />
+                      </PortalAwareItem>
+                    )}
+                  </Draggable>
+                );
+              })
             )}
             {provided.placeholder}
           </div>
@@ -222,6 +232,10 @@ function KanbanColumn({ column, projects, onView, onEdit, formatCurrency, t }) {
 // Main Kanban Board Component
 export function ProjectKanban({
   projects,
+  // Optional map of project id → computed readiness % (from
+  // /construction/projects/stats). Cards fall back to the manual
+  // progress_percent column when absent.
+  readinessById,
   onStatusChange,
   onViewProject,
   onEditProject,
@@ -251,6 +265,7 @@ export function ProjectKanban({
               key={column.id}
               column={column}
               projects={projects}
+              readinessById={readinessById}
               onView={onViewProject}
               onEdit={onEditProject}
               formatCurrency={formatCurrency}

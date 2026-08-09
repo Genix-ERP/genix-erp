@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, Suspense, lazy } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useConstructionContext } from '@/components/contexts/ConstructionContext';
 import { constructionService } from '@/api/services/construction';
+import { materialRequestsService } from '@/api/services/materialRequests';
 import { hrService } from '@/api/services/hr';
 import { inventoryService } from '@/api/services/inventory';
 import { Core as Integrations } from '@/api/integrations';
@@ -101,10 +102,16 @@ const DailyJournalTab = lazy(() => import('@/components/construction/tabs/DailyJ
 // StagesTab is kept around in the repo for reference/rollback but no
 // longer mounted.
 const StagesTab = lazy(() => import('@/components/construction/tabs/StagesTabV2'));
+// Ish grafigi — Gectaro-style Gantt over smeta work items (schedule +
+// dependencies + baseline), backed by /construction/projects/:id/schedule.
+const WorkScheduleTab = lazy(() => import('@/components/construction/tabs/WorkScheduleTab'));
 const ExpensesTab = lazy(() => import('@/components/construction/tabs/ExpensesTab'));
 const BudgetTab = lazy(() => import('@/components/construction/tabs/BudgetTab'));
 const MaterialUsageTab = lazy(() => import('@/components/construction/tabs/MaterialUsageTab'));
-const ProgressTab = lazy(() => import('@/components/construction/tabs/ProgressTab'));
+// ProgressTab (Jarayon) was cut in the qurilish-v2 flat IA — its stats
+// merged into the rebuilt Umumiy ko'rinish. The component file stays in
+// the repo for reference; only the navigation entry and dispatch branch
+// were removed.
 const SubcontractorsTab = lazy(() => import('@/components/construction/tabs/SubcontractorsTab'));
 const ActsTab = lazy(() => import('@/components/construction/tabs/ActsTab'));
 const FormsTab = lazy(() => import('@/components/construction/tabs/FormsTab'));
@@ -125,7 +132,8 @@ import {
   TimelineWidget,
   TeamWidget,
   VendorsWidget,
-  AlertsWidget
+  AlertsWidget,
+  BudgetMiniWidget
 } from '@/components/construction/DashboardWidgets';
 
 // Status transitions allowed for projects. Completed / cancelled are terminal;
@@ -304,6 +312,7 @@ const ProjectsTab = ({
         ) : viewMode === 'kanban' ? (
           <ProjectKanban
             projects={filteredProjects}
+            readinessById={readinessById}
             onStatusChange={onStatusChange}
             onViewProject={onViewProject}
             onEditProject={onEditProject}
@@ -528,6 +537,9 @@ const OverviewTabContent = React.memo(function OverviewTabContent({
   team,
   vendors,
   acts,
+  // v2 /progress payload (fetched by ProjectDetailView) — the single
+  // source for every progress/budget number on this screen.
+  progressData,
   t,
   setActiveGroup,
   setActiveTab,
@@ -644,10 +656,11 @@ const OverviewTabContent = React.memo(function OverviewTabContent({
           sections_count: sections.length,
           team_count: team.length,
         }}
+        progressData={progressData}
         onStatusChange={onProjectStatusChange}
       />
 
-      <TimelineWidget project={project} />
+      <TimelineWidget project={project} progressData={progressData} />
 
       {/* Quick Action Buttons — clean panel */}
       <div className="rounded-xl border border-slate-200 bg-white">
@@ -677,8 +690,11 @@ const OverviewTabContent = React.memo(function OverviewTabContent({
         </div>
       </div>
 
+      {/* Byudjet mini — reja (smeta) vs fakt (CEL) from /progress. */}
+      <BudgetMiniWidget progressData={progressData} />
+
       {/* Project Info — clean dl */}
-      <div className="lg:col-span-2 rounded-xl border border-slate-200 bg-white">
+      <div className="rounded-xl border border-slate-200 bg-white">
         <div className="px-5 pt-4 pb-3">
           <h3 className="text-sm font-semibold text-slate-900">
             {t('project_info') || "Loyiha ma'lumotlari"}
@@ -710,6 +726,8 @@ const OverviewTabContent = React.memo(function OverviewTabContent({
         sections={sections}
         vendors={vendors}
         acts={acts}
+        progressData={progressData}
+        onNavigate={(group, tab) => { setActiveGroup(group); setActiveTab(tab); }}
       />
 
       {/* Forma 19 == Material yig'indisi. Opened from the Tez amallar
@@ -723,6 +741,55 @@ const OverviewTabContent = React.memo(function OverviewTabContent({
     </div>
   );
 });
+
+// ─────────────────────────────────────────────────────────────────────
+// Qurilish v2 flat IA — static navigation shape + legacy URL redirects.
+//
+// NAV_STRUCTURE mirrors the NAV_GROUPS defined inside ProjectDetailView
+// (which layers localized labels/icons on top); it exists at module scope
+// so the URL normalizer below can validate ?group=&tab= params without
+// needing t(). Groups with an empty tab list beyond the first entry are
+// single-tab groups — clicking them activates that implicit tab and no
+// sub-pill row is rendered.
+const NAV_STRUCTURE = [
+  { key: 'dashboard',   tabs: ['overview'] },
+  { key: 'grafik',      tabs: ['work_schedule'] },
+  { key: 'smeta',       tabs: ['smeta_management', 'stages', 'estimates', 'buildings'] },
+  { key: 'moliya',      tabs: ['budget', 'reja_fakt', 'expenses'] },
+  { key: 'materiallar', tabs: ['material_requests'] },
+  { key: 'hujjatlar',   tabs: ['forms', 'acts', 'daily_logs', 'activity'] },
+  { key: 'jamoa',       tabs: ['team_tab', 'subcontractors'] },
+];
+
+// Old (v1) `?group=&tab=` deep links → their new home in the flat IA.
+// Consulted once when ProjectDetailView initializes state from the URL;
+// the URL-sync effect then rewrites the address bar to the new form, so
+// no old bookmark or notification link breaks.
+const LEGACY_ROUTES = {
+  'qurilish/buildings':       { group: 'smeta',     tab: 'buildings' },
+  'qurilish/progress':        { group: 'dashboard', tab: 'overview' },
+  'qurilish/stages':          { group: 'smeta',     tab: 'stages' },
+  'qurilish/work_schedule':   { group: 'grafik',    tab: 'work_schedule' },
+  'qurilish/reja_fakt':       { group: 'moliya',    tab: 'reja_fakt' },
+  'qurilish/estimates':       { group: 'smeta',     tab: 'estimates' },
+  'hujjatlar/subcontractors': { group: 'jamoa',     tab: 'subcontractors' },
+};
+
+// Pure: (group, tab) from the URL → a valid v2 (group, tab) pair.
+// Order: exact legacy pair → legacy group/tab catch-alls → validation
+// (unknown group falls back to 'dashboard'; a tab the group doesn't own
+// falls back to the group's first tab).
+const normalizeProjectRoute = (group, tab) => {
+  const legacy = LEGACY_ROUTES[`${group}/${tab}`];
+  if (legacy) return legacy;
+  // Old top-level "Smeta boshqaruvi" group — every tab it held maps to the
+  // new Smeta home segment.
+  if (group === 'smeta_boshqaruvi') return { group: 'smeta', tab: 'smeta_management' };
+  // Orphan 'team' tab (pre-TeamTab full page) → Jamoa.
+  if (tab === 'team') return { group: 'jamoa', tab: 'team_tab' };
+  const g = NAV_STRUCTURE.find((x) => x.key === group) || NAV_STRUCTURE[0];
+  return { group: g.key, tab: g.tabs.includes(tab) ? tab : g.tabs[0] };
+};
 
 // Project Detail View with Sub-tabs
 const ProjectDetailView = ({
@@ -744,10 +811,14 @@ const ProjectDetailView = ({
   // params aren't present. The two-way sync below keeps the URL in
   // step with state changes from the in-page navigation.
   const [projectViewParams, setProjectViewParams] = useSearchParams();
-  const initialGroup = projectViewParams.get('group') || 'dashboard';
-  const initialTab   = projectViewParams.get('tab')   || 'overview';
-  const [activeGroup, setActiveGroup] = useState(initialGroup);
-  const [activeTab,   setActiveTab]   = useState(initialTab);
+  // Normalize BEFORE state init so legacy v1 links (see LEGACY_ROUTES) land
+  // on the right v2 view; the sync effect below then rewrites the URL.
+  const initialRoute = normalizeProjectRoute(
+    projectViewParams.get('group') || 'dashboard',
+    projectViewParams.get('tab') || 'overview',
+  );
+  const [activeGroup, setActiveGroup] = useState(initialRoute.group);
+  const [activeTab,   setActiveTab]   = useState(initialRoute.tab);
   // Whenever the user navigates, mirror the change to the URL. We use
   // `replace: true` so each click doesn't push a new history entry —
   // the back button still does what users expect (return to the
@@ -771,61 +842,45 @@ const ProjectDetailView = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeGroup, activeTab]);
 
-  // Top-level navigation groups for the project page.
-  //
-  // Recent changes:
-  //   • "Materiallar" hidden — the materials forms aren't part of the
-  //     v2 workflow yet, and the Smeta boshqaruvi tab covers what
-  //     foremen actually need today. The constants stay defined inside
-  //     the component so the materials sub-tabs can be re-enabled
-  //     without restructuring NAV_GROUPS.
-  //   • "Smeta boshqaruvi" promoted to its own top-level group instead
-  //     of being a sub-pill under Moliya. It's the page foremen and
-  //     supervisors hit most often, so giving it a dedicated entry
-  //     saves a click.
+  // Top-level navigation — qurilish-v2 flat IA (conventions §3): seven
+  // groups, one level deep. Single-tab groups carry a `tab` field (the
+  // implicit tab the group click activates) and render no sub-pill row.
+  // Keep NAV_STRUCTURE (module scope, above ProjectDetailView) in sync
+  // with any key change here — it validates URL params.
   const NAV_GROUPS = [
-    { key: 'dashboard', label: t('nav_overview') || "Umumiy ko'rinish", icon: LayoutDashboard, subs: [] },
-    { key: 'qurilish', label: t('nav_objects') || 'Obyekt', icon: Building2, subs: [
-      { key: 'buildings', label: t('nav_buildings') || 'Binolar' },
-      { key: 'progress', label: t('nav_progress') || 'Jarayon' },
+    { key: 'dashboard', label: t('nav_overview') || "Umumiy ko'rinish", icon: LayoutDashboard, subs: [], tab: 'overview' },
+    { key: 'grafik', label: t('nav_work_schedule') || 'Ish grafigi', icon: Calendar, subs: [], tab: 'work_schedule' },
+    { key: 'smeta', label: t('nav_smeta') || 'Smeta', icon: ClipboardList, subs: [
+      { key: 'smeta_management', label: t('nav_smeta_home') || 'Ishlar va hajmlar' },
       { key: 'stages', label: t('nav_stages') || 'Bosqichlar' },
-      { key: 'reja_fakt', label: t('nav_plan_fact') || 'Reja vs Fakt' },
-      { key: 'estimates', label: t('nav_estimates') || 'Smetalar' },
-    ]},
-    // Smeta boshqaruvi promoted out of the Moliya sub-pills into its own
-    // top-level entry. Single-tab group → no sub-pill row needed.
-    { key: 'smeta_boshqaruvi', label: t('nav_smeta_management') || 'Smeta boshqaruvi', icon: ClipboardList, subs: [
-      { key: 'smeta_management', label: t('nav_smeta_management') || 'Smeta boshqaruvi' },
+      { key: 'estimates', label: t('nav_estimates_registry') || "Smetalar ro'yxati" },
+      { key: 'buildings', label: t('nav_buildings') || 'Binolar' },
     ]},
     { key: 'moliya', label: t('nav_finance') || 'Moliya', icon: DollarSign, subs: [
       { key: 'budget', label: t('nav_budget') || 'Byudjet' },
+      { key: 'reja_fakt', label: t('nav_plan_fact') || 'Reja vs Fakt' },
       { key: 'expenses', label: t('nav_expenses') || 'Xarajatlar' },
-      // 'financial' / Tahlil sub-tab removed per product request — the
-      // page mostly duplicated Byudjet's data and showed misleading
-      // margin numbers when smeta totals weren't loaded yet. The
-      // FinancialTab.jsx file was deleted in the 2026-08 cleanup.
     ]},
-    // Materiallar — zayavkalar v2 bilan qayta ochildi (2026-08). Eski
-    // forms/material_usage sub-pillari emas, faqat zayavkalar oqimi.
-    { key: 'materiallar', label: t('nav_materials') || 'Materiallar', icon: Package, subs: [
-      { key: 'material_requests', label: t('construction_view_requests') || 'Material zayavkalari' },
-    ]},
+    { key: 'materiallar', label: t('nav_materials') || 'Materiallar', icon: Package, subs: [], tab: 'material_requests' },
     { key: 'hujjatlar', label: t('nav_documents') || 'Hujjatlar', icon: FileText, subs: [
       { key: 'forms', label: t('nav_forms') || 'Formalar' },
       { key: 'acts', label: t('nav_acts') || 'Aktlar' },
       { key: 'daily_logs', label: t('nav_daily_log') || 'Kunlik jurnal' },
-      { key: 'subcontractors', label: t('nav_subcontractors') || 'Subpudratchilar' },
       { key: 'activity', label: t('nav_activity') || 'Faoliyat' },
     ]},
+    // Subpudratchilar moved from Hujjatlar → Jamoa (people/organizations
+    // belong together, documents stay documents).
     { key: 'jamoa', label: t('nav_team') || 'Jamoa', icon: Users, subs: [
       { key: 'team_tab', label: t('nav_team_members') || "Jamoa a'zolari" },
+      { key: 'subcontractors', label: t('nav_subcontractors') || 'Subpudratchilar' },
     ]},
   ];
 
   const handleGroupClick = (group) => {
     setActiveGroup(group.key);
     if (group.subs.length === 0) {
-      setActiveTab('overview');
+      // Single-tab group — activate its implicit tab.
+      setActiveTab(group.tab || 'overview');
     } else {
       setActiveTab(group.subs[0].key);
     }
@@ -857,6 +912,37 @@ const ProjectDetailView = ({
   const [projectMaterials, setProjectMaterials] = useState([]);
   const [wbsTree, setWbsTree] = useState([]);
   const [loading, setLoading] = useState(false);
+
+  // v2 progress payload (GET /projects/:id/progress) — the ONE progress
+  // number (qurilish-v2 conventions §2). Powers the overview widgets AND
+  // the live badge on the Ish grafigi tab, so it lives here (not inside
+  // the overview branch): fetched once per project, re-fetched whenever
+  // the user returns to the overview so freshly confirmed works show up.
+  const [progressData, setProgressData] = useState(null);
+  const progressFetchedFor = React.useRef(null);
+  useEffect(() => {
+    if (!project?.id) return;
+    if (activeTab !== 'overview' && progressFetchedFor.current === project.id) return;
+    if (progressFetchedFor.current !== project.id) setProgressData(null); // don't show the previous project's numbers
+    progressFetchedFor.current = project.id;
+    let cancelled = false;
+    constructionService.getProjectProgress(project.id)
+      .then((data) => { if (!cancelled) setProgressData(data || null); })
+      .catch(() => { if (!cancelled) setProgressData(null); });
+    return () => { cancelled = true; };
+  }, [project?.id, activeTab]);
+
+  // Ochiq zayavkalar soni — Materiallar tabidagi jonli badge. Same
+  // project-scoped stats endpoint the MaterialRequestsPanel KPI cards use.
+  const [openRequestsCount, setOpenRequestsCount] = useState(null);
+  useEffect(() => {
+    if (!project?.id) return;
+    let cancelled = false;
+    materialRequestsService.stats({ project_id: project.id })
+      .then((s) => { if (!cancelled) setOpenRequestsCount(typeof s?.open_count === 'number' ? s.open_count : null); })
+      .catch(() => { if (!cancelled) setOpenRequestsCount(null); });
+    return () => { cancelled = true; };
+  }, [project?.id]);
 
   // Modals
   const [showBuildingModal, setShowBuildingModal] = useState(false);
@@ -1096,12 +1182,8 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
               setProjectSubcontracts(estSubcontracts || []);
             } catch (e) { setWbsTree([]); }
             break;
-          case 'progress':
-            try {
-              const progressSections = await constructionService.listSections(project.id);
-              setSections(progressSections || []);
-            } catch (e) { setSections([]); }
-            break;
+          // (case 'progress' removed with the Jarayon tab — qurilish-v2
+          // flat IA folded its stats into the Umumiy ko'rinish rebuild.)
         }
       } catch (error) {
         console.error('Error loading data:', error);
@@ -1888,6 +1970,15 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
         {NAV_GROUPS.map((group) => {
           const Icon = group.icon;
           const isActive = activeGroup === group.key;
+          // Live badges (conventions §3): Ish grafigi — muddati o'tgan
+          // ishlar soni (red); Materiallar — ochiq zayavkalar soni (amber).
+          // null/0 → no chip, so a failed stats call degrades silently.
+          const badge =
+            group.key === 'grafik' && Number(progressData?.works_overdue) > 0
+              ? { count: Number(progressData.works_overdue), cls: 'bg-red-100 text-red-700' }
+              : group.key === 'materiallar' && Number(openRequestsCount) > 0
+                ? { count: Number(openRequestsCount), cls: 'bg-amber-100 text-amber-700' }
+                : null;
           return (
             <button
               key={group.key}
@@ -1905,6 +1996,16 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
             >
               <Icon className={cn('w-4 h-4', isActive ? 'text-slate-900' : 'text-slate-400')} strokeWidth={2} />
               {group.label}
+              {badge && (
+                <span
+                  className={cn(
+                    'inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1.5 text-[10px] font-semibold tabular-nums leading-none',
+                    badge.cls
+                  )}
+                >
+                  {badge.count}
+                </span>
+              )}
             </button>
           );
         })}
@@ -1959,6 +2060,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
             team={team}
             vendors={vendors}
             acts={acts}
+            progressData={progressData}
             t={t}
             setActiveGroup={setActiveGroup}
             setActiveTab={setActiveTab}
@@ -2714,11 +2816,6 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
           </Card>
         )}
 
-        {/* Progress Tab */}
-        {activeTab === 'progress' && (
-          <ProgressTab project={project} />
-        )}
-
         {/* Activity Log Tab */}
         {activeTab === 'activity' && (
           <Card>
@@ -2734,6 +2831,14 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
             project={project}
             setActiveGroup={setActiveGroup}
             setActiveTab={setActiveTab}
+          />
+        )}
+
+        {/* Ish grafigi (work schedule Gantt) Tab */}
+        {activeTab === 'work_schedule' && (
+          <WorkScheduleTab
+            project={project}
+            onOpenSmeta={() => { setActiveGroup('smeta'); setActiveTab('smeta_management'); }}
           />
         )}
 
@@ -3442,7 +3547,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                   <SelectItem value="project_manager">{t('project_manager') || 'Loyiha boshqaruvchisi'}</SelectItem>
                   <SelectItem value="chief_engineer">{t('chief_engineer') || 'Bosh muhandis'}</SelectItem>
                   <SelectItem value="site_engineer">{t('site_engineer') || 'Obyekt muhandisi'}</SelectItem>
-                  <SelectItem value="foreman">{t('foreman') || 'Prораб'}</SelectItem>
+                  <SelectItem value="foreman">{t('foreman') || 'Prorab'}</SelectItem>
                   <SelectItem value="quantity_surveyor">{t('quantity_surveyor') || 'Smetachi'}</SelectItem>
                   <SelectItem value="safety_officer">{t('safety_officer') || 'Xavfsizlik xodimi'}</SelectItem>
                   <SelectItem value="accountant">{t('accountant') || 'Hisobchi'}</SelectItem>

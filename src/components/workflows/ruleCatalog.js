@@ -425,6 +425,26 @@ export const TRIGGER_EVENTS = [
       { key: 'overrun_pct', labelKey: 'wf_f_overrun_pct', type: 'number' },
     ],
   },
+  // Ish grafigi (Gantt v2, migration 471)
+  {
+    value: 'construction.work_overdue', labelKey: 'evt_construction_work_overdue', descKey: 'evt_construction_work_overdue_desc',
+    category: 'construction', icon: AlertTriangle, scheduled: true,
+    fields: [
+      { key: 'work_name', labelKey: 'wf_f_work_name', type: 'text' },
+      { key: 'project_name', labelKey: 'wf_f_project_name', type: 'text' },
+      { key: 'sched_end', labelKey: 'wf_f_due_date', type: 'text' },
+      { key: 'progress_pct', labelKey: 'wf_f_progress_pct', type: 'number' },
+    ],
+  },
+  {
+    value: 'construction.work_completed', labelKey: 'evt_construction_work_completed', descKey: 'evt_construction_work_completed_desc',
+    category: 'construction', icon: ClipboardList, scheduled: false,
+    fields: [
+      { key: 'work_name', labelKey: 'wf_f_work_name', type: 'text' },
+      { key: 'project_name', labelKey: 'wf_f_project_name', type: 'text' },
+      { key: 'done_quantity', labelKey: 'wf_f_quantity', type: 'number' },
+    ],
+  },
 ];
 
 export const EVENT_BY_VALUE = Object.fromEntries(TRIGGER_EVENTS.map((e) => [e.value, e]));
