@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Send, DollarSign, TrendingUp, Clock, AlertCircle } from 'lucide-react';
+import { Plus, Search, DollarSign, TrendingUp, Clock, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { ru, uz } from 'date-fns/locale';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
@@ -40,7 +40,6 @@ export default function AccountsReceivable() {
   const dateLocale = getDateLocale(language);
   const {
     createCustomerInvoice,
-    updateCustomerInvoice,
     isLoading,
     refreshData
   } = useFinancials();
@@ -49,7 +48,7 @@ export default function AccountsReceivable() {
   const customerInvoices = salesInvoices || [];
   const { canCreate, canUpdate, MODULES } = usePermissions();
   const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
-  const { modal, showAlert, showError, showSuccess, close } = useAlertModal();
+  const { modal, showAlert, showError, close } = useAlertModal();
 
   const { customers: crmCustomers, isLoading: loadingCustomers } = useCustomers();
 
@@ -186,18 +185,6 @@ export default function AccountsReceivable() {
       console.error('Invoice creation error:', err.response?.data || err);
       showError(errorMsg, 'Invoice yaratish xatosi');
     }
-  };
-
-  const sendReminder = (invoiceId) => {
-    const invoice = customerInvoices.find(inv => inv.id === invoiceId);
-
-    // Update dunning level
-    updateCustomerInvoice(invoiceId, {
-      dunning_level: (invoice.dunning_level || 0) + 1,
-      last_dunning_date: new Date().toISOString().split('T')[0]
-    });
-
-    showSuccess(`Reminder sent for invoice ${invoice.invoice_number}. Dunning level increased.`);
   };
 
   const markAsPaid = async (invoiceId) => {
@@ -451,7 +438,6 @@ export default function AccountsReceivable() {
                       <TableHead>{t('amount')}</TableHead>
                       <TableHead>{t('payment_status') || 'Payment'}</TableHead>
                       <TableHead>{t('status')}</TableHead>
-                      <TableHead>{t('dunning')}</TableHead>
                       <TableHead>{t('actions')}</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -488,19 +474,7 @@ export default function AccountsReceivable() {
                           <Badge className={getStatusColor(invoice.status)}>{t(invoice.status) || invoice.status}</Badge>
                         </TableCell>
                         <TableCell>
-                          {invoice.dunning_level > 0 && (
-                            <Badge variant="outline" className="bg-orange-50 text-orange-700">
-                              {invoice.dunning_level}
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell>
                           <div className="flex gap-1">
-                            {canUpdate(MODULES.FINANCIALS) && invoice.status === 'overdue' && (
-                              <Button size="sm" variant="ghost" onClick={() => sendReminder(invoice.id)} title={t('remind')}>
-                                <Send className="w-4 h-4" />
-                              </Button>
-                            )}
                             {canUpdate(MODULES.FINANCIALS) && invoice.status !== 'paid' && (
                               <Button size="sm" variant="ghost" onClick={() => markAsPaid(invoice.id)} title={t('pay')}>
                                 <DollarSign className="w-4 h-4" />
