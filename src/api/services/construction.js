@@ -1173,6 +1173,18 @@ export const constructionService = {
     return response.data.data;
   },
 
+  // v2 single-source project progress (qurilish-v2 conventions §2) — the
+  // cost-weighted readiness CTE, same SQL as /projects/stats.readiness_pct.
+  // Returns: { project_pct, stages: [{ name, pct, works_total,
+  //   works_confirmed, works_started, works_overdue, plan_amount }],
+  //   works_total, works_confirmed, works_overdue, smeta_total, actual_cost,
+  //   contract_amount, planned_start, planned_end, days_left, elapsed_pct?,
+  //   updated_at }
+  async getProjectProgress(projectId) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/progress`);
+    return response.data.data;
+  },
+
   async getGanttData(projectId) {
     const response = await apiClient.get(`/construction/projects/${projectId}/gantt`);
     return response.data.data;
@@ -1571,6 +1583,51 @@ export const constructionService = {
 
   async deleteActType(id) {
     await apiClient.delete(`/construction/act-types/${id}`);
+  },
+
+  // =====================================================
+  // ISH GRAFIGI — work schedule (Gantt over smeta works)
+  // =====================================================
+
+  // Full schedule payload for the Gantt: ordered works (including
+  // unscheduled ones), FS dependencies and the project's planned window.
+  // params: { building_id? }
+  async getWorkSchedule(projectId, params = {}) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/schedule`, { params });
+    return response.data.data;
+  },
+
+  // Reschedule one work. Returns { updated: [{id, sched_start, sched_end,
+  // prev_start, prev_end}, …] } — the work itself plus any successors the
+  // server shifted via FS-propagation. Patch ALL of them locally and keep
+  // the prev_* values as one undo step.
+  async updateWorkSchedule(workId, data) {
+    const response = await apiClient.put(`/construction/works/${workId}/schedule`, data);
+    return response.data.data;
+  },
+
+  // Bulk set dates without propagation — used for Undo restore and for
+  // "add to schedule". items: [{ line_id, sched_start, sched_end }].
+  async bulkUpdateWorkSchedule(projectId, items) {
+    const response = await apiClient.post(`/construction/projects/${projectId}/schedule/bulk`, { items });
+    return response.data.data;
+  },
+
+  // Freeze the baseline (copies sched→baseline for every scheduled work).
+  async freezeScheduleBaseline(projectId) {
+    const response = await apiClient.post(`/construction/projects/${projectId}/schedule/baseline`, {});
+    return response.data.data;
+  },
+
+  // data: { predecessor_line_id, successor_line_id, lag_days }.
+  // 400s with a friendly code/message on cycle / duplicate / self-link.
+  async createWorkDependency(projectId, data) {
+    const response = await apiClient.post(`/construction/projects/${projectId}/dependencies`, data);
+    return response.data.data;
+  },
+
+  async deleteWorkDependency(depId) {
+    await apiClient.delete(`/construction/schedule-dependencies/${depId}`);
   },
 };
 
