@@ -176,7 +176,7 @@ const BudgetTab = ({ project }) => {
               fallback never fired and the button rendered the raw key.
               We keep this label localised here (3 strings) instead of
               extending the 24k-line translations.jsx file. */}
-          {({ uz: 'Свод hisobot', ru: 'Сводный отчёт', en: 'Svod report' })[language] || 'Свод hisobot'}
+          {({ uz: 'Jamlanma hisobot', ru: 'Сводный отчёт', en: 'Summary report' })[language] || 'Jamlanma hisobot'}
         </Button>
         <Button
           size="sm"

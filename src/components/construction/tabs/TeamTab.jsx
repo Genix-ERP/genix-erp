@@ -17,14 +17,14 @@ import { sortBuildings } from '@/utils/naturalSort';
 import { toast } from 'sonner';
 
 const ROLE_OPTIONS = [
-  { value: 'prorab', label: 'Prоrab' },
+  { value: 'prorab', label: 'Prorab' },
   { value: 'muhandis', label: 'Muhandis' },
   { value: 'texnik_nazoratchi', label: 'Texnik nazoratchi' },
   { value: 'buxgalter', label: 'Buxgalter' },
   { value: 'project_manager', label: 'Loyiha boshqaruvchisi' },
   { value: 'chief_engineer', label: 'Bosh muhandis' },
   { value: 'site_engineer', label: 'Obyekt muhandisi' },
-  { value: 'foreman', label: 'Prораб' },
+  { value: 'foreman', label: 'Prorab' },
   { value: 'quantity_surveyor', label: 'Smetachi' },
   { value: 'safety_officer', label: 'Xavfsizlik xodimi' },
   { value: 'accountant', label: 'Hisobchi' },
