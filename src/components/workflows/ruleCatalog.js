@@ -445,6 +445,17 @@ export const TRIGGER_EVENTS = [
       { key: 'done_quantity', labelKey: 'wf_f_quantity', type: 'number' },
     ],
   },
+  {
+    value: 'construction.stage_budget_exceeded', labelKey: 'evt_construction_stage_budget_exceeded', descKey: 'evt_construction_stage_budget_exceeded_desc',
+    category: 'construction', icon: AlertTriangle, scheduled: true,
+    fields: [
+      { key: 'stage_name', labelKey: 'wf_f_stage_name', type: 'text' },
+      { key: 'project_name', labelKey: 'wf_f_project_name', type: 'text' },
+      { key: 'plan', labelKey: 'wf_f_total_amount', type: 'number' },
+      { key: 'actual', labelKey: 'wf_f_actual_amount', type: 'number' },
+      { key: 'exceed_pct', labelKey: 'wf_f_overrun_pct', type: 'number' },
+    ],
+  },
 ];
 
 export const EVENT_BY_VALUE = Object.fromEntries(TRIGGER_EVENTS.map((e) => [e.value, e]));
