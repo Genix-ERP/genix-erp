@@ -17,6 +17,7 @@ import { useTranslation } from "@/components/utils/translations";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import financeService from "@/api/services/finance";
+import { isOverdue } from "./accounts-payable/billHelpers";
 
 export default function FinanceVendorBills() {
   const { language } = useLanguage();
@@ -48,14 +49,23 @@ export default function FinanceVendorBills() {
   const [billsLoading, setBillsLoading] = useState(false);
   const pageSize = 20;
 
+  // The filter set, in one place, so the list and the stat cards ask about the
+  // same rows.
+  const buildParams = useCallback(() => {
+    const params = {};
+    if (searchQuery) params.search = searchQuery;
+    if (statusFilter === 'overdue') params.overdue = 'true';
+    else if (statusFilter === 'partial' || statusFilter === 'paid') params.payment_status = statusFilter;
+    else if (statusFilter !== 'all') params.status = statusFilter === 'not_paid' ? 'posted' : statusFilter;
+    if (dateFrom) params.date_from = dateFrom;
+    if (dateTo) params.date_to = dateTo;
+    return params;
+  }, [searchQuery, statusFilter, dateFrom, dateTo]);
+
   const fetchBills = useCallback(async () => {
     setBillsLoading(true);
     try {
-      const params = { page: currentPage, page_size: pageSize };
-      if (searchQuery) params.search = searchQuery;
-      if (statusFilter !== 'all') params.status = statusFilter === 'not_paid' ? 'posted' : statusFilter;
-      if (dateFrom) params.date_from = dateFrom;
-      if (dateTo) params.date_to = dateTo;
+      const params = { ...buildParams(), page: currentPage, page_size: pageSize };
       const result = await financeService.listPurchaseInvoices(params);
       const bills = Array.isArray(result?.data) ? result.data : Array.isArray(result) ? result : [];
       setPaginatedBills(bills);
@@ -68,30 +78,28 @@ export default function FinanceVendorBills() {
     } finally {
       setBillsLoading(false);
     }
-  }, [currentPage, searchQuery, statusFilter, dateFrom, dateTo]);
+  }, [buildParams, currentPage]);
 
   useEffect(() => { fetchBills(); }, [fetchBills]);
 
   // Reset page when filters change
   useEffect(() => { setCurrentPage(1); }, [searchQuery, statusFilter, dateFrom, dateTo, codeFilter]);
 
-  // Fetch backend stats on mount
+  // Stats with the SAME filters as the list. This was called bare and keyed off
+  // `paginatedBills`, so the cards described the whole tenant while the rows
+  // underneath were filtered — the endpoint has been filter-sensitive since
+  // a60cb5b — and it re-fetched on every page turn to produce the same answer.
   useEffect(() => {
-    financeService.getPurchaseInvoiceStats()
+    financeService.getPurchaseInvoiceStats(buildParams())
       .then(data => setBackendStats(data))
       .catch(() => setBackendStats(null));
-  }, [paginatedBills]);
+  }, [buildParams]);
 
-  const isOverdue = (bill) => {
-    // Use backend-computed is_overdue if available
-    if (bill.is_overdue !== undefined) return bill.is_overdue;
-    if (!bill.due_date) return false;
-    const status = bill.status;
-    if (status === 'paid' || status === 'cancelled') return false;
-    return new Date(bill.due_date) < new Date(new Date().toDateString());
-  };
-
-  // Derive payment status from bill data
+  // Derive the display status from bill data. This is a display vocabulary
+  // (draft / cancelled / reversed alongside the payment states), not the
+  // payment_status the server emits — hence its own function. The overdue test
+  // underneath it is the shared one, so this screen and AccountsPayable cannot
+  // reach different answers about the same row.
   const getPaymentStatus = (bill) => {
     const paid = bill.amount_paid || 0;
     const total = bill.total_amount || 0;
