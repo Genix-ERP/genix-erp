@@ -22,8 +22,6 @@ const FISCAL_YEARS_KEY = 'genix_fiscal_years';
 const FISCAL_PERIODS_KEY = 'genix_fiscal_periods';
 const BUDGETS_KEY = 'genix_budgets';
 const BUDGET_LINES_KEY = 'genix_budget_lines';
-const CASH_REGISTERS_KEY = 'genix_cash_registers';
-const CASH_ORDERS_KEY = 'genix_cash_orders';
 const RECONCILIATION_ACTS_KEY = 'genix_reconciliation_acts';
 const EXCHANGE_DIFFS_KEY = 'genix_exchange_diffs';
 
@@ -148,18 +146,10 @@ const sampleBudgetLines = [
   { id: 'bl_3', budget_id: 'bud_1', account_id: 'acc_13', planned_amount: 50000000, actual_amount: 8000000, notes: 'Utilities' },
 ];
 
-const sampleCashRegisters = [
-  { id: 'cr_1', name: 'Asosiy kassa', code: 'KASSA-01', currency: 'UZS', limit_amount: 50000000, current_balance: 12500000, is_active: true },
-  { id: 'cr_2', name: 'Filial kassa', code: 'KASSA-02', currency: 'UZS', limit_amount: 30000000, current_balance: 5000000, is_active: true },
-  { id: 'cr_3', name: 'Valyuta kassa', code: 'KASSA-USD', currency: 'USD', limit_amount: 10000, current_balance: 2500, is_active: true },
-];
-
-const sampleCashOrders = [
-  { id: 'co_1', cash_register_id: 'cr_1', order_number: 'PKO-2026-00001', order_type: 'pko', order_date: new Date().toISOString().split('T')[0], amount: 5000000, currency: 'UZS', partner_name: 'Abdullayev M.', account_code: '4010', description: 'Tovar sotishdan tushum', status: 'confirmed', created_at: new Date().toISOString() },
-  { id: 'co_2', cash_register_id: 'cr_1', order_number: 'RKO-2026-00001', order_type: 'rko', order_date: new Date().toISOString().split('T')[0], amount: 2000000, currency: 'UZS', partner_name: 'Karimov S.', account_code: '7110', description: 'Xo\'jalik xarajatlari', status: 'confirmed', created_at: new Date().toISOString() },
-  { id: 'co_3', cash_register_id: 'cr_1', order_number: 'PKO-2026-00002', order_type: 'pko', order_date: new Date(Date.now() - 86400000).toISOString().split('T')[0], amount: 10000000, currency: 'UZS', partner_name: 'Raximov A.', account_code: '4010', description: 'Xizmat ko\'rsatishdan tushum', status: 'confirmed', created_at: new Date().toISOString() },
-  { id: 'co_4', cash_register_id: 'cr_1', order_number: 'RKO-2026-00002', order_type: 'rko', order_date: new Date().toISOString().split('T')[0], amount: 3500000, currency: 'UZS', partner_name: '', account_code: '6710', description: 'Ish haqi to\'lash', status: 'draft', created_at: new Date().toISOString() },
-];
+// Cash registers/orders intentionally have NO sample data and NO localStorage
+// fallback: kassa documents are ledger-backed documents — if the API fails they
+// must fail loudly instead of becoming browser-only ghosts (see 2026-08-10
+// cash-truth audit: PKO-2026-13647 existed only in localStorage).
 
 const sampleReconciliationActs = [
   { id: 'ra_1', partner_id: 'c_1', partner_name: 'Tech Solutions LLC', period_start: '2026-01-01', period_end: '2026-03-31', opening_balance: 5000000, our_debit_total: 15000000, our_credit_total: 8500000, our_balance: 11500000, partner_debit_total: 8500000, partner_credit_total: 15000000, partner_balance: 11500000, difference: 0, status: 'confirmed', created_at: new Date().toISOString() },
@@ -198,6 +188,9 @@ export function FinancialsProvider({ children }) {
   const [budgetLines, setBudgetLines] = useState([]);
   const [cashRegisters, setCashRegisters] = useState([]);
   const [cashOrders, setCashOrders] = useState([]);
+  // Ledger-derived cash position from GET /cash/balance — THE single cash
+  // engine: { total, as_of, accounts: [{account_id, code, name, balance, kind}] }
+  const [cashPosition, setCashPosition] = useState({ total: 0, as_of: null, accounts: [] });
   const [reconciliationActs, setReconciliationActs] = useState([]);
   const [exchangeDiffs, setExchangeDiffs] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -268,8 +261,9 @@ export function FinancialsProvider({ children }) {
     setBudgets(getData(BUDGETS_KEY, sampleBudgets));
     setBudgetLines(getData(BUDGET_LINES_KEY, sampleBudgetLines));
     // Finance extra modules
-    setCashRegisters(getData(CASH_REGISTERS_KEY, sampleCashRegisters));
-    setCashOrders(getData(CASH_ORDERS_KEY, sampleCashOrders));
+    // Cash registers/orders: no localStorage fallback — server documents only.
+    setCashRegisters([]);
+    setCashOrders([]);
     setReconciliationActs(getData(RECONCILIATION_ACTS_KEY, sampleReconciliationActs));
     setExchangeDiffs(getData(EXCHANGE_DIFFS_KEY, sampleExchangeDiffs));
 
@@ -301,8 +295,6 @@ export function FinancialsProvider({ children }) {
       initIfEmpty(BUDGETS_KEY, sampleBudgets);
       initIfEmpty(BUDGET_LINES_KEY, sampleBudgetLines);
       // Finance extra modules
-      initIfEmpty(CASH_REGISTERS_KEY, sampleCashRegisters);
-      initIfEmpty(CASH_ORDERS_KEY, sampleCashOrders);
       initIfEmpty(RECONCILIATION_ACTS_KEY, sampleReconciliationActs);
       initIfEmpty(EXCHANGE_DIFFS_KEY, sampleExchangeDiffs);
     }
@@ -328,7 +320,7 @@ export function FinancialsProvider({ children }) {
           const sales   = allow('sales');
           const purch   = allow('purchase');
 
-          const [entries, invoicesResponse, accountsData, paymentsData, taxRatesData, accountTypesData, vendorBillsData, bankAccountsData, cashTransactionsData, currenciesData, exchangeRatesData, fiscalYearsData, fiscalPeriodsData, budgetsData, budgetLinesData, journalsData, cashRegistersData, cashOrdersData, reconciliationActsData, exchangeDiffsData, paymentJournalsData] = await Promise.all([
+          const [entries, invoicesResponse, accountsData, paymentsData, taxRatesData, accountTypesData, vendorBillsData, bankAccountsData, cashTransactionsData, currenciesData, exchangeRatesData, fiscalYearsData, fiscalPeriodsData, budgetsData, budgetLinesData, journalsData, cashRegistersData, cashOrdersData, reconciliationActsData, exchangeDiffsData, paymentJournalsData, cashBalanceData] = await Promise.all([
             finance ? financeService.listJournalEntries({ limit: 1000 }).catch(() => []) : skip(),
             sales   ? salesService.listInvoices().catch(() => [])                         : skip(),
             finance ? financeService.listAccounts({ organization_id: activeCompany.id, limit: 500 }).catch(() => []) : skip(),
@@ -349,7 +341,8 @@ export function FinancialsProvider({ children }) {
             finance ? financeService.listCashOrders().catch(() => [])                     : skip(),
             finance ? financeService.listReconciliationActs().catch(() => [])             : skip(),
             finance ? financeService.listExchangeDiffs().catch(() => [])                  : skip(),
-            finance ? financeService.listPaymentJournals().catch(() => [])                : skip()
+            finance ? financeService.listPaymentJournals().catch(() => [])                : skip(),
+            finance ? financeService.getCashBalance().catch(() => null)                   : Promise.resolve(null)
           ]);
           setJournalEntries(entries || []);
           // Handle paginated response - could be array directly or { items: [...] }
@@ -399,16 +392,14 @@ export function FinancialsProvider({ children }) {
           // Set budgets and budget lines from backend
           setBudgets(budgetsData || []);
           setBudgetLines(budgetLinesData || []);
-          // Finance extra modules
-          setCashRegisters(cashRegistersData || []);
-          // Merge backend cash orders with localStorage (backend is stub, returns empty)
-          const localCashOrders = JSON.parse(localStorage.getItem(getStorageKey(CASH_ORDERS_KEY, activeCompany?.id)) || '[]');
-          const backendOrders = cashOrdersData || [];
-          if (backendOrders.length > 0) {
-            setCashOrders(backendOrders);
-          } else {
-            setCashOrders(localCashOrders);
-          }
+          // Finance extra modules — cash registers/orders come from the API
+          // only (no localStorage merge: ghost documents must not exist).
+          setCashRegisters(Array.isArray(cashRegistersData) ? cashRegistersData : (cashRegistersData?.items || []));
+          setCashOrders(Array.isArray(cashOrdersData) ? cashOrdersData : (cashOrdersData?.items || []));
+          // Ledger-derived cash position (GET /cash/balance)
+          setCashPosition(cashBalanceData && typeof cashBalanceData === 'object'
+            ? { total: cashBalanceData.total || 0, as_of: cashBalanceData.as_of || null, accounts: cashBalanceData.accounts || [] }
+            : { total: 0, as_of: null, accounts: [] });
           setReconciliationActs(reconciliationActsData || []);
           setExchangeDiffs(Array.isArray(exchangeDiffsData) ? exchangeDiffsData : []);
 
@@ -801,14 +792,28 @@ export function FinancialsProvider({ children }) {
     }
   }, []);
 
+  // Kassa balansi — ledger truth from GET /cash/balance (kind='cash' accounts,
+  // e.g. 5010). NEVER a client-side reduce over shadow tables. The full
+  // position (total incl. bank + per-account rows) is exposed as cashPosition.
   const getCashBalance = useCallback(() => {
-    return cashTransactions.reduce((balance, t) => {
-      if (t.type === 'income') return balance + t.amount;
-      if (t.type === 'expense') return balance - t.amount;
-      if (t.type === 'transfer') return balance - t.amount;
-      return balance;
-    }, 0);
-  }, [cashTransactions]);
+    return (cashPosition.accounts || [])
+      .filter(a => a.kind === 'cash')
+      .reduce((sum, a) => sum + (a.balance || 0), 0);
+  }, [cashPosition]);
+
+  const refreshCashPosition = useCallback(async (params = {}) => {
+    if (!backendAvailable) return null;
+    try {
+      const data = await financeService.getCashBalance(params);
+      if (data && typeof data === 'object') {
+        setCashPosition({ total: data.total || 0, as_of: data.as_of || null, accounts: data.accounts || [] });
+      }
+      return data;
+    } catch (err) {
+      console.error('Failed to refresh cash position:', err);
+      return null;
+    }
+  }, [backendAvailable]);
 
   // ==================== CURRENCIES CRUD ====================
   const createCurrency = useCallback(async (currencyData) => {
@@ -1440,56 +1445,56 @@ export function FinancialsProvider({ children }) {
   // lived here was removed with the 453 migration (2026-08-03).
 
   // ========== Cash Registers (Kassa) ==========
+  // Server documents only. No localStorage fallback, no client-side numbering:
+  // any API failure is thrown to the caller (surface it via getApiErrorMessage).
   const createCashRegister = useCallback(async (data) => {
-    if (backendAvailable) {
-      const result = await financeService.createCashRegister(data);
-      setCashRegisters(prev => [...prev, result]);
-      return result;
-    }
-    const newItem = { id: `cr_${Date.now()}`, ...data, current_balance: 0, is_active: true, created_at: new Date().toISOString() };
-    setCashRegisters(prev => { const updated = [...prev, newItem]; localStorage.setItem(getStorageKey(CASH_REGISTERS_KEY, activeCompany?.id), JSON.stringify(updated)); return updated; });
-    return newItem;
-  }, [backendAvailable, activeCompany]);
+    const result = await financeService.createCashRegister(data);
+    setCashRegisters(prev => [...prev, result]);
+    return result;
+  }, []);
 
   // ========== Cash Orders (PKO/RKO) ==========
+  // POST /cash/orders → 201 draft with SERVER-generated order_number.
   const createCashOrder = useCallback(async (data) => {
-    if (backendAvailable) {
-      try {
-        const result = await financeService.createCashOrder(data);
-        if (result && result.id) {
-          setCashOrders(prev => [...prev, result]);
-          return result;
-        }
-      } catch (e) {
-        // Backend stub or error — fall through to localStorage
-      }
-    }
-    const prefix = data.order_type === 'pko' ? 'PKO' : 'RKO';
-    const num = String(cashOrders.filter(o => o.order_type === data.order_type).length + 1).padStart(5, '0');
-    const newItem = { id: `co_${Date.now()}`, order_number: `${prefix}-2026-${num}`, status: 'draft', created_at: new Date().toISOString(), ...data };
-    setCashOrders(prev => { const updated = [...prev, newItem]; localStorage.setItem(getStorageKey(CASH_ORDERS_KEY, activeCompany?.id), JSON.stringify(updated)); return updated; });
-    return newItem;
-  }, [backendAvailable, activeCompany, cashOrders]);
+    const result = await financeService.createCashOrder(data);
+    setCashOrders(prev => [result, ...prev]);
+    return result;
+  }, []);
 
+  // POST /cash/orders/:id/confirm → one-tx balanced JE; response carries
+  // {status:'confirmed', journal_entry_id, entry_number} — proof of posting.
   const confirmCashOrder = useCallback(async (id) => {
-    if (backendAvailable) {
-      try { await financeService.confirmCashOrder(id); } catch (e) { /* stub */ }
-    }
-    setCashOrders(prev => { const updated = prev.map(o => o.id === id ? { ...o, status: 'confirmed' } : o); localStorage.setItem(getStorageKey(CASH_ORDERS_KEY, activeCompany?.id), JSON.stringify(updated)); return updated; });
-  }, [backendAvailable, activeCompany]);
+    const result = await financeService.confirmCashOrder(id);
+    setCashOrders(prev => prev.map(o => o.id === id
+      ? { ...o, ...(result && typeof result === 'object' ? result : {}), status: 'confirmed' }
+      : o));
+    // Confirm posts to the ledger — refresh the cash position and the
+    // per-register ledger balances from it.
+    refreshCashPosition();
+    financeService.listCashRegisters()
+      .then(regs => setCashRegisters(Array.isArray(regs) ? regs : (regs?.items || [])))
+      .catch(() => {});
+    return result;
+  }, [refreshCashPosition]);
 
-  const deleteCashOrder = useCallback(async (id) => {
-    if (backendAvailable) {
-      try { await financeService.updateCashOrder(id, { status: 'cancelled' }); } catch (e) { /* stub */ }
-    }
-    setCashOrders(prev => { const updated = prev.filter(o => o.id !== id); localStorage.setItem(getStorageKey(CASH_ORDERS_KEY, activeCompany?.id), JSON.stringify(updated)); return updated; });
-  }, [backendAvailable, activeCompany]);
+  const updateCashOrder = useCallback(async (id, data) => {
+    const result = await financeService.updateCashOrder(id, data);
+    setCashOrders(prev => prev.map(o => o.id === id ? { ...o, ...(result || data) } : o));
+    return result;
+  }, []);
+
+  // Drafts only — confirmed orders are immutable (storno = opposite order).
+  const cancelCashOrder = useCallback(async (id) => {
+    const result = await financeService.cancelCashOrder(id);
+    setCashOrders(prev => prev.map(o => o.id === id ? { ...o, status: 'cancelled' } : o));
+    return result;
+  }, []);
 
   const getCashBook = useCallback(async (params) => {
     if (backendAvailable) {
       return await financeService.getCashBook(params);
     }
-    return [];
+    return null;
   }, [backendAvailable]);
 
   // ========== Reconciliation Acts (Akt sverka) ==========
@@ -1577,7 +1582,7 @@ export function FinancialsProvider({ children }) {
     journals, paymentJournals, createJournal, updateJournal, deleteJournal,
     bankAccounts, createBankAccount, updateBankAccount, deleteBankAccount,
     bankTransactions, loadBankTransactions, getBankTransactionsByAccount, createBankTransaction, reconcileBankTransaction,
-    cashTransactions, createCashTransaction, updateCashTransaction, deleteCashTransaction, getCashBalance,
+    cashTransactions, createCashTransaction, updateCashTransaction, deleteCashTransaction, getCashBalance, cashPosition, refreshCashPosition,
     currencies, createCurrency, updateCurrency, deleteCurrency,
     exchangeRates, setExchangeRate, getLatestExchangeRate, convertCurrency,
     vendorBills, createVendorBill, updateVendorBill, listVendorBills, postVendorBill, payVendorBill,
@@ -1588,7 +1593,7 @@ export function FinancialsProvider({ children }) {
     budgets, createBudget, updateBudget, deleteBudget, activateBudget,
     budgetLines, createBudgetLine, updateBudgetLine, deleteBudgetLine, getBudgetLinesByBudget, getBudgetVariance,
     cashRegisters, createCashRegister,
-    cashOrders, createCashOrder, confirmCashOrder, deleteCashOrder, getCashBook,
+    cashOrders, createCashOrder, confirmCashOrder, updateCashOrder, cancelCashOrder, getCashBook,
     reconciliationActs, createReconciliationAct, updateReconciliationAct, deleteReconciliationAct, bulkGenerateReconciliation, refreshReconciliationAct, exportReconciliationAct,
     exchangeDiffs, syncExchangeRates, revalueCurrency,
     getBalanceSheet, getIncomeStatement, getCashFlow, getTrialBalance, getGeneralLedger, getAgingReceivables, getAgingPayables,
@@ -1612,7 +1617,7 @@ export function FinancialsProvider({ children }) {
       receivables: financeSettings.defaultReceivablesAccount,
       payables: financeSettings.defaultPayablesAccount
     })
-  }), [journalEntries, journalLines, createJournalEntry, updateJournalEntry, deleteJournalEntry, cancelJournalEntry, postJournalEntry, reverseJournalEntry, resetJournalEntryToDraft, listJournalEntries, getJournalLines, createJournalLine, accounts, accountTypes, createAccount, updateAccount, deleteAccount, getAccountTransactions, payments, createPayment, confirmPayment, taxRates, createTaxRate, updateTaxRate, deleteTaxRate, journals, createJournal, updateJournal, deleteJournal, bankAccounts, createBankAccount, updateBankAccount, deleteBankAccount, bankTransactions, loadBankTransactions, getBankTransactionsByAccount, createBankTransaction, reconcileBankTransaction, cashTransactions, createCashTransaction, updateCashTransaction, deleteCashTransaction, getCashBalance, currencies, createCurrency, updateCurrency, deleteCurrency, exchangeRates, setExchangeRate, getLatestExchangeRate, convertCurrency, vendorBills, createVendorBill, updateVendorBill, listVendorBills, postVendorBill, payVendorBill, customerInvoices, createCustomerInvoice, updateCustomerInvoice, listCustomerInvoices, financialTransactions, listFinancialTransactions, fiscalYears, createFiscalYear, updateFiscalYear, closeFiscalYear, deleteFiscalYear, fiscalPeriods, createFiscalPeriod, createFiscalPeriods, closeFiscalPeriod, reopenFiscalPeriod, getFiscalPeriodsByYear, budgets, createBudget, updateBudget, deleteBudget, activateBudget, budgetLines, createBudgetLine, updateBudgetLine, deleteBudgetLine, getBudgetLinesByBudget, getBudgetVariance, cashRegisters, createCashRegister, cashOrders, createCashOrder, confirmCashOrder, deleteCashOrder, getCashBook, reconciliationActs, createReconciliationAct, updateReconciliationAct, deleteReconciliationAct, bulkGenerateReconciliation, refreshReconciliationAct, exportReconciliationAct, exchangeDiffs, syncExchangeRates, revalueCurrency, getBalanceSheet, getIncomeStatement, getCashFlow, getTrialBalance, getGeneralLedger, getAgingReceivables, getAgingPayables, isLoading, backendAvailable, error, loadData, financeSettings]);
+  }), [journalEntries, journalLines, createJournalEntry, updateJournalEntry, deleteJournalEntry, cancelJournalEntry, postJournalEntry, reverseJournalEntry, resetJournalEntryToDraft, listJournalEntries, getJournalLines, createJournalLine, accounts, accountTypes, createAccount, updateAccount, deleteAccount, getAccountTransactions, payments, createPayment, confirmPayment, taxRates, createTaxRate, updateTaxRate, deleteTaxRate, journals, createJournal, updateJournal, deleteJournal, bankAccounts, createBankAccount, updateBankAccount, deleteBankAccount, bankTransactions, loadBankTransactions, getBankTransactionsByAccount, createBankTransaction, reconcileBankTransaction, cashTransactions, createCashTransaction, updateCashTransaction, deleteCashTransaction, getCashBalance, cashPosition, refreshCashPosition, currencies, createCurrency, updateCurrency, deleteCurrency, exchangeRates, setExchangeRate, getLatestExchangeRate, convertCurrency, vendorBills, createVendorBill, updateVendorBill, listVendorBills, postVendorBill, payVendorBill, customerInvoices, createCustomerInvoice, updateCustomerInvoice, listCustomerInvoices, financialTransactions, listFinancialTransactions, fiscalYears, createFiscalYear, updateFiscalYear, closeFiscalYear, deleteFiscalYear, fiscalPeriods, createFiscalPeriod, createFiscalPeriods, closeFiscalPeriod, reopenFiscalPeriod, getFiscalPeriodsByYear, budgets, createBudget, updateBudget, deleteBudget, activateBudget, budgetLines, createBudgetLine, updateBudgetLine, deleteBudgetLine, getBudgetLinesByBudget, getBudgetVariance, cashRegisters, createCashRegister, cashOrders, createCashOrder, confirmCashOrder, updateCashOrder, cancelCashOrder, getCashBook, reconciliationActs, createReconciliationAct, updateReconciliationAct, deleteReconciliationAct, bulkGenerateReconciliation, refreshReconciliationAct, exportReconciliationAct, exchangeDiffs, syncExchangeRates, revalueCurrency, getBalanceSheet, getIncomeStatement, getCashFlow, getTrialBalance, getGeneralLedger, getAgingReceivables, getAgingPayables, isLoading, backendAvailable, error, loadData, financeSettings]);
 
   return (
     <FinancialsContext.Provider value={value}>

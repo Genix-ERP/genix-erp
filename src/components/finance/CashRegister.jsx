@@ -21,10 +21,12 @@ import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { getApiErrorMessage } from '@/utils/apiError';
+import { toast } from 'sonner';
 
-// O'zbekiston BHMS accounting accounts for cash operations
+// O'zbekiston BHMS accounting accounts for cash operations (counter accounts).
+// Order numbers and the ledger JE come from the SERVER — never generated here.
 const ACCOUNTING_ACCOUNTS = [
-  { value: '5010', label: '5010 — Kassa (Касса)' },
   { value: '4010', label: '4010 — Debitorlar (Дебиторы)' },
   { value: '6010', label: '6010 — Kreditorlar (Кредиторы)' },
   { value: '4220', label: '4220 — Xodimlar (Работники)' },
@@ -34,23 +36,20 @@ const ACCOUNTING_ACCOUNTS = [
   { value: '9410', label: '9410 — Boshqaruv xarajatlari (Управленческие расходы)' },
 ];
 
-const generateOrderNumber = (type) => {
-  const year = new Date().getFullYear();
-  const seq = String(Math.floor(Math.random() * 99999) + 1).padStart(5, '0');
-  return type === 'pko' ? `PKO-${year}-${seq}` : `RKO-${year}-${seq}`;
-};
-
 export default function CashRegister() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const {
     cashTransactions,
-    createCashTransaction,
     getCashBalance,
+    cashPosition,
     cashRegisters = [],
     cashOrders = [],
     createCashOrder,
     confirmCashOrder,
+    cancelCashOrder,
+    getCashBook,
+    backendAvailable,
     isLoading
   } = useFinancials();
   const { canCreate } = usePermissions();
@@ -73,13 +72,15 @@ export default function CashRegister() {
     order_date: new Date().toISOString().split('T')[0],
     order_type: 'pko',
     amount: '',
-    currency: 'UZS',
     description: '',
-    partner_name: '',
-    account_code: '5010',
-    cash_register_id: '',
-    cashier: ''
+    counterparty_name: '',
+    account_code: '',
+    register_id: '',
+    storno_of: null
   });
+
+  // Ledger-derived cash book from GET /cash/book
+  const [cashBook, setCashBook] = useState(null);
 
   // Calculate summaries
   const today = new Date().toISOString().split('T')[0];
@@ -90,24 +91,59 @@ export default function CashRegister() {
     return dateStr.split('T')[0];
   }, []);
 
-  // Combine old transactions + new orders for stats
   const allOrders = [...cashOrders];
-  const todayOrders = allOrders.filter(o => getDateStr(o) === today);
+
+  // Fetch the ledger cash book (drives the Kassa kitobi tab AND the today
+  // income/expense stat cards). Default window: last 30 days through today.
+  const fetchCashBook = useCallback(async () => {
+    if (!backendAvailable) { setCashBook(null); return; }
+    const defaultFrom = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const todayStr = new Date().toISOString().split('T')[0];
+    try {
+      const book = await getCashBook({
+        date_from: dateFrom || defaultFrom,
+        date_to: dateTo || todayStr,
+        ...(selectedRegister !== 'all' ? { register_id: selectedRegister } : {})
+      });
+      setCashBook(book && typeof book === 'object' && !Array.isArray(book) ? book : null);
+    } catch (err) {
+      console.error('Failed to load cash book:', err);
+      setCashBook(null);
+    }
+  }, [backendAvailable, getCashBook, dateFrom, dateTo, selectedRegister]);
+
+  useEffect(() => { fetchCashBook(); }, [fetchCashBook]);
+
+  const cashBookDays = cashBook?.days || [];
+  const todayBookRow = cashBookDays.find(d => (d.date || '').split('T')[0] === today);
+
+  // Which register drives the header balance: a specific one when selected,
+  // otherwise the ledger total of kind='cash' accounts from /cash/balance.
+  const activeRegister = selectedRegister !== 'all'
+    ? cashRegisters.find(r => r.id === selectedRegister)
+    : null;
+  const cashGlAccounts = (cashPosition?.accounts || []).filter(a => a.kind === 'cash');
+  const currentBalance = activeRegister
+    ? (activeRegister.ledger_balance || 0)
+    : getCashBalance();
+  const balanceCaption = activeRegister
+    ? `${activeRegister.account_code || '5010'} ${activeRegister.account_name || 'Kassa'}`
+    : (cashGlAccounts.length > 0
+        ? cashGlAccounts.map(a => `${a.code} ${a.name}`).join(' + ')
+        : '5010 Kassa');
 
   const summaryStats = {
-    currentBalance: getCashBalance(),
-    todayIncome: todayOrders.filter(o => o.order_type === 'pko').reduce((s, o) => s + (o.amount || 0), 0)
-      + (cashTransactions || []).filter(t => getDateStr(t) === today && t.type === 'income').reduce((s, t) => s + t.amount, 0),
-    todayExpense: todayOrders.filter(o => o.order_type === 'rko').reduce((s, o) => s + (o.amount || 0), 0)
-      + (cashTransactions || []).filter(t => getDateStr(t) === today && t.type === 'expense').reduce((s, t) => s + t.amount, 0),
+    currentBalance,
+    todayIncome: todayBookRow?.income || 0,
+    todayExpense: todayBookRow?.expense || 0,
     totalOrders: allOrders.length,
     confirmedOrders: allOrders.filter(o => o.status === 'confirmed').length,
   };
 
-  // Cash limit check
-  const activeRegister = cashRegisters.find(r => r.id === selectedRegister) || cashRegisters[0];
-  const cashLimitExceeded = activeRegister && activeRegister.limit_amount > 0
-    && summaryStats.currentBalance > activeRegister.limit_amount;
+  // Cash limit check (against the ledger balance)
+  const limitRegister = activeRegister || cashRegisters[0];
+  const cashLimitExceeded = limitRegister && limitRegister.limit_amount > 0
+    && (limitRegister.ledger_balance || 0) > limitRegister.limit_amount;
 
   // Filter orders
   useEffect(() => {
@@ -117,6 +153,7 @@ export default function CashRegister() {
       filtered = filtered.filter(o =>
         o.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         o.order_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        o.counterparty_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         o.partner_name?.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
@@ -128,7 +165,7 @@ export default function CashRegister() {
       filtered = filtered.filter(o => o.order_type === typeFilter);
     }
     if (selectedRegister !== "all") {
-      filtered = filtered.filter(o => o.cash_register_id === selectedRegister);
+      filtered = filtered.filter(o => o.register_id === selectedRegister);
     }
     if (dateFrom) {
       filtered = filtered.filter(o => {
@@ -168,30 +205,37 @@ export default function CashRegister() {
     setFilteredTransactions(filtered.sort((a, b) => new Date(b.transaction_date) - new Date(a.transaction_date)));
   }, [cashTransactions, searchQuery]);
 
+  const resetNewOrder = (overrides = {}) => setNewOrder({
+    order_date: new Date().toISOString().split('T')[0],
+    order_type: 'pko',
+    amount: '',
+    description: '',
+    counterparty_name: '',
+    account_code: '',
+    register_id: selectedRegister !== 'all' ? selectedRegister : '',
+    storno_of: null,
+    ...overrides
+  });
+
+  // Order number is SERVER-generated (PKO-YYYY-NNNN) — nothing is sent from
+  // the client, and an API failure surfaces as a toast instead of a ghost row.
   const handleCreateOrder = async () => {
     setIsSaving(true);
     try {
-      const orderData = {
-        ...newOrder,
-        order_number: generateOrderNumber(newOrder.order_type),
+      await createCashOrder({
+        type: newOrder.order_type,
         amount: parseFloat(newOrder.amount) || 0,
-        status: 'draft'
-      };
-      await createCashOrder(orderData);
-      setNewOrder({
-        order_date: new Date().toISOString().split('T')[0],
-        order_type: 'pko',
-        amount: '',
-        currency: 'UZS',
-        description: '',
-        partner_name: '',
-        account_code: '5010',
-        cash_register_id: activeRegister?.id || '',
-        cashier: ''
+        description: newOrder.description,
+        date: newOrder.order_date || undefined,
+        register_id: newOrder.register_id || undefined,
+        counterparty_name: newOrder.counterparty_name || undefined,
+        account_code: newOrder.account_code || undefined
       });
+      resetNewOrder();
       setShowCreateModal(false);
     } catch (err) {
       console.error('Error creating cash order:', err);
+      toast.error(getApiErrorMessage(err, t('error_occurred') || 'Xatolik yuz berdi'));
     } finally {
       setIsSaving(false);
     }
@@ -199,10 +243,39 @@ export default function CashRegister() {
 
   const handleConfirmOrder = async (orderId) => {
     try {
-      await confirmCashOrder(orderId);
+      const result = await confirmCashOrder(orderId);
+      const entryNo = result?.entry_number;
+      toast.success(`${t('order_confirmed') || 'Order tasdiqlandi'}${entryNo ? ` — JE: ${entryNo}` : ''}`);
+      fetchCashBook();
     } catch (err) {
       console.error('Error confirming order:', err);
+      toast.error(getApiErrorMessage(err, t('error_occurred') || 'Xatolik yuz berdi'));
     }
+  };
+
+  const handleCancelOrder = async (orderId) => {
+    try {
+      await cancelCashOrder(orderId);
+      toast.success(t('order_cancelled') || 'Order bekor qilindi');
+    } catch (err) {
+      console.error('Error cancelling order:', err);
+      toast.error(getApiErrorMessage(err, t('error_occurred') || 'Xatolik yuz berdi'));
+    }
+  };
+
+  // Confirmed orders are immutable — storno creates the OPPOSITE order with
+  // the same amount, referencing the original in the description.
+  const handleStorno = (order) => {
+    resetNewOrder({
+      order_type: order.order_type === 'pko' ? 'rko' : 'pko',
+      amount: String(order.amount || ''),
+      description: `${t('storno') || 'Storno'} ${order.order_number}: ${order.description || ''}`.trim(),
+      counterparty_name: order.counterparty_name || order.partner_name || '',
+      account_code: order.account_code || '',
+      register_id: order.register_id || '',
+      storno_of: order.order_number
+    });
+    setShowCreateModal(true);
   };
 
   const getStatusBadge = (status) => {
@@ -218,33 +291,9 @@ export default function CashRegister() {
     }
   };
 
-  // Cash Book data: aggregate by date
-  const cashBookData = (() => {
-    const dateMap = {};
-    allOrders.filter(o => o.status === 'confirmed').forEach(o => {
-      const d = getDateStr(o);
-      if (!d) return;
-      if (!dateMap[d]) dateMap[d] = { date: d, income: 0, expense: 0 };
-      if (o.order_type === 'pko') dateMap[d].income += o.amount || 0;
-      if (o.order_type === 'rko') dateMap[d].expense += o.amount || 0;
-    });
-    // Also include legacy transactions
-    (cashTransactions || []).forEach(t => {
-      const d = getDateStr(t);
-      if (!d) return;
-      if (!dateMap[d]) dateMap[d] = { date: d, income: 0, expense: 0 };
-      if (t.type === 'income') dateMap[d].income += t.amount || 0;
-      if (t.type === 'expense') dateMap[d].expense += t.amount || 0;
-    });
-    const sorted = Object.values(dateMap).sort((a, b) => b.date.localeCompare(a.date));
-    let runningBalance = summaryStats.currentBalance;
-    return sorted.map(entry => {
-      const row = { ...entry, closing: runningBalance };
-      runningBalance = runningBalance - entry.income + entry.expense;
-      row.opening = runningBalance;
-      return row;
-    });
-  })();
+  // Cash Book rows come from GET /cash/book (ledger-derived) — no client-side
+  // running-balance computation. Newest day first for display.
+  const cashBookData = [...cashBookDays].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
   const activeFilterCount = (dateFrom ? 1 : 0) + (dateTo ? 1 : 0) + (codeFilter ? 1 : 0);
   const clearAllFilters = () => { setDateFrom(''); setDateTo(''); setCodeFilter(''); setSearchQuery(''); setTypeFilter('all'); setDateFilter('all'); };
@@ -302,8 +351,8 @@ export default function CashRegister() {
         order.order_number || '-',
         order.order_date ? format(new Date(order.order_date), 'dd.MM.yyyy') : '-',
         order.order_type === 'pko' ? 'PKO' : 'RKO',
-        order.partner_name || '-',
-        order.account_code || '5010',
+        order.counterparty_name || order.partner_name || '-',
+        order.account_code || '-',
         order.description || '-',
         amt,
         order.status || '-',
@@ -348,7 +397,7 @@ export default function CashRegister() {
             <div>
               <p className="font-medium text-amber-800">{t('cash_limit_warning') || 'Cash limit exceeded!'}</p>
               <p className="text-sm text-amber-600">
-                {t('cash_limit') || 'Cash Limit'}: {formatCurrency(activeRegister.limit_amount)} | {t('cash_balance') || 'Balance'}: {formatCurrency(summaryStats.currentBalance)}
+                {t('cash_limit') || 'Cash Limit'}: {formatCurrency(limitRegister.limit_amount)} | {t('cash_balance') || 'Balance'}: {formatCurrency(limitRegister.ledger_balance || 0)}
               </p>
             </div>
           </CardContent>
@@ -363,7 +412,7 @@ export default function CashRegister() {
               <div>
                 <p className="text-sm text-emerald-600 font-medium">{t('cash_balance') || 'Cash Balance'}</p>
                 <p className="text-3xl font-bold text-emerald-800">{formatCurrencyCompact(summaryStats.currentBalance)}</p>
-                <p className="text-xs text-emerald-500 mt-1">{t('current_state') || 'Current state'}</p>
+                <p className="text-xs text-emerald-500 mt-1 font-mono">{balanceCaption}</p>
               </div>
               <div className="w-14 h-14 bg-emerald-500/20 rounded-xl flex items-center justify-center">
                 <Wallet className="w-7 h-7 text-emerald-600" />
@@ -440,7 +489,7 @@ export default function CashRegister() {
           <div className="flex flex-wrap gap-2">
             <Button
               onClick={() => {
-                setNewOrder({ ...newOrder, order_type: 'pko', account_code: '5010' });
+                resetNewOrder({ order_type: 'pko' });
                 setShowCreateModal(true);
               }}
               className="bg-green-600 hover:bg-green-700 text-white"
@@ -450,7 +499,7 @@ export default function CashRegister() {
             </Button>
             <Button
               onClick={() => {
-                setNewOrder({ ...newOrder, order_type: 'rko', account_code: '5010' });
+                resetNewOrder({ order_type: 'rko' });
                 setShowCreateModal(true);
               }}
               className="bg-red-600 hover:bg-red-700 text-white"
@@ -620,7 +669,21 @@ export default function CashRegister() {
                 <TableBody>
                   {filteredOrders.map((order) => (
                     <TableRow key={order.id} className="hover:bg-slate-50">
-                      <TableCell className="font-mono text-sm">{order.order_number}</TableCell>
+                      <TableCell className="font-mono text-sm">
+                        <div className="flex flex-col gap-1">
+                          <span>{order.order_number}</span>
+                          {order.journal_entry_id && (
+                            <Badge
+                              variant="outline"
+                              className="w-fit text-[10px] font-mono bg-indigo-50 text-indigo-700 border-indigo-200"
+                              title={t('posted_to_ledger') || 'Ledgerga o\'tkazilgan'}
+                            >
+                              <FileText className="w-2.5 h-2.5 mr-1" />
+                              JE: {order.entry_number || order.journal_entry_id}
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell>{order.order_date ? format(new Date(order.order_date), 'dd.MM.yyyy') : '-'}</TableCell>
                       <TableCell>
                         {order.order_type === 'pko' ? (
@@ -629,8 +692,8 @@ export default function CashRegister() {
                           <Badge className="bg-red-100 text-red-700"><ArrowUpRight className="w-3 h-3 mr-1" />{t('rko_short') || 'RKO'}</Badge>
                         )}
                       </TableCell>
-                      <TableCell>{order.partner_name || '-'}</TableCell>
-                      <TableCell className="font-mono text-sm">{order.account_code || '5010'}</TableCell>
+                      <TableCell>{order.counterparty_name || order.partner_name || '-'}</TableCell>
+                      <TableCell className="font-mono text-sm">{order.account_code || '-'}</TableCell>
                       <TableCell className="max-w-[180px] truncate">{order.description}</TableCell>
                       <TableCell className={`text-right font-semibold ${order.order_type === 'pko' ? 'text-green-600' : 'text-red-600'}`}>
                         {order.order_type === 'pko' ? '+' : '-'}{formatCurrency(order.amount, order.currency)}
@@ -638,15 +701,38 @@ export default function CashRegister() {
                       <TableCell>{getStatusBadge(order.status)}</TableCell>
                       <TableCell>
                         <div className="flex gap-1">
-                          {order.status === 'draft' && (
+                          {order.status === 'draft' && canCreate(MODULES.FINANCIALS) && (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-green-600 border-green-300 hover:bg-green-50"
+                                onClick={() => handleConfirmOrder(order.id)}
+                              >
+                                <CheckCircle className="w-3 h-3 mr-1" />
+                                {t('confirm_order') || 'Confirm'}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                                onClick={() => handleCancelOrder(order.id)}
+                                title={t('cancel') || 'Cancel'}
+                              >
+                                <X className="w-3 h-3" />
+                              </Button>
+                            </>
+                          )}
+                          {order.status === 'confirmed' && canCreate(MODULES.FINANCIALS) && (
                             <Button
                               size="sm"
                               variant="outline"
-                              className="text-green-600 border-green-300 hover:bg-green-50"
-                              onClick={() => handleConfirmOrder(order.id)}
+                              className="text-amber-600 border-amber-300 hover:bg-amber-50"
+                              onClick={() => handleStorno(order)}
+                              title={t('storno_tooltip') || 'Teskari order yaratish'}
                             >
-                              <CheckCircle className="w-3 h-3 mr-1" />
-                              {t('confirm_order') || 'Confirm'}
+                              <ArrowRightLeft className="w-3 h-3 mr-1" />
+                              {t('storno') || 'Storno'}
                             </Button>
                           )}
                           <Button size="sm" variant="ghost">
@@ -677,12 +763,23 @@ export default function CashRegister() {
                 <CardTitle className="text-lg flex items-center gap-2">
                   <BookOpen className="w-5 h-5" />
                   {t('cash_book') || 'Cash Book'}
+                  {cashBook?.account_code && (
+                    <Badge variant="outline" className="font-mono text-xs">{cashBook.account_code}</Badge>
+                  )}
                 </CardTitle>
                 <Button variant="outline" size="sm">
                   <Printer className="w-4 h-4 mr-2" />
                   {t('print') || 'Print'}
                 </Button>
               </div>
+              {cashBook && (
+                <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-slate-500 mt-2">
+                  <span>{t('opening_balance') || 'Opening Balance'}: <span className="font-semibold text-slate-700">{formatCurrency(cashBook.opening_balance || 0)}</span></span>
+                  <span>{t('total_income') || 'Total Income'}: <span className="font-semibold text-green-600">+{formatCurrency(cashBook.total_income || 0)}</span></span>
+                  <span>{t('total_expense') || 'Total Expense'}: <span className="font-semibold text-red-600">-{formatCurrency(cashBook.total_expense || 0)}</span></span>
+                  <span>{t('closing_balance') || 'Closing Balance'}: <span className="font-semibold text-slate-700">{formatCurrency(cashBook.closing_balance || 0)}</span></span>
+                </div>
+              )}
             </CardHeader>
             <CardContent className="p-0">
               <Table>
@@ -786,9 +883,23 @@ export default function CashRegister() {
                 <><ArrowUpRight className="w-5 h-5 text-red-600" />{t('rko') || 'Cash Disbursement Order (RKO)'}</>
               )}
             </DialogTitle>
-            <DialogDescription>{t('new_cash_order') || 'New cash order'}</DialogDescription>
+            <DialogDescription>
+              {newOrder.storno_of
+                ? `${t('storno_of') || 'Storno asosi'}: ${newOrder.storno_of}`
+                : (t('new_cash_order') || 'New cash order')}
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 mt-4">
+            <div>
+              <label className="text-sm font-medium">{t('cash_order_number') || 'Order Number'}</label>
+              <Input
+                disabled
+                value=""
+                placeholder={t('order_number_auto') || 'Raqam serverda beriladi'}
+                className="bg-slate-50 text-slate-400"
+              />
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium">{t('date') || 'Date'}</label>
@@ -815,39 +926,20 @@ export default function CashRegister() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium">{t('amount') || 'Amount'}</label>
-                <NumberInput
-                  value={newOrder.amount}
-                  onChange={(raw) => setNewOrder({ ...newOrder, amount: raw })}
-                  placeholder="0"
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium">{t('currency') || 'Currency'}</label>
-                <Select
-                  value={newOrder.currency}
-                  onValueChange={(v) => setNewOrder({ ...newOrder, currency: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="UZS">UZS</SelectItem>
-                    <SelectItem value="USD">USD</SelectItem>
-                    <SelectItem value="EUR">EUR</SelectItem>
-                    <SelectItem value="RUB">RUB</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <div>
+              <label className="text-sm font-medium">{t('amount') || 'Amount'}</label>
+              <NumberInput
+                value={newOrder.amount}
+                onChange={(raw) => setNewOrder({ ...newOrder, amount: raw })}
+                placeholder="0"
+              />
             </div>
 
             <div>
               <label className="text-sm font-medium">{t('counterparty') || 'Counterparty'}</label>
               <Input
-                value={newOrder.partner_name}
-                onChange={(e) => setNewOrder({ ...newOrder, partner_name: e.target.value })}
+                value={newOrder.counterparty_name}
+                onChange={(e) => setNewOrder({ ...newOrder, counterparty_name: e.target.value })}
                 placeholder={t('enter_counterparty') || 'Enter counterparty name'}
               />
             </div>
@@ -873,15 +965,15 @@ export default function CashRegister() {
               <div>
                 <label className="text-sm font-medium">{t('cash_register') || 'Cash Register'}</label>
                 <Select
-                  value={newOrder.cash_register_id}
-                  onValueChange={(v) => setNewOrder({ ...newOrder, cash_register_id: v })}
+                  value={newOrder.register_id}
+                  onValueChange={(v) => setNewOrder({ ...newOrder, register_id: v })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder={t('select_cash_register') || 'Select cash register'} />
                   </SelectTrigger>
                   <SelectContent>
                     {cashRegisters.map(reg => (
-                      <SelectItem key={reg.id} value={reg.id}>{reg.name}</SelectItem>
+                      <SelectItem key={reg.id} value={reg.id}>{reg.name} ({reg.currency || 'UZS'})</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -895,15 +987,6 @@ export default function CashRegister() {
                 onChange={(e) => setNewOrder({ ...newOrder, description: e.target.value })}
                 placeholder={t('transaction_description') || 'Transaction description'}
                 rows={2}
-              />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium">{t('cashier') || 'Cashier'}</label>
-              <Input
-                value={newOrder.cashier}
-                onChange={(e) => setNewOrder({ ...newOrder, cashier: e.target.value })}
-                placeholder={t('cashier_name') || 'Cashier name'}
               />
             </div>
 
