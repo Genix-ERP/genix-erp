@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,28 +7,25 @@ import { Badge } from "@/components/ui/badge";
 import {
   Plus, Search, Building2, CreditCard, CheckCircle, Clock, AlertCircle,
   ArrowUpRight, ArrowDownLeft, RefreshCw, FileText, Upload, Download,
-  MoreHorizontal, Eye, Check, X, Landmark, Wallet, TrendingUp, TrendingDown, Globe,
-  Calendar, Target, Scale, Trash2, Edit, Lock, FileSpreadsheet
+  MoreHorizontal, Eye, Check, X, Landmark, Wallet, TrendingUp, TrendingDown,
+  Calendar, Scale, Trash2, Edit, FileSpreadsheet, AlertTriangle, Loader2
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { format } from "date-fns";
+import { toast } from 'sonner';
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import CashRegister from "./CashRegister";
-import CurrencyManagement from "./CurrencyManagement";
-import FiscalPeriods from "./FiscalPeriods";
-import AccountingPeriods from "./AccountingPeriods";
-import BudgetManagement from "./BudgetManagement";
 import ReconciliationWorkflow from "./ReconciliationWorkflow";
 import BankStatementImport from "./BankStatementImport";
-import BankVipiskaImport from "./BankVipiskaImport";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
-import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
+import { financeService } from '@/api/services/finance';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 export default function BankReconciliation() {
   const { language } = useLanguage();
@@ -65,13 +62,14 @@ export default function BankReconciliation() {
   const [editAccount, setEditAccount] = useState(null);
   const [showImportModal, setShowImportModal] = useState(false);
 
+  // No `balance` field: the legacy manually-maintained column is dead — the
+  // shown balance always comes from the linked GL account's ledger.
   const [newBankAccount, setNewBankAccount] = useState({
     name: '',
     bank_name: '',
     account_number: '',
     currency: 'UZS',
-    account_type: 'checking',
-    balance: ''
+    account_type: 'checking'
   });
 
   const [newTransaction, setNewTransaction] = useState({
@@ -89,12 +87,14 @@ export default function BankReconciliation() {
     }
   }, [selectedBankAccount?.id, loadBankTransactions]);
 
-  // Calculate summaries
+  // Calculate summaries — balances come from the LEDGER (ledger_balance via the
+  // linked GL account). The legacy manually-maintained `balance` column is dead
+  // and must never be displayed.
   const accountSummary = {
     totalAccounts: bankAccounts.length,
     activeAccounts: bankAccounts.filter(a => a.is_active).length,
-    totalBalanceUZS: bankAccounts.filter(a => a.currency === 'UZS').reduce((sum, a) => sum + (a.balance || 0), 0),
-    totalBalanceUSD: bankAccounts.filter(a => a.currency === 'USD').reduce((sum, a) => sum + (a.balance || 0), 0),
+    totalBalanceUZS: bankAccounts.filter(a => a.currency === 'UZS').reduce((sum, a) => sum + (a.ledger_balance || 0), 0),
+    totalBalanceUSD: bankAccounts.filter(a => a.currency === 'USD').reduce((sum, a) => sum + (a.ledger_balance || 0), 0),
   };
 
   const transactionSummary = selectedBankAccount ? (() => {
@@ -111,17 +111,13 @@ export default function BankReconciliation() {
   const handleCreateBankAccount = async () => {
     setIsSaving(true);
     try {
-      await createBankAccount({
-        ...newBankAccount,
-        balance: parseFloat(newBankAccount.balance) || 0
-      });
+      await createBankAccount({ ...newBankAccount });
       setNewBankAccount({
         name: '',
         bank_name: '',
         account_number: '',
         currency: 'UZS',
-        account_type: 'checking',
-        balance: ''
+        account_type: 'checking'
       });
       setShowCreateAccountModal(false);
     } catch (err) {
@@ -353,38 +349,21 @@ export default function BankReconciliation() {
             <Wallet className="w-4 h-4" />
             {t('cash_register') || 'Cash Register'}
           </TabsTrigger>
-          <TabsTrigger
-            value="currency"
-            className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
-          >
-            <Globe className="w-4 h-4" />
-            {t('currency') || 'Currency'}
-          </TabsTrigger>
-          <TabsTrigger
-            value="fiscal"
-            className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
-          >
-            <Calendar className="w-4 h-4" />
-            {t('fiscal_periods') || 'Fiscal Periods'}
-          </TabsTrigger>
-          <TabsTrigger
-            value="budgets"
-            className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
-          >
-            <Target className="w-4 h-4" />
-            {t('budgets') || 'Budgets'}
-          </TabsTrigger>
-          <TabsTrigger
-            value="accounting-periods"
-            className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
-          >
-            <Lock className="w-4 h-4" />
-            Hisob davrlari
-          </TabsTrigger>
+          {/* moliya-v2 IA: currency/fiscal/budgets/accounting-periods chips
+              moved out — Byudjetlar is a top tab, Valyuta and Davrlar live
+              under Buxgalteriya. Old ?tab=cashflow&sub=... URLs redirect in
+              Financials.jsx. */}
         </TabsList>
 
         <TabsContent value="vipiska" className="mt-4">
-          <BankVipiskaImport />
+          <VipiskaImportPanel
+            bankAccounts={bankAccounts}
+            canImport={canCreate(MODULES.FINANCIALS)}
+            onOpenImport={(account) => {
+              setSelectedBankAccount(account);
+              setShowImportModal(true);
+            }}
+          />
         </TabsContent>
 
         <TabsContent value="bank" className="mt-4 space-y-6">
@@ -533,7 +512,19 @@ export default function BankReconciliation() {
                         <Badge variant="outline">{account.currency}</Badge>
                       </TableCell>
                       <TableCell className="font-semibold">
-                        {formatCurrency(account.balance, account.currency)}
+                        <div className="flex items-center gap-2">
+                          {formatCurrency(account.ledger_balance || 0, account.currency)}
+                          {account.gl_linked === false && (
+                            <Badge
+                              variant="outline"
+                              className="bg-amber-50 text-amber-700 border-amber-300 text-[10px] whitespace-nowrap"
+                              title={t('gl_not_linked_tooltip') || "Balans ledgerdan hisoblanmaydi — hisobni GL schyotiga ulang"}
+                            >
+                              <AlertTriangle className="w-3 h-3 mr-1" />
+                              {t('gl_not_linked') || 'GL ulanmagan'}
+                            </Badge>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         {account.last_reconciled ? format(new Date(account.last_reconciled), 'dd.MM.yyyy') : '-'}
@@ -627,7 +618,7 @@ export default function BankReconciliation() {
                       <div className="text-center">
                         <p className="text-xs text-slate-500">{t('balance') || 'Balance'}</p>
                         <p className="text-lg font-bold text-green-600">
-                          {formatCurrency(selectedBankAccount.balance, selectedBankAccount.currency)}
+                          {formatCurrency(selectedBankAccount.ledger_balance || 0, selectedBankAccount.currency)}
                         </p>
                       </div>
                       <div className="text-center">
@@ -886,16 +877,9 @@ export default function BankReconciliation() {
                 </Select>
               </div>
             </div>
-            <div>
-              <label className="text-sm font-medium">{t('initial_balance') || 'Initial Balance'}</label>
-              <Input
-                type="text"
-                inputMode="decimal"
-                value={formatPriceInput(newBankAccount.balance)}
-                onChange={(e) => setNewBankAccount({ ...newBankAccount, balance: parsePriceInput(e.target.value) })}
-                placeholder="0"
-              />
-            </div>
+            <p className="text-xs text-slate-500">
+              {t('balance_from_gl_hint') || "Balans GL schyotidan hisoblanadi"}
+            </p>
             <div className="flex gap-2 justify-end mt-6">
               <Button variant="outline" onClick={() => setShowCreateAccountModal(false)}>{t('cancel')}</Button>
               <Button
@@ -986,22 +970,6 @@ export default function BankReconciliation() {
 
         <TabsContent value="cash" className="mt-4">
           <CashRegister />
-        </TabsContent>
-
-        <TabsContent value="currency" className="mt-4">
-          <CurrencyManagement />
-        </TabsContent>
-
-        <TabsContent value="fiscal" className="mt-4">
-          <FiscalPeriods />
-        </TabsContent>
-
-        <TabsContent value="budgets" className="mt-4">
-          <BudgetManagement />
-        </TabsContent>
-
-        <TabsContent value="accounting-periods" className="mt-4">
-          <AccountingPeriods />
         </TabsContent>
       </Tabs>
 
@@ -1137,6 +1105,216 @@ export default function BankReconciliation() {
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Vipiska — the WORKING statement-import surface. Two routed flows:
+//   1. 1C bank-klient TXT  → POST /bank-statement-imports (auto-match + JE)
+//   2. Excel/OFX per account → /bank-accounts/:id/import (BankStatementImport
+//      dialog, opened via onOpenImport)
+// The old BankVipiskaImport component called five endpoints that were never
+// routed (vipiska/lines review flow) and is intentionally unmounted.
+// ───────────────────────────────────────────────────────────────────────────
+function VipiskaImportPanel({ bankAccounts, canImport, onOpenImport }) {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
+  const { formatCurrency } = useCurrencyFormatter();
+
+  const [imports, setImports] = useState([]);
+  const [isLoadingImports, setIsLoadingImports] = useState(true);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadResult, setUploadResult] = useState(null);
+  const [selectedAccountId, setSelectedAccountId] = useState('');
+  const fileInputRef = useRef(null);
+
+  const loadImports = useCallback(async () => {
+    try {
+      const data = await financeService.listBankStatementImports();
+      setImports(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Failed to load bank statement imports:', err);
+    } finally {
+      setIsLoadingImports(false);
+    }
+  }, []);
+
+  // Mount-only fetch (tab content mounts on activation). `t` must never be a
+  // dep here — new closure every render → infinite fetch loop.
+  useEffect(() => {
+    loadImports();
+  }, [loadImports]);
+
+  const handle1CFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setIsUploading(true);
+    setUploadResult(null);
+    try {
+      const res = await financeService.importBankStatement1C(file);
+      setUploadResult(res);
+      await loadImports();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, t('vp_upload_failed') || 'Vipiska import qilinmadi'));
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const importStatusBadge = (status) => {
+    switch (status) {
+      case 'completed':
+      case 'matched':
+        return <Badge className="bg-green-100 text-green-700">{t('vp_status_done') || 'Yakunlangan'}</Badge>;
+      case 'partial':
+        return <Badge className="bg-amber-100 text-amber-700">{t('vp_status_partial') || 'Qisman'}</Badge>;
+      case 'failed':
+        return <Badge className="bg-red-100 text-red-700">{t('vp_status_failed') || 'Xato'}</Badge>;
+      default:
+        return <Badge variant="outline">{status}</Badge>;
+    }
+  };
+
+  const selectedAccount = bankAccounts.find(a => a.id === selectedAccountId) || null;
+
+  return (
+    <div className="space-y-4">
+      {/* Import actions */}
+      <Card className="bg-white/80 backdrop-blur-sm border border-slate-200/60 rounded-xl shadow-sm">
+        <CardHeader className="border-b border-slate-100 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-[var(--genix-blue)]/10 rounded-xl flex items-center justify-center">
+              <FileSpreadsheet className="w-5 h-5 text-[var(--genix-blue)]" />
+            </div>
+            <div>
+              <CardTitle className="text-base font-semibold">{t('vp_title') || 'Vipiska import'}</CardTitle>
+              <p className="text-sm text-slate-500">{t('vp_subtitle') || 'Bank-klient (1C TXT) yoki Excel/OFX fayldan tranzaksiyalarni yuklash'}</p>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-4 space-y-4">
+          {canImport && (
+            <div className="flex flex-wrap items-end gap-3">
+              {/* 1C bank-klient TXT */}
+              <div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".txt"
+                  className="hidden"
+                  onChange={handle1CFile}
+                />
+                <Button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploading}
+                  className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
+                >
+                  {isUploading ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {t('vp_uploading') || 'Yuklanmoqda...'}</>
+                  ) : (
+                    <><Upload className="w-4 h-4 mr-2" /> {t('vp_upload_1c') || '1C fayl yuklash'}</>
+                  )}
+                </Button>
+              </div>
+
+              <div className="w-px h-8 bg-slate-200 self-end mb-[2px] hidden sm:block" />
+
+              {/* Excel/OFX per account */}
+              <div className="flex items-end gap-2">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-500">{t('vp_account_for_excel') || 'Excel/OFX uchun hisobvaraq'}</label>
+                  <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
+                    <SelectTrigger className="w-[220px] h-9 bg-white">
+                      <SelectValue placeholder={t('select_bank_account') || 'Hisobvaraqni tanlang'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {bankAccounts.map(a => (
+                        <SelectItem key={a.id} value={a.id}>{a.name} ({a.currency})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button
+                  variant="outline"
+                  className="h-9"
+                  disabled={!selectedAccount}
+                  onClick={() => selectedAccount && onOpenImport(selectedAccount)}
+                >
+                  <Upload className="w-4 h-4 mr-2" /> {t('vp_import_excel') || 'Excel/OFX import'}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {uploadResult && (
+            <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-800 space-y-1">
+              <div className="flex items-center gap-2 font-medium">
+                <CheckCircle className="w-4 h-4" />
+                {t('vp_upload_done') || 'Import yakunlandi'}: {uploadResult.transaction_count ?? 0} {t('vp_txn_word') || 'tranzaksiya'}
+              </div>
+              {Array.isArray(uploadResult.warnings) && uploadResult.warnings.map((w, i) => (
+                <div key={i} className="flex items-start gap-2 text-amber-700">
+                  <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" /> {w}
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Import history */}
+      <Card className="bg-white/80 backdrop-blur-sm border border-slate-200/60 rounded-xl shadow-sm">
+        <CardContent className="p-0">
+          {isLoadingImports ? (
+            <div className="p-8 flex items-center justify-center text-slate-500">
+              <Loader2 className="w-5 h-5 mr-2 animate-spin" /> {t('loading') || 'Yuklanmoqda...'}
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-slate-50">
+                  <TableHead>{t('vp_file') || 'Fayl'}</TableHead>
+                  <TableHead>{t('date') || 'Sana'}</TableHead>
+                  <TableHead className="text-right">{t('vp_txns') || 'Tranzaksiyalar'}</TableHead>
+                  <TableHead className="text-right">{t('vp_matched') || 'Moslangan'}</TableHead>
+                  <TableHead className="text-right">{t('vp_credit') || 'Kirim'}</TableHead>
+                  <TableHead className="text-right">{t('vp_debit') || 'Chiqim'}</TableHead>
+                  <TableHead>{t('status') || 'Holat'}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {imports.map((imp) => (
+                  <TableRow key={imp.id} className="hover:bg-slate-50">
+                    <TableCell className="font-medium max-w-[220px] truncate" title={imp.file_name}>{imp.file_name}</TableCell>
+                    <TableCell className="text-slate-600">
+                      {imp.statement_date ? format(new Date(imp.statement_date), 'dd.MM.yyyy') : format(new Date(imp.imported_at), 'dd.MM.yyyy')}
+                    </TableCell>
+                    <TableCell className="text-right">{imp.transaction_count}</TableCell>
+                    <TableCell className="text-right">
+                      <span className="text-green-700">{imp.matched_count}</span>
+                      {imp.unmatched_count > 0 && (
+                        <span className="text-amber-600"> / {imp.unmatched_count} {t('vp_unmatched_short') || 'mos emas'}</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right text-green-700">{formatCurrency(imp.total_credit || 0)}</TableCell>
+                    <TableCell className="text-right text-red-600">{formatCurrency(imp.total_debit || 0)}</TableCell>
+                    <TableCell>{importStatusBadge(imp.status)}</TableCell>
+                  </TableRow>
+                ))}
+                {imports.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-8 text-slate-500">
+                      {t('vp_no_imports') || 'Hali vipiska import qilinmagan'}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

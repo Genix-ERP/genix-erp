@@ -393,6 +393,14 @@ export const financeService = {
     return response.data.data;
   },
 
+  // Business KPI layer (moliya-v2 conventions §3). Same { period_from,
+  // period_to } as the dashboard. Every KPI is { value: number|null,
+  // inputs: {...} } — null means "Ma'lumot yetarli emas", never render 0.
+  async getFinanceKPIs(params = {}) {
+    const response = await apiClient.get('/reports/finance-kpis', { params });
+    return response.data.data;
+  },
+
   async getCashFlow(params = {}) {
     const response = await apiClient.get('/reports/cash-flow', { params });
     return response.data.data;
@@ -488,9 +496,17 @@ export const financeService = {
     const response = await apiClient.post(`/period-close/${id}/reopen`, { reason });
     return response.data.data;
   },
+  // Pre-close checklist: drafts, missing depreciation months, unmatched
+  // vipiska. params: { period_start, period_end } (YYYY-MM-DD).
+  async getCloseChecklist(params = {}) {
+    const response = await apiClient.get('/period-close/checklist', { params });
+    return response.data.data;
+  },
 
-  // Bank Statement Import (TT §8.1)
-  async importBankStatement(file) {
+  // Bank Statement Import (TT §8.1) — 1C bank-klient TXT upload.
+  // NOTE: named ...1C because a per-account importBankStatement(bankAccountId,
+  // data) already exists above; a duplicate key here used to shadow it.
+  async importBankStatement1C(file) {
     const form = new FormData();
     form.append('file', file);
     const response = await apiClient.post('/bank-statement-imports', form, {
@@ -959,9 +975,20 @@ export const financeService = {
     return response.data.data;
   },
 
+  async cancelCashOrder(id) {
+    const response = await apiClient.post(`/cash/orders/${id}/cancel`);
+    return response.data.data;
+  },
+
   // ========== Cash Book (Kassa kitob) ==========
   async getCashBook(params = {}) {
     const response = await apiClient.get('/cash/book', { params });
+    return response.data.data;
+  },
+
+  // ========== Cash Balance (yagona cash engine — ledger) ==========
+  async getCashBalance(params = {}) {
+    const response = await apiClient.get('/cash/balance', { params });
     return response.data.data;
   },
 
