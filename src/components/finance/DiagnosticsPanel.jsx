@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { AlertTriangle, AlertCircle, CheckCircle2, Loader2, ArrowRight, ShieldAlert, RefreshCw } from 'lucide-react';
+import { AlertTriangle, AlertCircle, CheckCircle2, Info, Loader2, ArrowRight, ShieldAlert, RefreshCw } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import financeService from '@/api/services/finance';
@@ -55,6 +55,11 @@ export default function DiagnosticsPanel() {
     TRANSIT_NOT_CLOSED: tr('Tranzit yopilmagan', 'Транзит не закрыт', 'Transit not closed'),
     CAPEX_STUCK: tr('0820 yopilmagan', '0820 не закрыт', '0820 stuck'),
     GROUP_NODE_POSTING: tr('Guruh hisobiga provodka', 'Проводка на группу', 'Posting on group node'),
+    ORPHAN_SOURCE: tr('Manba hujjat topilmadi', 'Документ-источник не найден', 'Source doc missing'),
+    DUPLICATE_SOURCE: tr('Takroriy provodka (bitta hujjat)', 'Дубль проводки (один документ)', 'Duplicate posting (same source)'),
+    ZERO_LINE_ENTRY: tr('Qatorsiz provodka', 'Проводка без строк', 'Entry with no lines'),
+    UNBALANCED_ENTRY: tr('Balanslashmagan provodka', 'Несбалансированная проводка', 'Unbalanced entry'),
+    PERIOD_GAP: tr('Davr uzilishi', 'Разрыв периодов', 'Period gap'),
   }[rule] || rule);
 
   const anomalies = data?.anomalies || [];
@@ -131,12 +136,14 @@ export default function DiagnosticsPanel() {
                 <div key={i} className="flex items-center gap-3 py-2.5">
                   {a.severity === 'critical'
                     ? <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
-                    : <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />}
+                    : a.severity === 'info'
+                      ? <Info className="w-4 h-4 text-blue-500 shrink-0" />
+                      : <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-sm font-mono font-semibold text-slate-800">{a.code}</span>
                       <span className="text-sm text-slate-600 truncate">{language === 'ru' ? a.name_ru : a.name_uz}</span>
-                      <Badge className={`text-[10px] ${a.severity === 'critical' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                      <Badge className={`text-[10px] ${a.severity === 'critical' ? 'bg-red-100 text-red-700' : a.severity === 'info' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
                         {ruleLabel(a.rule)}
                       </Badge>
                     </div>
@@ -151,9 +158,13 @@ export default function DiagnosticsPanel() {
                       )}
                     </div>
                   </div>
-                  <Button size="sm" variant="ghost" className="text-blue-600 hover:text-blue-800 shrink-0" onClick={() => openAccount(a)}>
-                    {tr('Hisob kartasi', 'Карточка счёта', 'Account card')} <ArrowRight className="w-3.5 h-3.5 ml-1" />
-                  </Button>
+                  {/* Entry-level findings (ORPHAN_SOURCE, PERIOD_GAP, …) carry no
+                      account — nothing to drill into. */}
+                  {a.account_id && (
+                    <Button size="sm" variant="ghost" className="text-blue-600 hover:text-blue-800 shrink-0" onClick={() => openAccount(a)}>
+                      {tr('Hisob kartasi', 'Карточка счёта', 'Account card')} <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                    </Button>
+                  )}
                 </div>
               ))}
             </div>
