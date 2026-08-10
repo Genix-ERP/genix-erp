@@ -320,7 +320,10 @@ export default function StockOperations() {
       toast.error(`${t('insufficient_stock') || error.response.data.message || 'Insufficient stock'}: ${details}`, { duration: 8000 });
     } else {
       const msg = error.response?.data?.message || error.response?.data?.error || error.message;
-      toast.error(msg);
+      // 8s like the branches above. The server's 422s here are instructions
+      // ("attach a warehouse to this operation type and confirm again"), not
+      // status words, and the default toast is gone before one can be read.
+      toast.error(msg, { duration: 8000 });
     }
   };
 
