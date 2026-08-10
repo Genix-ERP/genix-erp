@@ -95,8 +95,8 @@ export default function CustomerFollowups() {
         followupLevelsService.list()
       ]);
       setSummary(summaryRes);
-      setCustomers(customersRes || []);
-      setLevels(levelsRes || []);
+      setCustomers(Array.isArray(customersRes) ? customersRes : []);
+      setLevels(Array.isArray(levelsRes) ? levelsRes : []);
     } catch (error) {
       console.error('Failed to fetch followup data:', error);
     } finally {

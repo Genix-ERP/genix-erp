@@ -1,64 +1,67 @@
 import apiClient from '../client';
 
+// Backend wraps every payload as { success, data, meta? } — unwrap .data.data
+const unwrap = (response) => response.data?.data ?? null;
+
 export const followupsService = {
   // Summary
   getSummary: async () => {
     const response = await apiClient.get('/followups/summary');
-    return response.data;
+    return unwrap(response);
   },
 
   // Customer follow-ups
   listCustomerFollowups: async (params = {}) => {
     const response = await apiClient.get('/followups/customers', { params });
-    return response.data;
+    return unwrap(response);
   },
 
   getCustomerDetails: async (customerId) => {
     const response = await apiClient.get(`/followups/customers/${customerId}`);
-    return response.data;
+    return unwrap(response);
   },
 
   // Actions
   createAction: async (data) => {
     const response = await apiClient.post('/followups/actions', data);
-    return response.data;
+    return unwrap(response);
   },
 
   sendReminder: async (data) => {
     const response = await apiClient.post('/followups/send-reminder', data);
-    return response.data;
+    return unwrap(response);
   },
 
   // Payment promises
   createPromise: async (data) => {
     const response = await apiClient.post('/followups/promises', data);
-    return response.data;
+    return unwrap(response);
   },
 
   updatePromiseStatus: async (id, status) => {
     const response = await apiClient.put(`/followups/promises/${id}/status`, { status });
-    return response.data;
+    return unwrap(response);
   },
 };
 
 export const followupLevelsService = {
   list: async () => {
     const response = await apiClient.get('/followup-levels');
-    return response.data;
+    return unwrap(response);
   },
 
   create: async (data) => {
     const response = await apiClient.post('/followup-levels', data);
-    return response.data;
+    return unwrap(response);
   },
 
   update: async (id, data) => {
     const response = await apiClient.put(`/followup-levels/${id}`, data);
-    return response.data;
+    return unwrap(response);
   },
 
   delete: async (id) => {
     const response = await apiClient.delete(`/followup-levels/${id}`);
-    return response.data;
+    return unwrap(response);
   },
 };

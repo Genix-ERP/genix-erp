@@ -9,7 +9,7 @@ import {
   Building2,
   Users,
   MapPin,
-  DollarSign,
+  Banknote,
   Calendar,
   GripVertical,
   Eye,
@@ -85,7 +85,7 @@ const PortalAwareItem = ({ provided, snapshot, children }) => {
 };
 
 // Project Card (visual only — drag is handled by the Draggable wrapper)
-function ProjectCard({ project, progress, onView, onEdit, formatCurrency, t }) {
+function ProjectCard({ project, progress, overdueWorks, onView, onEdit, formatCurrency, t }) {
   return (
     <Card
       onClick={() => onView(project)}
@@ -140,23 +140,32 @@ function ProjectCard({ project, progress, onView, onEdit, formatCurrency, t }) {
 
         {project.contract_amount > 0 && (
           <div className="flex items-center gap-2 text-xs text-slate-600 mb-3">
-            <DollarSign className="w-3 h-3" />
+            <Banknote className="w-3 h-3" />
             <span className="font-medium">{formatCurrency(project.contract_amount)}</span>
           </div>
         )}
 
         <div className="mb-2">
           <div className="flex justify-between text-xs mb-1">
-            <span className="text-slate-500">{t('progress') || 'Progress'}</span>
+            <span className="text-slate-500">{t('progress_label') || 'Bajarilish'}</span>
             <span className="font-medium">{progress}%</span>
           </div>
           <Progress value={progress} className="h-1.5" />
         </div>
 
-        {project.planned_end_date && (
-          <div className="flex items-center gap-1 text-xs text-slate-400 mt-2">
-            <Calendar className="w-3 h-3" />
-            <span>{format(new Date(project.planned_end_date), 'dd.MM.yyyy')}</span>
+        {(project.planned_end_date || overdueWorks > 0) && (
+          <div className="flex items-center justify-between gap-2 text-xs text-slate-400 mt-2">
+            {project.planned_end_date ? (
+              <span className="flex items-center gap-1">
+                <Calendar className="w-3 h-3" />
+                <span>{format(new Date(project.planned_end_date), 'dd.MM.yyyy')}</span>
+              </span>
+            ) : <span />}
+            {overdueWorks > 0 && (
+              <span className="inline-flex items-center rounded-full bg-red-50 border border-red-200 px-1.5 py-px text-[10px] font-medium text-red-600 whitespace-nowrap">
+                {(t('pf_works_overdue_chip') || '{n} ish kechikkan').replace('{n}', String(overdueWorks))}
+              </span>
+            )}
           </div>
         )}
       </CardContent>
@@ -165,7 +174,7 @@ function ProjectCard({ project, progress, onView, onEdit, formatCurrency, t }) {
 }
 
 // Kanban Column — a Droppable target for one status
-function KanbanColumn({ column, projects, readinessById, onView, onEdit, formatCurrency, t }) {
+function KanbanColumn({ column, projects, readinessById, statsById, onView, onEdit, formatCurrency, t }) {
   const columnProjects = projects.filter((p) => p.status === column.id);
 
   return (
@@ -203,6 +212,7 @@ function KanbanColumn({ column, projects, readinessById, onView, onEdit, formatC
                 const progress = typeof computed === 'number'
                   ? Math.round(computed)
                   : (Number(project.progress_percent) || 0);
+                const overdueWorks = Number(statsById?.[project.id]?.overdue_works) || 0;
                 return (
                   <Draggable key={project.id} draggableId={String(project.id)} index={index}>
                     {(dp, ds) => (
@@ -210,6 +220,7 @@ function KanbanColumn({ column, projects, readinessById, onView, onEdit, formatC
                         <ProjectCard
                           project={project}
                           progress={progress}
+                          overdueWorks={overdueWorks}
                           onView={onView}
                           onEdit={onEdit}
                           formatCurrency={formatCurrency}
@@ -236,6 +247,10 @@ export function ProjectKanban({
   // /construction/projects/stats). Cards fall back to the manual
   // progress_percent column when absent.
   readinessById,
+  // Optional map of project id → full per_project stats entry
+  // ({readiness_pct, actual_amount, overdue_works}) — used for the
+  // one-line overdue-works chip on cards.
+  statsById,
   onStatusChange,
   onViewProject,
   onEditProject,
@@ -266,6 +281,7 @@ export function ProjectKanban({
               column={column}
               projects={projects}
               readinessById={readinessById}
+              statsById={statsById}
               onView={onViewProject}
               onEdit={onEditProject}
               formatCurrency={formatCurrency}
