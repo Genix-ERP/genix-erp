@@ -265,32 +265,37 @@ export default function StockOperations() {
   const handleAdvance = async () => {
     if (!selectedOp) return;
     const op = selectedOp;
-    const isLastStep = op.current_step >= op.total_steps;
 
-    if (isLastStep) {
-      // Auto-save done_qty = expected_qty for lines where done_qty is 0 (e.g. created from SO)
-      const zeroLines = op.lines?.filter(l => l.done_qty === 0 && l.expected_qty > 0) || [];
-      if (zeroLines.length > 0) {
-        try {
-          await inventoryService.updateStockOperationLines(op.id,
-            zeroLines.map(l => ({ id: l.id, done_qty: l.expected_qty }))
-          );
-        } catch (e) {
-          console.error('Failed to auto-set done_qty', e);
-        }
-      }
-
-      // Check for genuinely partial lines (user explicitly set done_qty < expected_qty)
-      const partialLines = op.lines?.some(l => l.done_qty > 0 && l.done_qty < l.expected_qty && l.expected_qty > 0);
-      if (partialLines) {
-        setShowBackorderDialog(true);
-        return;
-      }
+    // A line the user never touched receives what was expected. That defaulting
+    // used to happen HERE, as a separate request whose failure was swallowed
+    // into a console.error — so a receipt whose patch did not land completed as
+    // "Bajarildi" and moved no stock at all. The server does it now, inside the
+    // same request that applies the movement, where it cannot be skipped.
+    //
+    // Only the genuinely partial case still needs asking about, and that is a
+    // quantity the user typed themselves.
+    const partialLines = op.lines?.some(l => l.done_qty > 0 && l.done_qty < l.expected_qty && l.expected_qty > 0);
+    if (partialLines && op.current_step >= op.total_steps) {
+      setShowBackorderDialog(true);
+      return;
     }
 
     setIsActionLoading(true);
     try {
-      const result = await inventoryService.advanceStockOperationStep(selectedOp.id);
+      // One press finishes the operation.
+      //
+      // The workflow can be configured with several steps and each is still
+      // logged separately, but a warehouse worker pressing "Qabul qilish"
+      // means "receive this", not "advance one stage of a state machine" —
+      // having to press it twice for a two-step type is a UI detail leaking
+      // out of the configuration.
+      let result = await inventoryService.advanceStockOperationStep(op.id);
+      // Bounded by the operation's own step count so a server that never
+      // reports 'done' cannot spin here.
+      let guard = (op.total_steps || 1) + 1;
+      while (result?.state !== 'done' && result?.state !== 'cancelled' && guard-- > 0) {
+        result = await inventoryService.advanceStockOperationStep(op.id);
+      }
       await refreshDetail();
       setSelectedOp(prev => ({ ...prev, state: result.state, current_step: result.current_step }));
       loadData();

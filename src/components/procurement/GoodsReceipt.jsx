@@ -51,6 +51,11 @@ export default function GoodsReceipt() {
   const { t } = useTranslation(language);
   const { purchaseOrders = [] } = useProcurement();
   const { canCreate } = usePermissions();
+  // Receiving goods is warehouse work as much as purchasing work. Gating it on
+  // the purchase module alone meant a storekeeper with full warehouse rights
+  // could not book in a delivery from the screen that shows the order it
+  // belongs to — they had to go to Ombor and find the operation there.
+  const canReceive = canCreate(MODULES.PURCHASES) || canCreate(MODULES.INVENTORY);
   const { isLotTrackingEnabled } = useInventory();
   const lotTrackingOn = isLotTrackingEnabled();
 
@@ -421,7 +426,7 @@ export default function GoodsReceipt() {
             <Package className="w-5 h-5" />
             {t('goods_receipt') || 'Goods Receipt'}
           </CardTitle>
-          {canCreate(MODULES.PURCHASES) && (
+          {canReceive && (
             <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-indigo-600 to-purple-600">
               <Plus className="w-4 h-4 mr-2" /> {t('new_receipt') || 'New Receipt'}
             </Button>
@@ -461,7 +466,7 @@ export default function GoodsReceipt() {
           <div className="text-center py-16">
             <Package className="w-16 h-16 text-slate-300 mx-auto mb-4" />
             <p className="text-slate-500">{t('no_receipts_yet') || 'No receipts yet'}</p>
-            {canCreate(MODULES.PURCHASES) && (
+            {canReceive && (
               <Button onClick={() => setShowCreateModal(true)} className="mt-4">
                 {t('create_first_receipt') || 'Create First Receipt'}
               </Button>
