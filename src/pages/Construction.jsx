@@ -35,11 +35,11 @@ import {
   FolderTree,
   FileSpreadsheet,
   ClipboardList,
-  TrendingUp,
   Users,
   MapPin,
   Calendar,
   DollarSign,
+  Banknote,
   Search,
   Edit,
   Trash2,
@@ -49,8 +49,6 @@ import {
   Package,
   Truck,
   FileText,
-  Clock,
-  CheckCircle,
   AlertCircle,
   AlertTriangle,
   Warehouse,
@@ -154,6 +152,13 @@ const ProjectsTab = ({
   loadError,
   onRetry,
   readinessById,
+  // Full per-project stats map (id → {readiness_pct, actual_amount,
+  // overdue_works}) + a flag telling whether the stats fetch succeeded.
+  // A project MISSING from the map has no estimate and no costs yet —
+  // the card shows the "Smeta hali tuzilmagan" variant instead of facts.
+  statsById,
+  statsReady,
+  formatCurrencyCompact,
   searchQuery,
   setSearchQuery,
   statusFilter,
@@ -313,6 +318,7 @@ const ProjectsTab = ({
           <ProjectKanban
             projects={filteredProjects}
             readinessById={readinessById}
+            statsById={statsById}
             onStatusChange={onStatusChange}
             onViewProject={onViewProject}
             onEditProject={onEditProject}
@@ -370,6 +376,12 @@ const ProjectsTab = ({
               const progress = typeof computed === 'number'
                 ? Math.round(computed)
                 : (Number(project.progress_percent) || 0);
+              const statEntry = statsById ? statsById[project.id] : undefined;
+              const overdueWorks = Number(statEntry?.overdue_works) || 0;
+              // No per_project entry at all == no edinich estimate AND no
+              // approved costs — a brand-new/sparse project. Only trust this
+              // when the stats fetch actually succeeded.
+              const noEstimateYet = statsReady && !statEntry;
               return (
                 <article
                   key={project.id}
@@ -423,7 +435,7 @@ const ProjectsTab = ({
                     )}
                     {project.contract_amount > 0 && (
                       <div className="flex items-center gap-2 text-slate-900">
-                        <DollarSign className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={2} />
+                        <Banknote className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={2} />
                         <dd className="font-medium tabular-nums">{formatCurrency(project.contract_amount)}</dd>
                       </div>
                     )}
@@ -441,40 +453,78 @@ const ProjectsTab = ({
                               ? project.planned_end_date
                               : end.toLocaleDateString('ru-RU')}
                           </dd>
+                          {overdue && (
+                            <span className="inline-flex items-center rounded-full bg-red-50 border border-red-200 px-1.5 py-px text-[10px] font-medium text-red-600 whitespace-nowrap">
+                              {t('pf_overdue_chip') || 'kechikkan'}
+                            </span>
+                          )}
                         </div>
                       );
                     })()}
                   </dl>
 
-                  {/* Progress */}
-                  <div className="mb-5 mt-auto">
+                  {/* Progress — cost-weighted readiness (conventions §2) */}
+                  <div className="mb-4 mt-auto">
                     <div className="flex items-baseline justify-between mb-1.5">
                       <span className="text-xs font-medium text-slate-500">
-                        {t('progress') || 'Jarayon'}
+                        {t('progress_label') || 'Bajarilish'}
                       </span>
-                      <span className="text-sm font-semibold text-slate-900 tabular-nums">{progress}%</span>
+                      <span className="text-sm font-bold text-slate-900 tabular-nums">{progress}%</span>
                     </div>
                     <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
                       <div
-                        className={cn(
-                          'h-full rounded-full transition-all duration-300',
-                          progress >= 100 ? 'bg-emerald-500'
-                          : progress >= 50 ? 'bg-blue-500'
-                          : progress > 0 ? 'bg-amber-500'
-                          : 'bg-slate-300'
-                        )}
+                        className="h-full rounded-full bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] transition-all duration-300"
                         style={{ width: `${Math.min(100, progress)}%` }}
                       />
                     </div>
                   </div>
 
+                  {/* Facts row — Fakt (approved CEL money) + overdue works chip.
+                      Sparse variant for projects without any estimate/costs. */}
+                  {noEstimateYet ? (
+                    <div className="flex items-center justify-between gap-2 pt-3 border-t border-slate-100 min-h-[40px]">
+                      <span className="text-xs text-slate-400 truncate">
+                        {t('pf_no_estimate') || 'Smeta hali tuzilmagan'}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 shrink-0 px-2.5 text-xs text-[var(--genix-blue)] hover:text-[var(--genix-blue)] hover:bg-blue-50 cursor-pointer"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onViewProject(project, { group: 'smeta', tab: 'estimates' });
+                        }}
+                      >
+                        <Plus className="w-3 h-3 mr-1" />
+                        {t('pf_create_estimate') || 'Smeta tuzish'}
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between gap-2 pt-3 border-t border-slate-100 text-xs min-h-[40px]">
+                      <span className="text-slate-500 truncate">
+                        {t('pf_fact_label') || 'Fakt'}:{' '}
+                        <span className="font-medium text-slate-700 tabular-nums">
+                          {statEntry && typeof statEntry.actual_amount === 'number'
+                            ? formatCurrencyCompact(statEntry.actual_amount)
+                            : '—'}
+                        </span>
+                      </span>
+                      {overdueWorks > 0 && (
+                        <span className="inline-flex items-center rounded-full bg-red-50 border border-red-200 px-2 py-0.5 text-[11px] font-medium text-red-600 whitespace-nowrap shrink-0">
+                          {(t('pf_works_overdue_chip') || '{n} ish kechikkan').replace('{n}', String(overdueWorks))}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
                   {/* Actions */}
-                  <div className="flex items-center gap-1.5 pt-4 border-t border-slate-100">
+                  <div className="flex items-center gap-1.5 pt-3 mt-3 border-t border-slate-100">
                     <Button
                       variant="ghost"
                       size="sm"
                       className="flex-1 h-8 text-slate-600 hover:text-slate-900 hover:bg-slate-100 cursor-pointer"
                       onClick={(e) => { e.stopPropagation(); onEditProject(project); }}
+                      title={t('edit') || 'Tahrirlash'}
                     >
                       <Edit className="w-3.5 h-3.5 mr-1.5" />
                       {t('edit') || 'Tahrirlash'}
@@ -1019,7 +1069,10 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
     weather_morning: '', weather_afternoon: '',
     temperature_min: '', temperature_max: '',
     work_summary: '', issues_encountered: '', safety_notes: '',
-    workers_count: '', workers_details: '', equipment_used: '', materials_received: ''
+    workers_count: '', workers_details: '', equipment_used: '', materials_received: '',
+    // Bajarilgan hajm + birlik — KS-2 auto-generation reads these; without
+    // them web journal entries always contributed 0 volume.
+    quantity_done: '', uom: ''
   });
   const [selectedDailyLog, setSelectedDailyLog] = useState(null);
   const [showDailyLogViewModal, setShowDailyLogViewModal] = useState(false);
@@ -1811,6 +1864,9 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
       workers_details: dailyLogForm.workers_details,
       equipment_used: dailyLogForm.equipment_used,
       materials_received: dailyLogForm.materials_received,
+      // Optional executed volume — feeds KS-2 (Forma-2) auto-generation.
+      quantity_done: Number(dailyLogForm.quantity_done) || 0,
+      uom: (dailyLogForm.uom || '').trim(),
       photos: allPhotos
     };
 
@@ -1842,7 +1898,8 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
       weather_morning: '', weather_afternoon: '',
       temperature_min: '', temperature_max: '',
       work_summary: '', issues_encountered: '', safety_notes: '',
-      workers_count: '', workers_details: '', equipment_used: '', materials_received: ''
+      workers_count: '', workers_details: '', equipment_used: '', materials_received: '',
+      quantity_done: '', uom: ''
     });
     setDailyLogFiles([]);
     setDailyLogPhotoPreview([]);
@@ -2661,7 +2718,8 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                   weather_morning: '', weather_afternoon: '',
                   temperature_min: '', temperature_max: '',
                   work_summary: '', issues_encountered: '', safety_notes: '',
-                  workers_count: '', workers_details: '', equipment_used: '', materials_received: ''
+                  workers_count: '', workers_details: '', equipment_used: '', materials_received: '',
+                  quantity_done: '', uom: ''
                 });
                 setShowDailyLogModal(true);
               }}>
@@ -2681,7 +2739,8 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                       weather_morning: '', weather_afternoon: '',
                       temperature_min: '', temperature_max: '',
                       work_summary: '', issues_encountered: '', safety_notes: '',
-                      workers_count: '', workers_details: '', equipment_used: '', materials_received: ''
+                      workers_count: '', workers_details: '', equipment_used: '', materials_received: '',
+                      quantity_done: '', uom: ''
                     });
                     setShowDailyLogModal(true);
                   }}>
@@ -2740,7 +2799,9 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                                   workers_count: log.workers_count || '',
                                   workers_details: jsonbFieldToString(log.workers_details),
                                   equipment_used: jsonbFieldToString(log.equipment_used),
-                                  materials_received: jsonbFieldToString(log.materials_received)
+                                  materials_received: jsonbFieldToString(log.materials_received),
+                                  quantity_done: log.quantity_done || '',
+                                  uom: log.uom || ''
                                 });
                                 setDailyLogFiles([]);
                                 setDailyLogPhotoPreview(parsePhotos(log.photos).map(p => getFileUrl(p.url || p)));
@@ -2785,6 +2846,9 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                         )}
                         <div className="flex gap-4 mt-3 text-sm text-slate-600">
                           <span><Users className="w-4 h-4 inline mr-1" />{log.workers_count || 0} {t('workers') || 'ishchi'}</span>
+                          {Number(log.quantity_done) > 0 && (
+                            <span className="tabular-nums">· {log.quantity_done} {log.uom || ''}</span>
+                          )}
                         </div>
                         {(() => {
                           const photos = parsePhotos(log.photos);
@@ -3846,6 +3910,8 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
               workers_details: '',
               equipment_used: '',
               materials_received: '',
+              quantity_done: '',
+              uom: '',
             });
           }
         }}
@@ -3956,6 +4022,34 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                 placeholder={t('work_summary_placeholder') || 'Bugun bajarilgan ishlar tavsifi...'}
                 rows={3}
               />
+            </div>
+
+            {/* Executed volume — optional, but without it KS-2 (Forma-2)
+                auto-generation gets 0 volume from journal entries. */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="dl-qty-done">{t('dl_quantity_done') || 'Bajarilgan hajm'}</Label>
+                <Input
+                  id="dl-qty-done"
+                  type="number"
+                  min="0"
+                  step="any"
+                  inputMode="decimal"
+                  value={dailyLogForm.quantity_done}
+                  onChange={(e) => setDailyLogForm({ ...dailyLogForm, quantity_done: e.target.value })}
+                  placeholder="12.5"
+                />
+              </div>
+              <div>
+                <Label htmlFor="dl-uom">{t('dl_uom') || 'Birlik'}</Label>
+                <Input
+                  id="dl-uom"
+                  value={dailyLogForm.uom}
+                  onChange={(e) => setDailyLogForm({ ...dailyLogForm, uom: e.target.value })}
+                  placeholder="m3"
+                  maxLength={20}
+                />
+              </div>
             </div>
 
             {/* Workers */}
@@ -4184,7 +4278,9 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                 workers_count: selectedDailyLog.workers_count || '',
                 workers_details: jsonbFieldToString(selectedDailyLog.workers_details),
                 equipment_used: jsonbFieldToString(selectedDailyLog.equipment_used),
-                materials_received: jsonbFieldToString(selectedDailyLog.materials_received)
+                materials_received: jsonbFieldToString(selectedDailyLog.materials_received),
+                quantity_done: selectedDailyLog.quantity_done || '',
+                uom: selectedDailyLog.uom || ''
               });
               setDailyLogFiles([]);
               setDailyLogPhotoPreview(parsePhotos(selectedDailyLog.photos).map(p => getFileUrl(p.url || p)));
@@ -4352,7 +4448,7 @@ export default function Construction() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { formatCurrency } = useCurrencyFormatter();
+  const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
   const { activeCompany } = useCompany();
 
   const {
@@ -4372,27 +4468,51 @@ export default function Construction() {
   // module access) — no extra fetch here, or the page fires the request
   // three times and bypasses the access gate.
 
-  // Portfolio stats: per-project COMPUTED readiness (cost-weighted over the
-  // edinich estimate works) so cards show real progress instead of the dead
-  // manual progress_percent. Best-effort: on failure cards fall back to the
-  // manual field.
-  const [readinessById, setReadinessById] = useState(null);
+  // Portfolio stats: ONE fetch of /construction/projects/stats feeds the KPI
+  // strip (totals), the per-card fakt/overdue chips (per_project) and the
+  // computed cost-weighted readiness bars. Best-effort: on failure the KPI
+  // strip hides and cards fall back to the manual progress_percent field.
+  const [projectStats, setProjectStats] = useState(null);
+  const [projectStatsLoading, setProjectStatsLoading] = useState(true);
   useEffect(() => {
     let cancelled = false;
     constructionService.getProjectStats()
       .then((stats) => {
         if (cancelled) return;
-        const map = {};
-        (stats?.per_project || []).forEach((p) => {
-          if (p && p.id != null && typeof p.readiness_pct === 'number') {
-            map[p.id] = p.readiness_pct;
-          }
-        });
-        setReadinessById(map);
+        setProjectStats(stats || null);
+        setProjectStatsLoading(false);
       })
-      .catch(() => { if (!cancelled) setReadinessById(null); });
+      .catch(() => {
+        if (!cancelled) {
+          setProjectStats(null);
+          setProjectStatsLoading(false);
+        }
+      });
     return () => { cancelled = true; };
   }, []);
+
+  // id → full per_project entry ({readiness_pct, actual_amount, overdue_works}).
+  // A project with NO entry here has neither an edinich estimate nor approved
+  // costs — the card shows the "Smeta hali tuzilmagan" empty variant.
+  const statsByProjectId = React.useMemo(() => {
+    if (!projectStats) return null;
+    const map = {};
+    (projectStats.per_project || []).forEach((p) => {
+      if (p && p.id != null) map[p.id] = p;
+    });
+    return map;
+  }, [projectStats]);
+
+  // Narrow map consumed by the grid/kanban progress bars (kept for
+  // back-compat with the existing readiness fallback logic).
+  const readinessById = React.useMemo(() => {
+    if (!statsByProjectId) return null;
+    const map = {};
+    Object.values(statsByProjectId).forEach((p) => {
+      if (typeof p.readiness_pct === 'number') map[p.id] = p.readiness_pct;
+    });
+    return map;
+  }, [statsByProjectId]);
 
   // Warehouses for the project form's "Loyiha ombori" picker. Loaded
   // once on mount and reused for both the create modal and the inline
@@ -4832,10 +4952,16 @@ export default function Construction() {
     setConfirmDeleteProject({ open: true, id });
   };
 
-  const handleViewProject = (project) => {
+  // Opens the project detail view. Optional `route` ({group, tab}) lands the
+  // user on a specific detail tab — used by the card's "Smeta tuzish" CTA to
+  // jump straight to Smeta → Smetalar ro'yxati. ProjectDetailView reads and
+  // normalizes these params on mount (normalizeProjectRoute).
+  const handleViewProject = (project, route) => {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       next.set('projectId', project.id);
+      if (route?.group) next.set('group', route.group);
+      if (route?.tab) next.set('tab', route.tab);
       return next;
     });
   };
@@ -4902,57 +5028,79 @@ export default function Construction() {
     );
   }
 
-  // Segmented status filter cards data — defined here for clean rendering
-  const STATUS_FILTER_CARDS = [
+  // Status filter chips — one compact pill per dropdown status so the two
+  // filter controls always stay in sync. "Jami" first.
+  const STATUS_FILTER_CHIPS = [
     {
       key: 'all',
-      label: t('total_projects') || 'Jami loyihalar',
+      label: t('total') || 'Jami',
       value: stats.total,
-      icon: Building2,
-      accent: 'text-slate-700',
       hint: t('show_all_projects') || "Barcha loyihalarni ko'rsatish",
     },
     {
       key: 'draft',
       label: t('draft') || 'Qoralama',
       value: stats.draft,
-      icon: FileSpreadsheet,
-      accent: 'text-slate-500',
       hint: t('draft_projects_hint') || "Qoralama: tayyorlash bosqichidagi loyihalar",
     },
     {
       key: 'planning',
       label: t('planning') || 'Rejalashtirish',
       value: stats.planning,
-      icon: ClipboardList,
-      accent: 'text-violet-600',
       hint: t('planning') || 'Rejalashtirish bosqichidagi loyihalar',
     },
     {
       key: 'in_progress',
       label: t('in_progress') || 'Jarayonda',
       value: stats.inProgress,
-      icon: TrendingUp,
-      accent: 'text-amber-600',
       hint: t('in_progress_projects_hint') || "Jarayonda: qurilish ketayotgan loyihalar",
     },
     {
       key: 'on_hold',
       label: t('on_hold') || "To'xtatilgan",
       value: stats.onHold,
-      icon: Clock,
-      accent: 'text-orange-600',
       hint: t('on_hold') || "To'xtatib turilgan loyihalar",
     },
     {
       key: 'completed',
       label: t('completed') || 'Tugallangan',
       value: stats.completed,
-      icon: CheckCircle,
-      accent: 'text-emerald-600',
       hint: t('completed_projects_hint') || "Tugallangan: yakunlangan loyihalar",
     },
   ];
+
+  // Portfolio KPI strip values — all from the single /projects/stats payload.
+  const perProjectStats = projectStats?.per_project || [];
+  const readinessEntries = perProjectStats.filter((p) => p && typeof p.readiness_pct === 'number');
+  const avgReadiness = readinessEntries.length > 0
+    ? Math.round(readinessEntries.reduce((sum, p) => sum + p.readiness_pct, 0) / readinessEntries.length)
+    : null;
+  const overdueWorksTotal = perProjectStats.reduce(
+    (sum, p) => sum + (Number(p?.overdue_works) || 0), 0,
+  );
+  const PORTFOLIO_KPIS = projectStats ? [
+    {
+      key: 'contract_total',
+      label: t('pf_contract_total') || 'Jami shartnoma',
+      value: formatCurrencyCompact(projectStats.totals?.contract_total || 0),
+    },
+    {
+      key: 'actual_total',
+      label: t('pf_actual_total') || 'Haqiqiy xarajat',
+      value: formatCurrencyCompact(projectStats.totals?.actual_total || 0),
+    },
+    {
+      key: 'avg_readiness',
+      label: t('pf_avg_readiness') || "O'rtacha bajarilish",
+      value: avgReadiness == null ? '—' : `${avgReadiness}%`,
+    },
+    {
+      key: 'overdue_works',
+      label: t('pf_overdue_works') || "Muddati o'tgan ishlar",
+      value: overdueWorksTotal,
+      danger: overdueWorksTotal > 0,
+    },
+  ] : [];
 
   return (
     <div className="min-h-screen bg-slate-50/50">
@@ -4987,12 +5135,45 @@ export default function Construction() {
 
         {activeView === 'projects' && (
         <>
-        {/* Stats: clickable status filter cards + summary metrics */}
-        <div className="space-y-3">
-          {/* Status filter — segmented cards, one per dropdown status so the
-              two filter controls always stay in sync */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            {STATUS_FILTER_CARDS.map(({ key, label, value, icon: Icon, accent, hint }) => {
+        {/* Portfolio KPI strip + status filter chips */}
+        <div className="space-y-4">
+          {/* KPI strip — one slim row from /projects/stats. Skeleton while
+              loading; hidden entirely when the stats fetch failed (cards
+              below still work off the manual fields). */}
+          {projectStatsLoading ? (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3" aria-hidden="true">
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className="glass-card rounded-xl p-4 animate-pulse">
+                  <div className="h-3 w-24 bg-slate-200 rounded mb-2.5" />
+                  <div className="h-5 w-32 bg-slate-200 rounded" />
+                </div>
+              ))}
+            </div>
+          ) : projectStats ? (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {PORTFOLIO_KPIS.map(({ key, label, value, danger }) => (
+                <div key={key} className="glass-card rounded-xl p-4 min-w-0">
+                  <p className="text-xs font-medium text-slate-500 truncate">{label}</p>
+                  <p
+                    className={cn(
+                      'mt-1 flex items-center gap-1.5 text-xl font-semibold tabular-nums truncate leading-tight',
+                      danger ? 'text-red-600' : 'text-slate-900'
+                    )}
+                  >
+                    {danger && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" aria-hidden="true" />
+                    )}
+                    {value}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {/* Status filter — compact pill chips, one per dropdown status so
+              the two filter controls always stay in sync */}
+          <div className="flex flex-wrap items-center gap-2" role="group" aria-label={t('status') || 'Holat'}>
+            {STATUS_FILTER_CHIPS.map(({ key, label, value, hint }) => {
               const isActive = statusFilter === key;
               return (
                 <button
@@ -5002,31 +5183,25 @@ export default function Construction() {
                   aria-pressed={isActive}
                   title={hint}
                   className={cn(
-                    'group relative rounded-xl border bg-white p-4 text-left transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--genix-blue)]',
+                    'inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--genix-blue)]',
                     isActive
-                      ? 'border-[var(--genix-blue)] ring-1 ring-[var(--genix-blue)]/40 bg-blue-50/40 shadow-sm'
-                      : 'border-slate-200 hover:border-slate-300'
+                      ? 'border-[var(--genix-blue)] bg-blue-50/60 text-[var(--genix-blue)]'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900'
                   )}
                 >
-                  <div className="flex items-start justify-between gap-2 mb-3">
-                    <Icon className={cn('w-5 h-5', accent)} strokeWidth={2} />
-                    {isActive && (
-                      <span className="w-2 h-2 rounded-full bg-[var(--genix-blue)]" aria-hidden="true" />
+                  <span>{label}</span>
+                  <span
+                    className={cn(
+                      'inline-flex min-w-[20px] items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-semibold tabular-nums leading-none',
+                      isActive ? 'bg-[var(--genix-blue)] text-white' : 'bg-slate-100 text-slate-600'
                     )}
-                  </div>
-                  <p className="text-xs font-medium text-slate-500 mb-1">
-                    {label}
-                  </p>
-                  <p className="text-2xl font-semibold text-slate-900 tabular-nums leading-none">
+                  >
                     {value}
-                  </p>
+                  </span>
                 </button>
               );
             })}
           </div>
-
-          {/* Summary metrics (Shartnoma summasi / Jami smeta) removed per
-              request — the status filter cards above are enough here. */}
         </div>
 
         {/* Projects List */}
@@ -5036,6 +5211,9 @@ export default function Construction() {
           loadError={loadError}
           onRetry={loadProjects}
           readinessById={readinessById}
+          statsById={statsByProjectId}
+          statsReady={!projectStatsLoading && !!projectStats}
+          formatCurrencyCompact={formatCurrencyCompact}
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
           statusFilter={statusFilter}
