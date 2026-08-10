@@ -31,9 +31,32 @@ export const aiService = {
   // Agentic chat — the model reads real ERP data via tools and proposes writes.
   // history: prior turns returned by the previous call. approved: a write the
   // user just confirmed ({tool, args}) — the agent executes it then continues.
-  async agentChat(message, history = [], approved = null) {
-    const response = await apiClient.post('/ai/agent', { message, history, approved });
-    return response.data.data; // { type, message?, history?, steps?, pending_action?, assistant_note? }
+  // agent: always '' (the orchestrator routes to module skills internally).
+  // conversationId: server-side thread id — '' starts a new thread; responses
+  // return conversation_id which must be echoed on every subsequent call.
+  async agentChat(message, history = [], approved = null, agent = '', conversationId = '') {
+    const response = await apiClient.post('/ai/agent', {
+      message, history, approved, agent, conversation_id: conversationId || '',
+    });
+    return response.data.data; // { type, agent, conversation_id?, message?, history?, steps?, blocks?, pending_action?, assistant_note? }
+  },
+
+  // Agent catalog + tenant Studio settings + per-tool effective states.
+  async listAgents() {
+    const response = await apiClient.get('/ai/agents');
+    return response.data.data; // { agents: [...], quota: {used, limit} }
+  },
+
+  // Save one agent's Studio settings (admin-gated server-side).
+  async updateAgentSettings(key, settings) {
+    const response = await apiClient.put(`/ai/agents/${key}`, settings);
+    return response.data.data;
+  },
+
+  // Tenant AI action log (admin observability).
+  async listActions() {
+    const response = await apiClient.get('/ai/actions');
+    return response.data.data;
   },
 
   // Conversations

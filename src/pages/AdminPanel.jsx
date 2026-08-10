@@ -31,7 +31,7 @@ export default function AdminPanel() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { toast } = useToast();
-  const { user: currentUser, isSiteAdmin } = useAuth();
+  const { user: currentUser, isSystemAdmin } = useAuth();
   const {
     companyUsers,
     subscription,
@@ -86,6 +86,13 @@ export default function AdminPanel() {
   const [tenantSearch, setTenantSearch] = useState('');
   const [tenantStatusFilter, setTenantStatusFilter] = useState('all');
   const [pricing, setPricing] = useState({ price_per_user_monthly: 0, price_per_user_yearly: 0 });
+  const [platformStats, setPlatformStats] = useState(null);
+  const [plans, setPlans] = useState([]);
+  const [roleMatrix, setRoleMatrix] = useState(null);
+  const [auditLog, setAuditLog] = useState([]);
+  const [showOnboard, setShowOnboard] = useState(false);
+  const [onboardData, setOnboardData] = useState({ tenant_code: '', tenant_name: '', owner_email: '', owner_first_name: '', owner_last_name: '', owner_phone: '', plan_code: 'free', trial_days: 7 });
+  const [onboarding, setOnboarding] = useState(false);
   const [selectedTenant, setSelectedTenant] = useState(null);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [checkoutData, setCheckoutData] = useState({ users: 1, billing: 'monthly' });
@@ -195,21 +202,30 @@ export default function AdminPanel() {
     setIsLoading(true);
     setLoadError(null);
     try {
-      if (!isSiteAdmin()) {
+      // SEC-04: platform control plane is platform-staff-only.
+      if (!isSystemAdmin()) {
         navigate('/');
         return;
       }
 
-      // Fetch tenants and pricing
-      const [usersResp, tenantsResp, plansResp] = await Promise.all([
+      // Fetch tenants, pricing, and the platform-wide server aggregates.
+      const [usersResp, tenantsResp, plansResp, statsResp, catalogResp, matrixResp, auditResp] = await Promise.all([
         apiClient.get('/admin/users'),
         apiClient.get('/admin/tenants'),
-        apiClient.get('/subscription/plans').catch(() => ({ data: { data: {} } }))
+        apiClient.get('/subscription/plans').catch(() => ({ data: { data: {} } })),
+        apiClient.get('/admin/stats').catch(() => ({ data: { data: null } })),
+        apiClient.get('/admin/plans').catch(() => ({ data: { data: [] } })),
+        apiClient.get('/admin/role-matrix').catch(() => ({ data: { data: null } })),
+        apiClient.get('/admin/audit-log').catch(() => ({ data: { data: [] } })),
       ]);
       setTenants(tenantsResp.data?.data || []);
       if (plansResp.data?.data) {
         setPricing(plansResp.data.data);
       }
+      setPlatformStats(statsResp.data?.data || null);
+      setPlans(catalogResp.data?.data || []);
+      setRoleMatrix(matrixResp.data?.data || null);
+      setAuditLog(auditResp.data?.data || []);
 
       // Fetch all system users from the backend API
       const response = usersResp;
@@ -497,22 +513,52 @@ export default function AdminPanel() {
     }
   };
 
-  const metrics = {
+  // Data-1 (docs/admin-panel/audit.md): KPIs come from the server-side platform
+  // aggregate (GET /admin/stats) — real COUNT()s across ALL tenants — instead of
+  // being computed in the browser from the paginated (limit 50), owner-only
+  // /admin/users list (which capped at 50, mislabeled users as companies, and
+  // left several cards permanently 0). Falls back to the old client derivation
+  // only if the stats endpoint hasn't loaded yet.
+  const metrics = platformStats ? {
+    totalUsers: platformStats.total_users ?? 0,
+    activeUsers: platformStats.companies?.active ?? 0,
+    trialUsers: platformStats.companies?.trialing ?? 0,
+    blockedUsers: platformStats.companies?.blocked ?? 0,
+    pastDue: platformStats.companies?.past_due ?? 0,
+    newThisMonth: platformStats.new_companies_this_month ?? 0,
+    churnThisMonth: platformStats.churn_this_month ?? 0,
+    mrr: platformStats.mrr ?? 0,
+    expiringTrials: (platformStats.expiring_soon || []).length,
+  } : {
     totalUsers: users.length,
-    adminUsers: users.filter(u => u.role === 'admin' || u.role === 'system_admin').length,
     activeUsers: users.filter(u => (u.subscription_status || 'trial') === 'active').length,
-    trialUsers: users.filter(u => (u.subscription_status || 'trial') === 'trial').length,
+    trialUsers: users.filter(u => (u.subscription_status || 'trial') === 'trialing').length,
     blockedUsers: users.filter(u => u.is_blocked === true).length,
-    enterpriseUsers: users.filter(u => u.subscription_plan === 'enterprise').length,
-    expiringTrials: users.filter(u => {
-      if ((u.subscription_status || 'trial') !== 'trial' || !u.trial_end_date) return false;
-      try {
-        const days = differenceInDays(parseISO(u.trial_end_date), new Date());
-        return days <= 7 && days >= 0;
-      } catch {
-        return false;
-      }
-    }).length
+    pastDue: 0, newThisMonth: 0, churnThisMonth: 0, mrr: 0,
+    expiringTrials: 0,
+  };
+
+  // Onboarding — "Yangi kompaniya ochish" (Phase 4). Creates a tenant + owner
+  // invite via POST /admin/tenants; no manual DB rows.
+  const handleOnboard = async () => {
+    if (!onboardData.tenant_code || !onboardData.tenant_name || !onboardData.owner_email || !onboardData.owner_first_name) {
+      toast.error(language === 'uz' ? "Majburiy maydonlarni to'ldiring" : 'Fill in the required fields');
+      return;
+    }
+    setOnboarding(true);
+    try {
+      const resp = await apiClient.post('/admin/tenants', onboardData);
+      const link = resp?.data?.data?.invite_link;
+      toast.success((language === 'uz' ? 'Kompaniya ochildi. Taklif havolasi: ' : 'Company created. Invite link: ') + (link || ''));
+      setShowOnboard(false);
+      setOnboardData({ tenant_code: '', tenant_name: '', owner_email: '', owner_first_name: '', owner_last_name: '', owner_phone: '', plan_code: 'free', trial_days: 7 });
+      loadData();
+    } catch (error) {
+      const msg = error.response?.data?.error?.message || error.response?.data?.message || error.message;
+      toast.error((language === 'uz' ? 'Xatolik: ' : 'Error: ') + msg);
+    } finally {
+      setOnboarding(false);
+    }
   };
 
   return (
@@ -521,13 +567,43 @@ export default function AdminPanel() {
         
         {/* Header */}
         <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6 md:p-8 rounded-2xl text-white shadow-xl">
-          <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center gap-3 mb-4 flex-wrap">
             <Shield className="w-8 h-8" />
             <h1 className="text-2xl md:text-3xl font-bold">{t('admin_panel')}</h1>
+            {/* SEC-04: persistent PLATFORMA badge so platform staff always know
+                they are on the cross-tenant control plane, not a company page. */}
+            <Badge className="bg-white text-purple-700 border-white font-bold tracking-wider shadow-sm">
+              PLATFORMA
+            </Badge>
             <Badge className="bg-white/20 text-white border-white/30">
               {t('enterprise_edition')}
             </Badge>
+            <div className="ml-auto">
+              <Button onClick={() => setShowOnboard(true)} className="bg-white text-purple-700 hover:bg-purple-50">
+                <Plus className="w-4 h-4 mr-1" /> {language === 'uz' ? 'Yangi kompaniya ochish' : 'New company'}
+              </Button>
+            </div>
           </div>
+          {platformStats && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-2">
+              <div className="bg-white/10 rounded-lg px-3 py-2">
+                <div className="text-xs text-white/70">MRR</div>
+                <div className="text-lg font-bold">{(metrics.mrr || 0).toLocaleString()} <span className="text-xs font-normal">so'm</span></div>
+              </div>
+              <div className="bg-white/10 rounded-lg px-3 py-2">
+                <div className="text-xs text-white/70">{language === 'uz' ? 'Faol kompaniyalar' : 'Active companies'}</div>
+                <div className="text-lg font-bold">{metrics.activeUsers}</div>
+              </div>
+              <div className="bg-white/10 rounded-lg px-3 py-2">
+                <div className="text-xs text-white/70">{language === 'uz' ? 'Bu oy yangi' : 'New this month'}</div>
+                <div className="text-lg font-bold">{metrics.newThisMonth}</div>
+              </div>
+              <div className="bg-white/10 rounded-lg px-3 py-2">
+                <div className="text-xs text-white/70">{language === 'uz' ? 'Muddati tugayapti (7 kun)' : 'Expiring (7d)'}</div>
+                <div className="text-lg font-bold">{metrics.expiringTrials}</div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Metrics - Enhanced */}
@@ -951,6 +1027,38 @@ export default function AdminPanel() {
 
           {/* Roles & Permissions Tab - Enhanced */}
           <TabsContent value="roles" className="mt-6">
+            {/* Phase 3: fixed, code-enforced capability matrix (read-only) from
+                GET /admin/role-matrix. Capabilities are code, not free-form
+                checkboxes — this screen shows the truth the server enforces. */}
+            {roleMatrix && (
+              <Card className="bg-white/90 mb-6 overflow-x-auto">
+                <CardHeader>
+                  <CardTitle className="text-base">{language === 'uz' ? 'Rollar va imkoniyatlar (server tomonidan majburiy)' : 'Roles & capabilities (server-enforced)'}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left border-b">
+                        <th className="py-2 pr-4">{language === 'uz' ? 'Imkoniyat' : 'Capability'}</th>
+                        {roleMatrix.roles.map(r => (<th key={r} className="py-2 px-2 text-center capitalize">{r.replace('_', ' ')}</th>))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Array.from(new Set(roleMatrix.roles.flatMap(r => Object.keys(roleMatrix.matrix[r] || {})))).sort().map(cap => (
+                        <tr key={cap} className="border-b last:border-0">
+                          <td className="py-1.5 pr-4 font-mono text-xs text-slate-600">{cap}</td>
+                          {roleMatrix.roles.map(r => (
+                            <td key={r} className="py-1.5 px-2 text-center">
+                              {roleMatrix.matrix[r]?.[cap] ? <span className="text-green-600 font-bold">✓</span> : <span className="text-slate-300">—</span>}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </CardContent>
+              </Card>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {/* System Administrator */}
               <Card className="bg-white/80 backdrop-blur-sm border-red-200">
@@ -1258,6 +1366,38 @@ export default function AdminPanel() {
 
           {/* Settings Tab */}
           <TabsContent value="settings" className="mt-6">
+            {/* SEC-05: platform audit trail (append-only) from GET /admin/audit-log */}
+            <Card className="bg-white/90 mb-6">
+              <CardHeader>
+                <CardTitle className="text-base">{language === 'uz' ? 'Audit jurnali (platforma amallari)' : 'Audit log (platform actions)'}</CardTitle>
+              </CardHeader>
+              <CardContent className="overflow-x-auto">
+                {auditLog.length === 0 ? (
+                  <p className="text-sm text-slate-500">{language === 'uz' ? "Hozircha yozuv yo'q" : 'No entries yet'}</p>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left border-b text-slate-500">
+                        <th className="py-2 pr-4">{language === 'uz' ? 'Vaqt' : 'Time'}</th>
+                        <th className="py-2 pr-4">{language === 'uz' ? 'Kim' : 'Actor'}</th>
+                        <th className="py-2 pr-4">{language === 'uz' ? 'Amal' : 'Action'}</th>
+                        <th className="py-2 pr-4">{language === 'uz' ? 'Obyekt' : 'Target'}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {auditLog.slice(0, 50).map(row => (
+                        <tr key={row.id} className="border-b last:border-0">
+                          <td className="py-1.5 pr-4 whitespace-nowrap text-xs text-slate-500">{row.created_at ? new Date(row.created_at).toLocaleString() : ''}</td>
+                          <td className="py-1.5 pr-4 text-xs">{row.actor_email || '—'}</td>
+                          <td className="py-1.5 pr-4"><Badge className="bg-slate-100 text-slate-700 font-mono text-xs">{row.action}</Badge></td>
+                          <td className="py-1.5 pr-4 text-xs text-slate-500">{row.target_type}{row.target_id ? ` · ${String(row.target_id).slice(0, 8)}` : ''}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </CardContent>
+            </Card>
             <Card className="bg-white/80 backdrop-blur-sm">
               <CardHeader>
                 <CardTitle>{t('system_settings')}</CardTitle>
@@ -2178,6 +2318,62 @@ export default function AdminPanel() {
               >
                 <Gift className="w-4 h-4 mr-2" />
                 {t('extend_trial')}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Onboarding — "Yangi kompaniya ochish" (Phase 4) */}
+        <Dialog open={showOnboard} onOpenChange={setShowOnboard}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>{language === 'uz' ? 'Yangi kompaniya ochish' : 'Open a new company'}</DialogTitle>
+            </DialogHeader>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-1">
+                <label className="text-xs text-slate-500">{language === 'uz' ? 'Kod' : 'Code'} *</label>
+                <Input value={onboardData.tenant_code} onChange={e => setOnboardData(d => ({ ...d, tenant_code: e.target.value }))} placeholder="ACME" />
+              </div>
+              <div className="col-span-1">
+                <label className="text-xs text-slate-500">{language === 'uz' ? 'Nomi' : 'Name'} *</label>
+                <Input value={onboardData.tenant_name} onChange={e => setOnboardData(d => ({ ...d, tenant_name: e.target.value }))} placeholder="ACME MChJ" />
+              </div>
+              <div className="col-span-1">
+                <label className="text-xs text-slate-500">{language === 'uz' ? 'Egasi ismi' : 'Owner first name'} *</label>
+                <Input value={onboardData.owner_first_name} onChange={e => setOnboardData(d => ({ ...d, owner_first_name: e.target.value }))} />
+              </div>
+              <div className="col-span-1">
+                <label className="text-xs text-slate-500">{language === 'uz' ? 'Egasi familiyasi' : 'Owner last name'}</label>
+                <Input value={onboardData.owner_last_name} onChange={e => setOnboardData(d => ({ ...d, owner_last_name: e.target.value }))} />
+              </div>
+              <div className="col-span-2">
+                <label className="text-xs text-slate-500">Email *</label>
+                <Input type="email" value={onboardData.owner_email} onChange={e => setOnboardData(d => ({ ...d, owner_email: e.target.value }))} placeholder="owner@acme.uz" />
+              </div>
+              <div className="col-span-1">
+                <label className="text-xs text-slate-500">{language === 'uz' ? 'Telefon' : 'Phone'}</label>
+                <Input value={onboardData.owner_phone} onChange={e => setOnboardData(d => ({ ...d, owner_phone: e.target.value }))} placeholder="+998..." />
+              </div>
+              <div className="col-span-1">
+                <label className="text-xs text-slate-500">{language === 'uz' ? 'Tarif' : 'Plan'}</label>
+                <Select value={onboardData.plan_code} onValueChange={v => setOnboardData(d => ({ ...d, plan_code: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {(plans.length ? plans : [{ code: 'free', display_name: 'Bepul' }, { code: 'starter', display_name: 'Starter' }, { code: 'professional', display_name: 'Professional' }, { code: 'enterprise', display_name: 'Korporativ' }]).map(p => (
+                      <SelectItem key={p.code} value={p.code}>{p.display_name || p.code}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="col-span-1">
+                <label className="text-xs text-slate-500">{language === 'uz' ? 'Sinov (kun)' : 'Trial (days)'}</label>
+                <Input type="number" value={onboardData.trial_days} onChange={e => setOnboardData(d => ({ ...d, trial_days: parseInt(e.target.value || '0', 10) }))} />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-4">
+              <Button variant="outline" onClick={() => setShowOnboard(false)}>{language === 'uz' ? 'Bekor qilish' : 'Cancel'}</Button>
+              <Button onClick={handleOnboard} disabled={onboarding} className="bg-indigo-600 hover:bg-indigo-700">
+                {onboarding ? '…' : (language === 'uz' ? 'Ochish' : 'Create')}
               </Button>
             </div>
           </DialogContent>

@@ -34,8 +34,10 @@ const deriveRole = (userData) => {
     if (hasOwnerRole) return ROLE_TYPES.OWNER;
   }
 
-  // Check email for admin (fallback for admin@genixerp.com)
-  if (userData.email === 'admin@genixerp.com') return ROLE_TYPES.SITE_ADMIN;
+  // SEC-04 (docs/admin-panel/audit.md): the hardcoded email fallback
+  // (admin@genixerp.com -> SITE_ADMIN) was a privilege backdoor independent of
+  // the real flag. Removed. Platform-admin status now comes solely from the
+  // server-provided is_system_admin boolean (checked above).
 
   return ROLE_TYPES.USER;
 };
@@ -345,7 +347,15 @@ export function AuthProvider({ children }) {
     setError(null);
   }, []);
 
-  // Check if current user is site admin
+  // SEC-04: the ONLY signal for platform (super) admin is the server-provided
+  // is_system_admin flag. Never a tenant role code or an email. Use this — not
+  // isSiteAdmin — to gate the platform control plane ("Boshqaruv paneli").
+  const isSystemAdmin = useCallback(() => {
+    return user?.is_system_admin === true;
+  }, [user]);
+
+  // Check if current user is site admin (a TENANT role — gates tenant admin
+  // features like Apps/Settings, NOT the platform control plane).
   const isSiteAdmin = useCallback(() => {
     return user?.role === ROLE_TYPES.SITE_ADMIN || user?.is_system_admin === true;
   }, [user]);
@@ -365,10 +375,11 @@ export function AuthProvider({ children }) {
     return isOwner() || isSiteAdmin();
   }, [isOwner, isSiteAdmin]);
 
-  // Check if user can access admin panel (site admin only)
+  // SEC-04: the platform control plane is for platform staff only — gate on the
+  // real is_system_admin flag, not the tenant site-admin role.
   const canAccessAdminPanel = useCallback(() => {
-    return isSiteAdmin();
-  }, [isSiteAdmin]);
+    return isSystemAdmin();
+  }, [isSystemAdmin]);
 
   const value = useMemo(() => ({
     user,
@@ -388,13 +399,14 @@ export function AuthProvider({ children }) {
     clearError,
     refreshUser,
     // Role helpers
+    isSystemAdmin,
     isSiteAdmin,
     isOwner,
     canManageCompany,
     canManageRoles,
     canAccessAdminPanel,
     ROLE_TYPES,
-  }), [user, isLoading, isAuthenticated, error, backendAvailable, login, register, registerWithOTP, loginWithGoogle, logout, updateUser, changePassword, forgotPassword, resetPassword, clearError, refreshUser, isSiteAdmin, isOwner, canManageCompany, canManageRoles, canAccessAdminPanel]);
+  }), [user, isLoading, isAuthenticated, error, backendAvailable, login, register, registerWithOTP, loginWithGoogle, logout, updateUser, changePassword, forgotPassword, resetPassword, clearError, refreshUser, isSystemAdmin, isSiteAdmin, isOwner, canManageCompany, canManageRoles, canAccessAdminPanel]);
 
   return (
     <AuthContext.Provider value={value}>
