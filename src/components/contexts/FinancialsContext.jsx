@@ -339,7 +339,13 @@ export function FinancialsProvider({ children }) {
             finance ? financeService.listJournals().catch(() => [])                       : skip(),
             finance ? financeService.listCashRegisters().catch(() => [])                  : skip(),
             finance ? financeService.listCashOrders().catch(() => [])                     : skip(),
-            finance ? financeService.listReconciliationActs().catch(() => [])             : skip(),
+            // Akt sverka fetches its own page (ActSverka.jsx) and nothing else
+            // reads reconciliationActs — verified with
+            // `grep -rn reconciliationActs src/`. Fetching every act at app
+            // boot was an unpaginated full-table read for no reader at all.
+            // The slot stays because this Promise.all is destructured
+            // positionally; only the request is gone.
+            skip(),
             finance ? financeService.listExchangeDiffs().catch(() => [])                  : skip(),
             finance ? financeService.listPaymentJournals().catch(() => [])                : skip(),
             finance ? financeService.getCashBalance().catch(() => null)                   : Promise.resolve(null)
@@ -1537,9 +1543,8 @@ export function FinancialsProvider({ children }) {
   const bulkGenerateReconciliation = useCallback(async (data) => {
     if (backendAvailable) {
       const result = await financeService.bulkGenerateReconciliation(data);
-      // Reload acts list after bulk generation
-      const acts = await financeService.listReconciliationActs().catch(() => []);
-      setReconciliationActs(acts || []);
+      // No reload here: the screen that shows these owns its own paginated
+      // list and refreshes itself after the call returns.
       return result;
     }
     return { count: 0, message: 'Backend not available' };

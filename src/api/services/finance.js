@@ -1036,6 +1036,23 @@ export const financeService = {
     return response.data.data;
   },
 
+  // Paginated variant. The endpoint's paging is OPT-IN — it returns a bare
+  // array unless `page`/`page_size` are present — so callers that were written
+  // against the unpaginated shape keep working untouched, and only a caller
+  // that asks for pages gets the {data, meta} envelope.
+  async listReconciliationActsPaginated(params = {}) {
+    const response = await apiClient.get('/reconciliation', { params });
+    return response.data;
+  },
+
+  // Counts for the summary cards, over the whole filtered set rather than the
+  // current page. `with_balance` in particular cannot be derived client-side
+  // once the list is paginated without miscounting the rows not yet loaded.
+  async getReconciliationSummary(params = {}) {
+    const response = await apiClient.get('/reconciliation/summary', { params });
+    return response.data.data;
+  },
+
   async getReconciliationAct(id) {
     const response = await apiClient.get(`/reconciliation/${id}`);
     return response.data.data;

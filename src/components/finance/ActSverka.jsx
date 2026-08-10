@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,16 +35,54 @@ const fixShareUrl = (url) => {
   }
 };
 
+// The act's closing balance, as the server computed it.
+//
+// closing_balance and our_balance are both `opening + debit - credit` over
+// LIVE journal entries, computed server-side on every list row and on detail.
+// This screen redid that subtraction in three separate places — the print
+// sheet, the detail panel and the table row — and the summary card counting
+// "Qoldiqi bor" made a fourth. Four copies of one number, each free to drift
+// from the server and from each other the moment the definition changes.
+//
+// The arithmetic survives only as a fallback for a response predating those
+// fields, never as the primary source.
+const actClosingBalance = (act) => {
+  if (!act) return 0;
+  if (typeof act.closing_balance === 'number') return act.closing_balance;
+  if (typeof act.our_balance === 'number') return act.our_balance;
+  return (act.opening_balance || 0) + (act.our_debit_total || 0) - (act.our_credit_total || 0);
+};
+
+// The status state machine, copied from the server that enforces it
+// (UpdateReconciliationAct in internal/handler/finance_extra.go).
+//
+// Every action button is derived from this table, so a button appears exactly
+// when the server would accept the transition. The three hand-written
+// condition lists it replaces had each drifted somewhere different: confirm
+// was not offered from `no_response`, "Solishtirishda xatolik" was offered
+// only from `draft` although the server allows it from `sent` too, and
+// "Qoralamaga qaytarish" was missing `disputed`. Three lists, three different
+// wrong answers — because each was maintained by hand against a rule written
+// down somewhere else.
+const ALLOWED_TRANSITIONS = {
+  draft: ['sent', 'confirmed', 'discrepancy'],
+  sent: ['confirmed', 'disputed', 'discrepancy', 'draft'],
+  confirmed: ['draft'],
+  disputed: ['draft', 'confirmed', 'sent'],
+  discrepancy: ['draft', 'confirmed'],
+  no_response: ['draft', 'sent', 'confirmed'],
+};
+
+const canTransition = (from, to) => (ALLOWED_TRANSITIONS[from || 'draft'] || []).includes(to);
+
 export default function ActSverka() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const {
-    reconciliationActs,
     createReconciliationAct,
     deleteReconciliationAct,
     bulkGenerateReconciliation,
     updateReconciliationAct,
-    isLoading
   } = useFinancials();
   const { formatCurrency } = useCurrencyFormatter();
   const { canCreate, canDelete } = usePermissions();
@@ -98,64 +136,107 @@ export default function ActSverka() {
     period_end: new Date().toISOString().split('T')[0]
   });
 
-  // Load contacts
+  // Partner picker: searched on the server.
+  //
+  // This used to call contactsService.list() with no params and filter the
+  // result in the browser. GET /contacts defaults to limit=50 (max 100), so
+  // the dropdown silently held the first 50 contacts and the search box
+  // searched only those — a tenant with 200 partners could not find number 51
+  // by typing its name, and nothing said so.
   useEffect(() => {
-    const loadContacts = async () => {
+    let cancelled = false;
+    const id = setTimeout(async () => {
       try {
-        const data = await contactsService.list();
+        const params = { limit: 20 };
+        if (contactSearch.trim()) params.search = contactSearch.trim();
+        const data = await contactsService.list(params);
         const arr = Array.isArray(data) ? data : (data?.items || []);
-        setContacts(arr);
+        if (!cancelled) setContacts(arr);
       } catch (err) {
         console.error('Failed to load contacts:', err);
       }
-    };
-    loadContacts();
-  }, []);
+    }, 250);
+    return () => { cancelled = true; clearTimeout(id); };
+  }, [contactSearch]);
 
-  // Stats
-  const stats = useMemo(() => {
-    const total = reconciliationActs.length;
-    const confirmed = reconciliationActs.filter(a => a.status === 'confirmed').length;
-    const withDifference = reconciliationActs.filter(a => {
-      const closing = (a.opening_balance || 0) + (a.our_debit_total || 0) - (a.our_credit_total || 0);
-      return Math.abs(closing) > 0.01;
-    }).length;
-    const draft = reconciliationActs.filter(a => a.status === 'draft').length;
-    const discrepancy = reconciliationActs.filter(a => a.status === 'discrepancy').length;
-    return { total, confirmed, withDifference, draft, discrepancy };
-  }, [reconciliationActs]);
+  // ── The list, the count and the cards all come from the server ──
+  //
+  // This screen used to read the whole act list out of FinancialsContext,
+  // filter and slice it in the browser, and count the summary cards over it.
+  // That works only while every act fits in one response: the moment it does
+  // not, the search silently stops finding partners and the cards describe
+  // whatever happened to be loaded. Searching and counting are now the
+  // server's job, and paging is opt-in so no other caller of this endpoint
+  // changes behaviour.
+  const [acts, setActs] = useState([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [isListLoading, setIsListLoading] = useState(false);
+  const [stats, setStats] = useState({
+    total: 0, confirmed: 0, withDifference: 0, draft: 0, discrepancy: 0,
+  });
 
-  // Filter
-  const filteredActs = useMemo(() => {
-    let result = [...reconciliationActs];
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter(a => (a.partner_name || '').toLowerCase().includes(q));
+  // Debounced so a search does not fire a request per keystroke.
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 300);
+    return () => clearTimeout(id);
+  }, [searchQuery]);
+
+  const loadActs = useCallback(async () => {
+    setIsListLoading(true);
+    try {
+      const params = { page: currentPage, page_size: pageSize };
+      if (debouncedSearch) params.search = debouncedSearch;
+      if (statusFilter !== 'all') params.status = statusFilter;
+      const res = await financeService.listReconciliationActsPaginated(params);
+      setActs(res?.data || []);
+      setTotalCount(res?.meta?.total ?? (res?.data?.length || 0));
+    } catch (err) {
+      console.error('Failed to load reconciliation acts:', err);
+      setActs([]);
+      setTotalCount(0);
+    } finally {
+      setIsListLoading(false);
     }
-    if (statusFilter !== 'all') {
-      result = result.filter(a => a.status === statusFilter);
+  }, [currentPage, pageSize, debouncedSearch, statusFilter]);
+
+  useEffect(() => { loadActs(); }, [loadActs]);
+
+  // The cards deliberately ignore statusFilter: they ARE the status
+  // breakdown, and are what the user clicks to set that filter. Counting them
+  // within the filter would make the selected status equal the total and
+  // every other card zero.
+  const loadStats = useCallback(async () => {
+    try {
+      const params = {};
+      if (debouncedSearch) params.search = debouncedSearch;
+      const s = await financeService.getReconciliationSummary(params);
+      setStats({
+        total: s?.total || 0,
+        confirmed: s?.confirmed || 0,
+        withDifference: s?.with_balance || 0,
+        draft: s?.draft || 0,
+        discrepancy: s?.discrepancy || 0,
+      });
+    } catch (err) {
+      console.error('Failed to load reconciliation summary:', err);
     }
-    return result;
-  }, [reconciliationActs, searchQuery, statusFilter]);
+  }, [debouncedSearch]);
+
+  useEffect(() => { loadStats(); }, [loadStats]);
 
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, statusFilter]);
+  }, [debouncedSearch, statusFilter]);
 
-  // Pagination
-  const totalCount = filteredActs.length;
   const totalPages = Math.ceil(totalCount / pageSize);
-  const paginatedActs = useMemo(() => {
-    return filteredActs.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-  }, [filteredActs, currentPage, pageSize]);
+  const paginatedActs = acts;
 
   // Filtered contacts for dropdown
-  const filteredContacts = useMemo(() => {
-    if (!contactSearch) return contacts.slice(0, 20);
-    const q = contactSearch.toLowerCase();
-    return contacts.filter(c => (c.name || '').toLowerCase().includes(q)).slice(0, 20);
-  }, [contacts, contactSearch]);
+  // The server already applied the search and the limit; filtering again here
+  // would only re-narrow a set that is already correct.
+  const filteredContacts = contacts;
 
   const getResponseBadge = (responseStatus) => {
     if (!responseStatus) return null;
@@ -182,14 +263,19 @@ export default function ActSverka() {
       sent: 'bg-blue-100 text-blue-800',
       confirmed: 'bg-green-100 text-green-800',
       disputed: 'bg-red-100 text-red-800',
-      discrepancy: 'bg-orange-100 text-orange-800'
+      discrepancy: 'bg-orange-100 text-orange-800',
+      no_response: 'bg-slate-100 text-slate-700'
     };
     const labels = {
       draft: t('draft') || 'Qoralama',
       sent: t('sent') || 'Yuborilgan',
       confirmed: t('confirmed') || 'Tasdiqlangan',
       disputed: t('disputed') || 'Munozarali',
-      discrepancy: t('discrepancy') || 'Solishtirishda xatolik'
+      discrepancy: t('discrepancy') || 'Solishtirishda xatolik',
+      // In the status CHECK constraint since migration 297 and reachable
+      // through the state machine, so without a label here the badge printed
+      // the raw string "no_response" at the user.
+      no_response: t('no_response') || 'Javob berilmadi'
     };
     return (
       <Badge className={styles[status] || 'bg-gray-100 text-gray-800'}>
@@ -203,6 +289,7 @@ export default function ActSverka() {
     setIsSaving(true);
     try {
       const result = await createReconciliationAct(formData);
+      await Promise.all([loadActs(), loadStats()]);
       setShowCreateModal(false);
       setFormData({
         partner_id: '', partner_name: '',
@@ -225,7 +312,8 @@ export default function ActSverka() {
   const handleBulkGenerate = async () => {
     setIsSaving(true);
     try {
-      const result = await bulkGenerateReconciliation(bulkFormData);
+      await bulkGenerateReconciliation(bulkFormData);
+      await Promise.all([loadActs(), loadStats()]);
       setShowBulkModal(false);
     } catch (err) {
       console.error('Failed to bulk generate:', err);
@@ -266,9 +354,13 @@ export default function ActSverka() {
   const handleStatusChange = async (newStatus) => {
     if (!selectedAct) return;
     try {
-      await updateReconciliationAct(selectedAct.id, { status: newStatus });
-      setSelectedAct(prev => ({ ...prev, status: newStatus }));
-      if (actDetail) setActDetail(prev => ({ ...prev, status: newStatus }));
+      // The server now returns the updated act (B2), so the local patch is a
+      // fallback for a backend that predates it rather than the only source.
+      const updated = await updateReconciliationAct(selectedAct.id, { status: newStatus });
+      const next = (updated && updated.id) ? updated : { status: newStatus };
+      setSelectedAct(prev => ({ ...prev, ...next }));
+      if (actDetail) setActDetail(prev => ({ ...prev, ...next }));
+      await Promise.all([loadActs(), loadStats()]);
     } catch (err) {
       console.error('Failed to update status:', err);
     }
@@ -284,6 +376,7 @@ export default function ActSverka() {
     if (!actToDelete) return;
     try {
       await deleteReconciliationAct(actToDelete.id);
+      await Promise.all([loadActs(), loadStats()]);
       if (selectedAct?.id === actToDelete.id) {
         setSelectedAct(null);
         setActDetail(null);
@@ -300,7 +393,7 @@ export default function ActSverka() {
     if (!actDetail) return;
     const act = actDetail;
     const lines = act.lines || [];
-    const closingBalance = (act.opening_balance || 0) + (act.our_debit_total || 0) - (act.our_credit_total || 0);
+    const closingBalance = actClosingBalance(act);
 
     const linesHtml = lines.map((l, i) => `
       <tr>
@@ -524,7 +617,7 @@ export default function ActSverka() {
     }
   };
 
-  if (isLoading) {
+  if (isListLoading && acts.length === 0) {
     return (
       <div className="flex items-center justify-center h-64">
         <RefreshCw className="w-8 h-8 animate-spin text-slate-400" />
@@ -536,7 +629,7 @@ export default function ActSverka() {
   if (selectedAct) {
     const act = actDetail || selectedAct;
     const lines = act.lines || [];
-    const closingBalance = (act.opening_balance || 0) + (act.our_debit_total || 0) - (act.our_credit_total || 0);
+    const closingBalance = actClosingBalance(act);
 
     return (
       <div className="space-y-4">
@@ -630,7 +723,7 @@ export default function ActSverka() {
                 {t('send_reminder') || 'Eslatma yuborish'}
               </Button>
             )}
-            {(act.status === 'draft' || act.status === 'sent' || act.status === 'discrepancy' || act.status === 'disputed') && (
+            {canTransition(act.status, 'confirmed') && (
               <Button
                 size="sm"
                 className="bg-green-600 hover:bg-green-700 text-white"
@@ -640,7 +733,7 @@ export default function ActSverka() {
                 {t('confirm') || 'Tasdiqlash'}
               </Button>
             )}
-            {act.status === 'draft' && (
+            {canTransition(act.status, 'discrepancy') && (
               <Button
                 size="sm"
                 variant="outline"
@@ -651,7 +744,7 @@ export default function ActSverka() {
                 {t('discrepancy') || 'Solishtirishda xatolik'}
               </Button>
             )}
-            {(act.status === 'confirmed' || act.status === 'discrepancy' || act.status === 'sent') && (
+            {canTransition(act.status, 'draft') && (
               <Button variant="outline" size="sm" onClick={() => handleStatusChange('draft')}>
                 {t('revert_to_draft') || 'Qoralamaga qaytarish'}
               </Button>
@@ -924,7 +1017,7 @@ export default function ActSverka() {
                         )}
                         {act.dispute_amount != null && (
                           <p className="text-red-600 text-xs mt-1">
-                            Kontragent summasi: {Number(act.dispute_amount).toLocaleString('uz-UZ')} so'm
+                            Kontragent summasi: {Number(act.dispute_amount).toLocaleString('uz-UZ')} so&apos;m
                           </p>
                         )}
                       </div>
@@ -1213,7 +1306,7 @@ export default function ActSverka() {
       {/* Acts Table */}
       <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60">
         <CardContent className="p-0">
-          {filteredActs.length === 0 ? (
+          {paginatedActs.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16">
               <FileCheck className="w-16 h-16 text-slate-300 mb-4" />
               <h3 className="text-lg font-medium text-slate-600">
@@ -1241,7 +1334,7 @@ export default function ActSverka() {
               </TableHeader>
               <TableBody>
                 {paginatedActs.map((act) => {
-                  const closingBalance = (act.opening_balance || 0) + (act.our_debit_total || 0) - (act.our_credit_total || 0);
+                  const closingBalance = actClosingBalance(act);
                   return (
                     <TableRow
                       key={act.id}
@@ -1287,17 +1380,17 @@ export default function ActSverka() {
                 })}
               </TableBody>
             </Table>
-            {Math.ceil(filteredActs.length / pageSize) > 1 && (
+            {totalPages > 1 && (
               <div className="flex items-center justify-between px-4 py-3 border-t">
                 <p className="text-sm text-slate-500">
-                  {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, filteredActs.length)} / {filteredActs.length}
+                  {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, totalCount)} / {totalCount}
                 </p>
                 <div className="flex items-center gap-2">
                   <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}>1</button>
                   <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft className="w-4 h-4" /></button>
-                  <span className="text-sm font-medium px-2">{currentPage} / {Math.ceil(filteredActs.length / pageSize)}</span>
-                  <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= Math.ceil(filteredActs.length / pageSize)} onClick={() => setCurrentPage(p => p + 1)}><ChevronRight className="w-4 h-4" /></button>
-                  <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= Math.ceil(filteredActs.length / pageSize)} onClick={() => setCurrentPage(Math.ceil(filteredActs.length / pageSize))}>{Math.ceil(filteredActs.length / pageSize)}</button>
+                  <span className="text-sm font-medium px-2">{currentPage} / {totalPages}</span>
+                  <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}><ChevronRight className="w-4 h-4" /></button>
+                  <button className="px-2 py-1 text-sm border rounded disabled:opacity-50" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(totalPages)}>{totalPages}</button>
                 </div>
               </div>
             )}
