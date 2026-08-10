@@ -193,8 +193,13 @@ export function SalesProvider({ children }) {
     setInvoices(prev => prev.filter(inv => inv.id !== id));
   }, []);
 
-  const recordPayment = useCallback(async (invoiceId, amount, method, date, writeOffAmount = 0) => {
+  // journalId is the journal the user actually picked. It used to be collected
+  // by the dialog and then dropped here, so the server had to guess — and it
+  // guessed only at CASH-coded journals, which meant a tenant settling through
+  // a bank journal got "Payment accounts not configured" whatever they chose.
+  const recordPayment = useCallback(async (invoiceId, amount, method, date, writeOffAmount = 0, journalId = '') => {
     const payload = { amount: parseFloat(amount) || 0, payment_method: method || 'bank_transfer', payment_date: date };
+    if (journalId) payload.journal_id = journalId;
     if (writeOffAmount > 0) payload.write_off_amount = parseFloat(writeOffAmount) || 0;
     const result = await salesService.recordPayment(invoiceId, payload);
     // Merge result with existing invoice to preserve fields like customer_name
