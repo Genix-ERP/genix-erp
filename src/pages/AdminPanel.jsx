@@ -19,8 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Plus, Search, Shield, Users, Settings, Activity, AlertTriangle, CheckCircle, XCircle,
   Mail, Trash2, Ban, Clock, Gift, Calendar, CreditCard, UserX, UserCheck, AlertCircle,
-  DollarSign, Package, Briefcase, Crown, Sparkles, Eye, Building2, Phone, Receipt
-} from 'lucide-react';
+  DollarSign, Package, Briefcase, Crown, Sparkles, Eye, Building2, Phone, Receipt, ShieldAlert} from 'lucide-react';
 import { format, differenceInDays, addDays, parseISO } from 'date-fns';
 import { formatPhoneDisplay } from '@/utils/formatCurrency';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -561,9 +560,34 @@ export default function AdminPanel() {
     }
   };
 
+  // The control plane has moved to its own site (genix/admin-panel).
+  //
+  // This screen stays until that site is deployed and verified — removing it
+  // first would leave nobody able to unblock a company or fix a subscription.
+  // The banner is here so the move is visible while both exist, and so this
+  // page is understood as the one on its way out rather than the current one.
+  //
+  // To retire it: delete this file, its route in pages/index.jsx, and the
+  // "Boshqaruv paneli" nav entry in Layout.jsx.
+  const ADMIN_SITE = import.meta.env.VITE_ADMIN_URL || 'https://admin.genixerp.com';
+
   return (
     <div className="p-4 md:p-6 lg:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
       <div className="max-w-7xl mx-auto space-y-6">
+        <div className="flex items-start gap-3 p-4 bg-indigo-50 border border-indigo-200 rounded-xl">
+          <ShieldAlert className="w-5 h-5 text-indigo-600 mt-0.5 shrink-0" />
+          <div className="flex-1">
+            <p className="font-medium text-indigo-900">
+              Boshqaruv paneli alohida saytga ko&apos;chirildi
+            </p>
+            <p className="text-sm text-indigo-800 mt-1">
+              Kompaniyalar, obunalar va platforma xodimlari endi{' '}
+              <a href={ADMIN_SITE} target="_blank" rel="noopener noreferrer"
+                 className="underline font-medium">{ADMIN_SITE.replace(/^https?:\/\//, '')}</a>{' '}
+              orqali boshqariladi. Bu sahifa vaqtincha qoldirilgan va tez orada olib tashlanadi.
+            </p>
+          </div>
+        </div>
         
         {/* Header */}
         <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6 md:p-8 rounded-2xl text-white shadow-xl">
