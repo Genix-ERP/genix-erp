@@ -542,6 +542,21 @@ export default function Warehouses({ hideSubTabs = false }) {
                             {warehouse.warehouse_type === 'scrap' && (
                               <Badge variant="destructive" className="text-xs">{t('scrap')}</Badge>
                             )}
+                            {/* A warehouse with no company is broken: every stock
+                                query filters by company, so nothing inside it is
+                                visible anywhere. It used to be hidden from this
+                                list entirely, which made it unfixable. Saving it
+                                now adopts it into the active company. */}
+                            {!warehouse.organization_id && (
+                              <Badge
+                                variant="destructive"
+                                className="text-xs"
+                                title={t('help_warehouse_no_company') ||
+                                  "Bu omborga kompaniya biriktirilmagan, shuning uchun undagi tovar hech qayerda ko'rinmaydi. Omborni ochib saqlasangiz, joriy kompaniyaga biriktiriladi."}
+                              >
+                                {t('warehouse_no_company') || "Kompaniyasiz — tovar ko'rinmaydi"}
+                              </Badge>
+                            )}
                           </div>
                           {warehouse.city && (
                             <div className="flex items-center gap-4 mt-1">
