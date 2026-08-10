@@ -65,8 +65,9 @@ import { VendorsProvider } from "@/components/contexts/VendorsContext";
 import { InventoryProvider } from "@/components/contexts/InventoryContext";
 import { FinancialsProvider } from "@/components/contexts/FinancialsContext";
 import { ModulesProvider } from "@/components/contexts/ModulesContext";
-import { AIProvider } from "@/components/contexts/AIContext";
 import { SubscriptionProvider } from "@/components/contexts/SubscriptionContext";
+import SubscriptionGate from "@/components/subscription/SubscriptionGate";
+import ImpersonationBanner from "@/components/subscription/ImpersonationBanner";
 import { CompanyProvider } from "@/components/contexts/CompanyContext";
 import { RolesProvider } from "@/components/contexts/RolesContext";
 import { ProcurementProvider } from "@/components/contexts/ProcurementContext";
@@ -154,7 +155,7 @@ function LayoutContent({ children, currentPageName }) {
   const [unreadCount, setUnreadCount] = React.useState(0);
   const [notifDropdownOpen, setNotifDropdownOpen] = React.useState(false);
   const [recentNotifications, setRecentNotifications] = React.useState([]);
-  const { user: currentUser, logout, isSiteAdmin, isOwner } = useAuth();
+  const { user: currentUser, logout, isSiteAdmin, isOwner, isSystemAdmin } = useAuth();
   const { canAccessModule, isAdmin } = useEmployeePermissions();
   const { settings: adminSettings } = useAdminSettings();
   // Always fall back to the public localStorage cache when settings don't
@@ -180,6 +181,9 @@ function LayoutContent({ children, currentPageName }) {
   const userRole = currentUser?.role;
   const isUserOwner = isOwner();
   const isUserSiteAdmin = isSiteAdmin();
+  // SEC-04: platform control-plane visibility is gated on the real
+  // is_system_admin flag, never a tenant role.
+  const isUserSystemAdmin = isSystemAdmin();
 
   // Expose AI chatbox opener globally
   React.useEffect(() => {
@@ -465,8 +469,8 @@ function LayoutContent({ children, currentPageName }) {
       dynamicItems.push(...adminNavigationItems);
     }
 
-    // Add Admin Panel if user is site admin
-    if (isUserSiteAdmin) {
+    // Add Admin Panel — platform control plane, platform staff only (SEC-04).
+    if (isUserSystemAdmin) {
       dynamicItems.push({
         title: t("admin_panel"),
         url: createPageUrl("AdminPanel"),
@@ -478,7 +482,7 @@ function LayoutContent({ children, currentPageName }) {
     dynamicItems.push(coreNavigationItems[2]);
 
     return dynamicItems;
-  }, [coreNavigationItems, adminNavigationItems, appNavigationMap, isAdmin, isUserSiteAdmin, isUserOwner, userRole, canAccessModule, isAppInstalled, isAppHiddenInActiveCompany, t]);
+  }, [coreNavigationItems, adminNavigationItems, appNavigationMap, isAdmin, isUserSiteAdmin, isUserSystemAdmin, isUserOwner, userRole, canAccessModule, isAppInstalled, isAppHiddenInActiveCompany, t]);
 
   const filteredNavigationItems = React.useMemo(() => {
     if (!searchQuery.trim()) return navigationItems;
@@ -554,6 +558,7 @@ function LayoutContent({ children, currentPageName }) {
         </Sidebar>
 
         <main className="flex-1 flex flex-col min-w-0" aria-label="Main content">
+          <ImpersonationBanner />
           <header className="bg-white/80 backdrop-blur-xl border-b border-slate-200/60 px-4 md:px-6 py-4 shadow-sm" role="banner">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
@@ -608,7 +613,9 @@ function LayoutContent({ children, currentPageName }) {
 
           <div className="flex-1 overflow-auto">
             <ErrorBoundary location={location}>
-              {children}
+              <SubscriptionGate>
+                {children}
+              </SubscriptionGate>
             </ErrorBoundary>
           </div>
         </main>
@@ -651,9 +658,7 @@ export default function Layout({ children, currentPageName }) {
                             <HRProvider>
                               <CargoProvider>
                                 <ConstructionProvider>
-                                  <AIProvider>
-                                    <LayoutContent children={children} currentPageName={currentPageName} />
-                                  </AIProvider>
+                                  <LayoutContent children={children} currentPageName={currentPageName} />
                                 </ConstructionProvider>
                               </CargoProvider>
                             </HRProvider>
