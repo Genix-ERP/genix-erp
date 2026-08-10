@@ -74,6 +74,8 @@ import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { useAdminSettings } from "@/components/contexts/AdminSettingsContext";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
+import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null }) {
   const { language } = useLanguage();
@@ -850,17 +852,23 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
     }
   };
 
+  const [paymentError, setPaymentError] = useState('');
+
   const handlePaymentSubmit = async () => {
-    if (selectedInvoice && parseFloat(paymentData.amount) > 0) {
-      // Derive payment method from selected journal type
-      const selectedJournal = bankCashJournals.find(j => j.id === paymentData.journal_id);
-      const method = selectedJournal?.type === 'cash' ? 'cash' : 'bank_transfer';
+    if (!selectedInvoice || !(parseFloat(paymentData.amount) > 0)) return;
+    // Derive payment method from selected journal type
+    const selectedJournal = bankCashJournals.find(j => j.id === paymentData.journal_id);
+    const method = selectedJournal?.type === 'cash' ? 'cash' : 'bank_transfer';
+    setPaymentError('');
+    try {
       await recordPayment(
         selectedInvoice.id,
         paymentData.amount,
         method,
         paymentData.date,
-        paymentData.write_off ? paymentData.write_off_amount : 0
+        paymentData.write_off ? paymentData.write_off_amount : 0,
+        // The journal the user chose, rather than leaving the server to guess.
+        paymentData.journal_id
       );
       await fetchInvoices();
       // Store for receipt printing before clearing
@@ -870,6 +878,14 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
       setSelectedInvoice(null);
       // Auto-open print receipt
       handlePrintPaymentReceipt(invoiceForReceipt, paymentForReceipt);
+    } catch (err) {
+      // This used to be an unhandled promise rejection. The server returns a
+      // precise, actionable 400 — an unconfigured account, a locked period, an
+      // overpayment — and every one of them reached the console and nowhere
+      // else, so the button simply appeared dead.
+      const msg = getApiErrorMessage(err, "To'lovni qayd etib bo'lmadi");
+      setPaymentError(msg);
+      toast.error(msg);
     }
   };
 
@@ -1550,7 +1566,7 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
       </Dialog>
 
       {/* Payment Modal */}
-      <Dialog open={showPaymentModal} onOpenChange={setShowPaymentModal}>
+      <Dialog open={showPaymentModal} onOpenChange={(open) => { setShowPaymentModal(open); if (!open) setPaymentError(''); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1657,6 +1673,15 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                   }
                 />
               </div>
+
+              {/* Shown in the dialog, not only as a toast: the reason a
+                  payment was refused belongs next to the form that will have
+                  to be corrected. */}
+              {paymentError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm text-red-800">{paymentError}</p>
+                </div>
+              )}
 
               <div className="flex justify-end gap-3 pt-4">
                 <Button variant="outline" onClick={() => setShowPaymentModal(false)}>
