@@ -150,11 +150,16 @@ export default function Reconcile() {
     return list;
   }, [balances, search]);
 
+  // Over the FILTERED partners, not the whole ledger. These summed `balances`
+  // while the table rendered `filtered`, so typing in the search box left three
+  // cards describing every partner above rows describing one — the same defect
+  // the aging screens had, and the server-side aging report now resolves the
+  // same way: search narrows the totals with the rows.
   const totals = useMemo(() => ({
-    due: balances.reduce((s, p) => s + (p.due || 0), 0),
-    credit: balances.reduce((s, p) => s + (p.credit || 0), 0),
-    partners: balances.length,
-  }), [balances]);
+    due: filtered.reduce((s, p) => s + (p.due || 0), 0),
+    credit: filtered.reduce((s, p) => s + (p.credit || 0), 0),
+    partners: filtered.length,
+  }), [filtered]);
 
   const subTabClass = "flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 data-[state=inactive]:text-slate-600";
 

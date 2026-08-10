@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Plus, Search, CreditCard, Calendar, CheckCircle, Clock,
   AlertCircle, ArrowUpRight, ArrowDownLeft, Building2, User, Wallet,
-  Filter, Download, MoreHorizontal, Eye, Printer
+  Eye, Printer, ChevronLeft, ChevronRight
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -22,9 +22,12 @@ import { useSales } from "@/components/contexts/SalesContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { contactsService } from "@/api/services";
 import financeService from "@/api/services/finance";
+import salesService from "@/api/services/sales";
 import FinanceVendorBills from "@/components/finance/FinanceVendorBills";
 import { toast } from 'sonner';
 import { getApiErrorMessage } from '@/utils/apiError';
+
+const PAGE_SIZE = 20;
 
 export default function Payments({ side } = {}) {
   // When `side` is 'customer' or 'vendor', this instance renders ONLY that side
@@ -35,20 +38,18 @@ export default function Payments({ side } = {}) {
   const { t } = useTranslation(language);
   const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
   const {
-    payments,
-    accounts,
+    // `payments` is deliberately not read: the context loads it with limit=100,
+    // so it can never answer a question about the whole set.
     journals,
     paymentJournals,
-    vendorBills,
     currencies,
     createPayment,
     confirmPayment,
-    isLoading
   } = useFinancials();
   // Use SalesContext invoices so newly created SO invoices appear immediately
   const { invoices: salesInvoices, refreshData: refreshSalesData } = useSales();
   const customerInvoices = salesInvoices || [];
-  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
+  const { canCreate, canUpdate, MODULES } = usePermissions();
 
   const [activeTab, setActiveTab] = useState(forcedSide || "customer");
   const [searchQuery, setSearchQuery] = useState("");
@@ -66,6 +67,14 @@ export default function Payments({ side } = {}) {
   // Inner view inside each Customer/Vendor tab: 'documents' (invoices/bills) | 'payments'
   const [subTab, setSubTab] = useState('documents');
 
+  // Server-side list + cards.
+  const [pagePayments, setPagePayments] = useState([]);
+  const [paymentsSummary, setPaymentsSummary] = useState(null);
+  const [paymentsLoading, setPaymentsLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPayments, setTotalPayments] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+
   const [newPayment, setNewPayment] = useState({
     payment_type: 'inbound',
     payment_method: 'bank_transfer',
@@ -81,15 +90,41 @@ export default function Payments({ side } = {}) {
     invoice_party_name: '',
   });
 
-  // Get unpaid vendor bills for bill selector
-  const unpaidBills = vendorBills.filter(b =>
-    b.status === 'posted' || b.status === 'confirmed' || b.status === 'draft'
-  ).filter(b => (b.amount_due || b.total_amount || 0) > 0);
+  // Documents to allocate a payment against, fetched when the create modal
+  // opens.
+  //
+  // These used to be filtered out of the context arrays. `vendorBills` is
+  // loaded with no parameters and the backend defaults page_size to 20, so the
+  // bill selector could only ever offer the twenty most recent bills — paying
+  // the twenty-first was impossible from this screen, with nothing to say why.
+  // payment_status=unpaid,partial is the server-side form of "still owes
+  // something", using the filter added alongside this change.
+  const [unpaidBills, setUnpaidBills] = useState([]);
+  const [unpaidInvoices, setUnpaidInvoices] = useState([]);
 
-  // Get unpaid customer invoices for invoice selector
-  const unpaidInvoices = (customerInvoices || []).filter(inv =>
-    inv.status !== 'cancelled' && inv.status !== 'paid'
-  ).filter(inv => ((inv.total_amount || 0) - (inv.amount_paid || 0)) > 0);
+  useEffect(() => {
+    if (!showCreateModal) return;
+    let cancelled = false;
+    if (activeTab === 'vendor') {
+      financeService.listPurchaseInvoices({ payment_status: 'unpaid,partial', status: 'confirmed,posted,draft', page_size: 100 })
+        .then(resp => {
+          if (cancelled) return;
+          const rows = Array.isArray(resp?.data) ? resp.data : Array.isArray(resp) ? resp : [];
+          setUnpaidBills(rows.filter(b => ((b.total_amount || 0) - (b.amount_paid || 0)) > 0));
+        })
+        .catch(() => !cancelled && setUnpaidBills([]));
+    } else {
+      salesService.listInvoices({ payment_status: 'unpaid,partial', page_size: 100 })
+        .then(rows => {
+          if (cancelled) return;
+          const list = Array.isArray(rows) ? rows : [];
+          setUnpaidInvoices(list.filter(inv =>
+            inv.status !== 'cancelled' && ((inv.total_amount || 0) - (inv.amount_paid || 0)) > 0));
+        })
+        .catch(() => !cancelled && setUnpaidInvoices([]));
+    }
+    return () => { cancelled = true; };
+  }, [showCreateModal, activeTab]);
 
   const bankCashJournals = (paymentJournals || []).length > 0 ? paymentJournals : (journals || []).filter(j => j.type === 'bank' || j.type === 'cash');
 
@@ -102,82 +137,86 @@ export default function Payments({ side } = {}) {
     }
   }, [showCreateModal, bankCashJournals.length, newPayment.journal_id]);
 
-  // Load contacts when modal opens
+  // Contacts are loaded once for the screen, not only when the create modal
+  // opens: the partner filter above the list needs them too, and it used to
+  // build its options from the loaded payments — which is now one page, so it
+  // would offer twenty partners and silently hide the rest.
   useEffect(() => {
-    if (showCreateModal && contacts.length === 0) {
-      setContactsLoading(true);
-      contactsService.list()
-        .then(data => {
-          setContacts(data || []);
-        })
-        .catch(err => {
-          console.error('Failed to load contacts:', err);
-        })
-        .finally(() => {
-          setContactsLoading(false);
-        });
+    if (contacts.length > 0) return;
+    setContactsLoading(true);
+    contactsService.list()
+      .then(data => setContacts(data || []))
+      .catch(err => console.error('Failed to load contacts:', err))
+      .finally(() => setContactsLoading(false));
+  }, [contacts.length]);
+
+  // Rows and cards from the server, through the same filters.
+  //
+  // FinancialsContext loads payments with limit=100, so on any tenant past its
+  // hundredth payment the cards were the first hundred presented as the whole,
+  // and all six filters ran over that same slice — choosing "Tasdiqlangan"
+  // searched a hundred rows rather than the tenant's.
+  //
+  // The tab is a server filter too: p.type is 'receipt' or 'payment' in the
+  // database, which the context maps to inbound/outbound for display.
+  const buildParams = useCallback(() => {
+    const params = { type: activeTab === 'customer' ? 'receipt' : 'payment' };
+    if (searchQuery.trim()) params.search = searchQuery.trim();
+    if (statusFilter !== 'all') params.status = statusFilter;
+    if (methodFilter !== 'all') params.method = methodFilter;
+    if (dateFrom) params.date_from = dateFrom;
+    if (dateTo) params.date_to = dateTo;
+    if (customerFilter !== 'all') params.contact_id = customerFilter;
+    return params;
+  }, [activeTab, searchQuery, statusFilter, methodFilter, dateFrom, dateTo, customerFilter]);
+
+  const fetchPayments = useCallback(async () => {
+    setPaymentsLoading(true);
+    const params = buildParams();
+    try {
+      const [list, sum] = await Promise.all([
+        financeService.listPaymentsPaged({ ...params, page: currentPage, limit: PAGE_SIZE }),
+        // Same filters, deliberately no page/limit.
+        financeService.getPaymentsSummary(params).catch(() => null),
+      ]);
+      setPagePayments((list.data || []).map(p => ({
+        ...p,
+        // The list endpoint speaks the database's vocabulary; the rest of this
+        // screen speaks the context's.
+        payment_type: p.type === 'receipt' ? 'inbound' : 'outbound',
+        party_name: p.contact_name || p.party_name || '',
+      })));
+      setTotalPayments(list.meta?.total ?? (list.data || []).length);
+      setTotalPages(list.meta?.total_pages || 1);
+      setPaymentsSummary(sum);
+    } catch (err) {
+      console.error('Failed to load payments:', err);
+      setPagePayments([]);
+      setPaymentsSummary(null);
+    } finally {
+      setPaymentsLoading(false);
     }
-  }, [showCreateModal, contacts.length]);
+  }, [buildParams, currentPage]);
 
-  // Split payments by type
-  const customerPayments = useMemo(() =>
-    payments.filter(p => p.payment_type === 'inbound'), [payments]);
-  const vendorPayments = useMemo(() =>
-    payments.filter(p => p.payment_type === 'outbound'), [payments]);
+  useEffect(() => { fetchPayments(); }, [fetchPayments]);
+  useEffect(() => { setCurrentPage(1); }, [activeTab, searchQuery, statusFilter, methodFilter, dateFrom, dateTo, customerFilter]);
 
-  // Get current tab's payments
-  const currentPayments = activeTab === 'customer' ? customerPayments : vendorPayments;
+  // The table shows one page; the query above already applied every filter.
+  const filteredPayments = pagePayments;
 
-  // Filter payments
-  const filteredPayments = useMemo(() => {
-    let filtered = currentPayments;
-
-    if (searchQuery) {
-      filtered = filtered.filter(payment =>
-        payment.reference?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        payment.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        payment.party_name?.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-
-    if (statusFilter !== "all") {
-      filtered = filtered.filter(payment => payment.status === statusFilter);
-    }
-
-    if (methodFilter !== "all") {
-      filtered = filtered.filter(payment => payment.payment_method === methodFilter);
-    }
-
-    if (dateFrom) {
-      filtered = filtered.filter(payment => {
-        const d = payment.payment_date?.split('T')[0];
-        return d && d >= dateFrom;
-      });
-    }
-
-    if (dateTo) {
-      filtered = filtered.filter(payment => {
-        const d = payment.payment_date?.split('T')[0];
-        return d && d <= dateTo;
-      });
-    }
-
-    if (customerFilter !== "all") {
-      filtered = filtered.filter(payment => payment.contact_id === customerFilter || payment.party_id === customerFilter);
-    }
-
-    return filtered;
-  }, [currentPayments, searchQuery, statusFilter, methodFilter, dateFrom, dateTo, customerFilter]);
-
-  // Summary stats per tab
+  // Cards over the WHOLE filtered set. by_status is the server's per-status
+  // rollup, so "settled" and "pending" are read off it rather than re-derived
+  // from whichever payments happen to be loaded.
   const summaryStats = useMemo(() => {
-    const tabPayments = currentPayments;
+    const byStatus = paymentsSummary?.by_status || {};
+    const sum = (...keys) => keys.reduce((acc, k) => acc + (byStatus[k]?.value || 0), 0);
+    const count = (...keys) => keys.reduce((acc, k) => acc + (byStatus[k]?.count || 0), 0);
     return {
-      totalAmount: tabPayments.filter(p => p.status === 'confirmed' || p.status === 'posted').reduce((sum, p) => sum + (p.amount || 0), 0),
-      pendingCount: tabPayments.filter(p => p.status === 'draft' || p.status === 'pending').length,
-      confirmedCount: tabPayments.filter(p => p.status === 'confirmed' || p.status === 'posted').length,
+      totalAmount: sum('confirmed', 'posted'),
+      pendingCount: count('draft', 'pending'),
+      confirmedCount: count('confirmed', 'posted'),
     };
-  }, [currentPayments]);
+  }, [paymentsSummary]);
 
   const handleOpenCreate = () => {
     setNewPayment({
@@ -1093,7 +1132,7 @@ export default function Payments({ side } = {}) {
                     {isCustomerTab ? (t('customer_payments') || 'Customer Payments') : (t('vendor_payments') || 'Vendor Payments')}
                   </CardTitle>
                   <p className="text-sm text-slate-500 mt-1">
-                    {filteredPayments.length} {t('payments_total')}
+                    {totalPayments} {t('payments_total')}
                   </p>
                 </div>
               </div>
@@ -1156,11 +1195,13 @@ export default function Payments({ side } = {}) {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">{t('all') || 'Barchasi'}</SelectItem>
-                      {[...new Map(currentPayments.filter(p => p.party_name).map(p => [p.contact_id || p.party_id || p.party_name, p])).values()].map(p => (
-                        <SelectItem key={p.contact_id || p.party_id || p.party_name} value={p.contact_id || p.party_id || p.party_name}>
-                          {p.party_name}
-                        </SelectItem>
-                      ))}
+                      {contacts
+                        .filter(c => (isCustomerTab ? c.contact_type === 'customer' : c.contact_type === 'vendor'))
+                        .map(c => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.company_name || c.name}
+                          </SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                   {(dateFrom || dateTo || methodFilter !== 'all' || customerFilter !== 'all') && (
@@ -1173,7 +1214,7 @@ export default function Payments({ side } = {}) {
             </div>
           </CardHeader>
           <CardContent className="p-0">
-            {isLoading ? (
+            {paymentsLoading ? (
               <div className="flex items-center justify-center py-16">
                 <div className="text-center">
                   <div className="w-8 h-8 border-4 border-[var(--genix-purple)] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
@@ -1297,6 +1338,22 @@ export default function Payments({ side } = {}) {
                     ))}
                   </TableBody>
                 </Table>
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between px-4 py-3 border-t">
+                    <span className="text-sm text-slate-600">
+                      {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, totalPayments)} / {totalPayments}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>
+                        <ChevronLeft className="w-4 h-4" />
+                      </Button>
+                      <span className="text-sm font-medium">{currentPage} / {totalPages}</span>
+                      <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}>
+                        <ChevronRight className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </CardContent>
@@ -1322,9 +1379,11 @@ export default function Payments({ side } = {}) {
           </CardHeader>
           <CardContent className="p-0">
             {(() => {
-              const items = isCustomerTab
-                ? (customerInvoices || []).filter(inv => inv.status !== 'cancelled')
-                : (vendorBills || []).filter(b => b.status !== 'cancelled');
+              // This block only renders on the customer side — the vendor
+              // side hands the whole tab to FinanceVendorBills — so the
+              // vendorBills branch that used to sit here was unreachable, and
+              // it read the context array capped at twenty rows.
+              const items = (customerInvoices || []).filter(inv => inv.status !== 'cancelled');
 
               if (items.length === 0) {
                 return (
