@@ -1047,9 +1047,18 @@ export function FinancialsProvider({ children }) {
       try {
         const apiBill = await financeService.createPurchaseInvoice({
           vendor_id: billData.partner_id || billData.vendor_id,
+          organization_id: billData.organization_id || companyId,
+          // POST /purchase-invoices marks this binding:"required". It was not
+          // in the payload at all, so every create from the AP screen returned
+          // 400 and the only trace was a console message — the button looked
+          // like it did nothing.
+          vendor_invoice_number: billData.vendor_invoice_number || billData.invoice_number || '',
           invoice_date: billData.invoice_date,
           due_date: billData.due_date,
           subtotal: billData.subtotal || 0,
+          // Recorded alongside the amount so the stored bill says which rate
+          // produced its tax.
+          ...(billData.tax_rate_id ? { tax_rate_id: billData.tax_rate_id } : {}),
           tax_amount: billData.tax_amount || 0,
           total_amount: billData.total_amount || 0,
           notes: billData.description || billData.notes || '',
