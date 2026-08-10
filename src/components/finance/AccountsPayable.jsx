@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Upload, Search, FileText, AlertTriangle, CheckCircle, Clock, DollarSign, Plus, Download, Printer, Eye, Building2, Loader2, RotateCcw } from 'lucide-react';
+import { Upload, Search, FileText, AlertTriangle, CheckCircle, Clock, DollarSign, Plus, Printer, Eye, Building2, Loader2, RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
 import { ru, uz } from 'date-fns/locale';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -21,20 +21,15 @@ import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
-// Import universal ERP components
+// Import universal ERP components. Six more were imported here and never
+// rendered — the same dead-import defect the aging files carried (F20).
 import {
-  StatusBadge,
-  WorkflowActions,
-  WorkflowTimeline,
   ImportModal,
   ExportModal,
   ImportExportButtons,
-  PrintButton,
   PrintPreviewModal,
   BatchPrintModal,
-  generateDocumentPDF,
   useAuditTrail,
-  AttachmentsCommentsCard,
 } from '@/components/shared';
 
 // Helper to get date-fns locale
@@ -51,15 +46,16 @@ export default function AccountsPayable() {
   const { t } = useTranslation(language);
   const { activeCompany } = useCompany();
   const dateLocale = getDateLocale(language);
+  // `vendorBills` is deliberately not read here any more: the context fetches
+  // it unparameterised, so it is the first twenty bills of the tenant and can
+  // never answer a question about the whole set.
   const {
-    vendorBills,
     createVendorBill,
     updateVendorBill,
     postVendorBill,
     payVendorBill,
-    isLoading
   } = useFinancials();
-  const { canCreate, canUpdate, canDelete } = useEmployeePermissions();
+  const { canCreate, canUpdate } = useEmployeePermissions();
   const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
 
   const [filteredBills, setFilteredBills] = useState([]);
@@ -67,6 +63,71 @@ export default function AccountsPayable() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
   const [paymentStatusFilter, setPaymentStatusFilter] = useState('all');
+
+  // Server-side list + cards. Everything on this screen used to be folded in the
+  // browser over the `vendorBills` array, which FinancialsContext fetches with
+  // NO parameters — and the backend defaults page_size to 20. So "Jami to'lov"
+  // was the sum of the first twenty bills presented as the tenant's total debt,
+  // wrong on any real tenant and with nothing on screen to say so. Mobile reads
+  // /purchase-invoices/stats, which is why the two never agreed.
+  const [billsLoading, setBillsLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalBills, setTotalBills] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [stats, setStats] = useState(null);
+  const pageSize = 20;
+
+  // The one place the filter set is turned into query parameters, so the list
+  // and the cards cannot describe different sets.
+  const buildParams = useCallback(() => {
+    const params = {};
+    if (searchQuery.trim()) params.search = searchQuery.trim();
+    if (typeFilter !== 'all') params.invoice_type = typeFilter;
+    if (paymentStatusFilter !== 'all') params.payment_status = paymentStatusFilter;
+    // "Muddati o'tgan" is not a document status — it is a predicate over due
+    // date and residual. The old code compared it against bill.status, so the
+    // chip matched nothing at all.
+    if (statusFilter === 'overdue') params.overdue = 'true';
+    // "Tasdiqlangan" has to mean confirmed OR posted — posting does not
+    // un-confirm an invoice — and a single status= could not express that.
+    // The server takes a comma-separated list and matches with = ANY().
+    else if (statusFilter === 'confirmed') params.status = 'confirmed,posted';
+    else if (statusFilter !== 'all') params.status = statusFilter;
+    return params;
+  }, [searchQuery, statusFilter, typeFilter, paymentStatusFilter]);
+
+  const fetchBills = useCallback(async () => {
+    setBillsLoading(true);
+    const params = buildParams();
+    try {
+      const [listResp, statsResp] = await Promise.all([
+        financeService.listPurchaseInvoices({ ...params, page: currentPage, page_size: pageSize }),
+        // Same params, deliberately without page/page_size — a summary that
+        // paginated would answer a different question than it appears to.
+        financeService.getPurchaseInvoiceStats(params).catch(() => null),
+      ]);
+      const bills = Array.isArray(listResp?.data) ? listResp.data : Array.isArray(listResp) ? listResp : [];
+      setFilteredBills(bills);
+      const meta = listResp?.meta || {};
+      setTotalBills(meta.total ?? bills.length);
+      setTotalPages(meta.total_pages || Math.max(1, Math.ceil((meta.total ?? bills.length) / pageSize)));
+      setStats(statsResp);
+    } catch (err) {
+      console.error('Failed to load vendor bills:', err);
+      setFilteredBills([]);
+      setStats(null);
+    } finally {
+      setBillsLoading(false);
+    }
+  }, [buildParams, currentPage]);
+
+  const hasActiveFilter = searchQuery.trim() !== '' || statusFilter !== 'all'
+    || typeFilter !== 'all' || paymentStatusFilter !== 'all';
+
+  useEffect(() => { fetchBills(); }, [fetchBills]);
+  // A filter change re-queries from page 1; staying on page 7 of the old result
+  // set shows an empty table and reads as "no data".
+  useEffect(() => { setCurrentPage(1); }, [searchQuery, statusFilter, typeFilter, paymentStatusFilter]);
   const [showDebitNoteModal, setShowDebitNoteModal] = useState(false);
   const [debitNoteBill, setDebitNoteBill] = useState(null);
   const [debitNoteReason, setDebitNoteReason] = useState('');
@@ -198,13 +259,29 @@ export default function AccountsPayable() {
     { key: 'subtotal', label: t('amount') || 'Amount', required: true },
   ];
 
+  // The server emits payment_status from the same expression the
+  // payment_status= filter uses, so the badge and the chip cannot disagree
+  // about a row. The local derivation stays only as a fallback for a bill that
+  // reached this component from somewhere other than the list.
   const getPaymentStatus = (bill) => {
+    if (bill.payment_status) return bill.payment_status;
     const paid = bill.amount_paid || 0;
     const total = bill.total_amount || 0;
     if (total <= 0) return 'unpaid';
     if (paid >= total) return 'paid';
     if (paid > 0) return 'partial';
     return 'unpaid';
+  };
+
+  // is_overdue comes from Postgres CURRENT_DATE and requires a residual. The
+  // browser comparison it replaces used the user's clock and no amount test, so
+  // a fully-settled invoice past its due date counted as overdue here and not
+  // on the server.
+  const isOverdue = (bill) => {
+    if (bill.is_overdue !== undefined) return bill.is_overdue;
+    if (!bill.due_date || bill.status === 'paid' || bill.status === 'cancelled') return false;
+    return (bill.total_amount || 0) - (bill.amount_paid || 0) > 0
+      && new Date(bill.due_date) < new Date(new Date().toDateString());
   };
 
   const getPaymentStatusBadge = (bill) => {
@@ -222,34 +299,11 @@ export default function AccountsPayable() {
     return { style: styles[status], label: labels[status] };
   };
 
-  useEffect(() => {
-    setFilteredBills(vendorBills);
-  }, [vendorBills]);
-
-  useEffect(() => {
-    let filtered = vendorBills;
-
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(b => b.status === statusFilter);
-    }
-
-    if (typeFilter !== 'all') {
-      filtered = filtered.filter(b => (b.invoice_type || 'invoice') === typeFilter);
-    }
-
-    if (paymentStatusFilter !== 'all') {
-      filtered = filtered.filter(b => getPaymentStatus(b) === paymentStatusFilter);
-    }
-
-    if (searchQuery) {
-      filtered = filtered.filter(b =>
-        b.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        b.partner_id?.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-
-    setFilteredBills(filtered);
-  }, [vendorBills, searchQuery, statusFilter, typeFilter, paymentStatusFilter]);
+  // Status, type, payment status and search are query parameters now (see
+  // buildParams). They used to run over the loaded array, so picking
+  // "To'langan" searched twenty bills rather than the tenant's — and the search
+  // box matched partner_id, a UUID, instead of the vendor name shown in the
+  // column beside it.
 
   const handleCreateBill = async () => {
     setIsSaving(true);
@@ -275,6 +329,7 @@ export default function AccountsPayable() {
 
       const created = await createVendorBill(billData);
       addAuditLog('create', created?.id || 'new', billData.partner_name);
+      await fetchBills();
       setShowCreateModal(false);
       setNewBill({
         partner_id: '',
@@ -292,38 +347,46 @@ export default function AccountsPayable() {
     }
   };
 
-  const approveBill = (billId) => {
-    updateVendorBill(billId, { status: 'confirmed' });
+  // Each action re-queries the current page and the cards afterwards. Mutating
+  // context state was enough while the list came from context; with the rows
+  // now server-side, a confirmed bill would otherwise keep its old badge until
+  // a full reload.
+  const approveBill = async (billId) => {
+    await updateVendorBill(billId, { status: 'confirmed' });
     addAuditLog('approve', billId, 'Vendor Bill', { oldStatus: 'draft', newStatus: 'confirmed' });
+    await fetchBills();
   };
 
   const postBill = async (billId) => {
     try {
       await postVendorBill(billId);
       addAuditLog('post', billId, 'Vendor Bill', { oldStatus: 'draft', newStatus: 'posted', note: 'Journal entry created' });
+      await fetchBills();
     } catch (err) {
       console.error('Failed to post bill:', err);
     }
   };
 
-  const payBill = async (billId) => {
+  // The bill is passed in rather than looked up: `vendorBills` holds at most the
+  // context's twenty rows, so a bill on page 2 was not in it and the amount came
+  // out NaN — payVendorBill then posted a payment for nothing.
+  const payBill = async (bill) => {
     try {
-      const bill = vendorBills.find(b => b.id === billId);
-      // Use payVendorBill which creates a Payment record and journal entry
-      await payVendorBill(billId, bill?.total_amount - (bill?.amount_paid || 0));
-      addAuditLog('status_change', billId, 'Vendor Bill', { oldStatus: bill?.status, newStatus: 'paid' });
+      const residual = bill?.amount_residual
+        ?? ((bill?.total_amount || 0) - (bill?.amount_paid || 0));
+      if (residual <= 0) return;
+      await payVendorBill(bill.id, residual);
+      addAuditLog('status_change', bill.id, 'Vendor Bill', { oldStatus: bill?.status, newStatus: 'paid' });
+      await fetchBills();
     } catch (err) {
       console.error('Failed to pay bill:', err);
     }
   };
 
-  const handleStatusChange = (billId, newStatus, comment) => {
-    const bill = vendorBills.find(b => b.id === billId);
-    updateVendorBill(billId, { status: newStatus });
-    addAuditLog('status_change', billId, bill?.partner_id, { oldStatus: bill?.status, newStatus, comment });
-  };
-
   const handleImport = async (data) => {
+    // Awaited in sequence, not fired and forgotten: the previous loop called
+    // createVendorBill without await, so the audit line was written — and the
+    // list refreshed — before any bill existed, and a failing row was silent.
     for (const row of data) {
       const billData = {
         partner_id: row.partner_id,
@@ -338,9 +401,10 @@ export default function AccountsPayable() {
         status: 'draft',
         three_way_match_status: 'pending'
       };
-      createVendorBill(billData);
+      await createVendorBill(billData);
     }
     addAuditLog('create', 'batch', `${data.length} bills imported`);
+    await fetchBills();
   };
 
   const generatePrintConfig = (bill) => {
@@ -453,7 +517,9 @@ export default function AccountsPayable() {
       setShowDebitNoteModal(false);
       setDebitNoteBill(null);
       setDebitNoteReason('');
-      window.location.reload();
+      // Re-query instead of window.location.reload(): a full reload threw away
+      // the user's filters and their page in the list.
+      await fetchBills();
     } catch (error) {
       console.error('Failed to create debit note:', error);
     } finally {
@@ -464,20 +530,27 @@ export default function AccountsPayable() {
   const handleConfirmDebitNote = async (debitNoteId) => {
     try {
       await financeService.confirmDebitNote(debitNoteId);
-      window.location.reload();
+      await fetchBills();
     } catch (error) {
       console.error('Failed to confirm debit note:', error);
     }
   };
 
-  // Calculate metrics
+  // Three figures over the WHOLE filtered set, from the server.
+  //
+  // outstanding_amount is the residual (total - paid) over everything not paid
+  // or cancelled — not the stored amount_due column the old reduce summed.
+  // amount_due is not maintained on every write path, which is the second
+  // reason the card could drift from the rows beneath it.
+  //
+  // The screen calls the third card "Tasdiqlash kutilmoqda", but there is no
+  // approval workflow in this schema: migration 478 pins the writable statuses
+  // to draft/confirmed/posted/partial/paid/cancelled. draft_count is what "not
+  // yet confirmed" actually means here.
   const metrics = {
-    totalPayable: vendorBills.reduce((sum, b) => sum + (b.amount_due || 0), 0),
-    overdueBills: vendorBills.filter(b => {
-      if (!b.due_date || b.status === 'paid') return false;
-      return new Date(b.due_date) < new Date();
-    }).length,
-    pendingApproval: vendorBills.filter(b => b.status === 'draft').length
+    totalPayable: stats?.outstanding_amount ?? 0,
+    overdueBills: stats?.overdue_count ?? 0,
+    pendingApproval: stats?.draft_count ?? 0,
   };
 
   return (
@@ -506,6 +579,8 @@ export default function AccountsPayable() {
             </div>
             <p className="text-3xl font-bold text-orange-900">{metrics.overdueBills}</p>
             <p className="text-sm text-slate-600">{t('overdue_bills')}</p>
+            {/* The count alone never said how much was at stake. */}
+            <p className="text-xs text-orange-600 mt-0.5">{formatCurrencyCompact(stats?.overdue_amount ?? 0)}</p>
           </CardContent>
         </Card>
 
@@ -527,7 +602,12 @@ export default function AccountsPayable() {
             <CardHeader className="border-b border-slate-100 pb-6">
               <div className="flex flex-col gap-4">
                 <div className="flex items-center justify-between flex-wrap gap-2">
-                  <CardTitle className="text-xl font-bold">{t('vendor_bills')}</CardTitle>
+                  <div>
+                    <CardTitle className="text-xl font-bold">{t('vendor_bills')}</CardTitle>
+                    {/* The table shows one page; say how many rows the filter
+                        actually matched so the cards above are readable. */}
+                    <p className="text-sm text-slate-500 mt-1">{totalBills} {t('bills') || 'faktura'}</p>
+                  </div>
                   <div className="flex gap-2 flex-wrap">
                     <ImportExportButtons
                       onImport={() => setShowImportModal(true)}
@@ -598,15 +678,21 @@ export default function AccountsPayable() {
             </CardHeader>
 
         <CardContent className="p-0">
-          {isLoading ? (
+          {billsLoading ? (
             <div className="flex items-center justify-center py-16">
               <div className="w-8 h-8 border-4 border-[var(--genix-blue)] border-t-transparent rounded-full animate-spin"></div>
             </div>
           ) : filteredBills.length === 0 ? (
             <div className="text-center py-16">
               <FileText className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-              <p className="text-slate-500">{t('no_data')}</p>
-              {canCreate('financials') && (
+              {/* An empty filtered result is not an empty tenant — offering
+                  "create your first bill" under an active filter is a lie. */}
+              <p className="text-slate-500">
+                {hasActiveFilter
+                  ? (t('no_results_found') || 'Natija topilmadi')
+                  : t('no_data')}
+              </p>
+              {!hasActiveFilter && canCreate('financials') && (
                 <Button onClick={() => setShowCreateModal(true)} className="mt-4" variant="outline">
                   <Plus className="w-4 h-4 mr-2" /> {t('create_first_bill')}
                 </Button>
@@ -630,8 +716,10 @@ export default function AccountsPayable() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredBills.map((bill) => (
-                    <TableRow key={bill.id} className="hover:bg-slate-50">
+                  {filteredBills.map((bill) => {
+                    const overdue = isOverdue(bill);
+                    return (
+                    <TableRow key={bill.id} className={overdue ? 'bg-red-50/80 hover:bg-red-100/60' : 'hover:bg-slate-50'}>
                       <TableCell className="font-mono text-sm">
                         <div className="flex items-center gap-2">
                           {bill.invoice_type === 'debit_note' && (
@@ -653,8 +741,14 @@ export default function AccountsPayable() {
                       <TableCell className="text-sm">
                         {bill.invoice_date ? format(new Date(bill.invoice_date), 'dd.MM.yyyy', { locale: dateLocale }) : '-'}
                       </TableCell>
-                      <TableCell className="text-sm">
+                      {/* days_overdue arrives from the same CURRENT_DATE the
+                          flag does, and is negative while an invoice is still
+                          within term — so the sign chooses the wording. */}
+                      <TableCell className={`text-sm ${overdue ? 'text-red-600 font-semibold' : ''}`}>
                         {bill.due_date ? format(new Date(bill.due_date), 'dd.MM.yyyy', { locale: dateLocale }) : '-'}
+                        {overdue && bill.days_overdue > 0 && (
+                          <span className="ml-1 text-xs">({bill.days_overdue}d)</span>
+                        )}
                       </TableCell>
                       <TableCell className="font-semibold">{formatCurrency(bill.total_amount || 0)}</TableCell>
                       <TableCell>
@@ -704,7 +798,7 @@ export default function AccountsPayable() {
                             </>
                           )}
                           {canUpdate('financials') && (bill.status === 'confirmed' || bill.status === 'posted') && (bill.invoice_type || 'invoice') === 'invoice' && (
-                            <Button size="sm" variant="ghost" onClick={() => payBill(bill.id)} title={t('pay') || 'Record Payment'}>
+                            <Button size="sm" variant="ghost" onClick={() => payBill(bill)} title={t('pay') || 'Record Payment'}>
                               <DollarSign className="w-4 h-4" />
                             </Button>
                           )}
@@ -721,9 +815,26 @@ export default function AccountsPayable() {
                         </div>
                       </TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between px-4 py-3 border-t">
+                  <span className="text-sm text-slate-600">
+                    {t('showing') || 'Showing'} {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, totalBills)} {t('of') || '/'} {totalBills}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>
+                      <ChevronLeft className="w-4 h-4" />
+                    </Button>
+                    <span className="text-sm font-medium">{currentPage} / {totalPages}</span>
+                    <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}>
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </CardContent>
@@ -1243,7 +1354,7 @@ export default function AccountsPayable() {
                 {(selectedBill.status === 'confirmed' || selectedBill.status === 'posted') && (
                   <Button
                     onClick={async () => {
-                      await payBill(selectedBill.id);
+                      await payBill(selectedBill);
                       setSelectedBill({ ...selectedBill, status: 'paid', amount_due: 0 });
                     }}
                     className="flex-1 bg-green-600 hover:bg-green-700"

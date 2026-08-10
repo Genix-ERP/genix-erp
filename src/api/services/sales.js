@@ -96,6 +96,23 @@ export const salesService = {
     return response.data.data;
   },
 
+  // Same endpoint, but keeps the pagination envelope. listInvoices drops it,
+  // so a caller that wanted page N had no way to learn how many pages exist —
+  // which is why the AR tab asked for page_size 1000 and folded everything in
+  // the browser instead.
+  async listInvoicesPaged(params = {}) {
+    const response = await apiClient.get('/sales-invoices', { params });
+    return { data: response.data?.data || [], meta: response.data?.meta || null };
+  },
+
+  // AR metric cards and aging buckets over the whole filtered set. Takes the
+  // same filters as the list, through the same server-side predicate, so the
+  // cards always describe the rows underneath them.
+  async getInvoicesSummary(params = {}) {
+    const response = await apiClient.get('/sales-invoices/summary', { params });
+    return response.data.data;
+  },
+
   async getInvoice(id) {
     const response = await apiClient.get(`/sales-invoices/${id}`);
     return response.data.data;
