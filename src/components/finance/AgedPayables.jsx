@@ -87,26 +87,35 @@ export default function AgedPayables() {
     return list;
   }, [data, searchQuery, sortField, sortDir]);
 
-  const totals = useMemo(() => {
-    return filteredContacts.reduce((acc, c) => ({
-      current: acc.current + (c.current || 0),
-      days1to30: acc.days1to30 + (c.days_1_to_30 || 0),
-      days31to60: acc.days31to60 + (c.days_31_to_60 || 0),
-      days61to90: acc.days61to90 + (c.days_61_to_90 || 0),
-      over90: acc.over90 + (c.over_90_days || 0),
-      total: acc.total + (c.total_amount || 0),
-    }), { current: 0, days1to30: 0, days31to60: 0, days61to90: 0, over90: 0, total: 0 });
-  }, [filteredContacts]);
+  // Server-computed over the whole ledger — see the twin note in
+  // AgedReceivables. Reducing over filteredContacts made the cards describe the
+  // search results while still labelled "Jami".
+  const totals = useMemo(() => ({
+    current: data?.current_total || 0,
+    days1to30: data?.days_1_to_30 || 0,
+    days31to60: data?.days_31_to_60 || 0,
+    days61to90: data?.days_61_to_90 || 0,
+    over90: data?.over_90_days || 0,
+    total: data?.total_amount || 0,
+  }), [data]);
 
-  const pct = (val) => totals.total > 0 ? ((val / totals.total) * 100).toFixed(1) : '0.0';
+  const pct = (key) => {
+    const v = data?.percentages?.[key];
+    return v === undefined || v === null ? '—' : v.toFixed(1);
+  };
 
-  // Payables are liabilities — display as negative amounts
+  // Payables are liabilities, so a positive balance displays as negative — but
+  // the sign MUST be tested first. A vendor overpayment leaves total_amount
+  // negative via the same FIFO-leftover path as AR, and prepending "-"
+  // unconditionally turned that credit into a bigger apparent debt.
   const formatPayableAmount = (amount) => {
     if (amount === 0 || amount === undefined || amount === null) return '-';
+    if (amount < 0) return formatCurrency(Math.abs(amount));
     return `-${formatCurrency(amount)}`;
   };
   const formatPayableAmountCompact = (amount) => {
     if (amount === 0 || amount === undefined || amount === null) return '-';
+    if (amount < 0) return formatCurrencyCompact(Math.abs(amount));
     return `-${formatCurrencyCompact(amount)}`;
   };
 
@@ -176,35 +185,35 @@ export default function AgedPayables() {
             <CardContent className="p-4">
               <p className="text-xs font-medium text-green-600 uppercase tracking-wide">{t('not_due') || 'Not Due'}</p>
               <p className="text-lg font-bold text-green-700 mt-1">{formatPayableAmountCompact(totals.current)}</p>
-              <p className="text-xs text-green-500 mt-0.5">{pct(totals.current)}%</p>
+              <p className="text-xs text-green-500 mt-0.5">{pct('current')}%</p>
             </CardContent>
           </Card>
           <Card className="bg-white/80 backdrop-blur-sm border-yellow-200/60">
             <CardContent className="p-4">
               <p className="text-xs font-medium text-yellow-600 uppercase tracking-wide">1-30 {t('days') || 'days'}</p>
               <p className="text-lg font-bold text-yellow-700 mt-1">{formatPayableAmountCompact(totals.days1to30)}</p>
-              <p className="text-xs text-yellow-500 mt-0.5">{pct(totals.days1to30)}%</p>
+              <p className="text-xs text-yellow-500 mt-0.5">{pct('days_1_to_30')}%</p>
             </CardContent>
           </Card>
           <Card className="bg-white/80 backdrop-blur-sm border-orange-200/60">
             <CardContent className="p-4">
               <p className="text-xs font-medium text-orange-600 uppercase tracking-wide">31-60 {t('days') || 'days'}</p>
               <p className="text-lg font-bold text-orange-700 mt-1">{formatPayableAmountCompact(totals.days31to60)}</p>
-              <p className="text-xs text-orange-500 mt-0.5">{pct(totals.days31to60)}%</p>
+              <p className="text-xs text-orange-500 mt-0.5">{pct('days_31_to_60')}%</p>
             </CardContent>
           </Card>
           <Card className="bg-white/80 backdrop-blur-sm border-red-200/60">
             <CardContent className="p-4">
               <p className="text-xs font-medium text-red-600 uppercase tracking-wide">61-90 {t('days') || 'days'}</p>
               <p className="text-lg font-bold text-red-700 mt-1">{formatPayableAmountCompact(totals.days61to90)}</p>
-              <p className="text-xs text-red-500 mt-0.5">{pct(totals.days61to90)}%</p>
+              <p className="text-xs text-red-500 mt-0.5">{pct('days_61_to_90')}%</p>
             </CardContent>
           </Card>
           <Card className="bg-white/80 backdrop-blur-sm border-red-300/60">
             <CardContent className="p-4">
               <p className="text-xs font-medium text-red-700 uppercase tracking-wide">90+ {t('days') || 'days'}</p>
               <p className="text-lg font-bold text-red-800 mt-1">{formatPayableAmountCompact(totals.over90)}</p>
-              <p className="text-xs text-red-600 mt-0.5">{pct(totals.over90)}%</p>
+              <p className="text-xs text-red-600 mt-0.5">{pct('over_90_days')}%</p>
             </CardContent>
           </Card>
         </div>

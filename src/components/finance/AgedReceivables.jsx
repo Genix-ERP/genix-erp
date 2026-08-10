@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import {
   Users, Search, ChevronDown, ChevronRight, ArrowUpDown, Loader2,
-  Download, Calendar, FileText, AlertTriangle
+  Calendar, FileText, AlertTriangle
 } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -89,19 +89,28 @@ export default function AgedReceivables() {
     return list;
   }, [data, searchQuery, sortField, sortDir]);
 
-  // Calculate totals from filtered contacts
-  const totals = useMemo(() => {
-    return filteredContacts.reduce((acc, c) => ({
-      current: acc.current + (c.current || 0),
-      days1to30: acc.days1to30 + (c.days_1_to_30 || 0),
-      days31to60: acc.days31to60 + (c.days_31_to_60 || 0),
-      days61to90: acc.days61to90 + (c.days_61_to_90 || 0),
-      over90: acc.over90 + (c.over_90_days || 0),
-      total: acc.total + (c.total_amount || 0),
-    }), { current: 0, days1to30: 0, days31to60: 0, days61to90: 0, over90: 0, total: 0 });
-  }, [filteredContacts]);
+  // The server already ships these six, computed over the whole ledger after
+  // the FIFO pass, so they reflect payments and credit notes. Rebuilding them
+  // here from the contact rows also made the cards describe the SEARCH RESULTS
+  // rather than the ledger — typing in the box silently changed "Jami".
+  const totals = useMemo(() => ({
+    current: data?.current_total || 0,
+    days1to30: data?.days_1_to_30 || 0,
+    days31to60: data?.days_31_to_60 || 0,
+    days61to90: data?.days_61_to_90 || 0,
+    over90: data?.over_90_days || 0,
+    total: data?.total_amount || 0,
+  }), [data]);
 
-  const pct = (val) => totals.total > 0 ? ((val / totals.total) * 100).toFixed(1) : '0.0';
+  // Shares come from the server too (aging_paging.go). The denominator there is
+  // the sum of the POSITIVE buckets, so a negative grand total no longer
+  // short-circuits every bucket to "0.0%" — the old guard printed a confident
+  // 0.0 beside a real 32.5m in 90+ whenever credits outweighed invoices.
+  // null means "not meaningful"; render an em dash rather than a number.
+  const pct = (key) => {
+    const v = data?.percentages?.[key];
+    return v === undefined || v === null ? '—' : v.toFixed(1);
+  };
 
   // Format amount with sign: positive = debt, negative = payment/credit
   const formatAmount = (amount) => {
@@ -192,42 +201,42 @@ export default function AgedReceivables() {
             <CardContent className="p-4">
               <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">{t('total') || 'Total'}</p>
               <p className={`text-lg font-bold mt-1 ${totals.total < 0 ? 'text-blue-600' : 'text-slate-900'}`}>{formatAmountCompact(totals.total)}</p>
-              <p className="text-xs text-slate-400 mt-0.5">{filteredContacts.length} {t('partners') || 'partners'}</p>
+              <p className="text-xs text-slate-400 mt-0.5">{data?.meta?.total ?? (data?.contacts?.length || 0)} {t('partners') || 'partners'}</p>
             </CardContent>
           </Card>
           <Card className="bg-white/80 backdrop-blur-sm border-green-200/60">
             <CardContent className="p-4">
               <p className="text-xs font-medium text-green-600 uppercase tracking-wide">{t('not_due') || 'Not Due'}</p>
               <p className={`text-lg font-bold mt-1 ${totals.current < 0 ? 'text-blue-600' : 'text-green-700'}`}>{formatAmountCompact(totals.current)}</p>
-              <p className="text-xs text-green-500 mt-0.5">{pct(totals.current)}%</p>
+              <p className="text-xs text-green-500 mt-0.5">{pct('current')}%</p>
             </CardContent>
           </Card>
           <Card className="bg-white/80 backdrop-blur-sm border-yellow-200/60">
             <CardContent className="p-4">
               <p className="text-xs font-medium text-yellow-600 uppercase tracking-wide">1-30 {t('days') || 'days'}</p>
-              <p className="text-lg font-bold text-yellow-700 mt-1">{formatCurrencyCompact(totals.days1to30)}</p>
-              <p className="text-xs text-yellow-500 mt-0.5">{pct(totals.days1to30)}%</p>
+              <p className="text-lg font-bold text-yellow-700 mt-1">{formatAmountCompact(totals.days1to30)}</p>
+              <p className="text-xs text-yellow-500 mt-0.5">{pct('days_1_to_30')}%</p>
             </CardContent>
           </Card>
           <Card className="bg-white/80 backdrop-blur-sm border-orange-200/60">
             <CardContent className="p-4">
               <p className="text-xs font-medium text-orange-600 uppercase tracking-wide">31-60 {t('days') || 'days'}</p>
-              <p className="text-lg font-bold text-orange-700 mt-1">{formatCurrencyCompact(totals.days31to60)}</p>
-              <p className="text-xs text-orange-500 mt-0.5">{pct(totals.days31to60)}%</p>
+              <p className="text-lg font-bold text-orange-700 mt-1">{formatAmountCompact(totals.days31to60)}</p>
+              <p className="text-xs text-orange-500 mt-0.5">{pct('days_31_to_60')}%</p>
             </CardContent>
           </Card>
           <Card className="bg-white/80 backdrop-blur-sm border-red-200/60">
             <CardContent className="p-4">
               <p className="text-xs font-medium text-red-600 uppercase tracking-wide">61-90 {t('days') || 'days'}</p>
-              <p className="text-lg font-bold text-red-700 mt-1">{formatCurrencyCompact(totals.days61to90)}</p>
-              <p className="text-xs text-red-500 mt-0.5">{pct(totals.days61to90)}%</p>
+              <p className="text-lg font-bold text-red-700 mt-1">{formatAmountCompact(totals.days61to90)}</p>
+              <p className="text-xs text-red-500 mt-0.5">{pct('days_61_to_90')}%</p>
             </CardContent>
           </Card>
           <Card className="bg-white/80 backdrop-blur-sm border-red-300/60">
             <CardContent className="p-4">
               <p className="text-xs font-medium text-red-700 uppercase tracking-wide">90+ {t('days') || 'days'}</p>
-              <p className="text-lg font-bold text-red-800 mt-1">{formatCurrencyCompact(totals.over90)}</p>
-              <p className="text-xs text-red-600 mt-0.5">{pct(totals.over90)}%</p>
+              <p className="text-lg font-bold text-red-800 mt-1">{formatAmountCompact(totals.over90)}</p>
+              <p className="text-xs text-red-600 mt-0.5">{pct('over_90_days')}%</p>
             </CardContent>
           </Card>
         </div>
