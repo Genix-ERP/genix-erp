@@ -733,8 +733,12 @@ export const financeService = {
     return response.data;
   },
 
-  async getPurchaseInvoiceStats() {
-    const response = await apiClient.get('/purchase-invoices/stats');
+  // Takes the SAME filters as listPurchaseInvoices. The endpoint has been
+  // filter-sensitive since a60cb5b; calling it bare left the cards describing
+  // the whole tenant while the rows underneath were filtered, which is exactly
+  // the mismatch the shared predicate was built to remove.
+  async getPurchaseInvoiceStats(params = {}) {
+    const response = await apiClient.get('/purchase-invoices/stats', { params });
     return response.data.data;
   },
 
