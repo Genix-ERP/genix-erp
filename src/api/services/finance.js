@@ -273,6 +273,19 @@ export const financeService = {
     return response.data.data;
   },
 
+  // Same endpoint, keeping the pagination envelope so a caller can page.
+  async listPaymentsPaged(params = {}) {
+    const response = await apiClient.get('/payments', { params });
+    return { data: response.data?.data || [], meta: response.data?.meta || null };
+  },
+
+  // Payment metric cards over the whole filtered set. Takes the same filters
+  // as the list, through the same server-side predicate.
+  async getPaymentsSummary(params = {}) {
+    const response = await apiClient.get('/payments/summary', { params });
+    return response.data.data;
+  },
+
   async getPayment(id) {
     const response = await apiClient.get(`/payments/${id}`);
     return response.data.data;
