@@ -377,9 +377,6 @@ export function AuthProvider({ children }) {
 
   // SEC-04: the platform control plane is for platform staff only — gate on the
   // real is_system_admin flag, not the tenant site-admin role.
-  const canAccessAdminPanel = useCallback(() => {
-    return isSystemAdmin();
-  }, [isSystemAdmin]);
 
   const value = useMemo(() => ({
     user,
@@ -404,9 +401,8 @@ export function AuthProvider({ children }) {
     isOwner,
     canManageCompany,
     canManageRoles,
-    canAccessAdminPanel,
     ROLE_TYPES,
-  }), [user, isLoading, isAuthenticated, error, backendAvailable, login, register, registerWithOTP, loginWithGoogle, logout, updateUser, changePassword, forgotPassword, resetPassword, clearError, refreshUser, isSystemAdmin, isSiteAdmin, isOwner, canManageCompany, canManageRoles, canAccessAdminPanel]);
+  }), [user, isLoading, isAuthenticated, error, backendAvailable, login, register, registerWithOTP, loginWithGoogle, logout, updateUser, changePassword, forgotPassword, resetPassword, clearError, refreshUser, isSystemAdmin, isSiteAdmin, isOwner, canManageCompany, canManageRoles]);
 
   return (
     <AuthContext.Provider value={value}>

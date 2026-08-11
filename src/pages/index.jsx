@@ -34,7 +34,6 @@ const Settings = lazyRetry(() => import('./Settings'));
 const MySettings = lazyRetry(() => import('./MySettings'));
 const Financials = lazyRetry(() => import('./Financials'));
 const Notifications = lazyRetry(() => import('./Notifications'));
-const AdminPanel = lazyRetry(() => import('./AdminPanel'));
 const AdminSettings = lazyRetry(() => import('./AdminSettings'));
 const Manufacturing = lazyRetry(() => import('./Manufacturing'));
 const ManufacturingKiosk = lazyRetry(() => import('@/components/manufacturing/KioskMode'));
@@ -86,7 +85,6 @@ const PAGES = {
     MySettings: MySettings,
     Financials: Financials,
     Notifications: Notifications,
-    AdminPanel: AdminPanel,
     AdminSettings: AdminSettings,
     Manufacturing: Manufacturing,
     Procurement: Procurement,
@@ -163,29 +161,6 @@ function AdminRoute({ children }) {
     }
 
     if (!isOwner()) {
-        return <Navigate to="/dashboard" replace />;
-    }
-
-    return children;
-}
-
-// SEC-04 (docs/admin-panel/audit.md): platform control-plane route guard.
-// Gates strictly on the server-provided is_system_admin flag — NOT the tenant
-// owner/site-admin role — and returns Navigate BEFORE rendering any child, so
-// the platform console never flashes to a tenant user. The backend
-// RequireSystemAdmin remains the real boundary; this is defence-in-depth.
-function SystemAdminRoute({ children }) {
-    const { isSystemAdmin, isLoading } = useAuth();
-
-    if (isLoading) {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-            </div>
-        );
-    }
-
-    if (!isSystemAdmin()) {
         return <Navigate to="/dashboard" replace />;
     }
 
@@ -271,7 +246,6 @@ function PagesContent() {
                 <Route path="my-settings" element={<MySettings />} />
                 <Route path="financials" element={<ModuleRoute moduleId="finance"><Financials /></ModuleRoute>} />
                 <Route path="notifications" element={<Notifications />} />
-                <Route path="adminpanel" element={<SystemAdminRoute><AdminPanel /></SystemAdminRoute>} />
                 <Route path="adminsettings" element={<AdminRoute><AdminSettings /></AdminRoute>} />
                 <Route path="manufacturing" element={<ModuleRoute moduleId="manufacturing"><Manufacturing /></ModuleRoute>} />
                 {/* Ustaxona kiosk — tablet-first shop-floor terminal (B3) */}

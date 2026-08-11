@@ -469,15 +469,6 @@ function LayoutContent({ children, currentPageName }) {
       dynamicItems.push(...adminNavigationItems);
     }
 
-    // Add Admin Panel — platform control plane, platform staff only (SEC-04).
-    if (isUserSystemAdmin) {
-      dynamicItems.push({
-        title: t("admin_panel"),
-        url: createPageUrl("AdminPanel"),
-        icon: Shield
-      });
-    }
-
     // Add AI Assistant at the bottom
     dynamicItems.push(coreNavigationItems[2]);
 
@@ -565,8 +556,7 @@ function LayoutContent({ children, currentPageName }) {
                 <SidebarTrigger className="hover:bg-slate-100 p-2 rounded-lg transition-colors duration-200" />
                 <div className="hidden md:block">
                   <h1 className="text-xl md:text-2xl font-bold text-[var(--genix-navy)]">
-                    {currentPageName === 'AdminPanel' ? t('admin_panel') :
-                     currentPageName === 'AIAssistant' ? t('ai_assistant') :
+                    {currentPageName === 'AIAssistant' ? t('ai_assistant') :
                      currentPageName === 'DirectorDashboard' ? t('director_dashboard') :
                      currentPageName === 'Customers' ? t('crm') /* sidebar says CRM — the header must match */ :
                      currentPageName === 'LeaveManagement' ? t('leave_management') :
