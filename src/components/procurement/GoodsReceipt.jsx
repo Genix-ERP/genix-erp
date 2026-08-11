@@ -74,6 +74,8 @@ export default function GoodsReceipt() {
     po_id: '',
     received_by: '',
     warehouse_location: '',
+    vehicle_number: '',
+    driver_name: '',
     notes: '',
     lines: [],
   });
@@ -254,6 +256,8 @@ export default function GoodsReceipt() {
         received_by: newGR.received_by || 'User',
         warehouse_id: newGR.warehouse_location || undefined,
         warehouse_name: selectedWarehouse?.name || '',
+        vehicle_number: newGR.vehicle_number || '',
+        driver_name: newGR.driver_name || '',
         notes: newGR.notes || '',
         lines: validLines,
       };
@@ -266,6 +270,8 @@ export default function GoodsReceipt() {
         po_id: '',
         received_by: '',
         warehouse_location: '',
+        vehicle_number: '',
+        driver_name: '',
         notes: '',
         lines: [],
       });
@@ -575,6 +581,29 @@ export default function GoodsReceipt() {
               </div>
             </div>
 
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium mb-1 block">{t('vehicle_number') || 'Vehicle Number'}</label>
+                <div className="relative">
+                  <Truck className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <Input
+                    className="pl-10"
+                    value={newGR.vehicle_number}
+                    onChange={(e) => setNewGR({ ...newGR, vehicle_number: e.target.value })}
+                    placeholder="01 A 123 AA"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">{t('driver_name') || 'Driver'}</label>
+                <Input
+                  value={newGR.driver_name}
+                  onChange={(e) => setNewGR({ ...newGR, driver_name: e.target.value })}
+                  placeholder={t('driver_name') || 'Driver'}
+                />
+              </div>
+            </div>
+
             <div>
               <label className="text-sm font-medium mb-1 block">{t('warehouse_location') || 'Warehouse Location'}</label>
               <Select
@@ -822,6 +851,18 @@ export default function GoodsReceipt() {
                   <p className="text-sm text-slate-500">{t('quality_status') || 'Quality Status'}</p>
                   <Badge className={qualityColors[selectedGR.quality_status]}>{getQualityLabel(selectedGR.quality_status)}</Badge>
                 </div>
+                {selectedGR.vehicle_number && (
+                  <div>
+                    <p className="text-sm text-slate-500">{t('vehicle_number') || 'Vehicle Number'}</p>
+                    <p className="font-medium">{selectedGR.vehicle_number}</p>
+                  </div>
+                )}
+                {selectedGR.driver_name && (
+                  <div>
+                    <p className="text-sm text-slate-500">{t('driver_name') || 'Driver'}</p>
+                    <p className="font-medium">{selectedGR.driver_name}</p>
+                  </div>
+                )}
               </div>
 
               {selectedGR.warehouse_location && (

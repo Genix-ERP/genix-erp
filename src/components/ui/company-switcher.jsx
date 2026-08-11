@@ -64,7 +64,7 @@ export default function CompanySwitcher({ compact = false }) {
         <Button
           variant="ghost"
           className={compact
-            ? "flex items-center gap-1.5 px-2 py-1.5 h-auto hover:bg-slate-100/80 rounded-lg"
+            ? "flex items-center gap-1.5 px-2.5 h-9 hover:bg-slate-100 rounded-lg"
             : "w-full justify-between px-3 py-2 h-auto hover:bg-slate-100/80"
           }
         >
