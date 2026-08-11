@@ -152,11 +152,12 @@ const sampleBudgetLines = [
 // must fail loudly instead of becoming browser-only ghosts (see 2026-08-10
 // cash-truth audit: PKO-2026-13647 existed only in localStorage).
 
-const sampleReconciliationActs = [
-  { id: 'ra_1', partner_id: 'c_1', partner_name: 'Tech Solutions LLC', period_start: '2026-01-01', period_end: '2026-03-31', opening_balance: 5000000, our_debit_total: 15000000, our_credit_total: 8500000, our_balance: 11500000, partner_debit_total: 8500000, partner_credit_total: 15000000, partner_balance: 11500000, difference: 0, status: 'confirmed', created_at: new Date().toISOString() },
-  { id: 'ra_2', partner_id: 'c_2', partner_name: 'Global Industries', period_start: '2026-01-01', period_end: '2026-03-31', opening_balance: 0, our_debit_total: 25000000, our_credit_total: 20000000, our_balance: 5000000, partner_debit_total: 20000000, partner_credit_total: 24500000, partner_balance: 4500000, difference: 500000, status: 'disputed', created_at: new Date().toISOString() },
-  { id: 'ra_3', partner_id: 'c_3', partner_name: 'Qurilish Materials', period_start: '2026-01-01', period_end: '2026-03-31', opening_balance: 3000000, our_debit_total: 8000000, our_credit_total: 10000000, our_balance: 1000000, partner_debit_total: 10000000, partner_credit_total: 8000000, partner_balance: 1000000, difference: 0, status: 'draft', created_at: new Date().toISOString() },
-];
+// Reconciliation acts have NO sample data for the same reason as kassa
+// documents: they are signed, partner-facing documents. Three invented acts
+// ("Tech Solutions LLC", difference 500 000, status disputed) used to seed
+// demo mode here — a fake disputed balance is exactly the kind of number that
+// gets read as real. ActSverka fetches its own list from the API; this state
+// only ever holds server documents.
 
 const sampleExchangeDiffs = [
   { id: 'ed_1', currency_code: 'USD', amount_uzs: 3500000, diff_type: 'positive', period_start: '2026-01-01', period_end: '2026-01-31', description: 'USD kurs farqi — Yanvar 2026' },
@@ -267,7 +268,8 @@ export function FinancialsProvider({ children }) {
     // Cash registers/orders: no localStorage fallback — server documents only.
     setCashRegisters([]);
     setCashOrders([]);
-    setReconciliationActs(getData(RECONCILIATION_ACTS_KEY, sampleReconciliationActs));
+    // Server documents only — no localStorage fallback, no samples.
+    setReconciliationActs([]);
     setExchangeDiffs(getData(EXCHANGE_DIFFS_KEY, sampleExchangeDiffs));
 
     // Only initialize localStorage with sample data in demo mode
@@ -297,8 +299,8 @@ export function FinancialsProvider({ children }) {
       initIfEmpty(FISCAL_PERIODS_KEY, sampleFiscalPeriods);
       initIfEmpty(BUDGETS_KEY, sampleBudgets);
       initIfEmpty(BUDGET_LINES_KEY, sampleBudgetLines);
-      // Finance extra modules
-      initIfEmpty(RECONCILIATION_ACTS_KEY, sampleReconciliationActs);
+      // Finance extra modules (reconciliation acts deliberately absent —
+      // partner-facing documents get no demo seed)
       initIfEmpty(EXCHANGE_DIFFS_KEY, sampleExchangeDiffs);
     }
   }, [activeCompany]);
@@ -405,10 +407,20 @@ export function FinancialsProvider({ children }) {
           // only (no localStorage merge: ghost documents must not exist).
           setCashRegisters(Array.isArray(cashRegistersData) ? cashRegistersData : (cashRegistersData?.items || []));
           setCashOrders(Array.isArray(cashOrdersData) ? cashOrdersData : (cashOrdersData?.items || []));
-          // Ledger-derived cash position (GET /cash/balance)
+          // Ledger-derived cash position (GET /cash/balance). Same field set
+          // as refreshCashPosition — this boot-time setter used to drop
+          // cash_total/bank_total, so the kassa card read 0 until something
+          // triggered a manual refresh.
           setCashPosition(cashBalanceData && typeof cashBalanceData === 'object'
-            ? { total: cashBalanceData.total || 0, as_of: cashBalanceData.as_of || null, accounts: cashBalanceData.accounts || [] }
-            : { total: 0, as_of: null, accounts: [] });
+            ? {
+                total: cashBalanceData.total || 0,
+                cash_total: cashBalanceData.cash_total || 0,
+                bank_total: cashBalanceData.bank_total || 0,
+                currency_total: cashBalanceData.currency_total || 0,
+                as_of: cashBalanceData.as_of || null,
+                accounts: cashBalanceData.accounts || [],
+              }
+            : { total: 0, cash_total: 0, bank_total: 0, currency_total: 0, as_of: null, accounts: [] });
           setReconciliationActs(reconciliationActsData || []);
           setExchangeDiffs(Array.isArray(exchangeDiffsData) ? exchangeDiffsData : []);
 

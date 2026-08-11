@@ -1400,45 +1400,9 @@ export function InventoryProvider({ children }) {
     if (stored) setLots(JSON.parse(stored));
   }, [backendAvailable, activeCompany]);
 
-  const createLot = useCallback(async (lotData) => {
-    if (backendAvailable) {
-      try {
-        const newLot = await inventoryService.createLot({
-          product_id: lotData.product_id,
-          warehouse_id: lotData.warehouse_id,
-          lot_number: lotData.lot_number || '', // empty = auto-generate on backend
-          received_date: lotData.received_date || new Date().toISOString().split('T')[0],
-          expiry_date: lotData.expiry_date || '',
-          manufacture_date: lotData.manufacture_date || '',
-          quantity: lotData.quantity,
-          unit_cost: lotData.unit_cost || 0,
-          vendor_id: lotData.vendor_id || '',
-          notes: lotData.notes || '',
-        });
-        await fetchLots();
-        return newLot;
-      } catch (err) {
-        console.error('[InventoryContext] Failed to create lot via API:', err);
-        throw err;
-      }
-    }
-
-    // Fallback: localStorage-only mode
-    const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(LOTS_STORAGE_KEY, companyId);
-    const newLot = {
-      id: `lot_${Date.now()}`,
-      lot_number: lotData.lot_number || `LOT-${new Date().getFullYear()}-${String(lots.length + 1).padStart(3, '0')}`,
-      ...lotData,
-      original_quantity: lotData.quantity,
-      status: 'active',
-      created_at: new Date().toISOString()
-    };
-    const updated = [...lots, newLot];
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setLots(updated);
-    return newLot;
-  }, [lots, activeCompany, backendAvailable, fetchLots]);
+  // No createLot: the server has never had POST /inventory/lots — lots are
+  // created automatically during goods receipt, and no screen ever called
+  // this. The wiring here would have 404ed on its first real use.
 
   const updateLot = useCallback(async (id, lotData) => {
     if (backendAvailable) {
@@ -2146,7 +2110,6 @@ export function InventoryProvider({ children }) {
     // Lot/Batch Tracking
     lots,
     fetchLots,
-    createLot,
     updateLot,
     deleteLot,
     consumeLot,
@@ -2215,7 +2178,7 @@ export function InventoryProvider({ children }) {
     isAutoReorderEnabled: () => inventorySettings.autoReorderEnabled,
     getDefaultUnit: () => inventorySettings.defaultUnit,
     getUnitsOfMeasure: () => inventorySettings.unitsOfMeasure
-  }), [products, createProduct, updateProduct, deleteProduct, categories, createCategory, updateCategory, deleteCategory, warehouses, createWarehouse, updateWarehouse, deleteWarehouse, createWarehouseLocation, updateWarehouseLocation, deleteWarehouseLocation, inventory, stockMovements, reloadMovements, adjustInventory, transferInventory, getInventoryValuation, getInventorySummary, getProductStock, getWarehouseInventory, lots, createLot, updateLot, deleteLot, consumeLot, getProductLots, getExpiringLots, stockCounts, createStockCount, updateStockCountLine, completeStockCount, cancelStockCount, boms, bomLines, createBOM, updateBOM, deleteBOM, createBOMLine, updateBOMLine, deleteBOMLine, getBOMLinesByBOM, calculateBOMCost, reorderRules, createReorderRule, updateReorderRule, deleteReorderRule, getReorderRulesByProduct, checkReorderNeeded, scrapOrders, createScrapOrder, updateScrapOrder, confirmScrapOrder, cancelScrapOrder, getScrapSummary, items, isLoading, backendAvailable, error, loadData, inventorySettings]);
+  }), [products, createProduct, updateProduct, deleteProduct, categories, createCategory, updateCategory, deleteCategory, warehouses, createWarehouse, updateWarehouse, deleteWarehouse, createWarehouseLocation, updateWarehouseLocation, deleteWarehouseLocation, inventory, stockMovements, reloadMovements, adjustInventory, transferInventory, getInventoryValuation, getInventorySummary, getProductStock, getWarehouseInventory, lots, updateLot, deleteLot, consumeLot, getProductLots, getExpiringLots, stockCounts, createStockCount, updateStockCountLine, completeStockCount, cancelStockCount, boms, bomLines, createBOM, updateBOM, deleteBOM, createBOMLine, updateBOMLine, deleteBOMLine, getBOMLinesByBOM, calculateBOMCost, reorderRules, createReorderRule, updateReorderRule, deleteReorderRule, getReorderRulesByProduct, checkReorderNeeded, scrapOrders, createScrapOrder, updateScrapOrder, confirmScrapOrder, cancelScrapOrder, getScrapSummary, items, isLoading, backendAvailable, error, loadData, inventorySettings]);
 
   return (
     <InventoryContext.Provider value={value}>
