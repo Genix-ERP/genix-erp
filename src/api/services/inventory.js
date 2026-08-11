@@ -655,10 +655,9 @@ export const inventoryService = {
     return response.data.data;
   },
 
-  async createLot(data) {
-    const response = await apiClient.post('/inventory/lots', data);
-    return response.data.data;
-  },
+  // No createLot: POST /inventory/lots does not exist on the server. Lots are
+  // created automatically during Goods Receipt (see the route comment in
+  // handler.go); only list/get/update/delete are exposed.
 
   async updateLot(id, data) {
     const response = await apiClient.put(`/inventory/lots/${id}`, data);

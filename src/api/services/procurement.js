@@ -244,23 +244,9 @@ export const procurementService = {
     return response.data.data;
   },
 
-  // Contract documents (attachments)
-  async listContractAttachments(id) {
-    const response = await apiClient.get(`/contracts/${id}/attachments`);
-    return response.data.data || [];
-  },
-  async uploadContractAttachment(id, file, description) {
-    const form = new FormData();
-    form.append('file', file);
-    if (description) form.append('description', description);
-    const response = await apiClient.post(`/contracts/${id}/attachments`, form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
-    return response.data.data;
-  },
-  async deleteContractAttachment(id, attachmentId) {
-    await apiClient.delete(`/contracts/${id}/attachments/${attachmentId}`);
-  },
+  // No contract-attachment methods: /contracts/:id/attachments never existed
+  // on the server and no screen ever called them. (Subcontractor files in the
+  // construction module are a different, working endpoint.)
 
   // Purchase Requisitions
   async listRequisitions(params = {}) {

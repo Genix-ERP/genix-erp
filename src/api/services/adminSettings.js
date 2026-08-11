@@ -68,46 +68,10 @@ export const adminSettingsService = {
     }
   },
 
-  // Get settings history/audit log
-  async getSettingsHistory(companyId, params = {}) {
-    try {
-      const response = await apiClient.get('/admin/settings/history', {
-        params: { company_id: companyId, ...params }
-      });
-      return response.data.data || response.data;
-    } catch (error) {
-      console.error('Error fetching settings history:', error);
-      throw error;
-    }
-  },
-
-  // Export settings as JSON
-  async exportSettings(companyId) {
-    try {
-      const response = await apiClient.get('/admin/settings/export', {
-        params: { company_id: companyId },
-        responseType: 'blob'
-      });
-      return response.data;
-    } catch (error) {
-      console.error('Error exporting settings:', error);
-      throw error;
-    }
-  },
-
-  // Import settings from JSON
-  async importSettings(companyId, settingsData) {
-    try {
-      const response = await apiClient.post('/admin/settings/import', {
-        company_id: companyId,
-        settings: settingsData
-      });
-      return response.data.data || response.data;
-    } catch (error) {
-      console.error('Error importing settings:', error);
-      throw error;
-    }
-  },
+  // No history/export/import methods here: /admin/settings/history, /export
+  // and /import were never routes on the server, and no screen called these —
+  // the AdminSettings page's export/import buttons use the context's
+  // client-side JSON versions (AdminSettingsContext.jsx), not the API.
 
   // --- AI settings (tenant-wide; the API key is never returned in full) ---
 

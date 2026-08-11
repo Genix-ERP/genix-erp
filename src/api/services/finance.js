@@ -840,10 +840,8 @@ export const financeService = {
     return response.data.data;
   },
 
-  async getFiscalPeriod(id) {
-    const response = await apiClient.get(`/fiscal-periods/${id}`);
-    return response.data.data;
-  },
+  // No getFiscalPeriod: GET /fiscal-periods/:id has no server route and no
+  // screen ever called it — periods are always read via the list.
 
   async createFiscalPeriod(data) {
     const response = await apiClient.post('/fiscal-periods', data);
@@ -1107,11 +1105,8 @@ export const financeService = {
     return response.data.data;
   },
 
-  // ========== Budget Consolidated ==========
-  async getBudgetConsolidated(params = {}) {
-    const response = await apiClient.get('/budget/consolidated', { params });
-    return response.data.data;
-  },
+  // No getBudgetConsolidated: /budget/consolidated has no server route and no
+  // screen ever called it.
 
   // ========== Budget Cash Flow (BDDS) ==========
   async getBudgetCashFlow() {
