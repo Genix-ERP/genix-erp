@@ -1,5 +1,11 @@
 export const translations = {
   en: {
+    "ship_order": "Ship from warehouse",
+    "order_shipped": "Order shipped — stock deducted",
+    "ship_failed": "Failed to ship the order",
+    "receive_po": "Receive into warehouse",
+    "po_received": "Goods received — stock updated",
+    "nothing_to_receive": "Nothing left to receive",
     // ── missing keys, en (audit backfill 2026-08-11) ──
     "actionType": "Action Type",
     "activeRules": "Active Rules",
@@ -9967,6 +9973,12 @@ export const translations = {
   },
 
   uz: {
+    "ship_order": "Ombordan jo'natish",
+    "order_shipped": "Buyurtma jo'natildi — zaxiradan chiqarildi",
+    "ship_failed": "Buyurtmani jo'natib bo'lmadi",
+    "receive_po": "Omborga qabul qilish",
+    "po_received": "Tovar qabul qilindi — zaxira yangilandi",
+    "nothing_to_receive": "Qabul qilinadigan qoldiq yo'q",
     // ── uz for harvested keys (audit backfill 2, 2026-08-11) ──
     "actionType": "Amal turi",
     "activeRules": "Faol qoidalar",
@@ -20050,6 +20062,12 @@ export const translations = {
   },
 
   ru: {
+    "ship_order": "Отгрузить со склада",
+    "order_shipped": "Заказ отгружен — остаток списан",
+    "ship_failed": "Не удалось отгрузить заказ",
+    "receive_po": "Принять на склад",
+    "po_received": "Товар принят — остаток обновлён",
+    "nothing_to_receive": "Нечего принимать",
     // ── ru for harvested keys (audit backfill 2, 2026-08-11) ──
     "actionType": "Тип действия",
     "activeRules": "Активные правила",
