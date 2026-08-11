@@ -122,9 +122,10 @@ export default function VendorPricelist() {
       const vendor = suppliers.find(s => s.id === price.vendor_id);
       const product = products.find(p => p.id === price.product_id);
 
+      const q = searchTerm.toLowerCase();
       const matchesSearch =
-        vendor?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        product?.name?.toLowerCase().includes(searchTerm.toLowerCase());
+        (price.vendor_name || vendor?.name || '').toLowerCase().includes(q) ||
+        (price.product_name || product?.name || '').toLowerCase().includes(q);
 
       const matchesVendor = vendorFilter === 'all' || price.vendor_id === vendorFilter;
       const matchesStatus = statusFilter === 'all' ||
@@ -242,14 +243,17 @@ export default function VendorPricelist() {
     }
   };
 
-  const getVendorName = (vendorId) => {
-    const vendor = suppliers.find(s => s.id === vendorId);
-    return vendor?.name || vendorId;
+  // The /vendor-prices rows already carry joined vendor_name/product_name —
+  // prefer those; the context lookups only cover suppliers/products that made
+  // it into the loaded lists, and a raw UUID must never reach the screen.
+  const getVendorName = (price) => {
+    const vendor = suppliers.find(s => s.id === price.vendor_id);
+    return price.vendor_name || vendor?.name || `${String(price.vendor_id || '').slice(0, 8)}…`;
   };
 
-  const getProductName = (productId) => {
-    const product = products.find(p => p.id === productId);
-    return product?.name || productId;
+  const getProductName = (price) => {
+    const product = products.find(p => p.id === price.product_id);
+    return price.product_name || product?.name || `${String(price.product_id || '').slice(0, 8)}…`;
   };
 
   // Statistics
@@ -407,11 +411,11 @@ export default function VendorPricelist() {
                 <TableBody>
                   {filteredPrices.map((price) => (
                     <TableRow key={price.id}>
-                      <TableCell className="font-medium">{getVendorName(price.vendor_id)}</TableCell>
+                      <TableCell className="font-medium">{getVendorName(price)}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Package className="w-4 h-4 text-slate-400" />
-                          {getProductName(price.product_id)}
+                          {getProductName(price)}
                         </div>
                       </TableCell>
                       <TableCell className="text-right font-semibold">
@@ -654,11 +658,11 @@ export default function VendorPricelist() {
             <div className="py-4 space-y-2">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">{t('vendor') || 'Vendor'}:</span>
-                <span className="font-medium">{getVendorName(priceToDelete.vendor_id)}</span>
+                <span className="font-medium">{getVendorName(priceToDelete)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">{t('product') || 'Product'}:</span>
-                <span className="font-medium">{getProductName(priceToDelete.product_id)}</span>
+                <span className="font-medium">{getProductName(priceToDelete)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">{t('price') || 'Price'}:</span>
