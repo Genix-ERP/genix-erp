@@ -33,7 +33,6 @@ import {
   Receipt,
   Image as ImageIcon,
   Sparkles,
-  Smartphone,
   Landmark
 } from 'lucide-react';
 
@@ -50,7 +49,6 @@ import FinanceSettings from '@/components/admin-settings/FinanceSettings';
 import ExpensesSettings from '@/components/admin-settings/ExpensesSettings';
 import ConstructionSettings from '@/components/admin-settings/ConstructionSettings';
 import AISettings from '@/components/admin-settings/AISettings';
-import MobileAppSettings from '@/components/admin-settings/MobileAppSettings';
 import FixedAssetsMappingSettings from '@/components/admin-settings/FixedAssetsMappingSettings';
 import CompanySettings from '@/components/settings/CompanySettings';
 import SubscriptionSettings from '@/components/settings/SubscriptionSettings';
@@ -73,10 +71,10 @@ const SECTIONS = [
   { id: 'expenses', icon: Receipt, label: 'expenses_settings', component: ExpensesSettings, appIds: ['expenses'] },
   { id: 'construction', icon: HardHat, label: 'construction_settings', component: ConstructionSettings, appIds: ['construction'] },
   // Workflow automation rules moved to the dedicated Workflows module (sidebar → Ish jarayonlari)
-  { id: 'ai', icon: Sparkles, label: 'ai_settings', component: AISettings, appIds: null },
-  // Global mobile-app update gate — one app for all tenants, so it's only
-  // shown to (and editable by) the platform system admin.
-  { id: 'mobile', icon: Smartphone, label: 'mobile_app_settings', component: MobileAppSettings, appIds: null, systemAdminOnly: true }
+  { id: 'ai', icon: Sparkles, label: 'ai_settings', component: AISettings, appIds: null }
+  // The mobile-app update gate lives in the control plane now
+  // (admin.genixerp.com → Mobil versiya). It is one setting for every tenant,
+  // which is what made it the odd one out in a per-tenant settings screen.
 ];
 
 export default function AdminSettings() {
@@ -115,6 +113,9 @@ export default function AdminSettings() {
   const visibleSections = useMemo(() => {
     return SECTIONS.filter(section => {
       // Global platform config (e.g. mobile updater) is system-admin only.
+      // No section sets systemAdminOnly any more — the one that did (the
+      // mobile update gate) moved to the control plane. Kept because it costs
+      // nothing and the next global setting will want it.
       if (section.systemAdminOnly && !(isSiteAdmin?.())) return false;
       // Always show sections with null appIds (like general)
       if (section.appIds === null) return true;
