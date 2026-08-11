@@ -743,14 +743,11 @@ export const translations = {
     "stage_negotiation": "Negotiation",
     "stage_won": "Won",
     "stage_lost": "Lost",
-
-    "admin_panel": "Admin Panel",
     "my_settings": "My Settings",
     "my_settings_subtitle": "Manage your personal profile and security settings",
     "owner": "Owner",
     "site_admin": "Site Administrator",
     "admin": "Admin",
-    "admin_panel_subtitle": "Complete user lifecycle management with subscription control",
     "enterprise_edition": "Enterprise Edition",
 
     // Admin Panel
@@ -10571,10 +10568,8 @@ export const translations = {
     "my_settings": "Mening sozlamalarim",
     "my_settings_subtitle": "Shaxsiy profilingiz va xavfsizlik sozlamalarini boshqaring",
     "owner": "Egasi",
-    "admin_panel_subtitle": "Foydalanuvchilarni to'liq boshqarish va obuna nazorati",
     "enterprise_edition": "Korxona nashri",
     "site_admin": "Sayt administratori",
-    "admin_panel": "Boshqaruv paneli",
     "admin": "Administrator",
 
     // Admin Panel
@@ -20482,7 +20477,6 @@ export const translations = {
     "my_settings": "Мои настройки",
     "my_settings_subtitle": "Управление личным профилем и настройками безопасности",
     "owner": "Владелец",
-    "admin_panel_subtitle": "Полное управление пользователями и контроль подписки",
     "enterprise_edition": "Корпоративная версия",
     "site_admin": "Администратор сайта",
     "apps": "Приложения",
@@ -20617,8 +20611,6 @@ export const translations = {
     "stage_negotiation": "Переговоры",
     "stage_won": "Выигран",
     "stage_lost": "Потерян",
-
-    "admin_panel": "Панель Администратора",
     "admin": "Администратор",
 
     // Admin Panel
