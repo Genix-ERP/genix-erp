@@ -159,23 +159,34 @@ export const CargoProvider = ({ children }) => {
       return newShipment;
     }
 
-    // Create via backend - Transform data to match backend schema
+    // Create via backend. Callers arrive in TWO shapes and this transform
+    // used to assume only one of them:
+    //   - the Excel import sends the FORM shape ({costs: {transport}, items:
+    //     [{name, price}]}), which this transform was written for;
+    //   - the manual "Yangi yuk" dialog (CargoShipments.handleSubmit) already
+    //     transforms to the BACKEND shape ({transport_cost, items:
+    //     [{item_name, unit_price}]}).
+    // Running the form-shape mapping over backend-shaped data silently turned
+    // every price into 0 (`shipmentData.costs?.transport` → undefined,
+    // `item.price` → undefined) and dropped item names — the manual test
+    // report's BUG-01: totals correct in the dialog, 0,00 everywhere after
+    // saving. Coalesce both spellings so either caller lands intact.
     try {
       const backendData = {
         tracking_number: shipmentData.tracking_number || '',
         supplier_country: shipmentData.supplier_country || '',
         supplier_company: shipmentData.supplier_company || '',
         expected_date: shipmentData.expected_date || null,
-        transport_cost: shipmentData.costs?.transport || 0,
-        customs_cost: shipmentData.costs?.customs || 0,
-        insurance_cost: shipmentData.costs?.insurance || 0,
-        other_cost: shipmentData.costs?.other || 0,
+        transport_cost: Number(shipmentData.transport_cost ?? shipmentData.costs?.transport ?? 0),
+        customs_cost: Number(shipmentData.customs_cost ?? shipmentData.costs?.customs ?? 0),
+        insurance_cost: Number(shipmentData.insurance_cost ?? shipmentData.costs?.insurance ?? 0),
+        other_cost: Number(shipmentData.other_cost ?? shipmentData.costs?.other ?? 0),
         notes: shipmentData.notes || '',
-        items: shipmentData.items.map(item => ({
-          item_name: item.name,
-          quantity: item.quantity,
-          unit_price: item.price || 0,
-          currency: item.currency,
+        items: (shipmentData.items || []).map(item => ({
+          item_name: item.item_name ?? item.name ?? '',
+          quantity: Number(item.quantity || 0),
+          unit_price: Number(item.unit_price ?? item.price ?? 0),
+          currency: item.currency || 'USD',
           hs_code: item.hs_code || '',
           description: item.description || ''
         }))
