@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { toast } from 'sonner';
 import {
   LineChart, Line, BarChart, Bar, AreaChart, Area,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -214,8 +215,13 @@ export default function DirectorDashboard() {
   const [companyPickerOpen, setCompanyPickerOpen] = useState(false);
   const [companySearch, setCompanySearch] = useState('');
 
-  const [perCompany, setPerCompany] = useState({}); // { [orgId]: { revenue, expenses, profit, deb, cred, monthlyRev[], expenseBreakdown{} } }
+  const [perCompanyRaw, setPerCompany] = useState({}); // { [orgId]: { revenue, expenses, profit, deb, cred, monthlyRev[], expenseBreakdown{} } }
   const [loading, setLoading] = useState(false);
+  // Latest USD→UZS rate from the summary endpoint. 0 = tenant has no rate
+  // configured, in which case the USD toggle explains itself instead of
+  // silently doing nothing (which is exactly what it used to do for
+  // everyone: the currency state was set and never read — BUG-03).
+  const [usdRate, setUsdRate] = useState(0);
 
   const allMode = selectedIds.size === 0;
   const visibleCompanies = useMemo(() => {
@@ -235,8 +241,8 @@ export default function DirectorDashboard() {
   const [monthLabels, setMonthLabels] = useState([]);
   // Top-level (tenant-wide) sales block: period-scoped orders + current
   // overdue receivables. Absent on old cached responses — guard on null.
-  const [salesSummary, setSalesSummary] = useState(null);
-  const [assetsSummary, setAssetsSummary] = useState(null);
+  const [salesSummaryRaw, setSalesSummary] = useState(null);
+  const [assetsSummaryRaw, setAssetsSummary] = useState(null);
 
   const loadAll = useCallback(async () => {
     if (!companies || companies.length === 0) return;
@@ -248,6 +254,7 @@ export default function DirectorDashboard() {
       const payload = res.data?.data ?? res.data ?? {};
       const rows = Array.isArray(payload.companies) ? payload.companies : [];
       if (Array.isArray(payload.month_labels)) setMonthLabels(payload.month_labels);
+      setUsdRate(Number(payload.usd_rate || 0));
       setSalesSummary(payload.sales && typeof payload.sales === 'object' ? payload.sales : null);
       setAssetsSummary(payload.assets && typeof payload.assets === 'object' ? payload.assets : null);
       const next = {};
@@ -308,6 +315,58 @@ export default function DirectorDashboard() {
     if (monthLabels.length > 0) return monthLabels.map(l => ({ label: l }));
     return monthRange(6);
   }, [monthLabels]);
+
+  // ── Currency view ──
+  // Everything below reads perCompany / salesSummary / assetsSummary; these
+  // are the raw UZS figures divided by the USD rate when the toggle says
+  // USD. Converting at the data layer once means every tile, chart and card
+  // follows the toggle without each of the ~50 call sites knowing about it.
+  // Counts (orders, employees, contracts) are deliberately NOT in the money
+  // key lists.
+  const conv = useCallback(
+    (v) => (currency === 'USD' && usdRate > 0 ? Number(v || 0) / usdRate : Number(v || 0)),
+    [currency, usdRate],
+  );
+
+  const perCompany = useMemo(() => {
+    if (currency !== 'USD' || usdRate <= 0) return perCompanyRaw;
+    const moneyKeys = [
+      'revenue', 'expenses', 'profit', 'deb', 'cred', 'stockValue',
+      'salaryFund', 'payrollFund', 'payrollUnpaid', 'activeContractsValue',
+      'contractsOutstanding', 'purchasesPeriodTotal', 'purchaseAPTotal',
+      'crmPipelineValue', 'crmWonValueMonth',
+    ];
+    const out = {};
+    Object.entries(perCompanyRaw).forEach(([id, d]) => {
+      const v = { ...d };
+      moneyKeys.forEach(k => { v[k] = conv(d[k]); });
+      v.monthlyRev = (d.monthlyRev || []).map(conv);
+      v.expenseBreakdown = Object.fromEntries(
+        Object.entries(d.expenseBreakdown || {}).map(([k, val]) => [k, conv(val)]),
+      );
+      out[id] = v;
+    });
+    return out;
+  }, [perCompanyRaw, currency, usdRate, conv]);
+
+  const salesSummary = useMemo(() => {
+    if (!salesSummaryRaw || currency !== 'USD' || usdRate <= 0) return salesSummaryRaw;
+    return {
+      ...salesSummaryRaw,
+      orders_sum: conv(salesSummaryRaw.orders_sum),
+      overdue_receivables: conv(salesSummaryRaw.overdue_receivables),
+    };
+  }, [salesSummaryRaw, currency, usdRate, conv]);
+
+  const assetsSummary = useMemo(() => {
+    if (!assetsSummaryRaw || currency !== 'USD' || usdRate <= 0) return assetsSummaryRaw;
+    return {
+      ...assetsSummaryRaw,
+      total_cost: conv(assetsSummaryRaw.total_cost),
+      total_book_value: conv(assetsSummaryRaw.total_book_value),
+      month_depreciation: conv(assetsSummaryRaw.month_depreciation),
+    };
+  }, [assetsSummaryRaw, currency, usdRate, conv]);
 
   // Aggregates
   const agg = useMemo(() => {
@@ -472,7 +531,19 @@ export default function DirectorDashboard() {
               { id: 'USD', label: 'USD' },
             ]}
             value={currency}
-            onChange={setCurrency}
+            onChange={(v) => {
+              // Without a configured rate, switching would change nothing —
+              // say why instead of silently ignoring the click.
+              if (v === 'USD' && usdRate <= 0) {
+                toast.error(t(
+                  "USD kursi kiritilmagan — Moliya → Valyutalar bo'limida kurs kiriting",
+                  'Курс USD не задан — добавьте курс в Финансы → Валюты',
+                  'No USD rate configured — add one under Finance → Currencies',
+                ));
+                return;
+              }
+              setCurrency(v);
+            }}
           />
           <Segmented
             label={t("Bo'lim", 'Раздел', 'Section')}

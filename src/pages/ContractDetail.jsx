@@ -67,6 +67,7 @@ export default function ContractDetail() {
 
   // Dialogs
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [confirmComplete, setConfirmComplete] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [summaryDialog, setSummaryDialog] = useState(null); // {fileName, summary, loading}
@@ -138,6 +139,13 @@ export default function ContractDetail() {
       setConfirmCancel(true);
       return;
     }
+    // Completing is nearly one-way (only reopen-to-active leads back), and the
+    // manual test report flagged that it applied with no warning — confirm it
+    // the same way cancelling is confirmed.
+    if (target === 'completed') {
+      setConfirmComplete(true);
+      return;
+    }
     try {
       const updated = await contractsService.changeStatus(contractId, target);
       setContract(updated);
@@ -145,6 +153,18 @@ export default function ContractDetail() {
     } catch (e) {
       console.error(e);
       toast.error(e?.response?.data?.error?.message || t('status_update_failed'));
+    }
+  };
+
+  const confirmCompleteContract = async () => {
+    try {
+      const updated = await contractsService.changeStatus(contractId, 'completed');
+      setContract(updated);
+      toast.success(t('status_updated'));
+    } catch {
+      toast.error(t('status_update_failed'));
+    } finally {
+      setConfirmComplete(false);
     }
   };
 
@@ -1095,6 +1115,20 @@ export default function ContractDetail() {
         </Dialog>
 
         {/* Confirm cancel */}
+        {/* Confirm complete — completing is nearly one-way, so ask first */}
+        <Dialog open={confirmComplete} onOpenChange={setConfirmComplete}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader><DialogTitle>{t('complete_contract_title')}</DialogTitle></DialogHeader>
+            <p className="text-sm text-slate-600">{t('complete_contract_confirm')}</p>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setConfirmComplete(false)}>{t('cancel')}</Button>
+              <Button className="bg-sky-600 hover:bg-sky-700 text-white" onClick={confirmCompleteContract}>
+                {t('cstatus_completed')}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         <Dialog open={confirmCancel} onOpenChange={setConfirmCancel}>
           <DialogContent className="max-w-sm">
             <DialogHeader><DialogTitle>{t('cancel_contract_title')}</DialogTitle></DialogHeader>
