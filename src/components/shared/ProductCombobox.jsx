@@ -31,9 +31,30 @@ export default function ProductCombobox({ products: initialProducts = [], value,
   const [lastSelected, setLastSelected] = useState(null);
   const debounceRef = useRef(null);
 
+  // First page fetched on open when the parent supplied no products.
+  //
+  // Parents pass `products` when they already hold a list; the sales-order
+  // form passes nothing, and this combobox then showed an EMPTY dropdown
+  // until two characters were typed — a picker that looks broken, because
+  // nothing tells the user the list is search-only. Now opening it loads the
+  // first page once, and typing still narrows server-side as before.
+  const [initialFetch, setInitialFetch] = useState([]);
+  const fetchedRef = useRef(false);
+  useEffect(() => {
+    if (!open || initialProducts.length > 0 || fetchedRef.current) return;
+    fetchedRef.current = true;
+    setIsSearching(true);
+    apiClient.get('/products', { params: { limit: 50 } })
+      .then((res) => setInitialFetch(res.data?.data || []))
+      .catch(() => {})
+      .finally(() => setIsSearching(false));
+  }, [open, initialProducts.length]);
+
   // Use initial products when no search, search results when searching
-  const displayProducts = search.length >= 2 ? searchResults : initialProducts;
-  const selectedProduct = [...initialProducts, ...searchResults, ...(lastSelected ? [lastSelected] : [])].find((p) => p.id === value);
+  const displayProducts = search.length >= 2
+    ? searchResults
+    : (initialProducts.length > 0 ? initialProducts : initialFetch);
+  const selectedProduct = [...initialProducts, ...initialFetch, ...searchResults, ...(lastSelected ? [lastSelected] : [])].find((p) => p.id === value);
 
   // Clear lastSelected when value is externally cleared
   useEffect(() => {

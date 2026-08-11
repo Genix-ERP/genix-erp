@@ -21,9 +21,29 @@ export default function CustomerCombobox({ customers: initialCustomers = [], val
   const [lastSelected, setLastSelected] = useState(null);
   const debounceRef = useRef(null);
 
+  // Same first-page-on-open behaviour as ProductCombobox, for the same
+  // reason: a parent that passes no customers produced a dropdown that sat
+  // empty until two characters were typed.
+  const [initialFetch, setInitialFetch] = useState([]);
+  const fetchedRef = useRef(false);
+  useEffect(() => {
+    if (!open || initialCustomers.length > 0 || fetchedRef.current) return;
+    fetchedRef.current = true;
+    setIsSearching(true);
+    apiClient.get('/contacts', { params: { limit: 50, type: 'customer' } })
+      .then((res) => {
+        const data = res.data?.data || res.data || [];
+        setInitialFetch(Array.isArray(data) ? data : data.items || []);
+      })
+      .catch(() => {})
+      .finally(() => setIsSearching(false));
+  }, [open, initialCustomers.length]);
+
   // Use initial customers when no search, search results when searching
-  const displayCustomers = search.length >= 2 ? searchResults : initialCustomers;
-  const selectedCustomer = [...initialCustomers, ...searchResults, ...(lastSelected ? [lastSelected] : [])].find((c) => c.id === value);
+  const displayCustomers = search.length >= 2
+    ? searchResults
+    : (initialCustomers.length > 0 ? initialCustomers : initialFetch);
+  const selectedCustomer = [...initialCustomers, ...initialFetch, ...searchResults, ...(lastSelected ? [lastSelected] : [])].find((c) => c.id === value);
 
   useEffect(() => {
     if (!value) setLastSelected(null);
