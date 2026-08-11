@@ -210,10 +210,46 @@ export default function Warehouses({ hideSubTabs = false }) {
     });
   };
 
+  // The server's `address` is a structured object — {street1, street2, city,
+  // state, postal_code, country} (entity.Address) — while this form keeps one
+  // street line plus separate city/state/country fields.
+  //
+  // The edit dialog used to drop the object straight into the street input,
+  // which rendered as the literal string "[object Object]", and it read
+  // city/state/country from the warehouse's top level, where the API has
+  // never put them — so those three boxes always opened empty, even for a
+  // warehouse with a full saved address. Saving then sent address as a plain
+  // string, which the server rejects outright ({json:"address"} binds to a
+  // struct), meaning the address could never be edited from this screen at
+  // all.
+  const addressToForm = (address) => {
+    const a = (address && typeof address === 'object') ? address : {};
+    return {
+      // A legacy string address (pre-structured data) still shows rather
+      // than disappearing.
+      address: typeof address === 'string' ? address : [a.street1, a.street2].filter(Boolean).join(', '),
+      city: a.city || '',
+      state: a.state || '',
+      country: a.country || '',
+    };
+  };
+
+  const formToPayload = (data) => {
+    const { address, city, state, country, ...rest } = data;
+    const hasAddress = address || city || state || country;
+    return {
+      ...rest,
+      // Omitted entirely when every field is blank: the input's address is
+      // *Address with omitempty, and an empty object would overwrite a saved
+      // address with nothing on an unrelated edit.
+      ...(hasAddress ? { address: { street1: address || '', city: city || '', state: state || '', country: country || '' } } : {}),
+    };
+  };
+
   const handleCreate = async () => {
     setIsSaving(true);
     try {
-      await createWarehouse(formData);
+      await createWarehouse(formToPayload(formData));
       resetForm();
       setShowCreateModal(false);
     } catch (error) {
@@ -230,10 +266,7 @@ export default function Warehouses({ hideSubTabs = false }) {
     setFormData({
       code: warehouse.code || '',
       name: warehouse.name || '',
-      address: warehouse.address || '',
-      city: warehouse.city || '',
-      state: warehouse.state || '',
-      country: warehouse.country || '',
+      ...addressToForm(warehouse.address),
       warehouse_type: warehouse.warehouse_type || 'regular',
       reception_steps: warehouse.reception_steps || 1,
       delivery_steps: warehouse.delivery_steps || 1,
@@ -245,7 +278,7 @@ export default function Warehouses({ hideSubTabs = false }) {
   const handleUpdate = async () => {
     setIsSaving(true);
     try {
-      await updateWarehouse(selectedWarehouse.id, formData);
+      await updateWarehouse(selectedWarehouse.id, formToPayload(formData));
       resetForm();
       setSelectedWarehouse(null);
       setShowEditModal(false);
