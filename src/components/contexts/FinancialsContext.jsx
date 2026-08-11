@@ -191,7 +191,9 @@ export function FinancialsProvider({ children }) {
   const [cashOrders, setCashOrders] = useState([]);
   // Ledger-derived cash position from GET /cash/balance — THE single cash
   // engine: { total, as_of, accounts: [{account_id, code, name, balance, kind}] }
-  const [cashPosition, setCashPosition] = useState({ total: 0, as_of: null, accounts: [] });
+  const [cashPosition, setCashPosition] = useState({
+    total: 0, cash_total: 0, bank_total: 0, currency_total: 0, as_of: null, accounts: [],
+  });
   const [reconciliationActs, setReconciliationActs] = useState([]);
   const [exchangeDiffs, setExchangeDiffs] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -805,21 +807,34 @@ export function FinancialsProvider({ children }) {
     }
   }, []);
 
-  // Kassa balansi — ledger truth from GET /cash/balance (kind='cash' accounts,
-  // e.g. 5010). NEVER a client-side reduce over shadow tables. The full
-  // position (total incl. bank + per-account rows) is exposed as cashPosition.
-  const getCashBalance = useCallback(() => {
-    return (cashPosition.accounts || [])
-      .filter(a => a.kind === 'cash')
-      .reduce((sum, a) => sum + (a.balance || 0), 0);
-  }, [cashPosition]);
+  // Kassa balansi — the server's own cash_total, not a reduce over accounts[].
+  //
+  // GET /cash/balance already returns cash_total (5010 leaves), bank_total and
+  // currency_total. Summing kind === 'cash' here meant the rule for "what
+  // counts as kassa" lived in two places, and the browser's copy kept whatever
+  // the backend used to mean: while the server tagged every 50xx account
+  // 'cash', this card showed kassa + bank + valyuta added together — the same
+  // money the Bank hisobvaraqlari tab shows, counted twice, one tab apart.
+  //
+  // Reading the field means the card follows the server's classification
+  // without a frontend release.
+  const getCashBalance = useCallback(() => cashPosition?.cash_total ?? 0, [cashPosition]);
 
   const refreshCashPosition = useCallback(async (params = {}) => {
     if (!backendAvailable) return null;
     try {
       const data = await financeService.getCashBalance(params);
       if (data && typeof data === 'object') {
-        setCashPosition({ total: data.total || 0, as_of: data.as_of || null, accounts: data.accounts || [] });
+        // The subtotals were dropped here, which is why the card had to
+        // recompute one: cash_total arrived and was thrown away.
+        setCashPosition({
+          total: data.total || 0,
+          cash_total: data.cash_total || 0,
+          bank_total: data.bank_total || 0,
+          currency_total: data.currency_total || 0,
+          as_of: data.as_of || null,
+          accounts: data.accounts || [],
+        });
       }
       return data;
     } catch (err) {

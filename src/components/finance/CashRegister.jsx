@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { financeService } from '@/api/services/finance';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -114,6 +115,29 @@ export default function CashRegister() {
 
   useEffect(() => { fetchCashBook(); }, [fetchCashBook]);
 
+  // Order counts come from meta.total, not from the array in the browser.
+  //
+  // totalOrders used to be allOrders.length — a count of what had been loaded,
+  // presented as a count of what exists. The mobile app already asks the
+  // server (page_size=1 + meta.total), so the same screen reported two
+  // different numbers depending on which app you opened.
+  const [orderCounts, setOrderCounts] = useState({ total: null, confirmed: null });
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [total, confirmed] = await Promise.all([
+          financeService.countCashOrders(),
+          financeService.countCashOrders({ status: 'confirmed' }),
+        ]);
+        if (!cancelled) setOrderCounts({ total, confirmed });
+      } catch (err) {
+        console.error('Failed to count cash orders:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [cashOrders.length]);
+
   const cashBookDays = cashBook?.days || [];
   const todayBookRow = cashBookDays.find(d => (d.date || '').split('T')[0] === today);
 
@@ -136,8 +160,10 @@ export default function CashRegister() {
     currentBalance,
     todayIncome: todayBookRow?.income || 0,
     todayExpense: todayBookRow?.expense || 0,
-    totalOrders: allOrders.length,
-    confirmedOrders: allOrders.filter(o => o.status === 'confirmed').length,
+    // null until the server answers — a 0 here would read as "no orders"
+    // rather than "not counted yet".
+    totalOrders: orderCounts.total,
+    confirmedOrders: orderCounts.confirmed,
   };
 
   // Cash limit check (against the ledger balance)
@@ -454,8 +480,8 @@ export default function CashRegister() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-blue-600 font-medium">{t('cash_orders') || 'Cash Orders'}</p>
-                <p className="text-2xl font-bold text-blue-800">{summaryStats.totalOrders}</p>
-                <p className="text-xs text-blue-500">{summaryStats.confirmedOrders} {t('confirmed') || 'confirmed'}</p>
+                <p className="text-2xl font-bold text-blue-800">{summaryStats.totalOrders ?? '—'}</p>
+                <p className="text-xs text-blue-500">{summaryStats.confirmedOrders ?? '—'} {t('confirmed') || 'confirmed'}</p>
               </div>
               <div className="w-12 h-12 bg-blue-500/20 rounded-xl flex items-center justify-center">
                 <FileText className="w-6 h-6 text-blue-600" />
