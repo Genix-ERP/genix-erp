@@ -972,6 +972,16 @@ export const financeService = {
     return response.data.data;
   },
 
+  // How many orders exist, without downloading them. Paging on this endpoint
+  // is opt-in, so asking for page_size=1 returns one row plus a meta.total
+  // describing the whole filtered set — which is the number the card wants.
+  async countCashOrders(params = {}) {
+    const response = await apiClient.get('/cash/orders', {
+      params: { ...params, page: 1, page_size: 1 },
+    });
+    return response.data?.meta?.total ?? (response.data?.data?.length ?? 0);
+  },
+
   async getCashOrder(id) {
     const response = await apiClient.get(`/cash/orders/${id}`);
     return response.data.data;
