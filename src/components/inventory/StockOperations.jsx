@@ -1180,8 +1180,12 @@ export default function StockOperations() {
                           <SelectValue placeholder={t('select_reason') || 'Select reason'} />
                         </SelectTrigger>
                         <SelectContent>
-                          {WRITE_OFF_REASONS.map(r => (
-                            <SelectItem key={r} value={r}>{t(`writeoff_${r}`) || r}</SelectItem>
+                          {/* Was WRITE_OFF_REASONS — an identifier that does
+                              not exist anywhere, so opening this editor threw
+                              a ReferenceError and blanked the panel. Same
+                              source and shape as the create form at line ~864. */}
+                          {writeOffReasons.map(r => (
+                            <SelectItem key={r.value} value={r.value}>{t(`writeoff_${r.value}`) || r.label}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
