@@ -97,6 +97,8 @@ export default function Carriers() {
       setCarriers(prev => prev.map(c => (c.id === carrier.id ? updated : c)));
     } catch (error) {
       console.error('Failed to toggle carrier status:', error);
+    
+      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
     }
   };
 

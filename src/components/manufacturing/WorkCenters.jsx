@@ -202,7 +202,9 @@ export default function WorkCenters() {
       if (newIds.length > 0) {
         await apiClient.post(`/work-centers/${workCenterId}/employees`, { employee_ids: newIds, role: 'operator' }).catch(() => {});
       }
-    } catch (e) { console.error('Failed to save employee assignments:', e); }
+    } catch (e) { console.error('Failed to save employee assignments:', e); 
+        toast.error((e?.response?.data?.message) || (e?.response?.data?.error) || e?.message || 'Amalni bajarib bo\'lmadi');
+      }
   };
 
   const saveEquipmentAssignments = async (workCenterId, equipmentIds) => {

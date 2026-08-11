@@ -2,7 +2,7 @@
 export { default as authService } from './auth';
 export { default as activityService } from './activity';
 export { default as contactsService } from './contacts';
-export { default as inventoryService } from './inventory';
+export { default as inventoryService, fetchAllPages } from './inventory';
 export { default as financeService } from './finance';
 export { default as salesService } from './sales';
 export { default as procurementService } from './procurement';

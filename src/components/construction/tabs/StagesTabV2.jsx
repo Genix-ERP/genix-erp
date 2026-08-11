@@ -1012,6 +1012,8 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
             );
           } catch (e) {
             console.error('Failed to delete line', ln.id, e);
+          
+            toast.error((e?.response?.data?.message) || (e?.response?.data?.error) || e?.message || 'Amalni bajarib bo\'lmadi');
           }
         }
         const deletedIds = new Set();

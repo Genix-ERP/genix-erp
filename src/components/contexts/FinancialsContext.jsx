@@ -4,6 +4,7 @@ import { useCompany } from './CompanyContext';
 import { useEmployeePermissions } from './EmployeePermissionsContext';
 import { isDemoMode, checkBackendHealth, API_BASE_URL } from '@/config/dataMode';
 import { useAdminSettings } from './AdminSettingsContext';
+import { toast } from 'sonner';
 
 const JOURNAL_ENTRIES_KEY = 'genix_journal_entries';
 const JOURNAL_LINES_KEY = 'genix_journal_lines';
@@ -488,7 +489,9 @@ export function FinancialsProvider({ children }) {
         const newAccount = await financeService.createAccount(backendData);
         setAccounts(prev => [newAccount, ...prev]);
         return newAccount;
-      } catch (err) { console.error('API error, falling back to local:', err); }
+      } catch (err) { console.error('API error, falling back to local:', err); 
+        toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+      }
     }
     const newAccount = { id: `acc_${Date.now()}`, ...accountData, balance: 0, is_active: true, created_at: new Date().toISOString() };
     const updated = [newAccount, ...accounts];
@@ -505,7 +508,9 @@ export function FinancialsProvider({ children }) {
         const updated = await financeService.updateAccount(id, accountData);
         setAccounts(prev => prev.map(acc => acc.id === id ? updated : acc));
         return updated;
-      } catch (err) { console.error('API error:', err); }
+      } catch (err) { console.error('API error:', err); 
+        toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+      }
     }
     const updated = accounts.map(acc => acc.id === id ? { ...acc, ...accountData } : acc);
     localStorage.setItem(storageKey, JSON.stringify(updated));
@@ -520,7 +525,9 @@ export function FinancialsProvider({ children }) {
         await financeService.deleteAccount(id);
         setAccounts(prev => prev.filter(acc => acc.id !== id));
         return;
-      } catch (err) { console.error('API error:', err); }
+      } catch (err) { console.error('API error:', err); 
+        toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+      }
     }
     const updated = accounts.filter(acc => acc.id !== id);
     localStorage.setItem(storageKey, JSON.stringify(updated));
@@ -1103,6 +1110,8 @@ export function FinancialsProvider({ children }) {
         return updated;
       } catch (err) {
         console.error('API error updating vendor bill:', err);
+      
+        toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
       }
     }
 

@@ -231,7 +231,9 @@ export default function Contracts() {
         try { await contractsService.attachFile(created.id, aiFile.file_id); } catch (e) { console.error(e); }
       }
       if (pendingDealLink && created?.id) {
-        try { await contractsService.createLink(created.id, pendingDealLink.module, pendingDealLink.id); } catch (e) { console.error(e); }
+        try { await contractsService.createLink(created.id, pendingDealLink.module, pendingDealLink.id); } catch (e) { console.error(e); 
+        toast.error((e?.response?.data?.message) || (e?.response?.data?.error) || e?.message || 'Amalni bajarib bo\'lmadi');
+      }
         setPendingDealLink(null);
       }
       toast.success(t('contract_created'));

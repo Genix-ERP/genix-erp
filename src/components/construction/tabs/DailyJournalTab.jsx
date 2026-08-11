@@ -44,6 +44,7 @@ import { useTranslation } from '@/components/utils/translations';
 import Loader from '@/components/ui/loader';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { format } from 'date-fns';
+import { toast } from 'sonner';
 
 const DailyJournalTab = ({ project, buildings = [] }) => {
   const { language } = useLanguage();
@@ -140,6 +141,8 @@ const DailyJournalTab = ({ project, buildings = [] }) => {
       await loadLogs();
     } catch (error) {
       console.error('Error saving daily log:', error);
+    
+      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
     }
   };
 
@@ -155,6 +158,8 @@ const DailyJournalTab = ({ project, buildings = [] }) => {
           await loadLogs();
         } catch (error) {
           console.error('Error deleting daily log:', error);
+        
+          toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
         }
       },
     });

@@ -329,6 +329,8 @@ export default function BudgetManagement() {
       setView('list');
     } catch (e) {
       console.error('Error saving budget:', e);
+    
+      toast.error((e?.response?.data?.message) || (e?.response?.data?.error) || e?.message || 'Amalni bajarib bo\'lmadi');
     } finally {
       setIsSaving(false);
     }

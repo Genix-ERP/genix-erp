@@ -200,6 +200,8 @@ export default function StockCounting() {
       setActiveTab('count');
     } catch (err) {
       console.error('Error creating stock count:', err);
+    
+      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
     } finally {
       setIsSaving(false);
     }

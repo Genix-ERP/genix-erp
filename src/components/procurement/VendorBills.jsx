@@ -61,6 +61,7 @@ import { financeService } from '@/api/services/finance';
 import { useProcurement } from '@/components/contexts/ProcurementContext';
 import { useFinancials } from '@/components/contexts/FinancialsContext';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
+import { toast } from 'sonner';
 
 export default function VendorBills() {
   const { language } = useLanguage();
@@ -257,6 +258,8 @@ export default function VendorBills() {
       fetchBills();
     } catch (error) {
       console.error('Failed to create bill:', error);
+    
+      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
     }
   };
 
@@ -273,6 +276,8 @@ export default function VendorBills() {
       fetchBills();
     } catch (error) {
       console.error('Failed to update bill:', error);
+    
+      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
     }
   };
 
@@ -290,6 +295,8 @@ export default function VendorBills() {
         fetchBills();
       } catch (error) {
         console.error('Failed to delete bill:', error);
+      
+        toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
       }
     }
   };
@@ -300,6 +307,8 @@ export default function VendorBills() {
       fetchBills();
     } catch (error) {
       console.error('Failed to approve bill:', error);
+    
+      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
     }
   };
 
@@ -344,6 +353,8 @@ export default function VendorBills() {
       fetchBills();
     } catch (error) {
       console.error('Failed to reject bill:', error);
+    
+      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
     }
   };
 

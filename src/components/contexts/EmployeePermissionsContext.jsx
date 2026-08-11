@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { useAuth } from './AuthContext';
 import authService from '@/api/services/auth';
 import { hrService } from '@/api/services';
+import { toast } from 'sonner';
 
 const EmployeePermissionsContext = createContext(null);
 
@@ -274,6 +275,8 @@ export function EmployeePermissionsProvider({ children }) {
     } catch (err) {
       console.error('Failed to update employee permissions:', err);
       return false;
+    
+      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
     }
   }, [backendAvailable, employeeId, loadPermissions]);
 
@@ -306,6 +309,8 @@ export function EmployeePermissionsProvider({ children }) {
     } catch (err) {
       console.error('Failed to update module permission:', err);
       return false;
+    
+      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
     }
   }, [backendAvailable, employeeId, loadPermissions, getEmployeePermissions]);
 
@@ -331,6 +336,8 @@ export function EmployeePermissionsProvider({ children }) {
     } catch (err) {
       console.error('Failed to set module full access:', err);
       return false;
+    
+      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
     }
   }, [backendAvailable, employeeId, loadPermissions]);
 
@@ -344,6 +351,8 @@ export function EmployeePermissionsProvider({ children }) {
     } catch (err) {
       console.error('Failed to delete employee permissions:', err);
       return false;
+    
+      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
     }
   }, [backendAvailable]);
 

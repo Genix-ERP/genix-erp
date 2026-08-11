@@ -248,6 +248,8 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
             existingNames.add(key);
           } catch (e) {
             console.error('Failed to create stage:', name, e);
+          
+            toast.error((e?.response?.data?.message) || (e?.response?.data?.error) || e?.message || 'Amalni bajarib bo\'lmadi');
           }
         }
       }
@@ -568,6 +570,8 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
       await loadEstimates();
     } catch (error) {
       console.error('Error creating estimate:', error);
+    
+      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
     }
   };
 
@@ -584,6 +588,8 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
           await loadEstimates();
         } catch (error) {
           console.error('Error approving estimate:', error);
+        
+          toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
         }
       },
     });
@@ -616,6 +622,8 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
           await loadEstimates();
         } catch (error) {
           console.error('Error deleting estimate:', error);
+        
+          toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
         }
       },
     });
@@ -656,6 +664,8 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
       }
     } catch (error) {
       console.error('Error updating estimate:', error);
+    
+      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
     }
   };
 
@@ -708,6 +718,8 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
       setAddLines([{ product_id: '', quantity: '' }]);
     } catch (error) {
       console.error('Error saving line:', error);
+    
+      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
     }
   };
 
@@ -725,6 +737,8 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
           await loadEstimates();
         } catch (error) {
           console.error('Error deleting line:', error);
+        
+          toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
         }
       },
     });

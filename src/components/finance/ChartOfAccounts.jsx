@@ -18,6 +18,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import financeService from "@/api/services/finance";
 import GeneralLedgerView from "./GeneralLedgerView";
 import JournalManagement from "./JournalManagement";
+import { toast } from 'sonner';
 
 const getAccountTypes = (t) => [
   { value: 'asset', label: t('asset') || 'Aktiv', icon: DollarSign, color: 'bg-blue-100 text-blue-800' },
@@ -251,6 +252,8 @@ export default function ChartOfAccounts() {
       resetForm();
     } catch (error) {
       console.error('Error creating account:', error);
+    
+      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
     } finally {
       setIsSaving(false);
     }
@@ -277,6 +280,8 @@ export default function ChartOfAccounts() {
       resetForm();
     } catch (error) {
       console.error('Error updating account:', error);
+    
+      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
     } finally {
       setIsSaving(false);
     }
@@ -295,6 +300,8 @@ export default function ChartOfAccounts() {
         setAccountToDelete(null);
       } catch (error) {
         console.error('Error deleting account:', error);
+      
+        toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
       }
     }
   };

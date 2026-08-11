@@ -122,6 +122,8 @@ export default function BankReconciliation() {
       setShowCreateAccountModal(false);
     } catch (err) {
       console.error('Error creating bank account:', err);
+    
+      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
     } finally {
       setIsSaving(false);
     }
@@ -141,6 +143,8 @@ export default function BankReconciliation() {
       setEditAccount(null);
     } catch (err) {
       console.error('Error updating bank account:', err);
+    
+      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
     } finally {
       setIsSaving(false);
     }
@@ -164,6 +168,8 @@ export default function BankReconciliation() {
       setShowCreateTransactionModal(false);
     } catch (err) {
       console.error('Error creating transaction:', err);
+    
+      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
     } finally {
       setIsSaving(false);
     }
@@ -175,6 +181,8 @@ export default function BankReconciliation() {
       await reconcileBankTransaction(selectedBankAccount.id, transactionId);
     } catch (err) {
       console.error('Error reconciling transaction:', err);
+    
+      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
     }
   };
 
@@ -1096,6 +1104,8 @@ export default function BankReconciliation() {
                   }
                 } catch (err) {
                   console.error('Failed to delete bank account:', err);
+                
+                  toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
                 }
                 setDeleteAccountId(null);
               }}

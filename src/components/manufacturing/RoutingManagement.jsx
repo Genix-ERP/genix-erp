@@ -43,6 +43,7 @@ import { useManufacturing } from '@/components/contexts/ManufacturingContext';
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { toast } from 'sonner';
 
 const EMPTY_OP_FORM = {
   name: '',
@@ -132,6 +133,8 @@ export default function RoutingManagement() {
       setOpForm(EMPTY_OP_FORM);
     } catch (error) {
       console.error('Failed to add operation:', error);
+    
+      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
     } finally {
       setIsSubmitting(false);
     }
@@ -154,6 +157,8 @@ export default function RoutingManagement() {
       setOpForm(EMPTY_OP_FORM);
     } catch (error) {
       console.error('Failed to update operation:', error);
+    
+      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
     } finally {
       setIsSubmitting(false);
     }
@@ -166,6 +171,8 @@ export default function RoutingManagement() {
       await reloadData();
     } catch (error) {
       console.error('Failed to delete operation:', error);
+    
+      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
     } finally {
       setShowDeleteDialog(false);
       setSelectedOp(null);

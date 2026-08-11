@@ -1128,6 +1128,8 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
       setShowBuildingImportModal(false);
     } catch (error) {
       console.error('Error importing buildings:', error);
+    
+      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
     }
   };
 
@@ -1767,6 +1769,8 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
       setProjectMaterials(projMatsData || []);
     } catch (error) {
       console.error('Error approving material request:', error);
+    
+      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
     }
   };
 

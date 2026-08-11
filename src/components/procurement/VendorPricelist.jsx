@@ -237,6 +237,8 @@ export default function VendorPricelist() {
       ));
     } catch (error) {
       console.error('Failed to toggle status:', error);
+    
+      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
     }
   };
 

@@ -130,6 +130,8 @@ export default function PermissionsManagement() {
       await loadPermissions();
     } catch (error) {
       console.error('Error updating permission:', error);
+    
+      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
     }
   };
 

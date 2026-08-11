@@ -449,6 +449,8 @@ export default function StockOperations() {
       setEditingLines(false);
     } catch (e) {
       console.error('Failed to save line edits', e);
+    
+      toast.error((e?.response?.data?.message) || (e?.response?.data?.error) || e?.message || 'Amalni bajarib bo\'lmadi');
     } finally {
       setLinesSaving(false);
     }
@@ -464,6 +466,8 @@ export default function StockOperations() {
       await refreshDetail();
     } catch (e) {
       console.error('Failed to save done qty', e);
+    
+      toast.error((e?.response?.data?.message) || (e?.response?.data?.error) || e?.message || 'Amalni bajarib bo\'lmadi');
     }
   };
 
@@ -474,6 +478,8 @@ export default function StockOperations() {
       await refreshDetail();
     } catch (e) {
       console.error('Failed to delete line', e);
+    
+      toast.error((e?.response?.data?.message) || (e?.response?.data?.error) || e?.message || 'Amalni bajarib bo\'lmadi');
     }
   };
 
@@ -522,6 +528,8 @@ export default function StockOperations() {
       setEditingHeader(false);
     } catch (e) {
       console.error('Failed to update operation', e);
+    
+      toast.error((e?.response?.data?.message) || (e?.response?.data?.error) || e?.message || 'Amalni bajarib bo\'lmadi');
     } finally {
       setIsActionLoading(false);
     }
@@ -544,6 +552,8 @@ export default function StockOperations() {
       setView('detail');
     } catch (e) {
       console.error('Failed to create operation', e);
+    
+      toast.error((e?.response?.data?.message) || (e?.response?.data?.error) || e?.message || 'Amalni bajarib bo\'lmadi');
     } finally {
       setIsActionLoading(false);
     }

@@ -23,6 +23,7 @@ import { useTranslation } from "@/components/utils/translations";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useCustomers } from "@/components/contexts/CustomersContext";
 import { useCompany } from "@/components/contexts/CompanyContext";
+import { toast } from 'sonner';
 
 export default function PhoneWidget({ isOpen, onClose }) {
   const { language } = useLanguage();
@@ -159,6 +160,8 @@ export default function PhoneWidget({ isOpen, onClose }) {
         await loadRecentCalls();
       } catch (error) {
         console.error('Failed to end call:', error);
+      
+        toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
       }
     }
     setActiveCall(null);
