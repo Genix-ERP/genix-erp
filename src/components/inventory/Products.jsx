@@ -40,7 +40,7 @@ import Packages from "./Packages";
 import PackageTypes from "./PackageTypes";
 import UnitsOfMeasure from "./UnitsOfMeasure";
 import MaterialReservations from "./MaterialReservations";
-import { inventoryService } from '@/api/services/inventory';
+import { inventoryService, fetchAllPages } from '@/api/services/inventory';
 import apiClient from '@/api/client';
 
 const API_ORIGIN = (import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1').replace(/\/api\/v1\/?$/, '');
@@ -1209,6 +1209,8 @@ export default function Products() {
       setShowCreateAttribute(false);
     } catch (err) {
       console.error('Failed to create attribute:', err);
+    
+      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
     } finally {
       setIsCreatingAttr(false);
     }
@@ -1228,6 +1230,8 @@ export default function Products() {
       setShowAddValue(false);
     } catch (err) {
       console.error('Failed to add value:', err);
+    
+      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
     } finally {
       setIsAddingValue(false);
     }
@@ -1246,14 +1250,19 @@ export default function Products() {
   const handleOpenExport = useCallback(async () => {
     setIsPreparingExport(true);
     try {
-      const params = { page: 1, limit: 10000 };
+      // Paged to the end. `limit: 10000` looked like "everything" but the
+      // server clamps products at 5000, so an export from a larger catalogue
+      // quietly stopped there — a spreadsheet that looks complete and is not.
+      const params = {};
       if (searchQuery) params.search = searchQuery;
       if (categoryFilter !== "all") params.category_id = categoryFilter;
       if (inventoryTypeFilter !== "all") params.inventory_type = inventoryTypeFilter;
       if (warehouseFilter !== "all") params.warehouse_id = warehouseFilter;
       if (statusFilter === "inactive") params.include_inactive = "true";
-      const result = await inventoryService.listProductsPaginated(params);
-      let items = result?.data || [];
+      let items = await fetchAllPages(
+        (pp) => inventoryService.listProductsPaginated({ ...params, ...pp }),
+        { label: 'products-export' },
+      );
       // Same client-side filters as fetchProducts so the export
       // matches what the user sees on screen. Warehouse filter is now
       // server-side; only the inactive filter still needs client filtering
@@ -1529,6 +1538,8 @@ export default function Products() {
           });
         } catch (variantErr) {
           console.error('Error setting up variants:', variantErr);
+        
+          toast.error((variantErr?.response?.data?.message) || (variantErr?.response?.data?.error) || variantErr?.message || 'Amalni bajarib bo\'lmadi');
         }
       }
 
@@ -1537,6 +1548,8 @@ export default function Products() {
       fetchProducts();
     } catch (error) {
       console.error('Error creating product:', error);
+    
+      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
     } finally {
       setIsSaving(false);
     }
@@ -1751,6 +1764,8 @@ export default function Products() {
       fetchProducts();
     } catch (error) {
       console.error('Error deleting product:', error);
+    
+      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
     }
   };
 
@@ -2583,6 +2598,8 @@ export default function Products() {
                           if (url) setFormData({...formData, image_url: url});
                         } catch (err) {
                           console.error('Image upload failed:', err);
+                        
+                          toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
                         }
                       }}
                     />

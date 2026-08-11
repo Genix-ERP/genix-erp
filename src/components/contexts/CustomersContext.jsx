@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { contactsService, leadsService, opportunitiesService, activitiesService, tasksService, leadConversionService, pipelineStagesService } from '@/api/services';
 import { useCompany } from './CompanyContext';
 import { isDemoMode, checkBackendHealth } from '@/config/dataMode';
+import { toast } from 'sonner';
 
 const STORAGE_KEY = 'genix_customers';
 const PARTNERS_STORAGE_KEY = 'genix_partners';
@@ -408,6 +409,8 @@ export function CustomersProvider({ children }) {
         await contactsService.update(id, backendData);
       } catch (err) {
         console.error('API error:', err);
+      
+        toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
       }
     }
 
@@ -425,6 +428,8 @@ export function CustomersProvider({ children }) {
         await contactsService.delete(id);
       } catch (err) {
         console.error('API error:', err);
+      
+        toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
       }
     }
 
@@ -492,6 +497,8 @@ export function CustomersProvider({ children }) {
       const updated = leads.filter(l => l.id !== id);
       localStorage.setItem(storageKey, JSON.stringify(updated));
       setLeads(updated);
+    
+      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
     }
   }, [leads, activeCompany]);
 
@@ -547,6 +554,8 @@ export function CustomersProvider({ children }) {
       const updated = opportunities.filter(o => o.id !== id);
       localStorage.setItem(storageKey, JSON.stringify(updated));
       setOpportunities(updated);
+    
+      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
     }
   }, [opportunities, activeCompany]);
 
@@ -602,6 +611,8 @@ export function CustomersProvider({ children }) {
       const updated = activities.filter(a => a.id !== id);
       localStorage.setItem(storageKey, JSON.stringify(updated));
       setActivities(updated);
+    
+      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
     }
   }, [activities, activeCompany]);
 
@@ -663,6 +674,8 @@ export function CustomersProvider({ children }) {
       const updated = tasks.filter(t => t.id !== id);
       localStorage.setItem(storageKey, JSON.stringify(updated));
       setTasks(updated);
+    
+      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
     }
   }, [tasks, activeCompany]);
 

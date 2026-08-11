@@ -3,6 +3,7 @@ import { hrService } from '@/api/services/hr';
 import { useAdminSettings } from './AdminSettingsContext';
 import { useEmployeePermissions } from './EmployeePermissionsContext';
 import { isDemoMode, checkBackendHealth } from '@/config/dataMode';
+import { toast } from 'sonner';
 
 const HRContext = createContext(null);
 
@@ -207,6 +208,8 @@ export function HRProvider({ children }) {
         return newEmployee;
       } catch (err) {
         console.error('Backend error, saving locally:', err);
+      
+        toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
       }
     }
 
@@ -239,6 +242,8 @@ export function HRProvider({ children }) {
         return updated;
       } catch (err) {
         console.error('Backend error, updating locally:', err);
+      
+        toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
       }
     }
 
@@ -264,6 +269,8 @@ export function HRProvider({ children }) {
         await hrService.deleteEmployee(id);
       } catch (err) {
         console.error('Backend error, deleting locally:', err);
+      
+        toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
       }
     }
 
@@ -291,6 +298,8 @@ export function HRProvider({ children }) {
         return newPeriod;
       } catch (err) {
         console.error('Backend error, saving locally:', err);
+      
+        toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
       }
     }
 
@@ -321,6 +330,8 @@ export function HRProvider({ children }) {
         return updated;
       } catch (err) {
         console.error('Backend error, updating locally:', err);
+      
+        toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
       }
     }
 
@@ -346,6 +357,8 @@ export function HRProvider({ children }) {
         await hrService.deletePayrollPeriod(id);
       } catch (err) {
         console.error('Backend error, deleting locally:', err);
+      
+        toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
       }
     }
 

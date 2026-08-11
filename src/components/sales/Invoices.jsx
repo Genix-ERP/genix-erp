@@ -938,6 +938,8 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
       refreshData?.();
     } catch (error) {
       console.error("Failed to create credit note:", error);
+    
+      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
     } finally {
       setIsSaving(false);
     }
@@ -950,6 +952,8 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
       refreshData?.();
     } catch (error) {
       console.error("Failed to confirm credit note:", error);
+    
+      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
     }
   };
 

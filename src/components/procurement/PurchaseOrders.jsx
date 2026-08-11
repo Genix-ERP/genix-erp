@@ -729,6 +729,8 @@ export default function PurchaseOrders({ initialSubtab = 'orders' }) {
       setUnmatchedProducts([]);
     } catch (error) {
       console.error('Error creating PO:', error);
+    
+      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
     } finally {
       setIsSubmitting(false);
     }

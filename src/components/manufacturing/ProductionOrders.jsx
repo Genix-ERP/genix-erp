@@ -293,6 +293,8 @@ export default function ProductionOrders() {
       fetchOrders();
     } catch (error) {
       console.error('Error updating order status:', error);
+    
+      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
     }
   };
 
@@ -504,6 +506,8 @@ export default function ProductionOrders() {
       } catch (error) {
         console.error('Error moving to packaging:', error);
         // Even if the status update fails, still try to show the modal
+      
+        toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
       }
     }
     setSplitPoId(orderId);

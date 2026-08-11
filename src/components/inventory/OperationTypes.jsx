@@ -31,6 +31,7 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { inventoryService, financeService } from '@/api/services';
 import { usePermissions } from "@/hooks/usePermissions";
+import { toast } from 'sonner';
 
 // Icon mapping for operation types (by type field: receipt, delivery, internal, pos)
 const getOperationIcon = (type) => {
@@ -322,6 +323,8 @@ export default function OperationTypes() {
       resetForm();
     } catch (err) {
       console.error('Error creating operation type:', err);
+    
+      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
     } finally {
       setIsSaving(false);
     }
@@ -351,6 +354,8 @@ export default function OperationTypes() {
       setSelectedType(null);
     } catch (err) {
       console.error('Error updating operation type:', err);
+    
+      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
     } finally {
       setIsSaving(false);
     }
@@ -362,6 +367,8 @@ export default function OperationTypes() {
       setOperationTypes(prev => prev.filter(ot => ot.id !== typeId));
     } catch (err) {
       console.error('Error deleting operation type:', err);
+    
+      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
     }
   };
 
@@ -419,6 +426,8 @@ export default function OperationTypes() {
       await inventoryService.saveOperationTypeSteps(selectedType.id, payload);
     } catch (err) {
       console.error('Error saving steps:', err);
+    
+      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
     } finally {
       setStepsSaving(false);
     }

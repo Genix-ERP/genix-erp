@@ -393,6 +393,8 @@ export default function HR() {
             });
           } catch (orgErr) {
             console.error("Error assigning organization:", orgErr);
+          
+            toast.error((orgErr?.response?.data?.message) || (orgErr?.response?.data?.error) || orgErr?.message || 'Amalni bajarib bo\'lmadi');
           }
         }
       }
@@ -553,6 +555,8 @@ export default function HR() {
             });
           } catch (roleErr) {
             console.error("Error assigning role:", roleErr);
+          
+            toast.error((roleErr?.response?.data?.message) || (roleErr?.response?.data?.error) || roleErr?.message || 'Amalni bajarib bo\'lmadi');
           }
         }
       }

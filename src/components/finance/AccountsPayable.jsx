@@ -30,6 +30,7 @@ import CreateBillModal from './accounts-payable/CreateBillModal';
 import DebitNoteModal from './accounts-payable/DebitNoteModal';
 import BillDetailModal from './accounts-payable/BillDetailModal';
 import { buildBillPrintConfig } from './accounts-payable/billPrintConfig';
+import { toast } from 'sonner';
 import {
   getPaymentStatus, getPaymentStatusBadge, getStatusColor, isOverdue, residualOf,
 } from './accounts-payable/billHelpers';
@@ -219,6 +220,8 @@ export default function AccountsPayable() {
       // Shown in the dialog. This used to be a console.error only, so a
       // rejected create looked exactly like a button that did nothing.
       setCreateError(getApiErrorMessage(err, 'Failed to create vendor bill'));
+    
+      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
     } finally {
       setIsSaving(false);
     }
@@ -260,6 +263,8 @@ export default function AccountsPayable() {
       await fetchBills();
     } catch (error) {
       console.error('Failed to create debit note:', error);
+    
+      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
     } finally {
       setIsSaving(false);
     }
@@ -271,6 +276,8 @@ export default function AccountsPayable() {
       await fetchBills();
     } catch (error) {
       console.error('Failed to confirm debit note:', error);
+    
+      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
     }
   };
 

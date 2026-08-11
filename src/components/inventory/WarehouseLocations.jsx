@@ -147,6 +147,8 @@ export default function WarehouseLocations() {
       resetForm();
     } catch (err) {
       console.error('Error creating location:', err);
+    
+      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
     } finally {
       setIsSaving(false);
     }
@@ -175,6 +177,8 @@ export default function WarehouseLocations() {
       setSelectedLocation(null);
     } catch (err) {
       console.error('Error updating location:', err);
+    
+      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
     } finally {
       setIsSaving(false);
     }

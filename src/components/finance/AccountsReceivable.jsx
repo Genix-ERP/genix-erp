@@ -28,6 +28,7 @@ import { useAlertModal } from "@/hooks/useAlertModal";
 import { getApiErrorMessage } from '@/utils/apiError';
 import AlertModal from "@/components/shared/AlertModal";
 import salesService from '@/api/services/sales';
+import { toast } from 'sonner';
 
 // One colour per bucket, in the order the server returns them. The fifth entry
 // exists because the fifth bucket does: the browser version jumped from `<= 60`
@@ -293,6 +294,8 @@ export default function AccountsReceivable() {
     } catch (err) {
       console.error('Invoice creation error:', err.response?.data || err);
       showError(getApiErrorMessage(err, 'Failed to create invoice'), t('error') || 'Xato');
+    
+      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
     } finally {
       setIsSaving(false);
     }

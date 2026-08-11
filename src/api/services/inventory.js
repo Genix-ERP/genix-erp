@@ -1,5 +1,33 @@
 import apiClient from '../client';
 
+// Fetch every page of a list endpoint.
+//
+// Callers used to ask for `limit: 10000` and assume that meant "all". It does
+// not: the server clamps limit — products at 5000, inventory at 10000 — and
+// returns the clamped page with no indication that anything was cut. A tenant
+// past the cap silently lost rows, and because the products screen derives its
+// stock figures from the inventory array, the numbers it showed were simply
+// wrong with nothing to suggest it.
+//
+// Paging until a short page arrives cannot truncate, whatever the server's cap
+// happens to be. `hardCap` exists only to stop a runaway loop if a server ever
+// ignores paging entirely; reaching it is logged rather than passed off as a
+// complete result.
+export async function fetchAllPages(fetchPage, { pageSize = 500, hardCap = 100000, label = 'list' } = {}) {
+  const all = [];
+  for (let page = 1; ; page++) {
+    const batch = await fetchPage({ page, limit: pageSize, page_size: pageSize });
+    const rows = Array.isArray(batch) ? batch : (batch?.data ?? batch?.items ?? []);
+    all.push(...rows);
+    if (rows.length < pageSize) break;
+    if (all.length >= hardCap) {
+      console.warn(`fetchAllPages(${label}): stopped at ${all.length} rows — server appears to ignore paging`);
+      break;
+    }
+  }
+  return all;
+}
+
 export const inventoryService = {
   // Products
   async listProducts(params = {}) {

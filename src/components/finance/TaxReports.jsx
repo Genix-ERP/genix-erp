@@ -247,6 +247,8 @@ export default function TaxReports() {
       loadPeriods();
     } catch (error) {
       console.error('Failed to create period:', error);
+    
+      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
     } finally {
       setIsLoading(false);
     }
@@ -291,6 +293,8 @@ export default function TaxReports() {
       loadPeriods();
     } catch (error) {
       console.error('Failed to delete period:', error);
+    
+      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
     }
   };
 

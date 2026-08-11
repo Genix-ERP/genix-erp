@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { inventoryService } from '@/api/services';
+import { inventoryService, fetchAllPages } from '@/api/services';
 import { useCompany } from './CompanyContext';
 import { isDemoMode, checkBackendHealth } from '@/config/dataMode';
 import { useAdminSettings } from './AdminSettingsContext';
@@ -617,13 +617,16 @@ export function InventoryProvider({ children }) {
       if (isAvailable) {
         try {
           const [productsData, categoriesData, warehousesData, inventoryData, movementsData] = await Promise.all([
-            // Pass a high limit so dashboard summary stats (Active /
-            // Stockable / Low Stock) compute over the full product set
-            // instead of just the first page (server default = 20).
-            inventoryService.listProducts({ limit: 5000 }),
+            // Paged through to the end rather than asking for one huge
+            // page. `limit: 5000` was not "all products" — the server clamps
+            // products at 5000 and inventory at 10000 and says nothing when it
+            // does, so a larger tenant silently lost rows, and the stock
+            // figures derived from the inventory array were wrong with nothing
+            // to indicate it.
+            fetchAllPages((pp) => inventoryService.listProducts(pp), { label: 'products' }),
             inventoryService.listCategories(),
             inventoryService.listWarehouses(),
-            inventoryService.listInventory({ limit: 10000 }),
+            fetchAllPages((pp) => inventoryService.listInventory(pp), { label: 'inventory' }),
             inventoryService.listInventoryMovements({ limit: 1000 })
           ]);
 

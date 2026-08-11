@@ -56,6 +56,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { MODULES } from "@/config/permissions";
 import { inventoryService } from "@/api/services/inventory";
+import { toast } from 'sonner';
 
 export default function PriceHistory() {
   const { language } = useLanguage();
@@ -168,6 +169,8 @@ export default function PriceHistory() {
       resetForm();
     } catch (error) {
       console.error('Failed to add price record:', error);
+    
+      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
     }
   };
 

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { useCompany } from './CompanyContext';
 import { useInstalledApps } from './InstalledAppsContext';
 import { cargoService } from '@/api/services/cargo';
+import { toast } from 'sonner';
 
 const CargoContext = createContext();
 
@@ -273,6 +274,8 @@ export const CargoProvider = ({ children }) => {
       const updatedShipments = shipments.filter(s => s.id !== shipmentId);
       setShipments(updatedShipments);
       saveToStorage(STORAGE_KEYS.shipments, updatedShipments);
+    
+      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
     }
   }, [shipments, useBackend, saveToStorage, STORAGE_KEYS.shipments, loadShipments]);
 
