@@ -550,53 +550,58 @@ function LayoutContent({ children, currentPageName }) {
 
         <main className="flex-1 flex flex-col min-w-0" aria-label="Main content">
           <ImpersonationBanner />
-          <header className="bg-white/80 backdrop-blur-xl border-b border-slate-200/60 px-4 md:px-6 py-4 shadow-sm" role="banner">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <SidebarTrigger className="hover:bg-slate-100 p-2 rounded-lg transition-colors duration-200" />
-                <div className="hidden md:block">
-                  <h1 className="text-xl md:text-2xl font-bold text-[var(--genix-navy)]">
-                    {currentPageName === 'AIAssistant' ? t('ai_assistant') :
-                     currentPageName === 'DirectorDashboard' ? t('director_dashboard') :
-                     currentPageName === 'Customers' ? t('crm') /* sidebar says CRM — the header must match */ :
-                     currentPageName === 'LeaveManagement' ? t('leave_management') :
-                     currentPageName === 'Attendance' ? t('attendance') :
-                     currentPageName === 'EmployeeContracts' ? t('employee_contracts') :
-                     (t(currentPageName?.toLowerCase()) || t("dashboard"))}
-                  </h1>
-                </div>
-              </div>
-              <div className="flex items-center gap-1.5 md:gap-2">
-                <LanguageSelector />
-                <Link to={createPageUrl("AIAssistant")} className="hidden sm:inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors">
-                  <Sparkles className="w-3.5 h-3.5" />
-                  {t('ai_assistant')}
-                </Link>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setIsAIChatOpen(!isAIChatOpen)}
-                  className="relative hover:bg-gradient-to-r hover:from-blue-500 hover:to-purple-500 hover:text-white rounded-full transition-all duration-200"
-                  title={t('ai_assistant')}
-                >
-                  <Bot className="w-4 h-4 md:w-5 md:h-5" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setIsPhoneOpen(!isPhoneOpen)}
-                  className={`relative rounded-full transition-all duration-200 ${isPhoneOpen ? 'bg-emerald-500 text-white hover:bg-emerald-600' : 'hover:bg-emerald-50 hover:text-emerald-600'}`}
-                  title={t('phone') || 'Telefon'}
-                >
-                  <Phone className="w-4 h-4 md:w-5 md:h-5" />
-                </Button>
-                <NotificationBell />
-                {/* Company Switcher next to profile - Odoo style */}
-                <div className="hidden md:flex items-center gap-1.5 ml-1">
-                  <div className="w-px h-6 bg-slate-200"></div>
-                  <CompanySwitcher compact />
-                  <UserMenu compact />
-                </div>
+          <header className="bg-white/80 backdrop-blur-xl border-b border-slate-200/60 h-14 md:h-16 px-3 md:px-6 flex items-center justify-between gap-3" role="banner">
+            {/* Left: sidebar toggle + page title */}
+            <div className="flex items-center gap-2 md:gap-3 min-w-0">
+              <SidebarTrigger className="h-9 w-9 shrink-0 text-slate-500 hover:bg-slate-100 hover:text-slate-900 rounded-lg transition-colors" />
+              <div className="w-px h-5 bg-slate-200 shrink-0 hidden sm:block" />
+              <h1 className="text-base md:text-lg font-semibold tracking-tight text-[var(--genix-navy)] truncate">
+                {currentPageName === 'AIAssistant' ? t('ai_assistant') :
+                 currentPageName === 'DirectorDashboard' ? t('director_dashboard') :
+                 currentPageName === 'Customers' ? t('crm') /* sidebar says CRM — the header must match */ :
+                 currentPageName === 'LeaveManagement' ? t('leave_management') :
+                 currentPageName === 'Attendance' ? t('attendance') :
+                 currentPageName === 'EmployeeContracts' ? t('employee_contracts') :
+                 (t(currentPageName?.toLowerCase()) || t("dashboard"))}
+              </h1>
+            </div>
+
+            {/* Right: actions, grouped by dividers. One AI entry point —
+                the pill opens the quick chat; the full AI page stays in
+                the sidebar, so the old duplicate Bot icon is gone. */}
+            <div className="flex items-center gap-0.5 md:gap-1 shrink-0">
+              <Button
+                onClick={() => setIsAIChatOpen(!isAIChatOpen)}
+                title={t('ai_assistant')}
+                className="h-9 rounded-full px-3 md:px-3.5 gap-1.5 text-xs font-semibold text-white shadow-sm bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 transition-colors"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span className="hidden sm:inline">{t('ai_assistant')}</span>
+              </Button>
+
+              <div className="w-px h-5 bg-slate-200 mx-1 md:mx-1.5 hidden sm:block" />
+
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsPhoneOpen(!isPhoneOpen)}
+                className={`h-9 w-9 rounded-lg transition-colors ${
+                  isPhoneOpen
+                    ? 'bg-emerald-500 text-white hover:bg-emerald-600 hover:text-white'
+                    : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                }`}
+                title={t('phone') || 'Telefon'}
+              >
+                <Phone className="w-4 h-4" />
+              </Button>
+              <NotificationBell />
+              <LanguageSelector compact />
+
+              <div className="w-px h-5 bg-slate-200 mx-1 md:mx-1.5 hidden md:block" />
+
+              <div className="hidden md:flex items-center gap-0.5">
+                <CompanySwitcher compact />
+                <UserMenu compact />
               </div>
             </div>
           </header>

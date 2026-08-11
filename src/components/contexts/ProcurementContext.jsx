@@ -629,8 +629,6 @@ export function ProcurementProvider({ children }) {
           expected_date: poData.expected_delivery_date || poData.expected_date || '',
           payment_terms: poData.payment_terms || 'net_30',
           warehouse_id: poData.warehouse_id || undefined,
-          vehicle_number: poData.vehicle_number || undefined,
-          requires_shipping: poData.requires_shipping !== undefined ? poData.requires_shipping : true,
           construction_project_id: poData.construction_project_id ? Number(poData.construction_project_id) : undefined,
           subtotal: poData.subtotal || 0,
           tax_amount: poData.tax_amount || 0,
@@ -726,12 +724,6 @@ export function ProcurementProvider({ children }) {
         }
         if (updates.vendor_reference !== undefined) {
           backendUpdates.vendor_reference = updates.vendor_reference;
-        }
-        if (updates.vehicle_number !== undefined) {
-          backendUpdates.vehicle_number = updates.vehicle_number;
-        }
-        if (updates.requires_shipping !== undefined) {
-          backendUpdates.requires_shipping = updates.requires_shipping;
         }
         // Warehouse — accepts null/empty to clear back to NULL.
         // Was previously dropped here, so the edit modal's warehouse

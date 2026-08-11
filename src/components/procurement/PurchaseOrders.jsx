@@ -30,10 +30,8 @@ import {
   Plus,
   Search,
   ShoppingCart,
-  Truck,
   Edit,
   X,
-  Eye,
   MessageSquareWarning,
   RotateCcw,
   ClipboardList,
@@ -76,6 +74,23 @@ import BlanketOrders from './BlanketOrders';
 import LandedCosts from './LandedCosts';
 import GoodsReceipt from './GoodsReceipt';
 import PurchaseRequisitions from '@/components/procurement/PurchaseRequisitions';
+
+// Print-only helpers. The shared print engine (DocumentPrint.jsx) renders its
+// fixed labels in Uzbek, so these stay Uzbek too.
+const fmtPrintDate = (d) => {
+  if (!d) return '-';
+  const dt = new Date(d);
+  return isNaN(dt.getTime()) ? '-' : format(dt, 'dd.MM.yyyy');
+};
+
+// payment_terms arrives as days (int) from the API but as 'net_30'-style
+// strings from local form state — tolerate both.
+const paymentTermsPrintLabel = (pt) => {
+  if (pt === 0 || pt === '0' || pt === 'prepaid' || pt === 'due_on_receipt') return "Oldindan to'lov";
+  const days = typeof pt === 'number' ? pt : parseInt(String(pt ?? '').replace(/\D/g, ''), 10);
+  if (Number.isFinite(days) && days > 0) return `${days} kun`;
+  return pt ? String(pt) : '-';
+};
 
 export default function PurchaseOrders({ initialSubtab = 'orders' }) {
   const { language } = useLanguage();
@@ -249,8 +264,6 @@ export default function PurchaseOrders({ initialSubtab = 'orders' }) {
     tax_percent: 0,
     tax_rate_id: '',
     payment_terms: 'net_30',
-    vehicle_number: '',
-    requires_shipping: true,
     construction_project_id: '',
     lines: [{ product_id: '', product_name: '', quantity: 1, unit_price: 0, lead_time_days: 0 }]
   });
@@ -749,8 +762,6 @@ export default function PurchaseOrders({ initialSubtab = 'orders' }) {
         tax_percent: defaultTaxPercent,
         shipping_cost: 0,
         payment_terms: 'net_30',
-        vehicle_number: '',
-        requires_shipping: true,
         lines: [{ product_id: '', product_name: '', quantity: 1, unit_price: 0, lead_time_days: 0 }]
       });
       setIsDeliveryDateManual(false);
@@ -849,8 +860,6 @@ export default function PurchaseOrders({ initialSubtab = 'orders' }) {
       supplier_id: po.vendor_id || po.supplier_id || '',
       supplier_name: po.supplier_name || po.vendor_name,
       warehouse_id: po.warehouse_id || '',
-      vehicle_number: po.vehicle_number || '',
-      requires_shipping: po.requires_shipping !== false,
       tax_percent: po.tax_percent || 0,
       tax_rate_id: po.tax_rate_id || '',
       payment_terms: po.payment_terms || 'net_30',
@@ -909,8 +918,6 @@ export default function PurchaseOrders({ initialSubtab = 'orders' }) {
         supplier_id: fullOrder.vendor_id || fullOrder.supplier_id || prev.supplier_id,
         supplier_name: fullOrder.supplier_name || fullOrder.vendor_name || prev.supplier_name,
         warehouse_id: fullOrder.warehouse_id || prev.warehouse_id,
-        vehicle_number: fullOrder.vehicle_number || prev.vehicle_number,
-        requires_shipping: fullOrder.requires_shipping !== false,
         tax_percent: fullOrder.tax_percent || derivedTaxPercent || prev.tax_percent || 0,
         tax_rate_id: fullOrder.tax_rate_id || firstLineTaxID || prev.tax_rate_id || '',
         payment_terms: fullOrder.payment_terms || prev.payment_terms,
@@ -927,7 +934,7 @@ export default function PurchaseOrders({ initialSubtab = 'orders' }) {
         // whether the user actually changed anything. Without this,
         // every save sends the lines payload and the backend's
         // billed/received guards block edits even when the user only
-        // touched header fields like vehicle number.
+        // touched header fields like notes or payment terms.
         _originalLines: lines.length > 0 ? JSON.stringify(lines.map(l => ({
           id: l.id, product_id: l.product_id, quantity: l.quantity,
           unit_price: l.unit_price, packaging_id: l.packaging_id, packaging_qty: l.packaging_qty,
@@ -1028,8 +1035,6 @@ export default function PurchaseOrders({ initialSubtab = 'orders' }) {
       if (editPO.warehouse_id !== undefined) updates.warehouse_id = editPO.warehouse_id || null;
       if (editPO.expected_delivery_date) updates.expected_date = editPO.expected_delivery_date;
       if (editPO.payment_terms) updates.payment_terms = editPO.payment_terms;
-      if (editPO.vehicle_number !== undefined) updates.vehicle_number = editPO.vehicle_number || '';
-      if (editPO.requires_shipping !== undefined) updates.requires_shipping = !!editPO.requires_shipping;
       // Status is only sent if the user explicitly changed it, AND the
       // new status is one the generic PUT accepts. 'received' and
       // 'partial' must go through the dedicated /receive endpoint —
@@ -1055,7 +1060,7 @@ export default function PurchaseOrders({ initialSubtab = 'orders' }) {
       // changed compared to what was loaded. The diff check matters
       // because the backend rejects line replacement on POs that
       // have already been billed/received; if the user only edited
-      // the vehicle number we don't want to trip that guard.
+      // header fields we don't want to trip that guard.
       if (Array.isArray(editPO.lines) && editPO.lines.some(l => l.product_id)) {
         const headerTaxPercent = parseFloat(editPO.tax_percent) || 0;
         const currentLinesSnapshot = JSON.stringify(editPO.lines.map(l => ({
@@ -1267,7 +1272,7 @@ export default function PurchaseOrders({ initialSubtab = 'orders' }) {
                     </TableHeader>
                     <TableBody>
                       {filteredOrders.map((po) => (
-                        <TableRow key={po.id} className="hover:bg-slate-50">
+                        <TableRow key={po.id} className="hover:bg-slate-50 cursor-pointer" onClick={(e) => handleViewPO(po, e)}>
                           {colOn('po_number') && (
                             <TableCell className="font-mono text-sm">
                               <div className="flex items-center gap-2">
@@ -1305,11 +1310,8 @@ export default function PurchaseOrders({ initialSubtab = 'orders' }) {
                               <Badge className={getStatusColor(po.status)}>{t(po.status) || po.status}</Badge>
                             </TableCell>
                           )}
-                          <TableCell>
+                          <TableCell onClick={(e) => e.stopPropagation()}>
                             <div className="flex gap-1">
-                              <Button size="sm" variant="ghost" onClick={(e) => handleViewPO(po, e)} title={t('view_details') || 'View Details'}>
-                                <Eye className="w-4 h-4" />
-                              </Button>
                               {canUpdate(MODULES.PURCHASES) && (po.status === 'draft' || po.status === 'cancelled') && (
                                 <Button size="sm" variant="ghost" onClick={(e) => handleEditPO(po, e)} title={t('edit') || 'Edit'}>
                                   <Edit className="w-4 h-4" />
@@ -1429,8 +1431,6 @@ export default function PurchaseOrders({ initialSubtab = 'orders' }) {
             tax_percent: defaultTaxPercent || 0,
             shipping_cost: 0,
             payment_terms: 'net_30',
-            vehicle_number: '',
-            requires_shipping: true,
             lines: [{ product_id: '', product_name: '', quantity: 1, unit_price: 0, lead_time_days: 0 }]
           });
         }
@@ -1566,34 +1566,6 @@ export default function PurchaseOrders({ initialSubtab = 'orders' }) {
                     setIsDeliveryDateManual(true);
                   }}
                 />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium mb-1 block">{t('vehicle_number') || 'Vehicle Number'}</label>
-                <div className="relative">
-                  <Truck className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <Input
-                    value={newPO.vehicle_number || ''}
-                    onChange={(e) => setNewPO({...newPO, vehicle_number: e.target.value})}
-                    placeholder="01 A 123 AA"
-                    className="pl-10"
-                  />
-                </div>
-              </div>
-              <div className="flex items-end pb-1">
-                <div className="flex items-center gap-3">
-                  <Switch
-                    id="requires-shipping"
-                    checked={newPO.requires_shipping}
-                    onCheckedChange={(checked) => setNewPO({...newPO, requires_shipping: checked})}
-                  />
-                  <label htmlFor="requires-shipping" className="text-sm font-medium flex items-center gap-2 cursor-pointer">
-                    <Package className="w-4 h-4 text-slate-500" />
-                    {t('requires_shipping') || 'Requires Shipping'}
-                  </label>
-                </div>
               </div>
             </div>
 
@@ -1932,7 +1904,7 @@ export default function PurchaseOrders({ initialSubtab = 'orders' }) {
       </Dialog>
 
       {/* Edit PO Modal — full editor mirroring the create modal so
-          users can change supplier, warehouse, vehicle, dates, lines,
+          users can change supplier, warehouse, dates, lines,
           tax, payment terms, and status without recreating the order.
           Backend's UpdatePurchaseOrderInput supports all of these. */}
       <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
@@ -2040,35 +2012,6 @@ export default function PurchaseOrders({ initialSubtab = 'orders' }) {
                     value={editPO.expected_delivery_date?.split('T')[0] || ''}
                     onChange={(e) => setEditPO({...editPO, expected_delivery_date: e.target.value})}
                   />
-                </div>
-              </div>
-
-              {/* Vehicle + Shipping toggle */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium mb-1 block">{t('vehicle_number') || 'Vehicle Number'}</label>
-                  <div className="relative">
-                    <Truck className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <Input
-                      value={editPO.vehicle_number || ''}
-                      onChange={(e) => setEditPO({...editPO, vehicle_number: e.target.value})}
-                      placeholder="01 A 123 AA"
-                      className="pl-10"
-                    />
-                  </div>
-                </div>
-                <div className="flex items-end pb-1">
-                  <div className="flex items-center gap-3">
-                    <Switch
-                      id="edit-requires-shipping"
-                      checked={!!editPO.requires_shipping}
-                      onCheckedChange={(checked) => setEditPO({...editPO, requires_shipping: checked})}
-                    />
-                    <label htmlFor="edit-requires-shipping" className="text-sm font-medium flex items-center gap-2 cursor-pointer">
-                      <Package className="w-4 h-4 text-slate-500" />
-                      {t('requires_shipping') || 'Requires Shipping'}
-                    </label>
-                  </div>
                 </div>
               </div>
 
@@ -2459,39 +2402,50 @@ export default function PurchaseOrders({ initialSubtab = 'orders' }) {
           open={showPrintPreview}
           onClose={() => setShowPrintPreview(false)}
           filename={`${detailPO.po_number || detailPO.order_number || 'PO'}`}
-          config={{
-            template: 'invoice',
-            title: t('purchase_order') || 'Xarid buyurtmasi',
-            documentNumber: detailPO.po_number || detailPO.order_number || '',
-            documentDate: (detailPO.order_date || '').toString().split('T')[0],
-            dateLabel: t('order_date') || 'Sana',
-            headerFields: [
-              { label: t('supplier') || 'Yetkazib beruvchi', value: detailPO.supplier_name || detailPO.vendor_name || '-' },
-              { label: t('delivery_date') || 'Yetkazish sanasi', value: (detailPO.expected_delivery_date || detailPO.expected_date || '-').toString().split('T')[0] },
-              { label: t('status') || 'Holat', value: t(detailPO.status) || detailPO.status || '-' },
-            ],
-            tableColumns: [
-              { key: 'name', label: t('product') || 'Mahsulot', width: 70 },
-              { key: 'qty', label: t('quantity') || 'Miqdor', align: 'right', width: 22 },
-              { key: 'received', label: t('received') || 'Qabul', align: 'right', width: 22 },
-              { key: 'price', label: t('unit_price') || 'Narx', align: 'right', width: 32 },
-              { key: 'total', label: t('amount') || 'Summa', align: 'right', width: 34 },
-            ],
-            tableData: (detailPOLines || []).map((l) => ({
-              name: l.product_name || l.description || '-',
-              qty: String(l.quantity ?? ''),
-              received: String(l.quantity_received ?? 0),
-              price: formatCurrency(l.unit_price || 0),
-              total: formatCurrency(l.line_total || (l.quantity || 0) * (l.unit_price || 0)),
-            })),
-            totals: [
-              ...(detailPO.tax_amount > 0 ? [
-                { label: t('subtotal') || 'Oraliq summa', value: formatCurrency(detailPO.subtotal || 0) },
-                { label: t('tax') || 'QQS', value: formatCurrency(detailPO.tax_amount || 0) },
-              ] : []),
-              { label: t('total') || 'Jami', value: formatCurrency(detailPO.total_amount || 0), bold: true },
-            ],
-          }}
+          config={(() => {
+            const lines = detailPOLines || [];
+            const showReceived = lines.some((l) => Number(l.quantity_received) > 0);
+            const hasBreakdown = detailPO.tax_amount > 0 || detailPO.discount_amount > 0 || detailPO.shipping_amount > 0;
+            return {
+              template: 'invoice',
+              title: t('purchase_order') || 'Xarid buyurtmasi',
+              documentNumber: detailPO.po_number || detailPO.order_number || '',
+              documentDate: fmtPrintDate(detailPO.order_date),
+              dateLabel: t('order_date') || 'Sana',
+              headerFields: [
+                { label: t('supplier') || 'Yetkazib beruvchi', value: detailPO.supplier_name || detailPO.vendor_name || '-' },
+                { label: t('delivery_date') || 'Yetkazish sanasi', value: fmtPrintDate(detailPO.expected_delivery_date || detailPO.expected_date) },
+                { label: t('payment_terms') || "To'lov muddati", value: paymentTermsPrintLabel(detailPO.payment_terms) },
+                { label: t('status') || 'Holat', value: t(detailPO.status) || detailPO.status || '-' },
+              ],
+              tableColumns: [
+                { key: 'idx', label: '№', align: 'center', width: 10 },
+                { key: 'name', label: t('product') || 'Mahsulot' },
+                { key: 'unit', label: t('unit') || 'Birlik', align: 'center', width: 18 },
+                { key: 'qty', label: t('quantity') || 'Miqdor', align: 'right', width: 20 },
+                ...(showReceived ? [{ key: 'received', label: t('received') || 'Qabul qilindi', align: 'right', width: 24 }] : []),
+                { key: 'price', label: t('unit_price') || 'Birlik narxi', align: 'right', width: 30 },
+                { key: 'total', label: t('amount') || 'Summa', align: 'right', width: 32 },
+              ],
+              tableData: lines.map((l, i) => ({
+                idx: String(i + 1),
+                name: l.product_name || l.description || '-',
+                unit: l.unit_name || '-',
+                qty: Number(l.quantity || 0).toLocaleString(),
+                ...(showReceived ? { received: Number(l.quantity_received || 0).toLocaleString() } : {}),
+                price: formatCurrency(l.unit_price || 0),
+                total: formatCurrency(l.line_total || (l.quantity || 0) * (l.unit_price || 0)),
+              })),
+              totals: [
+                ...(hasBreakdown ? [{ label: t('subtotal') || 'Oraliq summa', value: formatCurrency(detailPO.subtotal || 0) }] : []),
+                ...(detailPO.discount_amount > 0 ? [{ label: t('discount') || 'Chegirma', value: `-${formatCurrency(detailPO.discount_amount)}` }] : []),
+                ...(detailPO.tax_amount > 0 ? [{ label: t('tax') || 'QQS', value: formatCurrency(detailPO.tax_amount) }] : []),
+                ...(detailPO.shipping_amount > 0 ? [{ label: t('shipping_cost') || 'Yetkazib berish', value: formatCurrency(detailPO.shipping_amount) }] : []),
+                { label: t('total') || 'Jami', value: formatCurrency(detailPO.total_amount || 0), bold: true },
+              ],
+              notes: detailPO.notes || '',
+            };
+          })()}
         />
       )}
 
