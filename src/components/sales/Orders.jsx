@@ -40,7 +40,7 @@ import DeliveryOrders from './DeliveryOrders';
 import { orderStatusClass } from './orderStatus';
 import { ImportExportButtons } from '@/components/shared';
 
-export default function Orders({
+export default function Orders({ onShipOrder,
   initialSubtab = 'list',
   onCreateOrder,
   onEditOrder,
@@ -322,6 +322,17 @@ export default function Orders({
                               {canUpdate(MODULES.SALES) && (order.status === 'draft' || order.status === 'quotation') && onUpdateStatus && (
                                 <Button size="sm" variant="ghost" onClick={() => onUpdateStatus(order.id, 'confirmed')} title={t('confirm') || 'Tasdiqlash'}>
                                   <CheckCircle className="w-4 h-4 text-purple-600" />
+                                </Button>
+                              )}
+                              {/* One press: create the delivery order and
+                                  validate it — stock leaves the warehouse and
+                                  the order moves to shipped, without a trip to
+                                  the Ombor module. Shown to sales users and to
+                                  anyone with warehouse access; the server still
+                                  enforces sales.delivery permissions. */}
+                              {(canUpdate(MODULES.SALES) || canCreate(MODULES.INVENTORY)) && ['confirmed', 'processing'].includes(order.status) && onShipOrder && (
+                                <Button size="sm" variant="ghost" onClick={() => onShipOrder(order)} title={t('ship_order') || "Ombordan jo'natish"}>
+                                  <Truck className="w-4 h-4 text-blue-600" />
                                 </Button>
                               )}
                               {canCreate(MODULES.SALES) && ['confirmed', 'processing', 'shipped', 'delivered'].includes(order.status) && !orderHasInvoice(order) && onCreateInvoice && (

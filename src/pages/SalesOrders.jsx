@@ -1063,6 +1063,50 @@ export default function SalesOrders() {
   // goes through POST /confirm. Every other transition has its own flow
   // (delivery validation sets shipped/delivered, /cancel cancels) — the
   // backend rejects raw PUT status writes.
+  // One press ships a confirmed order: create the delivery order, validate it.
+  //
+  // Validate is the step that actually moves stock and flips the order to
+  // shipped; before this, shipping meant leaving Savdo, opening Ombor, and
+  // confirming there — the two-trip flow the goods-receipt side already
+  // removed. Insufficient stock comes back as a per-item list, and a partial
+  // failure (created but not validated) is said plainly rather than reported
+  // as success.
+  const handleShipOrder = async (order) => {
+    try {
+      const dorder = await salesService.createDeliveryOrder({
+        sales_order_id: order.id,
+        warehouse_id: order.warehouse_id || undefined,
+      });
+      try {
+        await salesService.validateDeliveryOrder(dorder.id);
+        toast.success(t('order_shipped') || "Buyurtma jo'natildi — zaxiradan chiqarildi");
+      } catch (vErr) {
+        const items = vErr?.response?.data?.errors;
+        if (Array.isArray(items) && items.length) {
+          toast.error(
+            (t('insufficient_stock') || 'Zaxira yetarli emas') + ': ' +
+            items.map((i) => `${i.product_name}: ${i.available}/${i.requested}`).join('; '),
+            { duration: 8000 },
+          );
+        } else {
+          toast.error(
+            (t('ship_failed') || "Buyurtmani jo'natib bo'lmadi") + ': ' +
+            (vErr?.response?.data?.message || vErr?.message || '') +
+            " — yetkazib berish hujjati yaratildi, Yetkazib berishlar bo'limidan tasdiqlang",
+            { duration: 8000 },
+          );
+        }
+        return;
+      }
+      refreshModulesData?.();
+    } catch (err) {
+      toast.error(
+        (t('ship_failed') || "Buyurtmani jo'natib bo'lmadi") + ': ' +
+        (err?.response?.data?.message || err?.response?.data?.error || err?.message || ''),
+      );
+    }
+  };
+
   const handleUpdateStatus = async (orderId, newStatus) => {
     if (newStatus !== 'confirmed') return;
     try {
@@ -1269,6 +1313,7 @@ export default function SalesOrders() {
           {/* Orders Tab — list · quotations · deliveries · returns */}
           <TabsContent value="orders" className="space-y-6">
             <Orders
+              onShipOrder={handleShipOrder}
               key={initialOrdersSubtab}
               initialSubtab={initialOrdersSubtab}
               onCreateOrder={() => setShowCreateModal(true)}

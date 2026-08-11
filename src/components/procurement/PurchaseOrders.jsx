@@ -51,6 +51,7 @@ import {
   SlidersHorizontal,
   Landmark,
   FileText,
+  PackageCheck,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useSearchParams } from 'react-router-dom';
@@ -453,6 +454,33 @@ export default function PurchaseOrders({ initialSubtab = 'orders' }) {
   };
 
   // Scan a receipt/check image and add matched products to order lines
+  // One press receives everything still outstanding on the order — no trip to
+  // the Ombor module. POST /purchase-orders/:id/receive updates the PO lines,
+  // syncs the stock operation AND moves inventory server-side, so this is one
+  // request once the remaining quantities are known. Shown to purchasing users
+  // and to anyone with warehouse access; the server still enforces
+  // purchase.order permissions.
+  const handleQuickReceive = async (po) => {
+    try {
+      const full = await procurementService.getOrder(po.id);
+      const lines = (full?.lines || [])
+        .map((l) => ({ line_id: l.id, quantity_received: (l.quantity || 0) - (l.quantity_received || 0) }))
+        .filter((l) => l.quantity_received > 0);
+      if (lines.length === 0) {
+        toast({ title: t('nothing_to_receive') || "Qabul qilinadigan qoldiq yo'q" });
+        return;
+      }
+      await receivePurchaseOrder(po.id, { lines });
+      toast({ title: t('po_received') || 'Tovar qabul qilindi — zaxira yangilandi' });
+      fetchOrders();
+    } catch (err) {
+      toast({
+        variant: 'destructive',
+        title: err?.response?.data?.error?.message || err?.response?.data?.message || err?.message || t('error'),
+      });
+    }
+  };
+
   const handleScanReceipt = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1307,6 +1335,11 @@ export default function PurchaseOrders({ initialSubtab = 'orders' }) {
                                   }
                                 }}>
                                   {t('confirm') || 'Confirm'}
+                                </Button>
+                              )}
+                              {(canUpdate(MODULES.PURCHASES) || canCreate(MODULES.INVENTORY)) && ['confirmed', 'partial'].includes(po.status) && (
+                                <Button size="sm" variant="ghost" onClick={() => handleQuickReceive(po)} title={t('receive_po') || 'Omborga qabul qilish'}>
+                                  <PackageCheck className="w-4 h-4 text-emerald-600" />
                                 </Button>
                               )}
                               {['confirmed', 'received', 'partial'].includes(po.status) && !poHasBill(po.id) && (
