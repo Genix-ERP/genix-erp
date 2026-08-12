@@ -1,7 +1,6 @@
 
 
 import React from "react";
-import { createPortal } from "react-dom";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import {
@@ -15,29 +14,22 @@ import {
   Workflow,
   FolderKanban,
   Settings,
-  Bell,
-  Search,
   Bot,
-  Menu,
-  X,
   ShoppingCart,
   ShoppingBag,
   Monitor,
   Receipt,
   FileText,
-  Shield,
-  LogOut,
-  Cog,
   Ship,
   Building2,
   BarChart3,
   Sparkles,
-  Phone
+  Phone,
+  Loader2
 } from "lucide-react";
 import UserMenu from "@/components/ui/user-menu";
 import NotificationBell from "@/components/ui/NotificationBell";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
   Sidebar,
@@ -56,8 +48,12 @@ import {
 } from "@/components/ui/sidebar";
 import LanguageSelector from "@/components/ui/language-selector";
 import CompanySwitcher from "@/components/ui/company-switcher";
-import AIChatBox from "@/components/ai/AIChatBox";
 import PhoneWidget from "@/components/crm/PhoneWidget";
+
+// The AI widget drags AgentWorkspace → AgentBlocks → recharts + ReactMarkdown
+// into whatever chunk imports it, so it must stay OUT of the eager layout
+// graph — it loads on first open only.
+const AIChatBox = React.lazy(() => import("@/components/ai/AIChatBox"));
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { InstalledAppsProvider, useInstalledApps } from "@/components/contexts/InstalledAppsContext";
 import { CustomersProvider } from "@/components/contexts/CustomersContext";
@@ -79,21 +75,16 @@ import { resolveBrandLogoUrl, readStoredBrandLogo, applyFavicon, applyBrowserTit
 import { CargoProvider } from "@/components/contexts/CargoContext";
 import { ConstructionProvider } from "@/components/contexts/ConstructionContext";
 import { useTranslation } from "@/components/utils/translations";
-import { renderNotification } from "@/utils/notificationCatalog";
 import { useAuth } from "@/components/contexts/AuthContext";
-import { useInventory } from "@/components/contexts/InventoryContext";
-import { useModules } from "@/components/contexts/ModulesContext";
-import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { useEmployeePermissions } from "@/components/contexts/EmployeePermissionsContext";
 import ErrorBoundary from "@/components/ErrorBoundary";
-import apiClient from "@/api/client";
 
 // Navigation link that closes mobile sidebar on click. Rendered through
 // SidebarMenuButton's asChild (Radix Slot), which forwards a ref plus merged
 // props (tooltip event handlers etc.) — so this must be a forwardRef
 // component that spreads them onto the underlying Link.
 const NavLink = React.forwardRef(function NavLink(
-  { item, isActive, className = '', onClick, ...rest },
+  { item, isActive, isPending, className = '', onClick, ...rest },
   ref
 ) {
   const { setOpenMobile, isMobile, state } = useSidebar();
@@ -122,7 +113,14 @@ const NavLink = React.forwardRef(function NavLink(
       onClick={handleClick}
     >
       <div className={`flex items-center ${collapsed ? 'gap-0' : 'gap-3'}`}>
-        <item.icon className="w-5 h-5 shrink-0" />
+        {/* While the destination chunk downloads (router transition keeps the
+            old page on screen) the clicked item's icon becomes a spinner, so
+            the click visibly "took". */}
+        {isPending ? (
+          <Loader2 className="w-5 h-5 shrink-0 animate-spin text-[var(--genix-blue)]" />
+        ) : (
+          <item.icon className="w-5 h-5 shrink-0" />
+        )}
         {!collapsed && <span className="font-medium text-sm">{item.title}</span>}
       </div>
       {!collapsed && item.badge && (
@@ -148,14 +146,14 @@ function LayoutContent({ children, currentPageName }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { isAppInstalled, isAppHiddenInActiveCompany } = useInstalledApps();
-  const [searchQuery, setSearchQuery] = React.useState("");
   const [isAIChatOpen, setIsAIChatOpen] = React.useState(false);
   const [isPhoneOpen, setIsPhoneOpen] = React.useState(false);
   const [aiInitialPrompt, setAIInitialPrompt] = React.useState(null);
-  const [unreadCount, setUnreadCount] = React.useState(0);
-  const [notifDropdownOpen, setNotifDropdownOpen] = React.useState(false);
-  const [recentNotifications, setRecentNotifications] = React.useState([]);
-  const { user: currentUser, logout, isSiteAdmin, isOwner, isSystemAdmin } = useAuth();
+  // Path the user clicked but the router hasn't committed yet. RR v7 wraps
+  // navigation in startTransition, so while a lazy page chunk downloads the
+  // old location stays rendered — this state is the only visible feedback.
+  const [pendingPath, setPendingPath] = React.useState(null);
+  const { user: currentUser, isSiteAdmin, isOwner, isSystemAdmin } = useAuth();
   const { canAccessModule, isAdmin } = useEmployeePermissions();
   const { settings: adminSettings } = useAdminSettings();
   // Always fall back to the public localStorage cache when settings don't
@@ -197,71 +195,31 @@ function LayoutContent({ children, currentPageName }) {
     };
   }, []);
 
-  // Poll unread notification count every 30s. Uses the shared axios
-  // client so the baseURL (VITE_API_URL) and auth/tenant headers come
-  // from the same interceptors as the rest of the app — avoids leaking
-  // a stray localhost:8080 fallback into production builds.
-  const fetchUnreadCount = React.useCallback(async () => {
-    if (!localStorage.getItem('accessToken')) return;
-    try {
-      const res = await apiClient.get('/notifications/unread-count');
-      setUnreadCount(res.data?.data?.count || 0);
-    } catch (e) { /* silent */ }
-  }, []);
+  // NOTE: notification polling lives entirely inside <NotificationBell/>;
+  // an earlier duplicate poll loop here was removed. Likewise the layout no
+  // longer subscribes to Inventory/Modules/Financials contexts — a dead
+  // "dynamicInsights" memo used to re-render the whole sidebar+header on
+  // every update of the three heaviest stores.
 
-  const fetchRecentNotifications = React.useCallback(async () => {
-    if (!localStorage.getItem('accessToken')) return;
-    try {
-      const res = await apiClient.get('/notifications', { params: { is_read: false } });
-      setRecentNotifications((res.data?.data || []).slice(0, 8));
-    } catch (e) { /* silent */ }
-  }, []);
-
-  const markAllRead = React.useCallback(async () => {
-    if (!localStorage.getItem('accessToken')) return;
-    try {
-      await apiClient.put('/notifications/read-all');
-      setUnreadCount(0);
-      setRecentNotifications([]);
-    } catch (e) { /* silent */ }
-  }, []);
-
+  // A navigation is pending until the router commits the new location.
   React.useEffect(() => {
-    fetchUnreadCount();
-    const interval = setInterval(fetchUnreadCount, 30000);
-    return () => clearInterval(interval);
-  }, [fetchUnreadCount]);
+    setPendingPath(null);
+  }, [location.pathname]);
 
-  // Fetch recent notifications when dropdown opens
+  // Safety valve: if a chunk request dies (offline, deploy in progress) the
+  // router never commits — don't leave the spinner running forever.
   React.useEffect(() => {
-    if (notifDropdownOpen) {
-      fetchRecentNotifications();
-    }
-  }, [notifDropdownOpen, fetchRecentNotifications]);
+    if (!pendingPath) return undefined;
+    const id = setTimeout(() => setPendingPath(null), 15000);
+    return () => clearTimeout(id);
+  }, [pendingPath]);
 
-  // Get data for dynamic AI insights
-  const { items: inventory } = useInventory();
-  const { salesOrders } = useModules();
-  const { financialTransactions } = useFinancials();
-
-  // Calculate dynamic insights
-  const dynamicInsights = React.useMemo(() => {
-    const lowStockCount = inventory.filter(i => i.current_stock <= (i.reorder_level || 10)).length;
-
-    const monthlyRevenue = {};
-    financialTransactions.filter(t => t.transaction_type === 'income').forEach(t => {
-      const month = new Date(t.date).toLocaleString('default', { month: 'short' });
-      monthlyRevenue[month] = (monthlyRevenue[month] || 0) + t.amount;
-    });
-    const months = Object.keys(monthlyRevenue);
-    const lastMonth = monthlyRevenue[months[months.length - 1]] || 0;
-    const prevMonth = monthlyRevenue[months[months.length - 2]] || 0;
-    const revenueGrowth = prevMonth > 0 ? ((lastMonth - prevMonth) / prevMonth * 100).toFixed(0) : 0;
-
-    const activeOrders = salesOrders.filter(o => ['confirmed', 'processing', 'shipped'].includes(o.status)).length;
-
-    return { lowStockCount, revenueGrowth, activeOrders };
-  }, [inventory, financialTransactions, salesOrders]);
+  const handleNavClick = React.useCallback(
+    (url) => {
+      if (url !== location.pathname) setPendingPath(url);
+    },
+    [location.pathname]
+  );
 
   // Map app IDs to navigation items with permission module keys
   // moduleId should match the module IDs in EmployeePermissionsContext
@@ -475,14 +433,6 @@ function LayoutContent({ children, currentPageName }) {
     return dynamicItems;
   }, [coreNavigationItems, adminNavigationItems, appNavigationMap, isAdmin, isUserSiteAdmin, isUserSystemAdmin, isUserOwner, userRole, canAccessModule, isAppInstalled, isAppHiddenInActiveCompany, t]);
 
-  const filteredNavigationItems = React.useMemo(() => {
-    if (!searchQuery.trim()) return navigationItems;
-    const q = searchQuery.toLowerCase().trim();
-    return navigationItems.filter(item =>
-      item.title.toLowerCase().includes(q)
-    );
-  }, [navigationItems, searchQuery]);
-
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-gradient-to-br from-white to-slate-100">
@@ -500,8 +450,34 @@ function LayoutContent({ children, currentPageName }) {
               mix-blend-mode: multiply;
               filter: contrast(1.1);
             }
+            .nav-progress {
+              position: fixed;
+              top: 0;
+              left: 0;
+              right: 0;
+              height: 3px;
+              z-index: 100;
+              overflow: hidden;
+              background: transparent;
+              pointer-events: none;
+            }
+            .nav-progress::after {
+              content: '';
+              display: block;
+              height: 100%;
+              width: 40%;
+              background: linear-gradient(90deg, var(--genix-blue), var(--genix-purple));
+              border-radius: 2px;
+              animation: nav-progress-slide 1s ease-in-out infinite;
+            }
+            @keyframes nav-progress-slide {
+              0% { transform: translateX(-100%); }
+              100% { transform: translateX(350%); }
+            }
           `}
         </style>
+        {/* Indeterminate bar while a sidebar navigation waits for its chunk */}
+        {pendingPath && <div className="nav-progress" aria-hidden="true" />}
         
         <Sidebar collapsible="icon" className="border-r border-slate-200/60 bg-white/80 backdrop-blur-xl" role="navigation" aria-label="Main navigation">
           <SidebarHeader className="border-b border-slate-100 px-4 py-3 group-data-[collapsible=icon]:px-2">
@@ -533,7 +509,12 @@ function LayoutContent({ children, currentPageName }) {
                             isActive ? 'bg-gradient-to-r from-[var(--genix-blue)]/20 to-[var(--genix-purple)]/20 text-[var(--genix-blue)] font-semibold shadow-md border-l-4 border-[var(--genix-blue)]' : 'text-slate-600'
                           }`}
                         >
-                          <NavLink item={item} isActive={isActive} />
+                          <NavLink
+                            item={item}
+                            isActive={isActive}
+                            isPending={pendingPath === item.url}
+                            onClick={() => handleNavClick(item.url)}
+                          />
                         </SidebarMenuButton>
                       </SidebarMenuItem>
                     );
@@ -622,15 +603,19 @@ function LayoutContent({ children, currentPageName }) {
         onClose={() => setIsPhoneOpen(false)}
       />
 
-      {/* AI ChatBox */}
-      <AIChatBox
-        isOpen={isAIChatOpen}
-        onClose={() => {
-          setIsAIChatOpen(false);
-          setAIInitialPrompt(null);
-        }}
-        initialPrompt={aiInitialPrompt}
-      />
+      {/* AI ChatBox — mounted (and its chunk fetched) only on first open */}
+      {isAIChatOpen && (
+        <React.Suspense fallback={null}>
+          <AIChatBox
+            isOpen={isAIChatOpen}
+            onClose={() => {
+              setIsAIChatOpen(false);
+              setAIInitialPrompt(null);
+            }}
+            initialPrompt={aiInitialPrompt}
+          />
+        </React.Suspense>
+      )}
     </SidebarProvider>
   );
 }
@@ -653,7 +638,7 @@ export default function Layout({ children, currentPageName }) {
                             <HRProvider>
                               <CargoProvider>
                                 <ConstructionProvider>
-                                  <LayoutContent children={children} currentPageName={currentPageName} />
+                                  <LayoutContent currentPageName={currentPageName}>{children}</LayoutContent>
                                 </ConstructionProvider>
                               </CargoProvider>
                             </HRProvider>
