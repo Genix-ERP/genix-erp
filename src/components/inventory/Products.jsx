@@ -1335,20 +1335,42 @@ export default function Products() {
     );
   }, [warehouses, activeCompany]);
 
-  // Summary stat cards above the product table. Two notes for future-self:
-  //   • totalProducts comes from the paginated API meta so it reflects the
-  //     full filtered set, not just the current page.
-  //   • activeProducts / inStockProducts / lowStockProducts are computed
-  //     from the local `products` and `inventory` arrays. The inventory
-  //     context fetches products with limit=5000 and inventory with
-  //     limit=10000, so for tenants beyond those caps these stats can
-  //     undercount — switch to a dedicated /products/stats endpoint if
-  //     that ever becomes a real problem.
-  //   • "inStockProducts" replaces the previous `stockableProducts`
-  //     metric (count of products with is_stockable=true). is_stockable
-  //     was a product attribute, not a measurement of real stock, which
-  //     made the "Omborda" card disagree with the warehouse totals.
+  // Summary stat cards above the product table — served by GET
+  // /products/stats with the SAME filters as the list, so the cards always
+  // describe the set in the table (the note that used to live here — "switch
+  // to a dedicated /products/stats endpoint if that ever becomes a real
+  // problem" — came due: web counted from 5000/10000-capped context arrays
+  // and mobile counted from its loaded page, so the same tenant saw
+  // different numbers on the same screen).
+  //
+  // The client-side computation below survives ONLY as the fallback for a
+  // backend that predates the endpoint (404 during a mixed deploy) — the
+  // cards degrade to the old approximate numbers instead of dashes.
+  const [serverStats, setServerStats] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    const params = {};
+    if (searchQuery) params.search = searchQuery;
+    if (categoryFilter !== "all") params.category_id = categoryFilter;
+    if (inventoryTypeFilter !== "all") params.inventory_type = inventoryTypeFilter;
+    if (warehouseFilter !== "all") params.warehouse_id = warehouseFilter;
+    if (statusFilter === "inactive") params.include_inactive = "true";
+    inventoryService.getProductStats(params)
+      .then((d) => { if (!cancelled && d) setServerStats(d); })
+      .catch(() => { if (!cancelled) setServerStats(null); });
+    return () => { cancelled = true; };
+  }, [searchQuery, categoryFilter, warehouseFilter, statusFilter, inventoryTypeFilter]);
+
   const summaryStats = useMemo(() => {
+    if (serverStats) {
+      return {
+        totalProducts: serverStats.total ?? 0,
+        activeProducts: serverStats.active ?? 0,
+        inStockProducts: serverStats.in_stock ?? 0,
+        lowStockProducts: serverStats.low_stock ?? 0,
+      };
+    }
+    // Fallback (old backend): approximate client-side counts.
     const inStockProductIds = new Set();
     for (const inv of inventory || []) {
       const qty = inv.quantity_on_hand ?? inv.quantity ?? 0;
@@ -1366,7 +1388,7 @@ export default function Products() {
         return p.min_stock_level > 0 && stock <= p.min_stock_level;
       }).length,
     };
-  }, [totalProducts, products, inventory, items, accessibleWarehouseIds]);
+  }, [serverStats, totalProducts, products, inventory, items, accessibleWarehouseIds]);
 
   const getProductStock = (productId) => {
     let stockItems = inventory.filter(i => i.product_id === productId && i.warehouse_type !== 'scrap' && accessibleWarehouseIds.has(i.warehouse_id));
