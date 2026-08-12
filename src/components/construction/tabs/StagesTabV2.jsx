@@ -762,17 +762,44 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
   }, [project?.id, activeIterationId, refreshTick]);
 
   // ── Load estimate + lines when active building changes ───────────
+  // Cache layer (mirrors SmetaManagementTab's linesCacheRef): switching
+  // blocks used to refire the FULL chain — listEstimates, then the ВОР
+  // line set, then the единич line set — even when nothing had changed
+  // server-side. The estimates list is cached per project and each
+  // block's two line sets per "edinichId|vorId" key. reload() bumps
+  // refreshTick, which drops every cached entry, so mutations still
+  // reach the server; updateDone/patchLineStatus clear the lines cache
+  // explicitly because they patch `lines` state without a tick bump.
+  const estListCacheRef = React.useRef(null); // { projectId, list }
+  const linesCacheRef = React.useRef(new Map()); // "estId|vorId" → { lines, vorPlan }
+  const cacheTickRef = React.useRef(refreshTick);
   useEffect(() => {
     if (!project?.id) return;
     let cancelled = false;
+
+    // A mutation reload — invalidate everything before reading caches.
+    if (cacheTickRef.current !== refreshTick) {
+      cacheTickRef.current = refreshTick;
+      estListCacheRef.current = null;
+      linesCacheRef.current.clear();
+    }
+
     setLoading(true);
     setLines([]);
     setEstimates([]);
 
-    constructionService.listEstimates(project.id, { scope: 'all' })
-      .then(async (rows) => {
+    const cachedEstList = estListCacheRef.current;
+    const estimatesPromise = (cachedEstList && cachedEstList.projectId === project.id)
+      ? Promise.resolve(cachedEstList.list)
+      : constructionService.listEstimates(project.id, { scope: 'all' }).then((rows) => {
+          const fresh = Array.isArray(rows) ? rows : [];
+          estListCacheRef.current = { projectId: project.id, list: fresh };
+          return fresh;
+        });
+
+    estimatesPromise
+      .then(async (list) => {
         if (cancelled) return;
-        const list = Array.isArray(rows) ? rows : [];
         setEstimates(list);
         // Subcontractor scope: null → project's own (subcontract_id NULL);
         // a number → that subcontractor's estimate for the block.
@@ -822,23 +849,38 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
           return;
         }
         setActiveEstimateId(matchedEst.id);
+        // Coming back to an already-loaded block hydrates from the cache
+        // instantly — no network round-trip at all.
+        const linesCacheKey = `${matchedEst.id}|${vorEst?.id || 0}`;
+        const cachedLines = linesCacheRef.current.get(linesCacheKey);
+        if (cachedLines) {
+          setLines(cachedLines.lines);
+          setVorPlanByName(cachedLines.vorPlan);
+          setLoading(false);
+          return;
+        }
         try {
-          // ВОР side-fetch stays a SINGLE request: it isn't rendered, it
-          // only feeds the REJA plan-qty maps below, which must be complete
-          // before works show a correct planned quantity.
-          const vorRows = vorEst
-            ? await constructionService.listEstimateLines(vorEst.id, { page_size: 5000 }).catch(() => [])
-            : [];
+          // Both line sets in ONE parallel round-trip (this used to await
+          // the ВОР fetch before even starting the единич one — a full
+          // serial round-trip on every block switch). The ВОР side-fetch
+          // isn't rendered — it only feeds the REJA plan-qty maps below,
+          // which must be complete before works show a correct planned
+          // quantity. The единич set (the rendered stage tree) is pulled
+          // in ONE request because the web app derives the whole stage
+          // tree, progress and budget from the full set; paging it
+          // 20-at-a-time only caused a slow, flickering load on big
+          // blocks. (Mobile uses the 20-paged lines endpoint + the
+          // /summary endpoint instead.) The `cancelled` guard drops a
+          // stale load when the user switches block mid-flight.
+          const [vorRows, edinichRows] = await Promise.all([
+            vorEst
+              ? constructionService.listEstimateLines(vorEst.id, { page_size: 5000 }).catch(() => [])
+              : Promise.resolve([]),
+            constructionService.listEstimateLines(matchedEst.id, { page_size: 5000 }),
+          ]);
           if (cancelled) return;
-          // Единич lines (the rendered stage tree) — pulled in ONE request.
-          // The web app derives the whole stage tree, progress and budget
-          // from the full set, so paging it 20-at-a-time only caused a slow,
-          // flickering load on big blocks. (Mobile uses the 20-paged lines
-          // endpoint + the /summary endpoint instead.) The `cancelled` guard
-          // above already drops a stale load when the user switches block.
-          const rows = await constructionService.listEstimateLines(matchedEst.id, { page_size: 5000 });
-          if (cancelled) return;
-          setLines(Array.isArray(rows) ? rows : (rows?.data || rows?.items || []));
+          const lineRows = Array.isArray(edinichRows) ? edinichRows : (edinichRows?.data || edinichRows?.items || []);
+          setLines(lineRows);
           setLoading(false);
           // Build the name → qty map. Excel files often disagree on
           // whitespace between the Единич and ВОР sheets — e.g.
@@ -909,7 +951,9 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
             // overwrite the first and reintroduce the original bug.
             if (!loose.has(n)) loose.set(n, q);
           }
-          setVorPlanByName({ byItem, strict, loose });
+          const vorPlan = { byItem, strict, loose };
+          linesCacheRef.current.set(linesCacheKey, { lines: lineRows, vorPlan });
+          setVorPlanByName(vorPlan);
         } catch (e) {
           if (!cancelled) toast.error(formatApiError(e, t, 'Xatolik'));
         }
@@ -938,44 +982,37 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
     return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
   }, [estimates, activeBuildingId]);
 
-  // Per-building stage counts — fetched once per estimates list change so
-  // each block button can show its own etap count instead of repeating the
-  // active building's count.
+  // Per-building stage counts — the block buttons' "N etap" badges.
+  // Served by ONE light request (GET /:id/stage-counts) that replicates
+  // deriveStages' first-segment grouping server-side. The previous
+  // implementation downloaded EVERY единич estimate's full 5000-line
+  // payload (including stale re-imports and subcontractor estimates)
+  // just to run deriveStages(arr).length on each — N multi-MB requests
+  // per tab visit, refired on every block switch, and the single biggest
+  // cost of the Smeta page.
   useEffect(() => {
-    if (!estimates || estimates.length === 0) {
+    if (!project?.id) {
       setBuildingStageCounts({});
       return;
     }
     let cancelled = false;
-    const edinich = estimates.filter(
-      (e) => String(e.source_type || '').toLowerCase() === 'edinich'
-    );
-    Promise.all(
-      edinich.map((est) =>
-        constructionService.listEstimateLines(est.id, { page_size: 5000 })
-          .then((rows) => {
-            const arr = Array.isArray(rows) ? rows : (rows?.data || rows?.items || []);
-            return [Number(est.building_id), deriveStages(arr).length];
-          })
-          .catch(() => [Number(est.building_id), 0])
-      )
-    ).then((pairs) => {
-      if (cancelled) return;
-      // A building can have multiple единич estimates (re-imports stack
-      // up as new rows). Picking just `counts[bid] = cnt` would let the
-      // last one in the array win — and depending on the sort order
-      // returned by listEstimates, "last" could mean the OLDEST half-
-      // imported test row that has very few stages. Take the MAX so the
-      // badge reflects the richest estimate, which is what the user
-      // sees when they actually open the block.
-      const counts = {};
-      for (const [bid, cnt] of pairs) {
-        counts[bid] = Math.max(counts[bid] || 0, cnt);
-      }
-      setBuildingStageCounts(counts);
-    });
+    constructionService.getProjectStageCounts(project.id)
+      .then((rows) => {
+        if (cancelled) return;
+        // A building can have multiple единич estimates (re-imports stack
+        // up as new rows). Take the MAX so the badge reflects the richest
+        // estimate, which is what the user sees when they actually open
+        // the block.
+        const counts = {};
+        for (const r of (Array.isArray(rows) ? rows : [])) {
+          const bid = Number(r.building_id || 0);
+          counts[bid] = Math.max(counts[bid] || 0, Number(r.stage_count || 0));
+        }
+        setBuildingStageCounts(counts);
+      })
+      .catch(() => { if (!cancelled) setBuildingStageCounts({}); });
     return () => { cancelled = true; };
-  }, [estimates]);
+  }, [project?.id, refreshTick]);
 
   const reload = () => setRefreshTick((n) => n + 1);
 
@@ -1520,6 +1557,9 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
       // field name stays `done_quantity` for backwards compatibility but
       // the semantics changed under the hood.
       await constructionService.updateWorkDoneQuantity(work.id, newPeriod);
+      // The block-switch cache now holds a stale copy of these rows —
+      // drop it so returning to this block refetches fresh state.
+      linesCacheRef.current.clear();
       // Optimistic patch — the cumulative for this line is
       //   newCumulative = oldCumulative - prevPeriod + newPeriod
       // because all other iterations' period_fakt values are unchanged.
@@ -1562,29 +1602,54 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
     }
   }, [t, isFrozenView, periodFaktByLine]);
 
-  const transitionRow = useCallback(async (label, fn) => {
+  // Locally patch approval_status on the given line ids. A successful
+  // single-work transition doesn't need the full reload() storm (every
+  // confirm click used to refetch the estimates list + both 5000-line
+  // sets + the stage badges). Stage cards derive their status from
+  // `lines`, so patching state is enough; the block-switch cache is
+  // dropped because its copies are now stale. The target status strings
+  // mirror the backend's transitionWork calls in
+  // construction_work_approval.go exactly.
+  const patchLineStatus = useCallback((ids, status) => {
+    const idSet = new Set(ids.map(Number));
+    linesCacheRef.current.clear();
+    setLines((prev) => prev.map((r) =>
+      idSet.has(Number(r.id)) ? { ...r, approval_status: status } : r));
+  }, []);
+
+  // applyLocal — optional cheap state patch to run instead of reload().
+  // Bulk transitions still pass nothing and take the full reload, because
+  // the backend applies its own eligibility filters (e.g. bulk-submit
+  // skips rows with done_quantity = 0) and we don't want the local view
+  // to diverge from what the server actually transitioned.
+  const transitionRow = useCallback(async (label, fn, applyLocal) => {
     try {
       await fn();
       toast.success(label);
-      reload();
+      if (applyLocal) applyLocal(); else reload();
     } catch (e) {
       toast.error(formatApiError(e, t, 'Xatolik'));
     }
   }, [t]);
 
 
-  const submitWork              = (w) => transitionRow(t('sent_for_review'),     () => constructionService.submitWork(w.id));
-  const confirmAsSupervisor     = (w) => transitionRow(t('confirmed'),                    () => constructionService.confirmWorkSupervisor(w.id));
-  const rejectAsSupervisor      = (w) => transitionRow(t('rejected'),                     () => constructionService.rejectWorkSupervisor(w.id));
+  const submitWork              = (w) => transitionRow(t('sent_for_review'),     () => constructionService.submitWork(w.id),
+    () => patchLineStatus([w.id], 'submitted'));
+  const confirmAsSupervisor     = (w) => transitionRow(t('confirmed'),                    () => constructionService.confirmWorkSupervisor(w.id),
+    () => patchLineStatus([w.id], 'confirmed_supervisor'));
+  const rejectAsSupervisor      = (w) => transitionRow(t('rejected'),                     () => constructionService.rejectWorkSupervisor(w.id),
+    () => patchLineStatus([w.id], 'in_progress'));
   const confirmAsEngineer       = (w) => {
     askConfirm(
       t('engineer_final_confirm_title'),
       t('engineer_final_confirm'),
-      () => transitionRow(t('finalised'), () => constructionService.confirmWorkEngineer(w.id)),
+      () => transitionRow(t('finalised'), () => constructionService.confirmWorkEngineer(w.id),
+        () => patchLineStatus([w.id], 'confirmed_engineer')),
       t('finalize'),
     );
   };
-  const rejectAsEngineer        = (w) => transitionRow(t('rejected'), () => constructionService.rejectWorkEngineer(w.id));
+  const rejectAsEngineer        = (w) => transitionRow(t('rejected'), () => constructionService.rejectWorkEngineer(w.id),
+    () => patchLineStatus([w.id], 'submitted'));
 
   // Bulk handlers — pick eligible IDs from the stage and POST them.
   const submitAllInStage = (stage) => {
