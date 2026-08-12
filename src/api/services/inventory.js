@@ -655,6 +655,14 @@ export const inventoryService = {
     return response.data.data;
   },
 
+  // Summary-card counts for the Products screen. Same filters as
+  // listProductsPaginated, so the cards always describe the same set as the
+  // table under them. Returns { total, active, inactive, in_stock, low_stock }.
+  async getProductStats(params = {}) {
+    const response = await apiClient.get('/products/stats', { params });
+    return response.data.data;
+  },
+
   // No createLot: POST /inventory/lots does not exist on the server. Lots are
   // created automatically during Goods Receipt (see the route comment in
   // handler.go); only list/get/update/delete are exposed.
