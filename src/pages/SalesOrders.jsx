@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { lazy, Suspense, useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams, useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useModules } from '@/components/contexts/ModulesContext';
@@ -16,7 +16,7 @@ import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, Command
 import { cn } from "@/lib/utils";
 import {
   Plus, ShoppingBag, Receipt, RotateCcw, Tag, Printer, X,
-  LayoutDashboard, Building2, Settings, MessageSquareWarning, ChevronDown, Check
+  LayoutDashboard, Building2, Settings, MessageSquareWarning, ChevronDown, Check, Loader2
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { salesService } from '@/api/services/sales';
@@ -34,12 +34,21 @@ import { useAdminSettings } from '@/components/contexts/AdminSettingsContext';
 import { useFinancials } from '@/components/contexts/FinancialsContext';
 import { useInventory } from '@/components/contexts/InventoryContext';
 
-// Import sales components
-import SalesDashboard from '@/components/sales/SalesDashboard';
-import Invoices from '@/components/sales/Invoices';
-import Orders from '@/components/sales/Orders';
-import SalesSettingsTab from '@/components/sales/SalesSettingsTab';
+// Sales tab surfaces — each its own chunk; Radix unmounts inactive
+// TabsContent, so lazy() defers all but the visible tab.
+const SalesDashboard = lazy(() => import('@/components/sales/SalesDashboard'));
+const Invoices = lazy(() => import('@/components/sales/Invoices'));
+const Orders = lazy(() => import('@/components/sales/Orders'));
+const SalesSettingsTab = lazy(() => import('@/components/sales/SalesSettingsTab'));
 import { orderStatusClass } from '@/components/sales/orderStatus';
+
+function TabLoading() {
+  return (
+    <div className="h-64 flex items-center justify-center">
+      <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+    </div>
+  );
+}
 
 // Import universal ERP components
 import {
@@ -1307,11 +1316,14 @@ export default function SalesOrders() {
 
           {/* Dashboard Tab — DashboardKit + GET /sales-orders/stats */}
           <TabsContent value="dashboard" className="mt-6">
-            <SalesDashboard t={t} language={language} onOpenTab={setActiveTab} />
+            <Suspense fallback={<TabLoading />}>
+              <SalesDashboard t={t} language={language} onOpenTab={setActiveTab} />
+            </Suspense>
           </TabsContent>
 
           {/* Orders Tab — list · quotations · deliveries · returns */}
           <TabsContent value="orders" className="space-y-6">
+            <Suspense fallback={<TabLoading />}>
             <Orders
               onShipOrder={handleShipOrder}
               key={initialOrdersSubtab}
@@ -1345,16 +1357,21 @@ export default function SalesOrders() {
               showBatchPrint={showBatchPrint}
               setShowBatchPrint={setShowBatchPrint}
             />
+            </Suspense>
           </TabsContent>
 
           {/* Invoices Tab */}
           <TabsContent value="invoices">
-            <Invoices openInvoiceId={newInvoiceId} onInvoiceOpened={() => setNewInvoiceId(null)} />
+            <Suspense fallback={<TabLoading />}>
+              <Invoices openInvoiceId={newInvoiceId} onInvoiceOpened={() => setNewInvoiceId(null)} />
+            </Suspense>
           </TabsContent>
 
           {/* Settings Tab — discounts · carriers · pricelists · payment terms · templates · dropshipping */}
           <TabsContent value="settings">
-            <SalesSettingsTab key={initialSettingsSubtab} initialSubtab={initialSettingsSubtab} />
+            <Suspense fallback={<TabLoading />}>
+              <SalesSettingsTab key={initialSettingsSubtab} initialSubtab={initialSettingsSubtab} />
+            </Suspense>
           </TabsContent>
 
         </Tabs>

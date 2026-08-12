@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -16,23 +17,35 @@ import {
   DraftingCompass,
   LineChart,
   PlayCircle,
+  Loader2,
 } from 'lucide-react';
-
-import ManufacturingDashboard from '@/components/manufacturing/ManufacturingDashboard';
-import ProductionOrders from '@/components/manufacturing/ProductionOrders';
-import ProductionSchedule from '@/components/manufacturing/ProductionSchedule';
-import BOMManagement from '@/components/manufacturing/BOMManagement';
-import WorkCenters from '@/components/manufacturing/WorkCenters';
-import MRPPlanning from '@/components/manufacturing/MRPPlanning';
-import ShopFloorControl from '@/components/manufacturing/ShopFloorControl';
-import RoutingManagement from '@/components/manufacturing/RoutingManagement';
-import EquipmentMaintenance from '@/components/manufacturing/EquipmentMaintenance';
-import ManufacturingCategories from '@/components/manufacturing/ManufacturingCategories';
-import ManufacturingReport from '@/components/manufacturing/ManufacturingReport';
-import CostCalculation from '@/components/manufacturing/CostCalculation';
 
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+
+// Every surface is its own chunk — eagerly bundled they made this page a
+// 277kB download before anything rendered. Radix unmounts inactive
+// TabsContent, so lazy() means only the visible sub-tab loads.
+const ManufacturingDashboard = lazy(() => import('@/components/manufacturing/ManufacturingDashboard'));
+const ProductionOrders = lazy(() => import('@/components/manufacturing/ProductionOrders'));
+const ProductionSchedule = lazy(() => import('@/components/manufacturing/ProductionSchedule'));
+const BOMManagement = lazy(() => import('@/components/manufacturing/BOMManagement'));
+const WorkCenters = lazy(() => import('@/components/manufacturing/WorkCenters'));
+const MRPPlanning = lazy(() => import('@/components/manufacturing/MRPPlanning'));
+const ShopFloorControl = lazy(() => import('@/components/manufacturing/ShopFloorControl'));
+const RoutingManagement = lazy(() => import('@/components/manufacturing/RoutingManagement'));
+const EquipmentMaintenance = lazy(() => import('@/components/manufacturing/EquipmentMaintenance'));
+const ManufacturingCategories = lazy(() => import('@/components/manufacturing/ManufacturingCategories'));
+const ManufacturingReport = lazy(() => import('@/components/manufacturing/ManufacturingReport'));
+const CostCalculation = lazy(() => import('@/components/manufacturing/CostCalculation'));
+
+function TabLoading() {
+  return (
+    <div className="h-64 flex items-center justify-center">
+      <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+    </div>
+  );
+}
 
 // Ishlab chiqarish — 4 workflow groups (Reja · Bajarish · Muhandislik ·
 // Tahlil) instead of the old 10 flat tabs that wrapped to a second row.
@@ -141,13 +154,19 @@ export default function Manufacturing() {
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="dashboard">
-                <ManufacturingDashboard t={t} language={language} onOpenTab={openTab} />
+                <Suspense fallback={<TabLoading />}>
+                  <ManufacturingDashboard t={t} language={language} onOpenTab={openTab} />
+                </Suspense>
               </TabsContent>
               <TabsContent value="mrp">
-                <MRPPlanning />
+                <Suspense fallback={<TabLoading />}>
+                  <MRPPlanning />
+                </Suspense>
               </TabsContent>
               <TabsContent value="schedule">
-                <ProductionSchedule />
+                <Suspense fallback={<TabLoading />}>
+                  <ProductionSchedule />
+                </Suspense>
               </TabsContent>
             </Tabs>
           </TabsContent>
@@ -166,10 +185,14 @@ export default function Manufacturing() {
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="orders">
-                <ProductionOrders />
+                <Suspense fallback={<TabLoading />}>
+                  <ProductionOrders />
+                </Suspense>
               </TabsContent>
               <TabsContent value="shopfloor">
-                <ShopFloorControl isActive={activeGroup === 'execute' && activeSub === 'shopfloor'} />
+                <Suspense fallback={<TabLoading />}>
+                  <ShopFloorControl isActive={activeGroup === 'execute' && activeSub === 'shopfloor'} />
+                </Suspense>
               </TabsContent>
             </Tabs>
           </TabsContent>
@@ -200,19 +223,29 @@ export default function Manufacturing() {
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="bom">
-                <BOMManagement />
+                <Suspense fallback={<TabLoading />}>
+                  <BOMManagement />
+                </Suspense>
               </TabsContent>
               <TabsContent value="routing">
-                <RoutingManagement />
+                <Suspense fallback={<TabLoading />}>
+                  <RoutingManagement />
+                </Suspense>
               </TabsContent>
               <TabsContent value="workcenters">
-                <WorkCenters />
+                <Suspense fallback={<TabLoading />}>
+                  <WorkCenters />
+                </Suspense>
               </TabsContent>
               <TabsContent value="equipment">
-                <EquipmentMaintenance />
+                <Suspense fallback={<TabLoading />}>
+                  <EquipmentMaintenance />
+                </Suspense>
               </TabsContent>
               <TabsContent value="categories">
-                <ManufacturingCategories />
+                <Suspense fallback={<TabLoading />}>
+                  <ManufacturingCategories />
+                </Suspense>
               </TabsContent>
             </Tabs>
           </TabsContent>
@@ -231,10 +264,14 @@ export default function Manufacturing() {
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="costcalc">
-                <CostCalculation />
+                <Suspense fallback={<TabLoading />}>
+                  <CostCalculation />
+                </Suspense>
               </TabsContent>
               <TabsContent value="report">
-                <ManufacturingReport />
+                <Suspense fallback={<TabLoading />}>
+                  <ManufacturingReport />
+                </Suspense>
               </TabsContent>
             </Tabs>
           </TabsContent>

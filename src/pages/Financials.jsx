@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -19,34 +19,46 @@ import {
   Target,
   Calendar,
   Globe,
+  Loader2,
 } from "lucide-react";
-
-import FinanceDashboard from "@/components/finance/FinanceDashboard";
-import BudgetManagement from "@/components/finance/BudgetManagement";
-import CurrencyManagement from "@/components/finance/CurrencyManagement";
-import FiscalPeriodsV2 from "@/components/finance/FiscalPeriodsV2";
-import CustomerFollowups from "@/components/finance/CustomerFollowups";
-import ChartOfAccounts from "@/components/finance/ChartOfAccounts";
-import Payments from "@/components/finance/Payments";
-import Reconcile from "@/components/finance/Reconcile";
-import BankReconciliation from "@/components/finance/BankReconciliation";
-import RecurringJournalEntries from "@/components/finance/RecurringJournalEntries";
-import FinancialReports from "@/components/finance/FinancialReports";
-import ActSverka from "@/components/finance/ActSverka";
-import TaxReports from "@/components/finance/TaxReports";
-import GeneralLedger from "@/components/finance/GeneralLedger";
-import AgedReceivables from "@/components/finance/AgedReceivables";
-import AgedPayables from "@/components/finance/AgedPayables";
-import AccountCard from "@/components/finance/AccountCard";
-import AccountsReceivable from "@/components/finance/AccountsReceivable";
-import AccountsPayable from "@/components/finance/AccountsPayable";
 
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { financeService } from "@/api/services/finance";
 
-const tabTriggerClass = "flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100 data-[state=inactive]:hover:text-slate-900";
+// Every tab/sub-tab surface is its own chunk — eagerly bundled they made the
+// Moliya page a 673kB download before anything rendered. Radix unmounts
+// inactive TabsContent, so lazy() means only the visible surface loads.
+const FinanceDashboard = lazy(() => import("@/components/finance/FinanceDashboard"));
+const BudgetManagement = lazy(() => import("@/components/finance/BudgetManagement"));
+const CurrencyManagement = lazy(() => import("@/components/finance/CurrencyManagement"));
+const FiscalPeriodsV2 = lazy(() => import("@/components/finance/FiscalPeriodsV2"));
+const CustomerFollowups = lazy(() => import("@/components/finance/CustomerFollowups"));
+const ChartOfAccounts = lazy(() => import("@/components/finance/ChartOfAccounts"));
+const Payments = lazy(() => import("@/components/finance/Payments"));
+const Reconcile = lazy(() => import("@/components/finance/Reconcile"));
+const BankReconciliation = lazy(() => import("@/components/finance/BankReconciliation"));
+const RecurringJournalEntries = lazy(() => import("@/components/finance/RecurringJournalEntries"));
+const FinancialReports = lazy(() => import("@/components/finance/FinancialReports"));
+const ActSverka = lazy(() => import("@/components/finance/ActSverka"));
+const TaxReports = lazy(() => import("@/components/finance/TaxReports"));
+const GeneralLedger = lazy(() => import("@/components/finance/GeneralLedger"));
+const AgedReceivables = lazy(() => import("@/components/finance/AgedReceivables"));
+const AgedPayables = lazy(() => import("@/components/finance/AgedPayables"));
+const AccountCard = lazy(() => import("@/components/finance/AccountCard"));
+const AccountsReceivable = lazy(() => import("@/components/finance/AccountsReceivable"));
+const AccountsPayable = lazy(() => import("@/components/finance/AccountsPayable"));
+
+function TabLoading() {
+  return (
+    <div className="h-64 flex items-center justify-center">
+      <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+    </div>
+  );
+}
+
+const tabTriggerClass ="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100 data-[state=inactive]:hover:text-slate-900";
 const subTabTriggerClass = "flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 data-[state=inactive]:text-slate-600";
 
 // 12 tabs → 6 → 7 (docs/moliya-audit.md §3, moliya-v2 IA). Old ?tab= values
@@ -173,15 +185,21 @@ export default function Financials() {
           </TabsList>
 
           <TabsContent value="dashboard" className="mt-6">
-            <FinanceDashboard />
+            <Suspense fallback={<TabLoading />}>
+              <FinanceDashboard />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="cashflow" className="mt-6">
-            <BankReconciliation />
+            <Suspense fallback={<TabLoading />}>
+              <BankReconciliation />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="budgets" className="mt-6">
-            <BudgetManagement />
+            <Suspense fallback={<TabLoading />}>
+              <BudgetManagement />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="receivables" className="mt-6">
@@ -221,29 +239,45 @@ export default function Financials() {
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="customers">
-                <Payments side="customer" />
+                <Suspense fallback={<TabLoading />}>
+                  <Payments side="customer" />
+                </Suspense>
               </TabsContent>
               <TabsContent value="vendors">
-                <Payments side="vendor" />
+                <Suspense fallback={<TabLoading />}>
+                  <Payments side="vendor" />
+                </Suspense>
               </TabsContent>
               <TabsContent value="ar-list">
-                <AccountsReceivable />
+                <Suspense fallback={<TabLoading />}>
+                  <AccountsReceivable />
+                </Suspense>
               </TabsContent>
               <TabsContent value="ap-list">
-                <AccountsPayable />
+                <Suspense fallback={<TabLoading />}>
+                  <AccountsPayable />
+                </Suspense>
               </TabsContent>
               <TabsContent value="aging" className="space-y-8">
-                <AgedReceivables />
-                <AgedPayables />
+                <Suspense fallback={<TabLoading />}>
+                  <AgedReceivables />
+                  <AgedPayables />
+                </Suspense>
               </TabsContent>
               <TabsContent value="akt">
-                <ActSverka />
+                <Suspense fallback={<TabLoading />}>
+                  <ActSverka />
+                </Suspense>
               </TabsContent>
               <TabsContent value="match">
-                <Reconcile />
+                <Suspense fallback={<TabLoading />}>
+                  <Reconcile />
+                </Suspense>
               </TabsContent>
               <TabsContent value="followups">
-                <CustomerFollowups />
+                <Suspense fallback={<TabLoading />}>
+                  <CustomerFollowups />
+                </Suspense>
               </TabsContent>
             </Tabs>
           </TabsContent>
@@ -282,32 +316,48 @@ export default function Financials() {
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="chart">
-                <ChartOfAccounts />
+                <Suspense fallback={<TabLoading />}>
+                  <ChartOfAccounts />
+                </Suspense>
               </TabsContent>
               <TabsContent value="journal">
-                <GeneralLedger />
+                <Suspense fallback={<TabLoading />}>
+                  <GeneralLedger />
+                </Suspense>
               </TabsContent>
               <TabsContent value="card">
-                <AccountCard />
+                <Suspense fallback={<TabLoading />}>
+                  <AccountCard />
+                </Suspense>
               </TabsContent>
               <TabsContent value="recurring">
-                <RecurringJournalEntries />
+                <Suspense fallback={<TabLoading />}>
+                  <RecurringJournalEntries />
+                </Suspense>
               </TabsContent>
               <TabsContent value="periods">
-                <FiscalPeriodsV2 />
+                <Suspense fallback={<TabLoading />}>
+                  <FiscalPeriodsV2 />
+                </Suspense>
               </TabsContent>
               <TabsContent value="currency">
-                <CurrencyManagement />
+                <Suspense fallback={<TabLoading />}>
+                  <CurrencyManagement />
+                </Suspense>
               </TabsContent>
             </Tabs>
           </TabsContent>
 
           <TabsContent value="taxes" className="mt-6">
-            <TaxReports />
+            <Suspense fallback={<TabLoading />}>
+              <TaxReports />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="reports" className="mt-6">
-            <FinancialReports />
+            <Suspense fallback={<TabLoading />}>
+              <FinancialReports />
+            </Suspense>
           </TabsContent>
         </Tabs>
       </div>
