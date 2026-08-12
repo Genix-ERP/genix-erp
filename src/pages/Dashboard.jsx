@@ -15,11 +15,11 @@ import {
   DollarSign,
 } from "lucide-react";
 import {
-  ComposedChart,
+  BarChart,
   AreaChart,
   Area,
   Bar,
-  Line,
+  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -48,10 +48,11 @@ import { crmReportsService } from "@/api/services/crm";
 import apiClient from "@/api/client";
 
 // Same accent set as Moliya's FinanceDashboard so the home KPIs and the
-// finance module they drill into read as one system.
-const INCOME_COLOR = "#1baf7a";
+// finance module they drill into read as one system. The green/red pair is
+// dataviz-validator clean (deutan ΔE 8.4, contrast ≥3:1 on white) — the old
+// #1baf7a sat in the CVD warning band.
+const INCOME_COLOR = "#0f8f63";
 const EXPENSE_COLOR = "#e34948";
-const NET_COLOR = "#4a3aa7";
 const CASH_COLOR = "#2a78d6";
 const FUNNEL_BAR = "#534AB7";
 const PRODUCT_BAR = "#185FA5";
@@ -194,6 +195,10 @@ export default function Dashboard() {
   const [period, setPeriod] = useState("this_month");
   const range = useMemo(() => presetRange(period), [period]);
   const months = MONTH_NAMES[language] || MONTH_NAMES.uz;
+  // Spans profit and loss months — the Forma-2 name fits both signs, unlike
+  // a bare "Sof natija".
+  const netLabel =
+    language === "ru" ? "Прибыль (убыток)" : language === "uz" ? "Sof foyda (zarar)" : "Net profit (loss)";
 
   // One period-aware aggregate call per source — the ledger-backed
   // /reports/finance-dashboard replaces the old trial-balance sum + 12
@@ -241,7 +246,10 @@ export default function Dashboard() {
   const isLoss = netResult < 0;
 
   // Zero-fill the trailing 12 months — the endpoint only returns months that
-  // have postings, and a skipped category would distort the time axis.
+  // have postings, and a skipped category would distort the time axis. Then
+  // trim leading all-zero months (young tenants otherwise get a chart that is
+  // 3/4 dead space), keeping at least 6 months so a short history still reads
+  // as a timeline. Empty array = no postings at all → EmptyNote.
   const trendData = useMemo(() => {
     if (!trend.data) return [];
     const byMonth = new Map((trend.data.monthly || []).map((m) => [m.month, m]));
@@ -260,7 +268,9 @@ export default function Dashboard() {
         net: income - expense,
       });
     }
-    return out;
+    const firstActive = out.findIndex((m) => m.income !== 0 || m.expense !== 0);
+    if (firstActive === -1) return [];
+    return out.slice(Math.min(firstActive, out.length - 6));
   }, [trend.data, months]);
 
   const cashSeries = useMemo(
@@ -428,59 +438,101 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Trend + cash position */}
+        {/* Trend row — flows and the signed result as two side-by-side cards
+            over the same 12-month axis (one measure per chart, one axis each;
+            syncId keeps hover aligned across the pair). The old single card
+            squeezed both panels into 300px and neither could breathe. */}
         {(finance.status !== "denied" || trend.status === "ok") && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {trend.status === "loading" ? (
-              <SkeletonCard />
-            ) : trend.status === "ok" && trendData.length > 0 ? (
-              <ChartCard title={`${t("revenue")} / ${t("expenses")} — 12 ${t("months")}`} icon={BarChart3}>
-                <ResponsiveContainer width="100%" height={300}>
-                  <ComposedChart data={trendData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-                    <CartesianGrid stroke="#f1f5f9" vertical={false} />
-                    <XAxis dataKey="month" stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
-                    <YAxis
-                      stroke="#94a3b8"
-                      fontSize={11}
-                      tickLine={false}
-                      axisLine={false}
-                      width={70}
-                      tickFormatter={formatAxisTick}
-                    />
-                    <Tooltip content={<FinTooltip format={formatCurrency} t={t} />} />
-                    <Legend
-                      formatter={(value) => <span className="text-xs text-slate-500">{value}</span>}
-                      iconType="circle"
-                      iconSize={8}
-                    />
-                    <ReferenceLine y={0} stroke="#e2e8f0" />
-                    <Bar dataKey="income" name={t("revenue")} fill={INCOME_COLOR} radius={[3, 3, 0, 0]} maxBarSize={18} />
-                    <Bar dataKey="expense" name={t("expenses")} fill={EXPENSE_COLOR} radius={[3, 3, 0, 0]} maxBarSize={18} />
-                    <Line
-                      type="linear"
-                      dataKey="net"
-                      /* Series spans profit and loss months — the Forma-2 line
-                         name fits both signs, unlike a bare "Sof natija". */
-                      name={language === "ru" ? "Прибыль (убыток)" : language === "uz" ? "Sof foyda (zarar)" : "Net profit (loss)"}
-                      stroke={NET_COLOR}
-                      strokeWidth={2}
-                      dot={false}
-                      activeDot={{ r: 4 }}
-                    />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </ChartCard>
-            ) : trend.status === "ok" ? (
-              <ChartCard title={`${t("revenue")} / ${t("expenses")}`} icon={BarChart3}>
-                <EmptyNote icon={BarChart3} text={t("no_data")} />
-              </ChartCard>
-            ) : null}
+          <>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {trend.status === "loading" ? (
+                <>
+                  <SkeletonCard />
+                  <SkeletonCard />
+                </>
+              ) : trend.status === "ok" && trendData.length > 0 ? (
+                <>
+                  <ChartCard
+                    title={`${t("revenue")} / ${t("expenses")} — ${trendData.length} ${t("months")}`}
+                    icon={BarChart3}
+                  >
+                    <ResponsiveContainer width="100%" height={300}>
+                      <BarChart
+                        data={trendData}
+                        syncId="fin-trend"
+                        margin={{ top: 8, right: 10, left: 10, bottom: 0 }}
+                        barGap={2}
+                      >
+                        <CartesianGrid stroke="#f1f5f9" vertical={false} />
+                        <XAxis dataKey="month" stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
+                        <YAxis
+                          stroke="#94a3b8"
+                          fontSize={11}
+                          tickLine={false}
+                          axisLine={false}
+                          width={70}
+                          tickFormatter={formatAxisTick}
+                        />
+                        <Tooltip content={<FinTooltip format={formatCurrency} t={t} />} />
+                        <Legend
+                          verticalAlign="top"
+                          height={28}
+                          formatter={(value) => <span className="text-xs text-slate-500">{value}</span>}
+                          iconType="circle"
+                          iconSize={8}
+                        />
+                        <Bar dataKey="income" name={t("revenue")} fill={INCOME_COLOR} radius={[3, 3, 0, 0]} maxBarSize={26} />
+                        <Bar dataKey="expense" name={t("expenses")} fill={EXPENSE_COLOR} radius={[3, 3, 0, 0]} maxBarSize={26} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </ChartCard>
 
+                  {/* Diverging bars, colored by sign — "was the month
+                      profitable?" answered at a glance. Single series, so the
+                      title carries the name and there is no legend; top margin
+                      matches the neighbor's legend strip so the synced plots
+                      line up. */}
+                  <ChartCard title={`${netLabel} — ${trendData.length} ${t("months")}`} icon={TrendingUp}>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <BarChart data={trendData} syncId="fin-trend" margin={{ top: 36, right: 10, left: 10, bottom: 0 }}>
+                        <CartesianGrid stroke="#f1f5f9" vertical={false} />
+                        <XAxis dataKey="month" stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
+                        <YAxis
+                          stroke="#94a3b8"
+                          fontSize={11}
+                          tickLine={false}
+                          axisLine={false}
+                          width={70}
+                          tickFormatter={formatAxisTick}
+                        />
+                        <Tooltip content={<FinTooltip format={formatCurrency} t={t} />} />
+                        <ReferenceLine y={0} stroke="#cbd5e1" />
+                        <Bar dataKey="net" name={netLabel} maxBarSize={26} radius={2}>
+                          {trendData.map((m, i) => (
+                            <Cell key={i} fill={m.net < 0 ? EXPENSE_COLOR : INCOME_COLOR} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </ChartCard>
+                </>
+              ) : trend.status === "ok" ? (
+                <ChartCard
+                  title={`${t("revenue")} / ${t("expenses")}`}
+                  icon={BarChart3}
+                  className="lg:col-span-2"
+                >
+                  <EmptyNote icon={BarChart3} text={t("no_data")} />
+                </ChartCard>
+              ) : null}
+            </div>
+
+            {/* Cash position — a daily series earns the full row's width */}
             {finance.status === "loading" ? (
-              <SkeletonCard />
+              <SkeletonCard h="h-[300px]" />
             ) : fin && cashSeries.length > 0 ? (
               <ChartCard title={t("cash_balance_dynamics")} icon={LineChartIcon}>
-                <ResponsiveContainer width="100%" height={300}>
+                <ResponsiveContainer width="100%" height={260}>
                   <AreaChart data={cashSeries} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
                     <defs>
                       <linearGradient id="gradCash" x1="0" y1="0" x2="0" y2="1">
@@ -518,7 +570,7 @@ export default function Dashboard() {
                 <EmptyNote icon={LineChartIcon} text={t("no_data")} />
               </ChartCard>
             ) : null}
-          </div>
+          </>
         )}
 
         {/* Funnel + top products */}
