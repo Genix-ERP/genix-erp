@@ -945,6 +945,16 @@ export const constructionService = {
     return response.data.data;
   },
 
+  // Per-estimate Bosqichlar badge counts: [{estimate_id, building_id,
+  // stage_count}] for every единич estimate of the project, computed
+  // server-side from one two-column query. Replaces the old client-side
+  // approach of downloading every estimate's full 5000-line payload just
+  // to run deriveStages().length on it.
+  async getProjectStageCounts(projectId) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/stage-counts`);
+    return response.data.data;
+  },
+
   async listStages(projectId, { buildingId } = {}) {
     // Migration 333 — optional building filter. Pass a numeric id to scope
     // stages to one building, 0 for unassigned (project-wide), or nothing for
