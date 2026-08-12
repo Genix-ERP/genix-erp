@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Plus, Search, Receipt, Download, CheckCircle2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import ExpenseCategoriesTab from '@/components/expenses/ExpenseCategoriesTab';
 import * as XLSX from 'xlsx';
 import { financeService } from '@/api/services/finance';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -69,6 +70,9 @@ export default function Expenses() {
   // granted through can_update on the finance/expenses module).
   const mayApprove = canUpdate(MODULES.FINANCIALS) || canUpdate(MODULES.EXPENSES);
 
+  // 'expenses' | 'categories' — the categories tab manages the GL account
+  // each category posts from (Odoo's Expense Categories idea).
+  const [activeTab, setActiveTab] = useState('expenses');
   const [rangeKey, setRangeKey] = useState('this_month');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -131,14 +135,13 @@ export default function Expenses() {
   useEffect(() => { loadStats(); }, [loadStats]);
   useEffect(() => { loadExpenses(); }, [loadExpenses]);
 
-  useEffect(() => {
-    let cancelled = false;
+  const reloadCategories = useCallback(() => {
     financeService.listExpenseCategories()
-      .then((rows) => { if (!cancelled) setCategories(Array.isArray(rows) ? rows : []); })
+      .then((rows) => setCategories(Array.isArray(rows) ? rows : []))
       .catch(() => {})
-      .finally(() => { if (!cancelled) setCategoriesLoading(false); });
-    return () => { cancelled = true; };
+      .finally(() => setCategoriesLoading(false));
   }, []);
+  useEffect(() => { reloadCategories(); }, [reloadCategories]);
 
   const refreshAll = useCallback(async (updatedRecord) => {
     if (updatedRecord) {
@@ -294,6 +297,28 @@ export default function Expenses() {
         </div>
       </div>
 
+      {/* Tabs: expense list vs category management */}
+      <div className="flex gap-1 border-b border-slate-200">
+        {[['expenses', t('exp_tab_expenses')], ['categories', t('exp_tab_categories')]].map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setActiveTab(key)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              activeTab === key
+                ? 'border-slate-900 text-slate-900'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'categories' && (
+        <ExpenseCategoriesTab t={t} canManage={mayApprove} onChanged={reloadCategories} />
+      )}
+
+      {activeTab === 'expenses' && (<>
       {/* Date-range pills — drive stats, charts and table together */}
       <div className="flex flex-wrap gap-1.5">
         {RANGES.map((key) => (
@@ -474,6 +499,7 @@ export default function Expenses() {
           </div>
         )}
       </div>
+      </>)}
 
       {/* Detail side panel */}
       {selected && (
