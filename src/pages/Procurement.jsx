@@ -1,4 +1,4 @@
-import { useMemo, useEffect } from 'react';
+import { lazy, Suspense, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -9,20 +9,32 @@ import {
   History,
   Award,
   ListChecks,
+  Loader2,
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-
-import ProcurementDashboard from '@/components/procurement/ProcurementDashboard';
-import PurchaseOrders from '@/components/procurement/PurchaseOrders';
-import Suppliers from '@/components/procurement/Suppliers';
-import VendorPricelist from '@/components/procurement/VendorPricelist';
-import PriceComparison from '@/components/procurement/PriceComparison';
-import PriceHistory from '@/components/procurement/PriceHistory';
-import RFQManagement from '@/components/procurement/RFQManagement';
 
 import { useProcurement } from '@/components/contexts/ProcurementContext';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+
+// Each tab is its own chunk (was one eager 275kB page bundle); Radix
+// unmounts inactive TabsContent, so lazy() defers everything but the
+// surface being looked at.
+const ProcurementDashboard = lazy(() => import('@/components/procurement/ProcurementDashboard'));
+const PurchaseOrders = lazy(() => import('@/components/procurement/PurchaseOrders'));
+const Suppliers = lazy(() => import('@/components/procurement/Suppliers'));
+const VendorPricelist = lazy(() => import('@/components/procurement/VendorPricelist'));
+const PriceComparison = lazy(() => import('@/components/procurement/PriceComparison'));
+const PriceHistory = lazy(() => import('@/components/procurement/PriceHistory'));
+const RFQManagement = lazy(() => import('@/components/procurement/RFQManagement'));
+
+function TabLoading() {
+  return (
+    <div className="h-64 flex items-center justify-center">
+      <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+    </div>
+  );
+}
 
 // Xarid — 4 tabs (docs/xarid-audit.md §10). The old page had 5 top tabs
 // plus an orphan requisitions TabsContent with no trigger; "Tovar
@@ -96,15 +108,21 @@ export default function Procurement() {
           </TabsList>
 
           <TabsContent value="dashboard" className="mt-6">
-            <ProcurementDashboard t={t} language={language} onOpenTab={setActiveTab} />
+            <Suspense fallback={<TabLoading />}>
+              <ProcurementDashboard t={t} language={language} onOpenTab={setActiveTab} />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="orders" className="mt-6">
-            <PurchaseOrders initialSubtab={initialOrdersSubtab} />
+            <Suspense fallback={<TabLoading />}>
+              <PurchaseOrders initialSubtab={initialOrdersSubtab} />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="suppliers" className="mt-6">
-            <Suppliers />
+            <Suspense fallback={<TabLoading />}>
+              <Suppliers />
+            </Suspense>
           </TabsContent>
 
           {/* Narxlar — pricelists · comparison · history · RFQ in one place */}
@@ -130,16 +148,24 @@ export default function Procurement() {
               </TabsList>
 
               <TabsContent value="pricelist" className="mt-0">
-                <VendorPricelist />
+                <Suspense fallback={<TabLoading />}>
+                  <VendorPricelist />
+                </Suspense>
               </TabsContent>
               <TabsContent value="comparison" className="mt-0">
-                <PriceComparison />
+                <Suspense fallback={<TabLoading />}>
+                  <PriceComparison />
+                </Suspense>
               </TabsContent>
               <TabsContent value="history" className="mt-0">
-                <PriceHistory />
+                <Suspense fallback={<TabLoading />}>
+                  <PriceHistory />
+                </Suspense>
               </TabsContent>
               <TabsContent value="rfq" className="mt-0">
-                <RFQManagement />
+                <Suspense fallback={<TabLoading />}>
+                  <RFQManagement />
+                </Suspense>
               </TabsContent>
             </Tabs>
           </TabsContent>
