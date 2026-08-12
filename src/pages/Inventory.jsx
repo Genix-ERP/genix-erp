@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Package,
@@ -8,21 +8,33 @@ import {
   BarChart3,
   Settings,
   Inbox,
+  Loader2,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-import InventoryDashboard from "@/components/inventory/InventoryDashboard";
-import MaterialRequestsPanel from "@/components/construction/material-requests/MaterialRequestsPanel";
 import materialRequestsService from "@/api/services/materialRequests";
-import InventoryDocuments from "@/components/inventory/InventoryDocuments";
-import InventorySettings from "@/components/inventory/InventorySettings";
-import Products from "@/components/inventory/Products";
-import Planning from "@/components/inventory/Planning";
-import StockReport from "@/components/inventory/StockReport";
-
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useCurrencyFormatter } from "@/hooks/useCurrencyFormatter";
+
+// Each tab is its own chunk — the page used to ship all seven eagerly as one
+// 747kB bundle; now opening Ombor downloads only the tab being looked at
+// (Radix unmounts inactive TabsContent, so lazy() defers the rest).
+const InventoryDashboard = lazy(() => import("@/components/inventory/InventoryDashboard"));
+const MaterialRequestsPanel = lazy(() => import("@/components/construction/material-requests/MaterialRequestsPanel"));
+const InventoryDocuments = lazy(() => import("@/components/inventory/InventoryDocuments"));
+const InventorySettings = lazy(() => import("@/components/inventory/InventorySettings"));
+const Products = lazy(() => import("@/components/inventory/Products"));
+const Planning = lazy(() => import("@/components/inventory/Planning"));
+const StockReport = lazy(() => import("@/components/inventory/StockReport"));
+
+function TabLoading() {
+  return (
+    <div className="h-64 flex items-center justify-center">
+      <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+    </div>
+  );
+}
 
 // Ombor — 5 daily tabs + a settings surface (docs/ombor-audit.md §8).
 // The old page had 7 visible tabs plus 3 orphan TabsContent blocks with no
@@ -113,36 +125,50 @@ export default function Inventory() {
           </TabsList>
 
           <TabsContent value="dashboard" className="mt-6">
-            <InventoryDashboard
-              t={t}
-              language={language}
-              formatCompact={formatCurrencyCompact}
-              onOpenTab={setActiveTab}
-            />
+            <Suspense fallback={<TabLoading />}>
+              <InventoryDashboard
+                t={t}
+                language={language}
+                formatCompact={formatCurrencyCompact}
+                onOpenTab={setActiveTab}
+              />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="products" className="mt-6">
-            <Products />
+            <Suspense fallback={<TabLoading />}>
+              <Products />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="documents" className="mt-6">
-            <InventoryDocuments t={t} language={language} initialSection={initialDocSection} />
+            <Suspense fallback={<TabLoading />}>
+              <InventoryDocuments t={t} language={language} initialSection={initialDocSection} />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="requests" className="mt-6">
-            <MaterialRequestsPanel mode="warehouse" />
+            <Suspense fallback={<TabLoading />}>
+              <MaterialRequestsPanel mode="warehouse" />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="planning" className="mt-6">
-            <Planning />
+            <Suspense fallback={<TabLoading />}>
+              <Planning />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="reports" className="mt-6">
-            <StockReport />
+            <Suspense fallback={<TabLoading />}>
+              <StockReport />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="settings" className="mt-6">
-            <InventorySettings t={t} initialSection={initialSettingsSection} />
+            <Suspense fallback={<TabLoading />}>
+              <InventorySettings t={t} initialSection={initialSettingsSection} />
+            </Suspense>
           </TabsContent>
         </Tabs>
       </div>
