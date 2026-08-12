@@ -31,7 +31,9 @@ import financeService from "@/api/services/finance";
 // always-visible labeled legend list under the chart).
 const CATEGORY_COLORS = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7'];
 
-const INCOME_COLOR = '#1baf7a';
+// Green/red pair is dataviz-validator clean (deutan ΔE 8.4, ≥3:1 on white);
+// keep in sync with the home Dashboard's INCOME/EXPENSE constants.
+const INCOME_COLOR = '#0f8f63';
 const EXPENSE_COLOR = '#e34948';
 const NET_COLOR = '#4a3aa7';
 const CASH_COLOR = '#2a78d6';
