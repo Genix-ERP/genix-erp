@@ -118,12 +118,17 @@ function GlassTooltip({ active, payload, label }) {
 }
 
 function StatTile({ label, value, icon: Icon, chip, valueCls, spark }) {
+  // KPI figures must never be ellipsized — step the font down for long
+  // values and wrap as a last resort.
+  const valueLen = String(value ?? '').length;
+  const valueSize =
+    valueLen > 14 ? 'text-lg tracking-tight' : valueLen > 10 ? 'text-xl' : 'text-2xl';
   return (
     <div className="glass-card rounded-2xl border border-slate-200/60 bg-white/80 p-5 shadow-sm overflow-hidden">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm text-slate-500 truncate">{label}</p>
-          <p className={`text-2xl font-bold mt-1 truncate ${valueCls || 'text-slate-900'}`}>{value}</p>
+          <p className="text-sm text-slate-500 leading-snug">{label}</p>
+          <p className={`${valueSize} font-bold mt-1 leading-tight break-words ${valueCls || 'text-slate-900'}`}>{value}</p>
         </div>
         <div className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center ${chip}`}>
           <Icon className="w-5 h-5" />
