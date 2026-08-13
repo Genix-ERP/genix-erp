@@ -967,10 +967,20 @@ export default function WorkScheduleTab({ project, onOpenSmeta }) {
                   className="sticky left-0 z-40 shrink-0 flex items-center bg-slate-50 border-r border-slate-200 text-[10px] font-semibold uppercase tracking-wide text-slate-500"
                   style={{ width: RAIL_W }}
                 >
+                  {/* Short labels + truncate: the columns are narrow (42/56px)
+                      and sum exactly to RAIL_W, so full words ("BOSHLANISH")
+                      overflowed and ran into the next header. title= keeps the
+                      full name on hover. */}
                   <span className="px-2 truncate" style={{ width: NAME_W }}>{t('gpr_col_work') || 'Ish'}</span>
-                  <span className="text-center" style={{ width: DAYS_W }}>{t('gpr_col_days') || 'Kunlar'}</span>
-                  <span className="text-center" style={{ width: DATE_W }}>{t('gpr_col_start') || 'Boshl.'}</span>
-                  <span className="text-center" style={{ width: DATE_W }}>{t('gpr_col_end') || 'Tugash'}</span>
+                  <span className="text-center truncate px-0.5" style={{ width: DAYS_W }} title={t('gpr_col_days') || 'Kunlar'}>
+                    {t('gpr_col_days_short') || 'Kun'}
+                  </span>
+                  <span className="text-center truncate px-0.5" style={{ width: DATE_W }} title={t('gpr_col_start') || 'Boshlanish'}>
+                    {t('gpr_col_start_short') || 'Boshl.'}
+                  </span>
+                  <span className="text-center truncate px-0.5" style={{ width: DATE_W }} title={t('gpr_col_end') || 'Tugash'}>
+                    {t('gpr_col_end_short') || 'Tugash'}
+                  </span>
                 </div>
                 <div className="relative" style={{ width: gridWidth }}>
                   {zoom === 'day' && days.map((d, i) => {
