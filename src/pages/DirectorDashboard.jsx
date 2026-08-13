@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
 import {
   LineChart, Line, BarChart, Bar, AreaChart, Area,
@@ -219,6 +219,28 @@ export default function DirectorDashboard() {
   const [clock, setClock] = useState(new Date());
   const [companyPickerOpen, setCompanyPickerOpen] = useState(false);
   const [companySearch, setCompanySearch] = useState('');
+  const companyPickerRef = useRef(null);
+
+  // Tashqariga bosilganda yopish — hujjat darajasida.
+  //
+  // Ilgari buni `fixed inset-0` qoplama qilardi, lekin u ISHLAMASDI:
+  // `.glass-card` da backdrop-filter bor, backdrop-filter esa fixed
+  // elementlar uchun containing block yaratadi. Ya'ni "butun ekran" deb
+  // mo'ljallangan qoplama aslida faqat toolbar kartasining o'zini qoplagan,
+  // undan tashqariga bosilganda ro'yxat yopilmagan. Escape ham qo'shildi.
+  useEffect(() => {
+    if (!companyPickerOpen) return undefined;
+    const onDown = (e) => {
+      if (!companyPickerRef.current?.contains(e.target)) setCompanyPickerOpen(false);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') setCompanyPickerOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [companyPickerOpen]);
 
   const [perCompanyRaw, setPerCompany] = useState({}); // { [orgId]: { revenue, expenses, profit, deb, cred, monthlyRev[], expenseBreakdown{} } }
   const [loading, setLoading] = useState(false);
@@ -475,7 +497,18 @@ export default function DirectorDashboard() {
   return (
     <div className="p-4 md:p-6 bg-slate-50 min-h-screen">
       {/* Toolbar: company scope + filters + clock */}
-      <div className="glass-card bg-white/80 border border-slate-200/60 rounded-2xl shadow-sm px-4 py-3 mb-4 relative">
+      {/* z-30 SHART. `.glass-card` da backdrop-filter bor, u esa YANGI
+          stacking context ochadi — ya'ni ichkaridagi kompaniya ro'yxatining
+          z-40 i faqat SHU karta ichida ishlaydi, undan tashqariga chiqa
+          olmaydi. Pastdagi KPI kartalari ham glass-card va DOM da keyinroq
+          turgani uchun ro'yxat ustiga chizilardi: ochilganda faqat kartalar
+          orasidagi tirqishga tushgan bitta qatori ko'rinardi.
+          Toolbar'ning o'ziga musbat z berilsa, uning butun konteksti
+          keyingi kartalardan yuqorida bo'ladi. */}
+      <div
+        ref={companyPickerRef}
+        className="glass-card bg-white/80 border border-slate-200/60 rounded-2xl shadow-sm px-4 py-3 mb-4 relative z-30"
+      >
         <div className="flex flex-wrap items-center gap-2.5">
           <button
             onClick={() => setCompanyPickerOpen(v => !v)}
@@ -561,7 +594,6 @@ export default function DirectorDashboard() {
         {/* Company dropdown panel */}
         {companyPickerOpen && (
           <>
-            <div className="fixed inset-0 z-30" onClick={() => setCompanyPickerOpen(false)} />
             <div className="absolute top-full left-4 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-40 w-[380px] max-h-[420px] flex flex-col overflow-hidden">
               <div className="p-2 border-b border-slate-100 flex items-center gap-2">
                 <Search className="w-4 h-4 text-slate-400 ml-1" />
