@@ -19,6 +19,7 @@ import {
   FileText,
   Minus,
   CalendarDays,
+  Layers,
   Loader2,
 } from "lucide-react";
 import { format } from "date-fns";
@@ -27,6 +28,7 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useCurrencyFormatter } from "@/hooks/useCurrencyFormatter";
 import { inventoryService } from "@/api/services/inventory";
+import StockValuationPanel from "@/components/inventory/StockValuationPanel";
 
 // Transaction types that decrease stock (chiqim). Mirrors the backend
 // classification in /inventory/turnover so the single-product detail
@@ -538,6 +540,13 @@ export default function StockReport() {
             <CalendarDays className="w-4 h-4" />
             {language === "uz" ? "Ombor holati" : "Stock Status"}
           </TabsTrigger>
+          {/* Zaxiralarni baholash (reja §5). Bu yerda turadi, chunki savol
+              bir xil — "omborda nima bor va u qancha turadi" — faqat javob
+              qatlamlar bo'yicha, ya'ni FIFO/AVCO/standart usulida. */}
+          <TabsTrigger value="valuation" className="flex items-center gap-1.5">
+            <Layers className="w-4 h-4" />
+            {language === "uz" ? "Zaxiralar bahosi" : "Valuation"}
+          </TabsTrigger>
         </TabsList>
 
         {/* === MOVEMENTS TAB === */}
@@ -815,6 +824,16 @@ export default function StockReport() {
         </TabsContent>
 
         {/* === STOCK STATUS / TURNOVER (Ombor holati) TAB === */}
+        {/* === ZAXIRALARNI BAHOLASH (reja §5) === */}
+        <TabsContent value="valuation" className="mt-4">
+          <StockValuationPanel
+            language={language}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            warehouseId={warehouseFilter}
+          />
+        </TabsContent>
+
         <TabsContent value="stock-status" className="mt-4">
           {/* Summary Cards — period totals (kirim / chiqim / net / closing value) */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
