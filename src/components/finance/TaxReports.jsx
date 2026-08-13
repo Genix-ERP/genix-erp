@@ -67,6 +67,7 @@ import { taxReportsService } from '@/api/services/taxReports';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { usePermissions } from '@/hooks/usePermissions';
 import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/utils/apiError';
 // Profit tax (§8.1) and Tax summary (§10) used to be top-level tabs
 // in Financials. They've been folded into Tax Reports as sub-tabs so
 // every tax view lives in one place — TaxReports renders them inside
@@ -75,7 +76,6 @@ import { toast } from 'sonner';
 import ProfitTax from '@/pages/ProfitTax';
 import TaxSummary from '@/pages/TaxSummary';
 import TaxSettings from '@/components/finance/TaxSettings';
-import { getApiErrorMessage } from '@/utils/apiError';
 
 export default function TaxReports() {
   const { language } = useLanguage();
@@ -92,12 +92,20 @@ export default function TaxReports() {
   const [employeeTaxLoading, setEmployeeTaxLoading] = useState(false);
   const [periods, setPeriods] = useState([]);
   const [transactions, setTransactions] = useState([]);
+  // Server paginates at 20 by default and the old client silently dropped
+  // everything past page 1 (soliq audit 2026-08-13).
+  const TX_PAGE_SIZE = 50;
+  const [txPage, setTxPage] = useState(1);
+  const [txTotal, setTxTotal] = useState(0);
   const [selectedPeriod, setSelectedPeriod] = useState(null);
 
-  // Date filters — default to all time so all transactions are visible
+  // Date filters — default to the current month: the KPI cards, the
+  // employee-tax payment dialog and the XML export all need a concrete
+  // period, and an empty default left them either all-time or unusable
+  // (soliq audit 2026-08-13).
   const now = new Date();
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [startDate, setStartDate] = useState(format(startOfMonth(now), 'yyyy-MM-dd'));
+  const [endDate, setEndDate] = useState(format(endOfMonth(now), 'yyyy-MM-dd'));
   const [periodTypeFilter, setPeriodTypeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [yearFilter, setYearFilter] = useState(now.getFullYear().toString());
@@ -166,18 +174,18 @@ export default function TaxReports() {
   });
 
   // Load data on mount only
+  // Both effects fire on mount, so no separate mount-only effect (the old
+  // one double-fetched periods). loadSummary lives in the date effect —
+  // before, "Bu oy"/"Bu chorak" changed the dates but the KPI cards kept
+  // showing stale numbers (soliq audit 2026-08-13).
+  useEffect(() => {
+    loadPeriods();
+  }, [periodTypeFilter, statusFilter, yearFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     loadSummary();
-    loadPeriods();
-  }, []);
-
-  useEffect(() => {
-    loadPeriods();
-  }, [periodTypeFilter, statusFilter, yearFilter]);
-
-  useEffect(() => {
     if (activeTab === 'transactions') {
-      loadTransactions();
+      loadTransactions(1);
     }
     if (activeTab === 'employee-taxes') {
       loadEmployeeTaxReport();
@@ -190,7 +198,7 @@ export default function TaxReports() {
       const data = await taxReportsService.getEmployeeTaxReport(startDate, endDate);
       setEmployeeTaxReport(data || { rows: [], total_employee: 0, total_employer: 0, total: 0 });
     } catch (e) {
-      console.warn('Failed to load employee tax report', e);
+      toast.error(getApiErrorMessage(e, t('error_occurred') || 'Xatolik'));
     } finally {
       setEmployeeTaxLoading(false);
     }
@@ -202,7 +210,7 @@ export default function TaxReports() {
       const data = await taxReportsService.getSummary(startDate, endDate);
       setSummary(data);
     } catch (error) {
-      console.error('Failed to load tax summary:', error);
+      toast.error(getApiErrorMessage(error, t('error_occurred') || 'Xatolik'));
     } finally {
       setIsLoading(false);
     }
@@ -217,17 +225,19 @@ export default function TaxReports() {
       const data = await taxReportsService.listPeriods(params);
       setPeriods(data || []);
     } catch (error) {
-      console.error('Failed to load tax periods:', error);
+      toast.error(getApiErrorMessage(error, t('error_occurred') || 'Xatolik'));
     }
   };
 
-  const loadTransactions = async () => {
+  const loadTransactions = async (page = txPage) => {
     try {
       setIsLoading(true);
-      const data = await taxReportsService.getTransactions(startDate, endDate);
-      setTransactions(data || []);
+      const { rows, meta } = await taxReportsService.getTransactions(startDate, endDate, page, TX_PAGE_SIZE);
+      setTransactions(rows);
+      setTxPage(page);
+      setTxTotal(meta?.total ?? rows.length);
     } catch (error) {
-      console.error('Failed to load transactions:', error);
+      toast.error(getApiErrorMessage(error, t('error_occurred') || 'Xatolik'));
     } finally {
       setIsLoading(false);
     }
@@ -259,13 +269,14 @@ export default function TaxReports() {
     try {
       setIsLoading(true);
       await taxReportsService.calculateReport(periodId);
+      toast.success(t('report_calculated') || 'Hisobot hisoblandi');
       loadPeriods();
       if (selectedPeriod?.id === periodId) {
         const data = await taxReportsService.getPeriod(periodId);
         setSelectedPeriod(data);
       }
     } catch (error) {
-      console.error('Failed to calculate report:', error);
+      toast.error(getApiErrorMessage(error, t('error_occurred') || 'Xatolik'));
     } finally {
       setIsLoading(false);
     }
@@ -276,12 +287,13 @@ export default function TaxReports() {
     try {
       setIsLoading(true);
       await taxReportsService.fileReport(selectedPeriod.period.id, fileData);
+      toast.success(t('report_filed') || 'Hisobot topshirildi');
       setShowFileDialog(false);
       setShowPeriodDetails(false);
       setFileData({ filing_reference: '', notes: '' });
       loadPeriods();
     } catch (error) {
-      console.error('Failed to file report:', error);
+      toast.error(getApiErrorMessage(error, t('error_occurred') || 'Xatolik'));
     } finally {
       setIsLoading(false);
     }
@@ -300,8 +312,13 @@ export default function TaxReports() {
   };
 
   const openPayDialog = (periodId = null) => {
-    const id = periodId || periods.find(p => p.net_tax_liability > 0 && p.status !== 'draft' && !p.paid_at)?.id;
-    if (!id) return;
+    const id = periodId || periods.find(p => p.net_tax_liability > 0 && p.status !== 'draft' && p.status !== 'paid' && !p.paid_at)?.id;
+    if (!id) {
+      // The old code silently did nothing here — the KPI button looked dead
+      // (soliq audit 2026-08-13).
+      toast.info(t('no_payable_tax_period') || "To'lanadigan hisoblangan davr topilmadi — avval davrni hisoblang");
+      return;
+    }
     setPayPeriodId(id);
     setPaymentMethod('bank');
     setShowPayDialog(true);
@@ -312,12 +329,13 @@ export default function TaxReports() {
     try {
       setIsPaying(true);
       await taxReportsService.payPeriod(payPeriodId, { payment_method: paymentMethod });
+      toast.success(t('payment_recorded') || "To'lov qayd qilindi");
       setShowPayDialog(false);
       setPayPeriodId(null);
       loadSummary();
       loadPeriods();
     } catch (error) {
-      console.error('Failed to pay tax:', error);
+      toast.error(getApiErrorMessage(error, t('error_occurred') || 'Xatolik'));
     } finally {
       setIsPaying(false);
     }
@@ -330,7 +348,7 @@ export default function TaxReports() {
       setSelectedPeriod(data);
       setShowPeriodDetails(true);
     } catch (error) {
-      console.error('Failed to load period details:', error);
+      toast.error(getApiErrorMessage(error, t('error_occurred') || 'Xatolik'));
     } finally {
       setIsLoading(false);
     }
@@ -403,8 +421,10 @@ export default function TaxReports() {
   };
 
   const getStatusBadge = (status, deadline) => {
-    // Check if overdue: not filed and past deadline
-    if (deadline && status !== 'filed' && new Date(deadline) < new Date()) {
+    // Check if overdue: unresolved (not filed/paid) and past deadline —
+    // paid periods used to render as red "Muddati o'tgan" because 'paid'
+    // wasn't in the style map either (soliq audit 2026-08-13).
+    if (deadline && status !== 'filed' && status !== 'paid' && new Date(deadline) < new Date()) {
       return <Badge className="bg-red-100 text-red-700">{t('overdue') || 'Overdue'}</Badge>;
     }
     const styles = {
@@ -412,6 +432,7 @@ export default function TaxReports() {
       calculated: 'bg-blue-100 text-blue-700',
       submitted: 'bg-purple-100 text-purple-700',
       filed: 'bg-green-100 text-green-700',
+      paid: 'bg-emerald-100 text-emerald-700',
     };
     return <Badge className={styles[status] || styles.draft}>{t(status) || status}</Badge>;
   };
@@ -635,6 +656,7 @@ export default function TaxReports() {
                     <SelectItem value="draft">{t('draft') || 'Draft'}</SelectItem>
                     <SelectItem value="calculated">{t('calculated') || 'Calculated'}</SelectItem>
                     <SelectItem value="filed">{t('filed') || 'Filed'}</SelectItem>
+                    <SelectItem value="paid">{t('paid') || "To'langan"}</SelectItem>
                   </SelectContent>
                 </Select>
 
@@ -789,29 +811,52 @@ export default function TaxReports() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    transactions.map((tx) => (
-                      <TableRow key={tx.id}>
-                        <TableCell>{formatDate(tx.transaction_date)}</TableCell>
-                        <TableCell>
-                          <Badge variant={tx.transaction_type === 'sales_invoice' ? 'default' : 'secondary'}>
-                            {tx.transaction_type === 'sales_invoice' ? (t('sale') || 'Sale') : (t('purchase') || 'Purchase')}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="font-mono">{tx.transaction_number}</TableCell>
-                        <TableCell>{tx.party_name}</TableCell>
-                        <TableCell>
-                          {tx.tax_name} ({tx.tax_rate}%)
-                        </TableCell>
-                        <TableCell className="text-right">{formatCurrency(tx.taxable_amount)}</TableCell>
-                        <TableCell className={`text-right ${tx.transaction_type === 'sales_invoice' ? 'text-green-600' : 'text-red-600'}`}>
-                          {tx.transaction_type === 'sales_invoice' ? '+' : '-'}{formatCurrency(tx.tax_amount)}
-                        </TableCell>
-                        <TableCell className="text-right font-medium">{formatCurrency(tx.total_amount)}</TableCell>
-                      </TableRow>
-                    ))
+                    transactions.map((tx) => {
+                      // API vocabulary is 'sale'/'purchase' (taxTxKind) — the
+                      // old 'sales_invoice' comparison rendered EVERY row,
+                      // sales included, as a red "-Xarid" (soliq audit 2026-08-13).
+                      const isSale = tx.transaction_type === 'sale';
+                      return (
+                        <TableRow key={tx.id}>
+                          <TableCell>{formatDate(tx.transaction_date)}</TableCell>
+                          <TableCell>
+                            <Badge variant={isSale ? 'default' : 'secondary'}>
+                              {isSale ? (t('sale') || 'Sale') : (t('purchase') || 'Purchase')}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="font-mono">{tx.transaction_number}</TableCell>
+                          <TableCell>{tx.party_name}</TableCell>
+                          <TableCell>
+                            {tx.tax_name} ({tx.tax_rate}%)
+                          </TableCell>
+                          <TableCell className="text-right">{formatCurrency(tx.taxable_amount)}</TableCell>
+                          <TableCell className={`text-right ${isSale ? 'text-green-600' : 'text-red-600'}`}>
+                            {isSale ? '+' : '-'}{formatCurrency(tx.tax_amount)}
+                          </TableCell>
+                          <TableCell className="text-right font-medium">{formatCurrency(tx.total_amount)}</TableCell>
+                        </TableRow>
+                      );
+                    })
                   )}
                 </TableBody>
               </Table>
+              {txTotal > TX_PAGE_SIZE && (
+                <div className="flex items-center justify-between mt-3">
+                  <span className="text-sm text-muted-foreground">
+                    {txTotal} {t('transactions') || 'Tranzaksiyalar'} · {txPage}/{Math.max(1, Math.ceil(txTotal / TX_PAGE_SIZE))}
+                  </span>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" disabled={txPage <= 1}
+                      onClick={() => loadTransactions(txPage - 1)}>
+                      {t('previous') || 'Oldingi'}
+                    </Button>
+                    <Button variant="outline" size="sm" disabled={txPage >= Math.ceil(txTotal / TX_PAGE_SIZE)}
+                      onClick={() => loadTransactions(txPage + 1)}>
+                      {t('next') || 'Keyingi'}
+                    </Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -847,8 +892,12 @@ export default function TaxReports() {
               {employeeTaxLoading ? (
                 <div className="py-8 text-center text-muted-foreground">{t('loading') || 'Yuklanmoqda…'}</div>
               ) : (employeeTaxReport.rows?.length || 0) === 0 ? (
-                <div className="py-8 text-center text-muted-foreground">
-                  {t('no_employee_tax_data') || "Tanlangan davr uchun ma'lumot topilmadi"}
+                <div className="py-8 text-center text-muted-foreground space-y-2">
+                  <p>{t('no_employee_tax_data') || "Tanlangan davr uchun ma'lumot topilmadi"}</p>
+                  <p className="text-sm">
+                    {t('employee_tax_setup_hint')
+                      || "Agar ish haqi hisoblangan bo'lsa-yu bu yer bo'sh bo'lsa — Sozlamalar → Moliya → Xodim soliqlari (Stavkalar) bo'limida soliqlarni yoqing: hisob-kitob shundan keyingi davrlardan boshlab bu yerda ko'rinadi."}
+                  </p>
                 </div>
               ) : (
                 <Table>
@@ -1195,8 +1244,19 @@ export default function TaxReports() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="p-4 bg-orange-50 rounded-lg">
-              <p className="text-sm text-orange-600">{t('net_tax_liability') || 'Sof soliq majburiyati'}</p>
-              <p className="text-2xl font-bold text-orange-700">{formatCurrency(summary?.net_tax_liability || 0)}</p>
+              <p className="text-sm text-orange-600">
+                {(() => {
+                  const p = periods.find(pp => pp.id === payPeriodId);
+                  return p ? `${p.name} — ${t('net_tax_liability') || 'Sof soliq majburiyati'}` : (t('net_tax_liability') || 'Sof soliq majburiyati');
+                })()}
+              </p>
+              {/* The server charges the PERIOD's liability — showing the
+                  summary card's window-based figure here promised a
+                  different number than what got posted (soliq audit
+                  2026-08-13). */}
+              <p className="text-2xl font-bold text-orange-700">
+                {formatCurrency(periods.find(pp => pp.id === payPeriodId)?.net_tax_liability ?? summary?.net_tax_liability ?? 0)}
+              </p>
             </div>
             <div>
               <Label>{t('payment_method') || "To'lov usuli"}</Label>

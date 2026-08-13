@@ -848,7 +848,11 @@ export default function SalesOrders() {
 
     const total = subtotal + taxAmount + shippingCost - discountAmount;
 
-    // Filter and format lines - only include lines with valid product_id
+    // Filter and format lines - only include lines with valid product_id.
+    // tax_id rides on every line: the backend derives line VAT from it and
+    // the invoice built at shipment copies the line taxes — without it the
+    // whole chain shipped VAT-free (soliq audit 2026-08-13).
+    const lineTaxId = taxPercent > 0 ? (selectedTax?.id || undefined) : undefined;
     const validLines = newOrder.lines
       .filter(line => line.product_id && line.product_id.trim() !== '')
       .map(line => ({
@@ -856,6 +860,7 @@ export default function SalesOrders() {
         description: line.description || line.product_name || '',
         quantity: parseFloat(line.quantity) || 1,
         unit_price: parseFloat(line.unit_price) || 0,
+        tax_id: lineTaxId,
         packaging_id: line.packaging_id || undefined,
         packaging_qty: line.packaging_id ? (parseFloat(line.packaging_qty) || 1) : undefined,
       }));
@@ -959,7 +964,9 @@ export default function SalesOrders() {
     const shippingCost = parseFloat(editingOrder.shipping_cost) || 0;
     const total = subtotal + taxAmount + shippingCost;
 
-    // Filter and format lines - only include lines with valid product_id
+    // Filter and format lines - only include lines with valid product_id.
+    // Same tax_id propagation as create (soliq audit 2026-08-13).
+    const editLineTaxId = taxPercent > 0 ? (selectedTax?.id || undefined) : undefined;
     const validLines = editingOrder.lines
       .filter(line => line.product_id && line.product_id.trim() !== '')
       .map(line => ({
@@ -967,6 +974,7 @@ export default function SalesOrders() {
         description: line.description || line.product_name || '',
         quantity: parseFloat(line.quantity) || 1,
         unit_price: parseFloat(line.unit_price) || 0,
+        tax_id: editLineTaxId,
         packaging_id: line.packaging_id || undefined,
         packaging_qty: line.packaging_id ? (parseFloat(line.packaging_qty) || 1) : undefined,
       }));

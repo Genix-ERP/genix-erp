@@ -357,13 +357,26 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
       notes: formData.notes,
       currency_id: currencyObj?.id || undefined,
       exchange_rate: formData.exchange_rate || 1,
-      lines: formData.items.map((item) => ({
-        product_id: item.product_id,
-        description: item.product_name || "Product",
-        quantity: item.quantity,
-        unit_price: item.unit_price,
-        discount_amount: 0,
-      })),
+      // The backend derives VAT only from line tax_id → tax_rates; the typed
+      // percent alone never reached the server, so invoices stored 0 tax
+      // (soliq audit 2026-08-13). Resolve the entered percent to a catalog
+      // rate (preferring the configured default).
+      lines: formData.items.map((item) => {
+        const pct = parseFloat(formData.tax_percent) || 0;
+        const matchedTax = pct > 0
+          ? (parseFloat(defaultSalesTax?.rate) === pct
+              ? defaultSalesTax
+              : salesTaxRates.find(tr => parseFloat(tr.rate) === pct))
+          : null;
+        return {
+          product_id: item.product_id,
+          description: item.product_name || "Product",
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          discount_amount: 0,
+          tax_id: matchedTax?.id || undefined,
+        };
+      }),
     };
 
     if (editMode && selectedInvoice) {

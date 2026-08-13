@@ -90,6 +90,9 @@ export default function ActSverka() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  // 'all' | 'customer' | 'vendor' — acts are per-contact, and the same page
+  // serves both sides; this narrows the list to one side's counterparties.
+  const [partnerTypeFilter, setPartnerTypeFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 20;
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -189,6 +192,7 @@ export default function ActSverka() {
       const params = { page: currentPage, page_size: pageSize };
       if (debouncedSearch) params.search = debouncedSearch;
       if (statusFilter !== 'all') params.status = statusFilter;
+      if (partnerTypeFilter !== 'all') params.partner_type = partnerTypeFilter;
       const res = await financeService.listReconciliationActsPaginated(params);
       setActs(res?.data || []);
       setTotalCount(res?.meta?.total ?? (res?.data?.length || 0));
@@ -199,7 +203,7 @@ export default function ActSverka() {
     } finally {
       setIsListLoading(false);
     }
-  }, [currentPage, pageSize, debouncedSearch, statusFilter]);
+  }, [currentPage, pageSize, debouncedSearch, statusFilter, partnerTypeFilter]);
 
   useEffect(() => { loadActs(); }, [loadActs]);
 
@@ -211,6 +215,7 @@ export default function ActSverka() {
     try {
       const params = {};
       if (debouncedSearch) params.search = debouncedSearch;
+      if (partnerTypeFilter !== 'all') params.partner_type = partnerTypeFilter;
       const s = await financeService.getReconciliationSummary(params);
       setStats({
         total: s?.total || 0,
@@ -222,14 +227,14 @@ export default function ActSverka() {
     } catch (err) {
       console.error('Failed to load reconciliation summary:', err);
     }
-  }, [debouncedSearch]);
+  }, [debouncedSearch, partnerTypeFilter]);
 
   useEffect(() => { loadStats(); }, [loadStats]);
 
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearch, statusFilter]);
+  }, [debouncedSearch, statusFilter, partnerTypeFilter]);
 
   const totalPages = Math.ceil(totalCount / pageSize);
   const paginatedActs = acts;
@@ -1271,6 +1276,16 @@ export default function ActSverka() {
                   className="pl-10 bg-slate-50 border-slate-200"
                 />
               </div>
+              <Select value={partnerTypeFilter} onValueChange={setPartnerTypeFilter}>
+                <SelectTrigger className="w-[200px] bg-slate-50 border-slate-200">
+                  <SelectValue placeholder={t('counterparty') || "Kontragent"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t('all_partners') || 'Barcha kontragentlar'}</SelectItem>
+                  <SelectItem value="customer">{t('customers') || 'Mijozlar'}</SelectItem>
+                  <SelectItem value="vendor">{t('vendors') || 'Yetkazib beruvchilar'}</SelectItem>
+                </SelectContent>
+              </Select>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="w-[180px] bg-slate-50 border-slate-200">
                   <SelectValue placeholder={t('status') || "Holat"} />

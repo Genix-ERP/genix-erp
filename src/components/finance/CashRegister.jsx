@@ -54,7 +54,7 @@ export default function CashRegister() {
     backendAvailable,
     isLoading
   } = useFinancials();
-  const { canCreate } = usePermissions();
+  const { canCreate, canUpdate } = usePermissions();
   const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
 
   const [activeTab, setActiveTab] = useState('orders');
@@ -137,7 +137,9 @@ export default function CashRegister() {
       }
     })();
     return () => { cancelled = true; };
-  }, [cashOrders.length]);
+    // Keyed on the array reference, not .length: confirm/cancel change a
+    // status in place (context maps to a NEW array), so .length missed them.
+  }, [cashOrders]);
 
   const cashBookDays = cashBook?.days || [];
   const todayBookRow = cashBookDays.find(d => (d.date || '').split('T')[0] === today);
@@ -534,7 +536,7 @@ export default function CashRegister() {
               <ArrowUpRight className="w-4 h-4 mr-2" />
               {t('rko_short') || 'RKO'}
             </Button>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" onClick={() => window.print()}>
               <Printer className="w-4 h-4 mr-2" />
               {t('print') || 'Print'}
             </Button>
@@ -728,7 +730,7 @@ export default function CashRegister() {
                       <TableCell>{getStatusBadge(order.status)}</TableCell>
                       <TableCell>
                         <div className="flex gap-1">
-                          {order.status === 'draft' && canCreate(MODULES.FINANCIALS) && (
+                          {order.status === 'draft' && canUpdate(MODULES.FINANCIALS) && (
                             <>
                               <Button
                                 size="sm"
@@ -762,9 +764,6 @@ export default function CashRegister() {
                               {t('storno') || 'Storno'}
                             </Button>
                           )}
-                          <Button size="sm" variant="ghost">
-                            <Printer className="w-3 h-3" />
-                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -794,7 +793,7 @@ export default function CashRegister() {
                     <Badge variant="outline" className="font-mono text-xs">{cashBook.account_code}</Badge>
                   )}
                 </CardTitle>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" onClick={() => window.print()}>
                   <Printer className="w-4 h-4 mr-2" />
                   {t('print') || 'Print'}
                 </Button>

@@ -17,17 +17,19 @@ import { Textarea } from "@/components/ui/textarea";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import financeService from "@/api/services/finance";
+import { usePermissions } from "@/hooks/usePermissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { getApiErrorMessage } from '@/utils/apiError';
 import { useAlertModal } from "@/hooks/useAlertModal";
 import AlertModal from "@/components/shared/AlertModal";
 import { toast } from 'sonner';
-import { getApiErrorMessage } from '@/utils/apiError';
 
 export default function ReconciliationWorkflow({ bankAccount, onClose }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { formatCurrency } = useCurrencyFormatter();
-  const { modal, showError, close } = useAlertModal();
+  const { canDelete, MODULES } = usePermissions();
+  const { modal, close } = useAlertModal();
 
   const [reconciliations, setReconciliations] = useState([]);
   const [activeReconciliation, setActiveReconciliation] = useState(null);
@@ -110,8 +112,6 @@ export default function ReconciliationWorkflow({ bankAccount, onClose }) {
       loadReconciliation(result.id);
     } catch (error) {
       console.error('Failed to create reconciliation:', error);
-      showError(error.response?.data?.error?.message || 'Failed to create reconciliation');
-    
       toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
@@ -154,8 +154,6 @@ export default function ReconciliationWorkflow({ bankAccount, onClose }) {
       await loadReconciliation(activeReconciliation.id);
     } catch (error) {
       console.error('Failed to save reconciliation:', error);
-      showError('Failed to save reconciliation');
-    
       toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
@@ -181,8 +179,6 @@ export default function ReconciliationWorkflow({ bankAccount, onClose }) {
       await loadReconciliations();
     } catch (error) {
       console.error('Failed to complete reconciliation:', error);
-      showError(error.response?.data?.error?.message || 'Failed to complete reconciliation');
-    
       toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
@@ -200,13 +196,17 @@ export default function ReconciliationWorkflow({ bankAccount, onClose }) {
       await loadReconciliations();
     } catch (error) {
       console.error('Failed to delete reconciliation:', error);
-      showError(error.response?.data?.error?.message || 'Failed to delete');
-    
       toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     }
   };
 
-  // Calculate totals
+  // Calculate totals — the difference MUST be the formula the server enforces
+  // at /complete: statement_ending_balance − (opening anchor + cleared JOURNAL
+  // lines this session), where the anchor is the statement balance of the last
+  // COMPLETED reconciliation (summary.opening_balance). The old local formula
+  // (statement − book − clearedBankTotal) disagreed with the server: checking
+  // journal lines had no effect on the Complete gate, and a user who zeroed
+  // the local number still got a 400 from the server.
   const calculateTotals = () => {
     if (!reconciliationData) return { clearedBankTotal: 0, clearedBookTotal: 0, difference: 0 };
 
@@ -225,7 +225,8 @@ export default function ReconciliationWorkflow({ bankAccount, onClose }) {
     });
 
     const statementBalance = activeReconciliation?.statement_ending_balance || 0;
-    const difference = statementBalance - (reconciliationData.reconciliation?.book_balance || 0) - clearedBankTotal;
+    const openingAnchor = reconciliationData.summary?.opening_balance || 0;
+    const difference = statementBalance - (openingAnchor + clearedBookTotal);
 
     return { clearedBankTotal, clearedBookTotal, difference };
   };
@@ -299,7 +300,7 @@ export default function ReconciliationWorkflow({ bankAccount, onClose }) {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        {rec.status === 'draft' && (
+                        {rec.status === 'draft' && canDelete(MODULES.FINANCIALS) && (
                           <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); handleDeleteReconciliation(rec.id); }}>
                             <Trash2 className="w-4 h-4 text-red-500" />
                           </Button>
@@ -385,7 +386,10 @@ export default function ReconciliationWorkflow({ bankAccount, onClose }) {
               {isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               {language === 'uz' ? 'Saqlash' : 'Save'}
             </Button>
-            <Button onClick={handleCompleteReconciliation} disabled={isSaving || Math.abs(totals.difference) > 0.01}>
+            {/* Server tolerance: differences up to 1,000 so'm are auto
+                written off at /complete — gating stricter than the server
+                blocked completions the server would accept. */}
+            <Button onClick={handleCompleteReconciliation} disabled={isSaving || Math.abs(totals.difference) > 1000}>
               <CheckCircle className="w-4 h-4 mr-2" />
               {language === 'uz' ? 'Yakunlash' : 'Complete'}
             </Button>
