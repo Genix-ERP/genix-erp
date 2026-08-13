@@ -366,9 +366,36 @@ export default function CargoShipments() {
           });
         });
 
-        // Create shipments
+        // Create shipments.
+        // The map above is built in the FORM shape (name/price, nested costs),
+        // but createShipment posts straight to the API, which expects
+        // item_name/unit_price and flat *_cost fields. Sending the form shape
+        // silently dropped every price and cost — quantity survived (same field
+        // name) while unit_price arrived undefined -> 0, so imported cargo
+        // showed "Jami narx 0,00". Map to the backend contract here, exactly as
+        // handleSubmit does.
         Object.values(shipmentsMap).forEach(shipment => {
-          createShipment(shipment);
+          createShipment({
+            supplier_country: '',
+            supplier_company: shipment.supplier_company || '',
+            tracking_number: shipment.tracking_number,
+            expected_date: shipment.expected_date
+              ? new Date(shipment.expected_date).toISOString()
+              : null,
+            transport_cost: Number(shipment.costs?.transport || 0),
+            customs_cost: Number(shipment.costs?.customs || 0),
+            insurance_cost: 0,
+            other_cost: Number(shipment.costs?.other || 0),
+            notes: '',
+            items: shipment.items.map((item) => ({
+              item_name: item.name,
+              quantity: Number(item.quantity || 0),
+              unit_price: Number(item.price || 0),
+              currency: item.currency || 'USD',
+              hs_code: '',
+              description: item.imei ? `IMEI/Serial: ${item.imei}` : '',
+            })),
+          });
         });
 
         toast.success(`${Object.keys(shipmentsMap).length} ta yuk muvaffaqiyatli yuklandi!`);

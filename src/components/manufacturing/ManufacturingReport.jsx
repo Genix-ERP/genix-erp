@@ -12,12 +12,12 @@ import { Button } from '@/components/ui/button';
 import { productionOrdersService } from '@/api/services/manufacturing';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatAxisTick } from '@/utils/formatCurrency';
-import { getApiErrorMessage } from '@/utils/apiError';
 import {
   PAL, StatTile, ChartCard, EmptyNote, GlassTooltip, Segmented,
 } from '@/components/shared/DashboardKit';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 const iso = (d) => d.toISOString().split('T')[0];
 

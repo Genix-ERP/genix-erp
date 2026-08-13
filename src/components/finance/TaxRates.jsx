@@ -20,6 +20,7 @@ import TaxReports from "./TaxReports";
 import { useAlertModal } from "@/hooks/useAlertModal";
 import AlertModal from "@/components/shared/AlertModal";
 import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 export default function TaxRates({ hideReports = false }) {
   const { language } = useLanguage();
@@ -117,7 +118,7 @@ export default function TaxRates({ hideReports = false }) {
       const errorMsg = error.response?.data?.error?.message || error.message || 'Failed to create tax rate';
       showError(errorMsg);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }
@@ -157,7 +158,7 @@ export default function TaxRates({ hideReports = false }) {
       const errorMsg = error.response?.data?.error?.message || error.message || 'Failed to update tax rate';
       showError(errorMsg);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }
@@ -179,7 +180,7 @@ export default function TaxRates({ hideReports = false }) {
       const errorMsg = error.response?.data?.error?.message || error.message || 'Failed to delete tax rate';
       showError(errorMsg);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }

@@ -32,6 +32,7 @@ import { useTranslation } from "@/components/utils/translations";
 import { inventoryService, financeService } from '@/api/services';
 import { usePermissions } from "@/hooks/usePermissions";
 import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 // Icon mapping for operation types (by type field: receipt, delivery, internal, pos)
 const getOperationIcon = (type) => {
@@ -324,7 +325,7 @@ export default function OperationTypes() {
     } catch (err) {
       console.error('Error creating operation type:', err);
     
-      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(err, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }
@@ -355,7 +356,7 @@ export default function OperationTypes() {
     } catch (err) {
       console.error('Error updating operation type:', err);
     
-      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(err, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }
@@ -368,7 +369,7 @@ export default function OperationTypes() {
     } catch (err) {
       console.error('Error deleting operation type:', err);
     
-      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(err, 'Amalni bajarib bo\'lmadi'));
     }
   };
 
@@ -427,7 +428,7 @@ export default function OperationTypes() {
     } catch (err) {
       console.error('Error saving steps:', err);
     
-      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(err, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setStepsSaving(false);
     }

@@ -17,6 +17,7 @@ import { inventoryService, bomsService, workCentersService } from '@/api/service
 import ProductCombobox from "@/components/shared/ProductCombobox";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 export default function BOMManagement() {
   const { language } = useLanguage();
@@ -299,7 +300,7 @@ export default function BOMManagement() {
           } catch (error) {
             console.error('Error deleting operation:', opId, error);
           
-            toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+            toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
           }
         }
       }
@@ -335,7 +336,7 @@ export default function BOMManagement() {
           } catch (error) {
             console.error('Error deleting BOM line:', lineId, error);
           
-            toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+            toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
           }
         }
       }
@@ -356,7 +357,7 @@ export default function BOMManagement() {
           } catch (error) {
             console.error('Error creating BOM line:', error);
           
-            toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+            toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
           }
         }
       }

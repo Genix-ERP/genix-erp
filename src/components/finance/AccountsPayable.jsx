@@ -18,7 +18,6 @@ import { useEmployeePermissions } from '@/components/contexts/EmployeePermission
 import { financeService } from '@/api/services/finance';
 import { useCompany } from '@/components/contexts/CompanyContext';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
-import { getApiErrorMessage } from '@/utils/apiError';
 
 import {
   ImportModal, ExportModal, ImportExportButtons,
@@ -34,6 +33,7 @@ import { toast } from 'sonner';
 import {
   getPaymentStatus, getPaymentStatusBadge, getStatusColor, isOverdue, residualOf,
 } from './accounts-payable/billHelpers';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 const PAGE_SIZE = 20;
 
@@ -221,7 +221,7 @@ export default function AccountsPayable() {
       // rejected create looked exactly like a button that did nothing.
       setCreateError(getApiErrorMessage(err, 'Failed to create vendor bill'));
     
-      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(err, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }
@@ -264,7 +264,7 @@ export default function AccountsPayable() {
     } catch (error) {
       console.error('Failed to create debit note:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }
@@ -277,7 +277,7 @@ export default function AccountsPayable() {
     } catch (error) {
       console.error('Failed to confirm debit note:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     }
   };
 

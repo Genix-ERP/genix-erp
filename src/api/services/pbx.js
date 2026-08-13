@@ -1,6 +1,7 @@
 import apiClient from '../client';
 import { checkBackendHealth } from '@/config/dataMode';
 import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 // PBX Configuration stored in localStorage (fallback only)
 const PBX_CONFIG_KEY = 'genix_pbx_config';
@@ -77,7 +78,7 @@ export const pbxService = {
     } catch (error) {
       console.error('PBX connection test failed:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     }
     return false;
   },

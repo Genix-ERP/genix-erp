@@ -55,6 +55,7 @@ import SmetaSummaryView from '@/components/construction/SmetaSummaryView';
 import Loader from '@/components/ui/loader';
 import SublineModal from '@/components/construction/SublineModal';
 import EstimateLineEditModal from '@/components/construction/EstimateLineEditModal';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontracts = [] }) => {
   const { language } = useLanguage();
@@ -249,7 +250,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
           } catch (e) {
             console.error('Failed to create stage:', name, e);
           
-            toast.error((e?.response?.data?.message) || (e?.response?.data?.error) || e?.message || 'Amalni bajarib bo\'lmadi');
+            toast.error(getApiErrorMessage(e, 'Amalni bajarib bo\'lmadi'));
           }
         }
       }
@@ -571,7 +572,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
     } catch (error) {
       console.error('Error creating estimate:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     }
   };
 
@@ -589,7 +590,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
         } catch (error) {
           console.error('Error approving estimate:', error);
         
-          toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+          toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
         }
       },
     });
@@ -623,7 +624,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
         } catch (error) {
           console.error('Error deleting estimate:', error);
         
-          toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+          toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
         }
       },
     });
@@ -665,7 +666,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
     } catch (error) {
       console.error('Error updating estimate:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     }
   };
 
@@ -719,7 +720,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
     } catch (error) {
       console.error('Error saving line:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     }
   };
 
@@ -738,7 +739,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
         } catch (error) {
           console.error('Error deleting line:', error);
         
-          toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+          toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
         }
       },
     });

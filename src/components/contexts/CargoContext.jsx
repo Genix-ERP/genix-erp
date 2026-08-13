@@ -3,6 +3,7 @@ import { useCompany } from './CompanyContext';
 import { useInstalledApps } from './InstalledAppsContext';
 import { cargoService } from '@/api/services/cargo';
 import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 const CargoContext = createContext();
 
@@ -286,7 +287,7 @@ export const CargoProvider = ({ children }) => {
       setShipments(updatedShipments);
       saveToStorage(STORAGE_KEYS.shipments, updatedShipments);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     }
   }, [shipments, useBackend, saveToStorage, STORAGE_KEYS.shipments, loadShipments]);
 

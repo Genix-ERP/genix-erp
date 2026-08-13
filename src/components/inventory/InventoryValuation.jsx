@@ -200,7 +200,12 @@ export default function InventoryValuation() {
       avgMargin,
       categoryBreakdown,
       methodBreakdown,
-      itemCount: valuationData.length,
+      // Count comes from the SERVER total for the active filters, the same
+      // source that feeds the table (paginatedProducts). Recounting the
+      // context-cached `products` here made the footer disagree with the rows
+      // on screen ("13 Mahsulotlar" over 12 visible rows) whenever the cache
+      // and the server-side filter differed.
+      itemCount: totalProducts || valuationData.length,
     };
   }, [valuationData]);
 

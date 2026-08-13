@@ -123,7 +123,7 @@ export default function BankReconciliation() {
     } catch (err) {
       console.error('Error creating bank account:', err);
     
-      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(err, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }
@@ -144,7 +144,7 @@ export default function BankReconciliation() {
     } catch (err) {
       console.error('Error updating bank account:', err);
     
-      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(err, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }
@@ -169,7 +169,7 @@ export default function BankReconciliation() {
     } catch (err) {
       console.error('Error creating transaction:', err);
     
-      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(err, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }
@@ -182,7 +182,7 @@ export default function BankReconciliation() {
     } catch (err) {
       console.error('Error reconciling transaction:', err);
     
-      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(err, 'Amalni bajarib bo\'lmadi'));
     }
   };
 
@@ -1105,7 +1105,7 @@ export default function BankReconciliation() {
                 } catch (err) {
                   console.error('Failed to delete bank account:', err);
                 
-                  toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+                  toast.error(getApiErrorMessage(err, 'Amalni bajarib bo\'lmadi'));
                 }
                 setDeleteAccountId(null);
               }}

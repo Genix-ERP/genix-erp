@@ -22,8 +22,8 @@ import { MODULES } from "@/config/permissions";
 import { contactsService } from '@/api/services';
 import financeService from "@/api/services/finance";
 import { formatDate, formatDateTime } from '@/utils/formatDate';
-import { getApiErrorMessage } from '@/utils/apiError';
 import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 // Fix share URLs: replace backend's FRONTEND_URL with actual browser origin
 const fixShareUrl = (url) => {
@@ -306,7 +306,7 @@ export default function ActSverka() {
     } catch (err) {
       console.error('Failed to create act:', err);
     
-      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(err, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }
@@ -367,7 +367,7 @@ export default function ActSverka() {
     } catch (err) {
       console.error('Failed to update status:', err);
     
-      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(err, 'Amalni bajarib bo\'lmadi'));
     }
   };
 
@@ -389,7 +389,7 @@ export default function ActSverka() {
     } catch (err) {
       console.error('Delete failed:', err);
     
-      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(err, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setShowDeleteConfirm(false);
       setActToDelete(null);

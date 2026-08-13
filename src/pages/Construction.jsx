@@ -78,6 +78,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { getApiErrorMessage } from '@/utils/apiError';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { format } from 'date-fns';
@@ -1129,7 +1130,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
     } catch (error) {
       console.error('Error importing buildings:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     }
   };
 
@@ -1770,7 +1771,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
     } catch (error) {
       console.error('Error approving material request:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     }
   };
 

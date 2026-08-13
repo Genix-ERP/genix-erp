@@ -30,6 +30,7 @@ import { format } from "date-fns";
 import financeService from '@/api/services/finance';
 import AccountCombobox from '@/components/shared/AccountCombobox';
 import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -330,7 +331,7 @@ export default function BudgetManagement() {
     } catch (e) {
       console.error('Error saving budget:', e);
     
-      toast.error((e?.response?.data?.message) || (e?.response?.data?.error) || e?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(e, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }

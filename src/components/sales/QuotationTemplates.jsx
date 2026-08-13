@@ -32,6 +32,7 @@ import { paymentTermsService } from '@/api/services/paymentTerms';
 import { pricelistsService } from '@/api/services/pricelists';
 import { inventoryService } from '@/api/services/inventory';
 import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 export default function QuotationTemplates() {
   const { language } = useLanguage();
@@ -203,7 +204,7 @@ export default function QuotationTemplates() {
     } catch (error) {
       console.error('Failed to create template:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }
@@ -223,7 +224,7 @@ export default function QuotationTemplates() {
     } catch (error) {
       console.error('Failed to update template:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }
@@ -241,7 +242,7 @@ export default function QuotationTemplates() {
     } catch (error) {
       console.error('Failed to delete template:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     }
   };
 

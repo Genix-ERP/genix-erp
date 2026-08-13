@@ -23,6 +23,7 @@ import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useAlertModal } from "@/hooks/useAlertModal";
 import AlertModal from "@/components/shared/AlertModal";
 import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 export default function CurrencyManagement() {
   const { language } = useLanguage();
@@ -114,7 +115,7 @@ export default function CurrencyManagement() {
       const errorMsg = err.response?.data?.error?.message || err.message || 'Failed to create currency';
       showError(errorMsg);
     
-      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(err, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }

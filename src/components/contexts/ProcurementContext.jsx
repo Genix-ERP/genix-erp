@@ -3,6 +3,7 @@ import procurementService from '@/api/services/procurement';
 import { isDemoMode, checkBackendHealth } from '@/config/dataMode';
 import { useAdminSettings } from './AdminSettingsContext';
 import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 const ProcurementContext = createContext(null);
 
@@ -281,7 +282,7 @@ export function ProcurementProvider({ children }) {
       } catch (error) {
         console.error('Failed to update supplier via API:', error);
       
-        toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+        toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
       }
     }
     setSuppliers(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
@@ -294,7 +295,7 @@ export function ProcurementProvider({ children }) {
       } catch (error) {
         console.error('Failed to delete supplier via API:', error);
       
-        toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+        toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
       }
     }
     setSuppliers(prev => prev.filter(s => s.id !== id));
@@ -523,7 +524,7 @@ export function ProcurementProvider({ children }) {
       } catch (error) {
         console.error('Failed to delete contract via API:', error);
       
-        toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+        toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
       }
     }
     setContracts(prev => prev.filter(c => c.id !== id));
@@ -795,7 +796,7 @@ export function ProcurementProvider({ children }) {
       } catch (error) {
         console.error('Failed to delete PO via API:', error);
       
-        toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+        toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
       }
     }
     setPurchaseOrders(prev => prev.filter(po => po.id !== id));

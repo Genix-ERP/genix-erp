@@ -32,12 +32,12 @@ import { useTranslation } from '@/components/utils/translations';
 import { useManufacturing } from '@/components/contexts/ManufacturingContext';
 import { useInventory } from '@/components/contexts/InventoryContext';
 import { workOrdersService, productionOrdersService } from '@/api/services/manufacturing';
-import { getApiErrorMessage } from '@/utils/apiError';
 import QCReasonPicker, { composeDefectReason } from './QCReasonPicker';
 import { toast } from 'sonner';
 import apiClient from '@/api/client';
 import { format, differenceInMinutes, parseISO } from 'date-fns';
 import { parseSpreadsheetFile } from '@/components/shared/ImportExport';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 // How much of the bulk one packaged piece consumes, relative to the bulk's unit
 // (m, m³, kg…). Priority: explicit weight (legacy size-factor) > full volume

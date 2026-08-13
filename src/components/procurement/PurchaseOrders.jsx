@@ -74,6 +74,7 @@ import BlanketOrders from './BlanketOrders';
 import LandedCosts from './LandedCosts';
 import GoodsReceipt from './GoodsReceipt';
 import PurchaseRequisitions from '@/components/procurement/PurchaseRequisitions';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 // Print-only helpers. The shared print engine (DocumentPrint.jsx) renders its
 // fixed labels in Uzbek, so these stay Uzbek too.
@@ -769,7 +770,7 @@ export default function PurchaseOrders({ initialSubtab = 'orders' }) {
     } catch (error) {
       console.error('Error creating PO:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSubmitting(false);
     }

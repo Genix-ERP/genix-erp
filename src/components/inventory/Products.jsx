@@ -65,6 +65,7 @@ import {
 // running the file input directly on the products page we skip the dialog
 // entirely.
 import { parseSpreadsheetFile } from '@/components/shared/ImportExport';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 // ── EAN-13 Barcode Utilities ──────────────────────────────────────────────────
 const EAN13_L = ['0001101','0011001','0010011','0111101','0100011','0110001','0101111','0111011','0110111','0001011'];
@@ -1210,7 +1211,7 @@ export default function Products() {
     } catch (err) {
       console.error('Failed to create attribute:', err);
     
-      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(err, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsCreatingAttr(false);
     }
@@ -1231,7 +1232,7 @@ export default function Products() {
     } catch (err) {
       console.error('Failed to add value:', err);
     
-      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(err, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsAddingValue(false);
     }
@@ -1561,7 +1562,7 @@ export default function Products() {
         } catch (variantErr) {
           console.error('Error setting up variants:', variantErr);
         
-          toast.error((variantErr?.response?.data?.message) || (variantErr?.response?.data?.error) || variantErr?.message || 'Amalni bajarib bo\'lmadi');
+          toast.error(getApiErrorMessage(variantErr, 'Amalni bajarib bo\'lmadi'));
         }
       }
 
@@ -1571,7 +1572,7 @@ export default function Products() {
     } catch (error) {
       console.error('Error creating product:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }
@@ -1787,7 +1788,7 @@ export default function Products() {
     } catch (error) {
       console.error('Error deleting product:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     }
   };
 
@@ -2621,7 +2622,7 @@ export default function Products() {
                         } catch (err) {
                           console.error('Image upload failed:', err);
                         
-                          toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+                          toast.error(getApiErrorMessage(err, 'Amalni bajarib bo\'lmadi'));
                         }
                       }}
                     />

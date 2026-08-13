@@ -13,6 +13,7 @@ import { formatApiError } from '@/utils/apiErrors';
 import AddResourcePickerModal from '@/components/construction/AddResourcePickerModal';
 import AddSubWorkModal from '@/components/construction/AddSubWorkModal';
 import { sortLinesManualFirst, sortLinesManualFirstInPlace } from '@/components/construction/utils/sortLines';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 // =====================================================================
 // StagesTabV2 — full port of construction_module_v2.html
@@ -1050,7 +1051,7 @@ export default function StagesTabV2({ project, setActiveGroup, setActiveTab }) {
           } catch (e) {
             console.error('Failed to delete line', ln.id, e);
           
-            toast.error((e?.response?.data?.message) || (e?.response?.data?.error) || e?.message || 'Amalni bajarib bo\'lmadi');
+            toast.error(getApiErrorMessage(e, 'Amalni bajarib bo\'lmadi'));
           }
         }
         const deletedIds = new Set();

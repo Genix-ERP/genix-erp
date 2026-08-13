@@ -31,6 +31,7 @@ import { Employee } from '@/api/entities';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { formatDate } from '@/utils/formatDate';
 import { CONTRACT_STATUSES, CONTRACT_DIRECTIONS } from '@/components/contracts/constants';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 const EMPTY_FORM = {
   contract_number: '',
@@ -232,7 +233,7 @@ export default function Contracts() {
       }
       if (pendingDealLink && created?.id) {
         try { await contractsService.createLink(created.id, pendingDealLink.module, pendingDealLink.id); } catch (e) { console.error(e); 
-        toast.error((e?.response?.data?.message) || (e?.response?.data?.error) || e?.message || 'Amalni bajarib bo\'lmadi');
+        toast.error(getApiErrorMessage(e, 'Amalni bajarib bo\'lmadi'));
       }
         setPendingDealLink(null);
       }

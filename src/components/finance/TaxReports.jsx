@@ -75,6 +75,7 @@ import { toast } from 'sonner';
 import ProfitTax from '@/pages/ProfitTax';
 import TaxSummary from '@/pages/TaxSummary';
 import TaxSettings from '@/components/finance/TaxSettings';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 export default function TaxReports() {
   const { language } = useLanguage();
@@ -248,7 +249,7 @@ export default function TaxReports() {
     } catch (error) {
       console.error('Failed to create period:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsLoading(false);
     }
@@ -294,7 +295,7 @@ export default function TaxReports() {
     } catch (error) {
       console.error('Failed to delete period:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     }
   };
 

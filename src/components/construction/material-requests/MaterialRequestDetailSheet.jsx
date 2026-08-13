@@ -40,7 +40,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useAuth } from '@/components/contexts/AuthContext';
-import { getApiErrorMessage } from '@/utils/apiError';
 import materialRequestsService from '@/api/services/materialRequests';
 
 import {
@@ -48,6 +47,7 @@ import {
   mrLineStatusBadgeProps,
   MR_ACTIVITY_META,
 } from './materialRequestMeta';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 const ACTIONABLE = new Set(['new', 'in_review', 'in_purchase', 'partially_fulfilled']);
 
