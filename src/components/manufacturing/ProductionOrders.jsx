@@ -18,6 +18,7 @@ import { MODULES } from "@/config/permissions";
 import { inventoryService, bomsService, productionOrdersService } from '@/api/services';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/utils/apiError';
 import ProductCombobox from '@/components/shared/ProductCombobox';
 
 // How much of the bulk one packaged piece consumes, relative to the bulk's unit
@@ -293,8 +294,7 @@ export default function ProductionOrders() {
       fetchOrders();
     } catch (error) {
       console.error('Error updating order status:', error);
-    
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     }
   };
 
@@ -481,7 +481,7 @@ export default function ProductionOrders() {
       refreshInventory();
     } catch (err) {
       console.error('Final output submit error:', err);
-      toast.error('Failed: ' + (err.response?.data?.error?.message || err.message));
+      toast.error(getApiErrorMessage(err, 'Failed'));
     }
     setFinalOutputSubmitting(false);
   };
@@ -506,8 +506,7 @@ export default function ProductionOrders() {
       } catch (error) {
         console.error('Error moving to packaging:', error);
         // Even if the status update fails, still try to show the modal
-      
-        toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+        toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
       }
     }
     setSplitPoId(orderId);
@@ -608,7 +607,7 @@ export default function ProductionOrders() {
       refreshInventory();
     } catch (err) {
       console.error('Split output error:', err);
-      toast.error('Failed: ' + (err.response?.data?.error || err.message));
+      toast.error(getApiErrorMessage(err, 'Failed'));
     }
     setSplitSubmitting(false);
   };
@@ -657,7 +656,7 @@ export default function ProductionOrders() {
       refreshInventory();
     } catch (error) {
       console.error('Error recording output:', error);
-      toast.error(t('error_recording_output') || 'Failed to record output: ' + (error.response?.data?.error?.message || error.message));
+      toast.error(getApiErrorMessage(error, t('error_recording_output') || 'Failed to record output'));
     }
   };
 
