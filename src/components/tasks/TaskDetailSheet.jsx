@@ -87,8 +87,10 @@ export default function TaskDetailSheet({ boardId, taskId, columns, onClose, onC
   useEffect(() => {
     const id = setTimeout(async () => {
       try {
+        // listEmployees resolves to response.data.data — the employees ARRAY
+        // itself (SuccessWithPagination), not an {employees: [...]} wrapper.
         const res = await hrService.listEmployees({ search: employeeSearch, limit: 10, status: 'active' });
-        setEmployeeResults(res?.employees ?? []);
+        setEmployeeResults(Array.isArray(res) ? res : res?.employees ?? []);
       } catch {
         setEmployeeResults([]);
       }
@@ -413,7 +415,7 @@ export default function TaskDetailSheet({ boardId, taskId, columns, onClose, onC
                                     {emp.full_name || `${emp.first_name} ${emp.last_name}`}
                                   </span>
                                   <span className="block truncate text-xs text-slate-400">
-                                    {[emp.job_position_name || emp.job_title, emp.department].filter(Boolean).join(' · ')}
+                                    {[emp.job_position_name || emp.job_title, emp.department_name || emp.department].filter(Boolean).join(' · ')}
                                   </span>
                                 </span>
                                 {isAssigned && <CheckSquare className="w-4 h-4 text-blue-600 flex-shrink-0" />}
