@@ -3547,6 +3547,8 @@ export default {
     "money_received": "Pul olindi",
     "money_paid": "Pul to'landi",
     "plastic_card": "Plastik karta",
+    "payment_method_auto": "Avtomatik",
+    "payment_method_auto_hint": "Xodimlar kartochkasidagi usul bo'yicha",
     "select_payment_method": "To'lov usulini tanlang",
     "check": "Chek",
     "credit_card": "Kredit karta",
