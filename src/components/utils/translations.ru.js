@@ -3578,6 +3578,8 @@ export default {
     "failed_to_set_primary": "Не удалось установить основную компанию",
 
     "plastic_card": "Пластиковая карта",
+    "payment_method_auto": "Автоматически",
+    "payment_method_auto_hint": "По способу, указанному у сотрудника",
     "select_payment_method": "Выберите способ оплаты",
     "check": "Чек",
     "credit_card": "Кредитная карта",

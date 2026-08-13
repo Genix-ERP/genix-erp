@@ -358,13 +358,15 @@ export default function Payroll() {
 
   const updatePayrollStatus = (payrollId, newStatus, paymentMethod) => {
     const data = { status: newStatus };
-    if (paymentMethod) data.payment_method = paymentMethod;
+    // 'auto' sends no method — the backend then uses the dominant
+    // payment_method of the period's entries (bank stays bank).
+    if (paymentMethod && paymentMethod !== 'auto') data.payment_method = paymentMethod;
     updatePayroll(payrollId, data);
   };
 
   const handlePayClick = (payrollId) => {
     setPayingPayrollId(payrollId);
-    setSelectedPayMethod('cash');
+    setSelectedPayMethod('auto');
     setShowPayMethodDialog(true);
   };
 
@@ -1727,6 +1729,18 @@ export default function Payroll() {
               <DialogTitle>{t('select_payment_method') || "To'lov usulini tanlang"}</DialogTitle>
             </DialogHeader>
             <div className="space-y-3 py-4">
+              <button
+                onClick={() => setSelectedPayMethod('auto')}
+                className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 transition-colors ${selectedPayMethod === 'auto' ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300'}`}
+              >
+                <span className="text-2xl">⚙️</span>
+                <span className="font-medium text-left">
+                  {t('payment_method_auto') || 'Avtomatik'}
+                  <span className="block text-xs text-slate-500 font-normal">
+                    {t('payment_method_auto_hint') || "Xodimlar kartochkasidagi usul bo'yicha"}
+                  </span>
+                </span>
+              </button>
               <button
                 onClick={() => setSelectedPayMethod('cash')}
                 className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 transition-colors ${selectedPayMethod === 'cash' ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300'}`}

@@ -3614,6 +3614,8 @@ export default {
     "money_received": "Money Received",
     "money_paid": "Money Paid",
     "plastic_card": "Plastic Card",
+    "payment_method_auto": "Automatic",
+    "payment_method_auto_hint": "Per each employee's payment method",
     "select_payment_method": "Select Payment Method",
     "check": "Check",
     "credit_card": "Credit Card",
