@@ -823,6 +823,8 @@ export default {
     gpr_select_hint: 'Select a work to edit dates, progress and dependencies',
     gpr_works: 'works',
     gpr_all_blocks: 'All blocks',
+    gpr_range_truncated: "{n} works outside the range — switch to Month view",
+    gpr_range_until: "until",
     gpr_duration_note: 'working days incl. weekends (v1)',
     gpr_qty_zero_hint: 'Quantity is 0 — progress cannot be entered',
     mrp_v2_run: 'Run MRP',

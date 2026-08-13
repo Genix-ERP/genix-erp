@@ -55,7 +55,10 @@ const TICK_H = 26;      // day/week tick row height
 const MONTH_H = 20;     // month band height
 const RESIZE_ZONE = 10; // px from the right edge that acts as a resize handle
 const OVERSCAN = 10;    // windowing overscan rows
-const MAX_RANGE_DAYS = 750;
+// Grafik to'rining eng katta kengligi (px). Kun ko'rinishida bu ~900 kun,
+// Oy ko'rinishida ~6600 kun (18 yil) beradi — ya'ni uzoq loyihani ko'rish
+// uchun Oy ga o'tish kifoya, hech narsa jimgina yo'qolmaydi.
+const MAX_GRID_PX = 40000;
 
 const isScheduled = (w) => Boolean(w?.sched_start && w?.sched_end);
 
@@ -214,7 +217,16 @@ export default function WorkScheduleTab({ project, onOpenSmeta }) {
   }, [rows]);
 
   // Timeline range: min(all dates, planned_start, today) − 7 →
-  // max(all dates, today) + 14, capped at MAX_RANGE_DAYS.
+  // max(all dates, today) + 14, capped by maxRangeDays.
+  //
+  // Chegara kunlarda emas, PIKSELDA hisoblanadi. Ilgari qat'iy 750 kun turardi
+  // (~2 yil): undan uzoq loyihada oxirgi ishlar shunchaki chizilmasdi va buni
+  // bildiradigan hech narsa yo'q edi — foydalanuvchi uchun grafik "bir yildan
+  // keyin tugab qolgan"dek ko'rinardi. Aslida cheklov kenglikdan kelib chiqadi:
+  // Kun ko'rinishida bir kun 44px, Oy ko'rinishida esa 6px, ya'ni Oy'da xuddi
+  // shu piksel byudjetiga bir necha barobar ko'p kun sig'adi.
+  const maxRangeDays = Math.max(750, Math.floor(MAX_GRID_PX / dayWidth));
+
   const range = useMemo(() => {
     const today = todayISO();
     let min = today;
@@ -232,10 +244,18 @@ export default function WorkScheduleTab({ project, onOpenSmeta }) {
       min = projInfo.planned_start_date;
     }
     const start = addDays(min, -7);
-    let end = addDays(max, 14);
-    if (dayDiff(end, start) + 1 > MAX_RANGE_DAYS) end = addDays(start, MAX_RANGE_DAYS - 1);
-    return { start, end, dayCount: dayDiff(end, start) + 1 };
-  }, [works, projInfo]);
+    const wanted = addDays(max, 14);
+    let end = wanted;
+    let truncated = false;
+    if (dayDiff(end, start) + 1 > maxRangeDays) {
+      end = addDays(start, maxRangeDays - 1);
+      truncated = true;
+    }
+    return { start, end, dayCount: dayDiff(end, start) + 1, truncated, wantedEnd: wanted };
+    // visibleWorks — blok filtri o'zgarganda oraliq ham qayta hisoblanishi
+    // kerak; ilgari bu yerda `works` turgani uchun filtr almashsa oraliq eski
+    // holicha qolib ketardi.
+  }, [visibleWorks, projInfo, maxRangeDays]);
 
   const gridWidth = range.dayCount * dayWidth;
   const todayIdx = dayDiff(todayISO(), range.start);
@@ -271,6 +291,12 @@ export default function WorkScheduleTab({ project, onOpenSmeta }) {
   const unscheduledCount = visibleWorks.filter((w) => !isScheduled(w)).length;
   const scheduledCount = visibleWorks.length - unscheduledCount;
   const today = todayISO();
+
+  // Oraliqdan tashqarida qolgan ishlar. Nol bo'lmasa — buni AYTISH kerak:
+  // aks holda ular chizilmaydi va grafik oddiygina tugagandek ko'rinadi.
+  const offRangeCount = range.truncated
+    ? visibleWorks.filter((w) => w.sched_start && dayDiff(w.sched_start, range.end) > 0).length
+    : 0;
 
   // ─── Selection side effects ──────────────────────────────────────────
   useEffect(() => {
@@ -895,6 +921,19 @@ export default function WorkScheduleTab({ project, onOpenSmeta }) {
           <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600 tabular-nums">
             {visibleWorks.length} {t('gpr_works') || 'ta ish'}
           </span>
+          {/* Oraliq qirqilgan bo'lsa jim turmaymiz — nechta ish tashqarida
+              qolgani va qanday ko'rish kerakligi aytiladi. */}
+          {range.truncated && (
+            <button
+              type="button"
+              onClick={() => setZoom('month')}
+              title={`${range.wantedEnd} ${t('gpr_range_until') || 'gacha'}`}
+              className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-800 hover:bg-amber-100"
+            >
+              {(t('gpr_range_truncated') || "{n} ta ish oraliqdan tashqarida — Oy ko'rinishiga o'ting")
+                .replace('{n}', String(offRangeCount))}
+            </button>
+          )}
           {blockOptions.length > 1 && (
             <select
               value={blockFilter}
