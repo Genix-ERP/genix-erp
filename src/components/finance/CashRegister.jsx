@@ -30,8 +30,9 @@ import { toast } from 'sonner';
 const ACCOUNTING_ACCOUNTS = [
   { value: '4010', label: '4010 — Debitorlar (Дебиторы)' },
   { value: '6010', label: '6010 — Kreditorlar (Кредиторы)' },
-  { value: '4220', label: '4220 — Xodimlar (Работники)' },
-  { value: '6710', label: '6710 — Byudjetga to\'lovlar (Платежи в бюджет)' },
+  { value: '4720', label: '4720 — Xodimlarga berilgan qarzlar (Займы работникам)' },
+  { value: '6410', label: '6410 — Byudjetga to\'lovlar (Платежи в бюджет)' },
+  { value: '6710', label: '6710 — Ish haqi bo\'yicha qarz (Задолженность по оплате труда)' },
   { value: '5110', label: '5110 — Hisob-kitob schyoti (Расчётный счёт)' },
   { value: '9010', label: '9010 — Asosiy daromad (Основной доход)' },
   { value: '9410', label: '9410 — Boshqaruv xarajatlari (Управленческие расходы)' },
