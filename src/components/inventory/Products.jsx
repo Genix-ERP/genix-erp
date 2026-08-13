@@ -1817,9 +1817,13 @@ export default function Products() {
       stock_output_account_id: categoryAccounts.stock_output_account_id || null,
     };
 
+    // Baholash usuli: bo'sh = kompaniya hisob siyosatidan meros (reja §2.1).
+    categoryData.cost_method = categoryCostMethod || '';
+
     createCategory(categoryData);
     setNewCategoryName('');
     setCategoryAccounts({ ...defaultCategoryAccounts });
+    setCategoryCostMethod('');
     setShowCategoryModal(false);
   };
 
@@ -4669,7 +4673,7 @@ export default function Products() {
       {/* Create Category Modal */}
       <Dialog open={showCategoryModal} onOpenChange={(open) => {
         setShowCategoryModal(open);
-        if (!open) { setNewCategoryName(''); setCategoryAccounts({ ...defaultCategoryAccounts }); }
+        if (!open) { setNewCategoryName(''); setCategoryAccounts({ ...defaultCategoryAccounts }); setCategoryCostMethod(''); }
       }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -4874,6 +4878,15 @@ export default function Products() {
                 onChange={(e) => setEditCategoryName(e.target.value)}
               />
             </div>
+
+            {/* Baholash usuli (reja §2.1) — tahrirlashda qulf beyji bilan:
+                harakati bor kategoriyada maydon o'chirilgan va sababi yoziladi. */}
+            <CategoryCostMethodField
+              categoryId={selectedCategory?.id}
+              value={categoryCostMethod}
+              onChange={setCategoryCostMethod}
+              language={language}
+            />
 
             {/* GL Account Selectors */}
             <div className="border-t pt-4">
