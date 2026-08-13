@@ -1639,6 +1639,38 @@ export const constructionService = {
   async deleteWorkDependency(depId) {
     await apiClient.delete(`/construction/schedule-dependencies/${depId}`);
   },
+
+  // --- Avtomatik rejalashtirish (auto-scheduling) ---
+
+  // { params, total_works, unplanned, server_today }
+  async getScheduleParams(projectId) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/schedule/params`);
+    return response.data.data;
+  },
+
+  // Hisoblab beradi, HECH NARSA yozmaydi: { deltas, conflicts, project_end,
+  // affected_count, norm_missing, server_today }.
+  // body: { start_date, parallel_limit, crew_size, hours_per_shift, shifts,
+  //         workdays_mask, scope: 'unplanned'|'all'|'overdue'|'section', section }
+  async previewAutoSchedule(projectId, body) {
+    const response = await apiClient.post(`/construction/projects/${projectId}/schedule/auto/preview`, body);
+    return response.data.data;
+  },
+
+  async applyAutoSchedule(projectId, body) {
+    const response = await apiClient.post(`/construction/projects/${projectId}/schedule/auto/apply`, body);
+    return response.data.data;
+  },
+
+  async listScheduleRuns(projectId) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/schedule/runs`);
+    return response.data.data || [];
+  },
+
+  async undoScheduleRun(runId) {
+    const response = await apiClient.post(`/construction/schedule-runs/${runId}/undo`);
+    return response.data.data;
+  },
 };
 
 export default constructionService;
