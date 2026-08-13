@@ -4,53 +4,52 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Banknote } from 'lucide-react';
+import { Loader2, Banknote, Landmark, Wallet } from 'lucide-react';
 import { financeService } from '@/api/services/finance';
 
-// "To'lash" dialog — asks WHICH account pays (kassa/bank) before posting.
-// The server posts the journal entry (Dt category account / Kt this
+// "To'lash" dialog — asks WHICH journal pays (naqd/bank). The paying GL
+// account is resolved from the journal on the server, so there is no
+// account picker here: choosing "Bank jurnali" pays from that journal's
+// account. The server posts the entry (Dt category account / Kt journal
 // account) in the same transaction that flips the status to paid.
 export default function PayExpenseDialog({ open, onClose, onPay, expense, paying, formatCurrency, t }) {
-  const [accounts, setAccounts] = useState([]);
-  const [accountsLoading, setAccountsLoading] = useState(false);
-  const [accountId, setAccountId] = useState('');
-  const [method, setMethod] = useState('cash');
+  const [journals, setJournals] = useState([]);
+  const [journalsLoading, setJournalsLoading] = useState(false);
+  const [journalId, setJournalId] = useState('');
   const [paidDate, setPaidDate] = useState(new Date().toISOString().split('T')[0]);
 
   useEffect(() => {
     if (!open) return;
-    setAccountId('');
-    setMethod('cash');
+    setJournalId('');
     setPaidDate(new Date().toISOString().split('T')[0]);
-    setAccountsLoading(true);
-    financeService.listAccounts({ limit: 500 })
+    setJournalsLoading(true);
+    financeService.listPaymentJournals()
       .then((rows) => {
         const list = Array.isArray(rows) ? rows : rows?.items || [];
-        setAccounts(list);
+        setJournals(list);
       })
-      .catch(() => setAccounts([]))
-      .finally(() => setAccountsLoading(false));
+      .catch(() => setJournals([]))
+      .finally(() => setJournalsLoading(false));
   }, [open]);
 
-  // Money accounts on the BHMS chart: 50xx kassa, 51xx bank. Leaf only —
-  // TT §4.2 forbids posting to group headers.
-  const moneyAccounts = useMemo(
-    () => accounts.filter((a) => {
-      const code = String(a.code || '');
-      return (code.startsWith('50') || code.startsWith('51')) && a.is_leaf !== false;
+  // Cash journals first — paying from the kassa is the common case.
+  const sortedJournals = useMemo(
+    () => [...journals].sort((a, b) => {
+      if (a.type !== b.type) return a.type === 'cash' ? -1 : 1;
+      return String(a.code || '').localeCompare(String(b.code || ''));
     }),
-    [accounts]
+    [journals]
   );
 
   useEffect(() => {
-    if (!accountId && moneyAccounts.length > 0) {
-      const preferred = moneyAccounts.find((a) => String(a.code) === '5010') || moneyAccounts[0];
-      setAccountId(preferred.id);
-      setMethod(String(preferred.code || '').startsWith('51') ? 'bank' : 'cash');
+    if (!journalId && sortedJournals.length > 0) {
+      setJournalId(sortedJournals[0].id);
     }
-  }, [moneyAccounts, accountId]);
+  }, [sortedJournals, journalId]);
 
   if (!expense) return null;
+
+  const selected = sortedJournals.find((j) => j.id === journalId);
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -72,43 +71,38 @@ export default function PayExpenseDialog({ open, onClose, onPay, expense, paying
 
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label>{t('exp_pay_account')} *</Label>
-            {accountsLoading ? (
+            <Label>{t('exp_pay_journal')} *</Label>
+            {journalsLoading ? (
               <p className="text-sm text-slate-400">{t('loading')}</p>
+            ) : sortedJournals.length === 0 ? (
+              <p className="text-sm text-amber-600">{t('exp_pay_no_journals')}</p>
             ) : (
-              <Select value={accountId} onValueChange={(v) => {
-                setAccountId(v);
-                const acc = moneyAccounts.find((a) => a.id === v);
-                if (acc) setMethod(String(acc.code || '').startsWith('51') ? 'bank' : 'cash');
-              }}>
-                <SelectTrigger><SelectValue placeholder={t('exp_pay_account')} /></SelectTrigger>
+              <Select value={journalId} onValueChange={setJournalId}>
+                <SelectTrigger><SelectValue placeholder={t('exp_pay_journal')} /></SelectTrigger>
                 <SelectContent>
-                  {moneyAccounts.map((a) => (
-                    <SelectItem key={a.id} value={a.id}>
-                      {a.code} — {a.name_uz || a.name}
+                  {sortedJournals.map((j) => (
+                    <SelectItem key={j.id} value={j.id}>
+                      <span className="flex items-center gap-2">
+                        {j.type === 'cash'
+                          ? <Wallet className="w-3.5 h-3.5 text-emerald-600" />
+                          : <Landmark className="w-3.5 h-3.5 text-sky-600" />}
+                        {j.name_uz || j.name}
+                      </span>
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             )}
+            {selected && (
+              <p className="text-xs text-slate-400">
+                {selected.type === 'cash' ? t('exp_pay_hint_cash') : t('exp_pay_hint_bank')}
+              </p>
+            )}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label>{t('exp_pay_method')}</Label>
-              <Select value={method} onValueChange={setMethod}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="cash">{t('exp_method_cash')}</SelectItem>
-                  <SelectItem value="bank">{t('exp_method_bank')}</SelectItem>
-                  <SelectItem value="card">{t('exp_method_card')}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>{t('exp_pay_date')}</Label>
-              <Input type="date" value={paidDate} onChange={(e) => setPaidDate(e.target.value)} />
-            </div>
+          <div className="space-y-1.5">
+            <Label>{t('exp_pay_date')}</Label>
+            <Input type="date" value={paidDate} onChange={(e) => setPaidDate(e.target.value)} />
           </div>
         </div>
 
@@ -116,8 +110,8 @@ export default function PayExpenseDialog({ open, onClose, onPay, expense, paying
           <Button variant="outline" onClick={onClose} disabled={paying}>{t('cancel')}</Button>
           <Button
             className="bg-emerald-600 hover:bg-emerald-700"
-            disabled={paying || (!accountId && moneyAccounts.length > 0)}
-            onClick={() => onPay({ payment_account_id: accountId || undefined, payment_method: method, paid_date: paidDate })}
+            disabled={paying || !journalId}
+            onClick={() => onPay({ journal_id: journalId, paid_date: paidDate })}
           >
             {paying && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
             {t('exp_pay_confirm')}

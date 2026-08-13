@@ -654,10 +654,12 @@ export const financeService = {
   },
 
   // Marking paid posts the journal entry server-side (Dt category account /
-  // Kt the chosen kassa-bank account) — pass payment_account_id from the
-  // pay dialog; empty body pays from the default kassa (5010).
-  async payExpense(id, { payment_account_id, payment_method, paid_date } = {}) {
+  // Kt the paying account). The dialog sends journal_id — the user picks a
+  // naqd/bank JOURNAL and the server resolves its account; payment_account_id
+  // stays for older callers. Empty body pays from the default kassa (5010).
+  async payExpense(id, { journal_id, payment_account_id, payment_method, paid_date } = {}) {
     const body = {};
+    if (journal_id) body.journal_id = journal_id;
     if (payment_account_id) body.payment_account_id = payment_account_id;
     if (payment_method) body.payment_method = payment_method;
     if (paid_date) body.paid_date = paid_date;
