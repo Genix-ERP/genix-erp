@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { inventoryService, fetchAllPages } from '@/api/services';
 import { useCompany } from './CompanyContext';
 import { isDemoMode, checkBackendHealth } from '@/config/dataMode';
@@ -1313,8 +1313,17 @@ export function InventoryProvider({ children }) {
   // initial 1000-row page happened to contain. Without this, products with
   // older issue/chiqim rows that have aged out of the top 1000 falsely
   // appear to have "no chiqim" in the Hisobotlar tab.
+  // Fallback qiymat ref orqali o'qiladi, `stockMovements` bog'liqlik sifatida
+  // EMAS. Sabab: bu callback setStockMovements ni chaqiradi, ya'ni stockMovements
+  // ga bog'lansa har bir yuklashdan keyin identifikatori o'zgarardi. Shu sababli
+  // uni chaqiruvchi effektlarga deps qilib qo'shib bo'lmasdi (cheksiz sikl), va
+  // aynan shu narsa Hisobotlar tabidagi "yangilamaguncha ko'rinmaydi" xatosini
+  // keltirib chiqargan — pastdagi izohga qarang.
+  const stockMovementsRef = useRef(stockMovements);
+  useEffect(() => { stockMovementsRef.current = stockMovements; }, [stockMovements]);
+
   const reloadMovements = useCallback(async (params = {}) => {
-    if (!backendAvailable) return stockMovements;
+    if (!backendAvailable) return stockMovementsRef.current;
     try {
       const cleanParams = { limit: 10000, ...params };
       // Drop empty/undefined keys so we don't send "warehouse_id=all" etc.
@@ -1329,9 +1338,12 @@ export function InventoryProvider({ children }) {
       return movementsData || [];
     } catch (err) {
       console.error('reloadMovements failed:', err);
-      return stockMovements;
+      return stockMovementsRef.current;
     }
-  }, [backendAvailable, stockMovements]);
+    // Faqat backendAvailable ga bog'liq — identifikator har yuklashda emas,
+    // backend tayyor bo'lganda BIR MARTA o'zgaradi. Shuning uchun endi uni
+    // effekt deps iga xavfsiz qo'shsa bo'ladi.
+  }, [backendAvailable]);
 
   const getInventorySummary = useCallback(() => {
     const totalValue = inventory.reduce((total, item) => {
