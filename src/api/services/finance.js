@@ -871,6 +871,14 @@ export const financeService = {
     return response.data.data;
   },
 
+  // Side-split totals for the stat cards (planned/actual expense vs revenue,
+  // overspent count judged on the expense side only) — computed server-side
+  // over every budget, not from whatever slice the client happens to hold.
+  async getBudgetsSummary(params = {}) {
+    const response = await apiClient.get('/budgets/summary', { params });
+    return response.data.data;
+  },
+
   async getBudget(id) {
     const response = await apiClient.get(`/budgets/${id}`);
     return response.data.data;

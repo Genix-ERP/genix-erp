@@ -58,6 +58,18 @@ export default function BankVipiskaImport() {
     setUploading(true);
     try {
       const res = await financeService.importBankVipiska(file);
+      // Re-upload of the same file: the server dedupes by content hash and
+      // returns the EXISTING import (no transactions array) — load its lines
+      // so the review continues where it was, instead of doubling anything.
+      if (res?.duplicate) {
+        const existing = await financeService.getBankVipiskaTransactions(res.import_id);
+        setMeta(res);
+        setRows(existing || []);
+        toast.info(res?.warnings?.[0] || tr('Bu fayl allaqachon import qilingan — mavjud import ochildi',
+          'Этот файл уже импортирован — открыт существующий импорт',
+          'This file was already imported — opened the existing import'));
+        return;
+      }
       setMeta(res);
       setRows((res?.transactions || []).map(t => ({ ...t, posted: false })));
       const n = res?.transaction_count || 0;

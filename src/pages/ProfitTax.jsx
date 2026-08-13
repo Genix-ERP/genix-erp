@@ -60,7 +60,11 @@ export default function ProfitTax() {
   const [periodType, setPeriodType] = useState('month');
   const [periodKey, setPeriodKey] = useState(() => currentPeriodKey('month'));
   const [incomeInput, setIncomeInput] = useState('0'); // formatted string
-  const [rate, setRate] = useState('15'); // percent
+  // Empty = use the tenant's configured company_tax_rates 'profit' rate
+  // (server default). The old hardcoded '15' was ALWAYS sent, so the
+  // configured rate never applied on this tab while "Umumiy soliq
+  // jamlanmasi" used it — two tabs, two answers (soliq audit 2026-08-13).
+  const [rate, setRate] = useState(''); // percent override, '' = server default
 
   const [result, setResult] = useState(null); // ProfitTaxCalcResult shape
   const [loading, setLoading] = useState(false);
@@ -95,7 +99,7 @@ export default function ProfitTax() {
         periodType,
         periodKey,
         income,
-        rate: parseFloat(rate) || undefined,
+        rate: rate !== '' ? (parseFloat(rate) || undefined) : undefined,
       });
       setResult(res);
     } catch (e) {
@@ -106,7 +110,12 @@ export default function ProfitTax() {
     }
   }, [periodType, periodKey, income, rate]);
 
-  useEffect(() => { load(); }, [load]);
+  // Debounced: income/rate are keystroke-hot inputs — firing a request per
+  // character raced responses out of order (soliq audit 2026-08-13).
+  useEffect(() => {
+    const id = setTimeout(load, 350);
+    return () => clearTimeout(id);
+  }, [load]);
 
   // "Pull from ledger" — replaces the manual income field with the sum
   // of revenue account credits for the current period. Drops right into
@@ -411,7 +420,7 @@ export default function ProfitTax() {
                 value={rate}
                 onChange={(e) => setRate(e.target.value.replace(/[^\d.]/g, ''))}
                 inputMode="decimal"
-                placeholder="15"
+                placeholder={result?.rate != null ? String(result.rate) : '15'}
               />
             </div>
           </div>
