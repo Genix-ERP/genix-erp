@@ -23,6 +23,21 @@ const WEEKDAYS = [
 const errText = (e) =>
   e?.response?.data?.error?.message || e?.response?.data?.message || e?.message || 'Xatolik';
 
+// Konflikt sabablari backend'dan inglizcha kalit bo'lib keladi; foydalanuvchi
+// "nega bu ish siljimadi" degan savolga shu yerdan javob topishi kerak.
+const REASON_KEYS = {
+  manual: ['gpr_reason_manual', "qo'lda qo'yilgan"],
+  fixed: ['gpr_reason_fixed', 'muzlatilgan'],
+  started: ['gpr_reason_started', 'boshlangan'],
+  scope: ['gpr_reason_scope', 'qamrovdan tashqarida'],
+};
+
+const reasonLabel = (t, reason) => {
+  const entry = REASON_KEYS[reason];
+  if (!entry) return reason;
+  return t(entry[0]) || entry[1];
+};
+
 export default function AutoScheduleDialog({ open, onClose, projectId, t, onApplied }) {
   const [step, setStep] = useState('params');
   const [loading, setLoading] = useState(true);
@@ -48,6 +63,7 @@ export default function AutoScheduleDialog({ open, onClose, projectId, t, onAppl
         shifts: p.shifts ?? 1,
         workdays_mask: p.workdays_mask ?? 63,
         scope: 'unplanned',
+        release_manual: false,
         save_params: true,
       });
       constructionService.listScheduleRuns(projectId).then(setRuns).catch(() => {});
@@ -151,6 +167,28 @@ export default function AutoScheduleDialog({ open, onClose, projectId, t, onAppl
               </Field>
             </div>
 
+            {/* Avtoreja paydo bo'lishidan oldin sanasi bor bo'lgan har bir ish
+                'manual' deb belgilangan (495-migratsiya), shuning uchun eski
+                loyihalarda "Barcha ishlar" ham hech narsani siljita olmaydi.
+                Bu belgi o'sha himoyani shu yugurish uchun olib tashlaydi. */}
+            {form.scope !== 'unplanned' && (
+              <label className="flex items-start gap-2 rounded-md border border-slate-200 p-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={!!form.release_manual}
+                  onChange={(e) => set('release_manual', e.target.checked)}
+                />
+                <span className="text-xs text-slate-600">
+                  <span className="font-medium text-slate-800 block">
+                    {t('gpr_release_manual') || "Qo'lda qo'yilgan sanalarni ham qayta hisoblash"}
+                  </span>
+                  {t('gpr_release_manual_hint')
+                    || "Muzlatilgan va boshlangan ishlarga baribir tegilmaydi."}
+                </span>
+              </label>
+            )}
+
             <Field label={t('gpr_workdays') || 'Ish kunlari'}>
               <div className="flex gap-1.5">
                 {WEEKDAYS.map((d) => {
@@ -216,7 +254,9 @@ export default function AutoScheduleDialog({ open, onClose, projectId, t, onAppl
                 </div>
                 <div className="max-h-24 overflow-y-auto text-[11px] text-amber-800 space-y-0.5">
                   {preview.conflicts.slice(0, 20).map((c, i) => (
-                    <div key={i}>{c.label}: {c.current_start} ← {c.wanted_start} ({c.reason})</div>
+                    <div key={i}>
+                      {c.label}: {c.current_start} ← {c.wanted_start} ({reasonLabel(t, c.reason)})
+                    </div>
                   ))}
                 </div>
               </div>
