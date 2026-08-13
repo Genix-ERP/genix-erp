@@ -60,14 +60,19 @@ export const taxReportsService = {
     return response.data.data;
   },
 
-  // Transactions
-  getTransactions: async (startDate, endDate, type = null) => {
-    const params = {};
+  // Transactions — server-paginated (default page_size 20); the meta block
+  // carries {page, page_size, total} so callers can page instead of
+  // silently seeing only the first 20 rows.
+  getTransactions: async (startDate, endDate, page = 1, pageSize = 50, type = null) => {
+    const params = { page, page_size: pageSize };
     if (startDate) params.start_date = startDate;
     if (endDate) params.end_date = endDate;
     if (type) params.type = type;
     const response = await apiClient.get('/tax-reports/transactions', { params });
-    return response.data.data || [];
+    return {
+      rows: response.data.data || [],
+      meta: response.data.meta || null,
+    };
   },
 
   // Periods

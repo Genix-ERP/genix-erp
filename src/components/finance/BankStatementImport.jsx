@@ -14,6 +14,7 @@ import { useTranslation } from '@/components/utils/translations';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { parseSpreadsheetFile } from '@/components/shared/ImportExport';
 import financeService from '@/api/services/finance';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 // ─── OFX Parser ───────────────────────────────────────────
 function parseOFX(text) {
@@ -92,7 +93,7 @@ function autoDetectMapping(headers) {
 }
 
 // ─── Parse date from various formats ──────────────────────
-function parseDate(val) {
+function parseDate(val, onAmbiguous) {
   if (!val) return '';
   const s = String(val).trim();
 
@@ -105,15 +106,27 @@ function parseDate(val) {
   // YYYY-MM-DD
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0, 10);
 
-  // DD.MM.YYYY or DD/MM/YYYY
-  const dmy = s.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})/);
+  // DD.MM.YYYY / DD-MM-YYYY — dot/dash separated is always day-first
+  const dmy = s.match(/^(\d{1,2})[.-](\d{1,2})[.-](\d{4})/);
   if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`;
 
-  // MM/DD/YYYY
-  const mdy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-  if (mdy) {
-    const m = parseInt(mdy[1]), d = parseInt(mdy[2]);
-    if (m <= 12) return `${mdy[3]}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  // Slash-separated is ambiguous (01/02/2026): a component > 12 decides the
+  // order; otherwise default to DD/MM (bank statements here are UZ-format)
+  // and flag the row via onAmbiguous.
+  const slash = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (slash) {
+    const first = parseInt(slash[1], 10);
+    const second = parseInt(slash[2], 10);
+    let day = first, month = second;
+    if (first > 12) {
+      day = first; month = second; // must be DD/MM
+    } else if (second > 12) {
+      day = second; month = first; // must be MM/DD
+    } else if (onAmbiguous) {
+      onAmbiguous(); // both <= 12 — assumed DD/MM
+    }
+    if (month < 1 || month > 12) return '';
+    return `${slash[3]}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
   }
 
   // Try native parse as fallback
@@ -224,13 +237,13 @@ export default function BankStatementImport({ open, onOpenChange, bankAccount, o
   };
 
   // ─── Build transactions from mapped CSV/XLSX data ─────
-  const getMappedTransactions = () => {
+  const getMappedTransactions = (onAmbiguousDate) => {
     if (isOFX) return ofxTransactions;
 
     return rows
       .map(row => {
         const dateVal = mapping.date ? row[mapping.date] : '';
-        const parsedDate = parseDate(dateVal);
+        const parsedDate = parseDate(dateVal, onAmbiguousDate);
         if (!parsedDate) return null;
 
         let amount = 0;
@@ -286,14 +299,17 @@ export default function BankStatementImport({ open, onOpenChange, bankAccount, o
       setStep(STEP_DONE);
       if (onImportComplete) onImportComplete();
     } catch (err) {
-      setImportError(err?.response?.data?.message || err.message || (t('import_error') || 'Import failed'));
+      setImportError(getApiErrorMessage(err, t('import_error') || 'Import failed'));
     } finally {
       setIsImporting(false);
     }
   };
 
   // ─── Computed values ──────────────────────────
-  const transactions = step >= STEP_PREVIEW ? getMappedTransactions() : [];
+  // Rows whose slash-date could be either DD/MM or MM/DD (both parts <= 12) —
+  // parsed as DD/MM, surfaced as a warning in the preview.
+  let ambiguousDateCount = 0;
+  const transactions = step >= STEP_PREVIEW ? getMappedTransactions(() => { ambiguousDateCount += 1; }) : [];
   const credits = transactions.filter(tx => tx.transaction_type === 'credit');
   const debits = transactions.filter(tx => tx.transaction_type === 'debit');
   const totalCredits = credits.reduce((s, tx) => s + tx.amount, 0);
@@ -586,6 +602,17 @@ export default function BankStatementImport({ open, onOpenChange, bankAccount, o
                 </TableBody>
               </Table>
             </div>
+
+            {ambiguousDateCount > 0 && (
+              <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                {language === 'uz'
+                  ? `${ambiguousDateCount} ta qatorda sana formati noaniq — KK/OO (kun/oy) deb qabul qilindi`
+                  : language === 'ru'
+                  ? `Строк с неоднозначной датой: ${ambiguousDateCount} — принято как ДД/ММ (день/месяц)`
+                  : `${ambiguousDateCount} row(s) have an ambiguous date — assumed DD/MM (day/month)`}
+              </div>
+            )}
 
             {importError && (
               <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">

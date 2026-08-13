@@ -86,7 +86,12 @@ export default function TaxSummary() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [periodType, periodKey, manualIncome]);
 
-  useEffect(() => { load(); }, [load]);
+  // Debounced: manualIncome/periodKey are typed — one request per keystroke
+  // raced responses out of order (soliq audit 2026-08-13).
+  useEffect(() => {
+    const id = setTimeout(load, 350);
+    return () => clearTimeout(id);
+  }, [load]);
 
   // When the user switches period type, default the period key to the
   // canonical format for the new type so they don't have to retype.
@@ -346,7 +351,7 @@ export default function TaxSummary() {
               </CardHeader>
               <CardContent className="space-y-1 text-sm">
                 <div className="flex justify-between">
-                  <span>{t('income') || 'Daromad'} <span className="text-[10px] text-muted-foreground">({profit.income_source || '—'})</span></span>
+                  <span>{t('income') || 'Daromad'} <span className="text-[10px] text-muted-foreground">({profit.income_source === 'manual' ? (t('income_source_manual') || "qo'lda") : profit.income_source === 'ledger' ? (t('income_source_ledger') || 'kitobdan') : '—'})</span></span>
                   <span className="tabular-nums">{formatCurrency(profit.income || 0)}</span>
                 </div>
                 <div className="flex justify-between">

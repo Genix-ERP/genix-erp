@@ -12,7 +12,6 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { useLanguage } from "@/components/contexts/LanguageContext";
-import { useTranslation } from "@/components/utils/translations";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useSales } from "@/components/contexts/SalesContext";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
@@ -25,7 +24,6 @@ import { getApiErrorMessage } from '@/utils/apiError';
 // credit, then apply that credit to settle open invoices/bills.
 export default function Reconcile() {
   const { language } = useLanguage();
-  const { t } = useTranslation(language);
   const { formatCurrency } = useCurrencyFormatter();
   const { refreshData: refreshSalesData } = useSales();
   const { refreshData: refreshFinancials } = useFinancials();
@@ -120,17 +118,24 @@ export default function Reconcile() {
     setApplying(true);
     try {
       let applied = 0;
+      // Keep the last failure: a per-doc 400 ("no credit left") is normal near
+      // the end of the loop, but if NOTHING applied and a call errored, that
+      // error is the story — swallowing it showed "no credit" on auth/server
+      // failures too.
+      let lastErr = null;
       for (const doc of (ledger.open_docs || [])) {
         const res = await financeService.reconcilePartnerCredit({
           contact_id: selectedPartner.contact_id,
           direction,
           document_id: doc.id,
           amount: 0,
-        }).catch(() => null);
+        }).catch((err) => { lastErr = err; return null; });
         if (res?.applied) applied += res.applied;
       }
       if (applied > 0.001) {
         toast.success(`${formatCurrency(applied)} ${tr('hisobga olindi', 'зачтено', 'applied')}`);
+      } else if (lastErr) {
+        toast.error(getApiErrorMessage(lastErr, tr('Xatolik', 'Ошибка', 'Error')));
       } else {
         toast.info(tr('Hisobga olinadigan kredit yo\'q', 'Нет кредита для зачёта', 'No credit to apply'));
       }
