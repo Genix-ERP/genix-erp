@@ -154,14 +154,58 @@ export default function GoodsReceipt() {
     setFilteredReceipts(filtered);
   }, [receipts, searchQuery, statusFilter]);
 
-  // Get open POs for dropdown (approved, ordered, or partial POs)
-  const openPOs = purchaseOrders.filter(po =>
-    po.status === 'approved' || po.status === 'ordered' || po.status === 'partial' ||
-    po.status === 'sent' || po.status === 'confirmed'
-  );
+  // Open POs for the dropdown — fetched server-side with a status filter.
+  // The ProcurementContext list can't be used here: the backend caps the
+  // unfiltered list at 50 newest orders, so older confirmed POs (e.g.
+  // PO-00074 in a tenant with 500+ orders) never reached this dropdown.
+  const [openPOs, setOpenPOs] = useState([]);
+  const [openPOsLoading, setOpenPOsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!showCreateModal) return;
+    let cancelled = false;
+    const fetchOpenPOs = async () => {
+      setOpenPOsLoading(true);
+      try {
+        // Backend statuses that are receivable. Paginate because the
+        // server caps limit at 100 per page.
+        const all = [];
+        for (let page = 1; page <= 5; page++) {
+          const batch = await procurementService.listOrders({
+            status: 'approved,ordered,partial',
+            limit: 100,
+            page,
+          });
+          if (!Array.isArray(batch) || batch.length === 0) break;
+          all.push(...batch);
+          if (batch.length < 100) break;
+        }
+        if (!cancelled) {
+          setOpenPOs(all.map(po => ({
+            ...po,
+            po_number: po.order_number || po.po_number,
+            supplier_name: po.vendor_name || po.supplier_name,
+          })));
+        }
+      } catch (error) {
+        console.error('Failed to fetch open POs:', error);
+        if (!cancelled) {
+          // Fallback: whatever the context has (first 50 orders)
+          setOpenPOs(purchaseOrders.filter(po =>
+            ['approved', 'ordered', 'partial', 'sent', 'confirmed'].includes(po.status)
+          ));
+        }
+      } finally {
+        if (!cancelled) setOpenPOsLoading(false);
+      }
+    };
+    fetchOpenPOs();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showCreateModal]);
 
   const handleSelectPO = async (poId) => {
-    const poFromList = purchaseOrders.find(o => o.id === poId);
+    const poFromList = openPOs.find(o => o.id === poId) || purchaseOrders.find(o => o.id === poId);
     if (!poFromList) return;
 
     try {
@@ -559,7 +603,9 @@ export default function GoodsReceipt() {
                     <SelectValue placeholder={t('select_po') || 'Select PO'} />
                   </SelectTrigger>
                   <SelectContent>
-                    {openPOs.length === 0 ? (
+                    {openPOsLoading ? (
+                      <SelectItem value="__loading__" disabled>{t('loading') || 'Loading...'}</SelectItem>
+                    ) : openPOs.length === 0 ? (
                       <SelectItem value="-" disabled>{t('no_open_pos') || 'No open POs'}</SelectItem>
                     ) : (
                       openPOs.map((po) => (

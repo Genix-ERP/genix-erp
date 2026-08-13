@@ -58,6 +58,7 @@ import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { MODULES } from "@/config/permissions";
 import { inventoryService } from '@/api/services/inventory';
 import { financeService } from '@/api/services/finance';
+import { procurementService } from '@/api/services/procurement';
 import { useProcurement } from '@/components/contexts/ProcurementContext';
 import { useFinancials } from '@/components/contexts/FinancialsContext';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
@@ -131,6 +132,66 @@ export default function VendorBills() {
 
   // Purchase orders from context
   const purchaseOrders = contextPOs || [];
+
+  // PO options for the bill's "link to PO" dropdown — fetched server-side
+  // by vendor. The context list above is capped at the 50 newest orders,
+  // so older POs never appeared here (same bug as the goods-receipt
+  // dropdown); it is kept only as a fallback if the fetch fails.
+  const [vendorPOs, setVendorPOs] = useState([]);
+  const [vendorPOsLoading, setVendorPOsLoading] = useState(false);
+  const billVendorId = editingBill?.vendor_id || newBill.vendor_id;
+  const billLinkedPOId = editingBill?.purchase_order_id || newBill.purchase_order_id;
+
+  useEffect(() => {
+    if (!showBillDialog || !billVendorId) {
+      setVendorPOs([]);
+      return;
+    }
+    let cancelled = false;
+    const fetchVendorPOs = async () => {
+      setVendorPOsLoading(true);
+      try {
+        // Paginate because the server caps limit at 100 per page.
+        const all = [];
+        for (let page = 1; page <= 5; page++) {
+          const batch = await procurementService.listOrders({
+            vendor_id: billVendorId,
+            limit: 100,
+            page,
+          });
+          if (!Array.isArray(batch) || batch.length === 0) break;
+          all.push(...batch);
+          if (batch.length < 100) break;
+        }
+        // Keep the currently linked PO selectable even if it falls
+        // outside the fetched window.
+        if (billLinkedPOId && !all.some(po => po.id === billLinkedPOId)) {
+          try {
+            const linked = await procurementService.getOrder(billLinkedPOId);
+            if (linked?.id) all.unshift(linked);
+          } catch { /* dropdown still works without it */ }
+        }
+        if (!cancelled) {
+          setVendorPOs(all.map(po => ({
+            ...po,
+            po_number: po.po_number || po.order_number,
+          })));
+        }
+      } catch (error) {
+        console.error('Failed to fetch vendor POs:', error);
+        if (!cancelled) {
+          setVendorPOs(purchaseOrders.filter(po =>
+            (po.vendor_id || po.supplier_id) === billVendorId
+          ));
+        }
+      } finally {
+        if (!cancelled) setVendorPOsLoading(false);
+      }
+    };
+    fetchVendorPOs();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showBillDialog, billVendorId]);
 
   // Fetch products for dropdown
   useEffect(() => {
@@ -999,11 +1060,13 @@ export default function VendorBills() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">{t('none') || 'None'}</SelectItem>
-                    {purchaseOrders
-                      .filter(po => (po.vendor_id || po.supplier_id) === (editingBill?.vendor_id || newBill.vendor_id))
-                      .map(po => (
+                    {vendorPOsLoading ? (
+                      <SelectItem value="__loading__" disabled>{t('loading') || 'Loading...'}</SelectItem>
+                    ) : (
+                      vendorPOs.map(po => (
                         <SelectItem key={po.id} value={po.id}>{po.po_number || po.order_number || po.id}</SelectItem>
-                      ))}
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>

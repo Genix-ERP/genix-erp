@@ -1885,6 +1885,34 @@ export default function Payroll() {
                 </div>
               </div>
 
+              {/* Month quick-fill: picking a month sets period start (1st),
+                  period end (last day) and payment date (last day) in one go.
+                  The three date fields below stay editable for odd periods.
+                  Value is derived from pay_period_start so there's no extra
+                  state to keep in sync. */}
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="text-sm font-medium mb-1 block">{t('payroll_month_quick') || "Oy bo'yicha to'ldirish"}</label>
+                  <Input
+                    type="month"
+                    value={(newPayroll.pay_period_start || '').slice(0, 7)}
+                    onChange={(e) => {
+                      const m = e.target.value; // YYYY-MM
+                      if (!m) return;
+                      const [y, mo] = m.split('-').map(Number);
+                      const lastDay = new Date(y, mo, 0).getDate();
+                      const last = `${m}-${String(lastDay).padStart(2, '0')}`;
+                      setNewPayroll({
+                        ...newPayroll,
+                        pay_period_start: `${m}-01`,
+                        pay_period_end: last,
+                        payment_date: last,
+                      });
+                    }}
+                  />
+                </div>
+              </div>
+
               <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="text-sm font-medium mb-1 block">{t('pay_period_start')} *</label>
@@ -2190,6 +2218,21 @@ export default function Payroll() {
                         <span>{t('gross_pay')}:</span>
                         <span className="font-semibold">{formatCurrency(calc.gross_pay)}</span>
                       </div>
+                      {/* Fallback mode (empty employee-tax catalog): the
+                          12%+1% are computed locally, so itemize them here —
+                          otherwise the user only sees an unexplained total. */}
+                      {taxCatalog.length === 0 && calc.tax_deduction > 0 && (
+                        <div className="flex justify-between text-slate-600">
+                          <span>{t('income_tax_short') || "Daromad solig'i (JShDS)"} ({(incomeTaxRate * 100).toFixed(0)}%):</span>
+                          <span>-{formatCurrency(calc.tax_deduction)}</span>
+                        </div>
+                      )}
+                      {taxCatalog.length === 0 && calc.social_security > 0 && (
+                        <div className="flex justify-between text-slate-600">
+                          <span>{t('social_insurance_short') || 'INPS (pensiya badali)'} ({(socialInsuranceRate * 100).toFixed(0)}%):</span>
+                          <span>-{formatCurrency(calc.social_security)}</span>
+                        </div>
+                      )}
                       <div className="flex justify-between text-red-600">
                         <span>{t('total_deductions')}:</span>
                         <span className="font-semibold">-{formatCurrency(effectiveDeductions)}</span>

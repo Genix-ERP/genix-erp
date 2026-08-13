@@ -319,7 +319,9 @@ export function ProcurementProvider({ children }) {
             product_id: item.product_id || '',
             description: item.name || item.description || '',
             quantity: parseFloat(item.quantity) || 1,
-            unit_id: item.unit_id || '',
+            // Backend stores unit_id as a plain unit string ("dona", "kg", …),
+            // so the form's `unit` field is the real payload here.
+            unit_id: item.unit || item.unit_id || '',
             notes: item.notes || '',
           })),
           vendor_ids: rfqData.suppliers_invited || [],
