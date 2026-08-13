@@ -809,6 +809,7 @@ export default {
     gpr_progress_denied: 'Выполнение может вводить только назначенный прораб',
     gpr_select_hint: 'Выберите работу для редактирования дат, выполнения и связей',
     gpr_works: 'работ',
+    gpr_all_blocks: 'Все блоки',
     gpr_duration_note: 'календарные дни',
     gpr_qty_zero_hint: 'Количество 0 — выполнение нельзя ввести',
     mrp_v2_run: 'Рассчитать MRP',

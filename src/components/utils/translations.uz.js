@@ -787,6 +787,7 @@ export default {
     gpr_progress_denied: 'Bajarilishni faqat biriktirilgan prorab kirita oladi',
     gpr_select_hint: "Sanalar, bajarilish va bog'liqliklarni tahrirlash uchun ishni tanlang",
     gpr_works: 'ta ish',
+    gpr_all_blocks: 'Barcha bloklar',
     gpr_duration_note: 'kalendar kunlarda',
     gpr_qty_zero_hint: "Miqdor 0 — bajarilish kiritib bo'lmaydi",
     mrp_v2_run: 'MRP hisoblash',

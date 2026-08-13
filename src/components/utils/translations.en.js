@@ -816,6 +816,7 @@ export default {
     gpr_progress_denied: 'Only the assigned foreman can enter progress',
     gpr_select_hint: 'Select a work to edit dates, progress and dependencies',
     gpr_works: 'works',
+    gpr_all_blocks: 'All blocks',
     gpr_duration_note: 'working days incl. weekends (v1)',
     gpr_qty_zero_hint: 'Quantity is 0 — progress cannot be entered',
     mrp_v2_run: 'Run MRP',

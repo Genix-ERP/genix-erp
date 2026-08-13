@@ -109,6 +109,9 @@ export default function WorkScheduleTab({ project, onOpenSmeta }) {
   const [depPredId, setDepPredId] = useState('');
   const [depLag, setDepLag] = useState('0');
 
+  // Blok filtri — 'all' yoki building_id.
+  const [blockFilter, setBlockFilter] = useState('all');
+
   const dayWidth = ZOOMS[zoom] || ZOOMS.day;
 
   // ─── Data ────────────────────────────────────────────────────────────
@@ -143,17 +146,37 @@ export default function WorkScheduleTab({ project, onOpenSmeta }) {
     return m;
   }, [works]);
 
+  // Bloklar. Har bir blok odatda birinchisidan nusxa olinadi, shuning uchun
+  // bitta ish nomi blok soniga teng marta takrorlanadi va grafikda bir xil
+  // qatorlar ketma-ket chiqadi. Blok bo'yicha filtr + qatordagi blok yorlig'i
+  // shu chalkashlikni yo'qotadi. Faqat bittadan ortiq blok bo'lsa ko'rsatiladi.
+  const blockOptions = useMemo(() => {
+    const m = new Map();
+    (works || []).forEach((w) => {
+      const id = Number(w.building_id) || 0;
+      if (!id) return;
+      if (!m.has(id)) m.set(id, w.building_name || `#${id}`);
+    });
+    return Array.from(m, ([id, name]) => ({ id, name }));
+  }, [works]);
+
+  const visibleWorks = useMemo(() => {
+    if (blockFilter === 'all') return works || [];
+    const id = Number(blockFilter);
+    return (works || []).filter((w) => Number(w.building_id) === id);
+  }, [works, blockFilter]);
+
   // Contiguous section groups (works arrive ordered by sort_order).
   const groups = useMemo(() => {
     const out = [];
     let cur = null;
-    for (const w of (works || [])) {
+    for (const w of visibleWorks) {
       const name = w.section || 'Boshqalar';
       if (!cur || cur.name !== name) { cur = { name, works: [] }; out.push(cur); }
       cur.works.push(w);
     }
     return out;
-  }, [works]);
+  }, [visibleWorks]);
 
   // Cost-weighted progress + span per group (weight = total_amount,
   // fallback quantity).
@@ -201,7 +224,7 @@ export default function WorkScheduleTab({ project, onOpenSmeta }) {
       if (dayDiff(d, min) < 0) min = d;
       if (dayDiff(d, max) > 0) max = d;
     };
-    (works || []).forEach((w) => {
+    visibleWorks.forEach((w) => {
       push(w.sched_start); push(w.sched_end);
       push(w.baseline_start); push(w.baseline_end);
     });
@@ -245,8 +268,8 @@ export default function WorkScheduleTab({ project, onOpenSmeta }) {
   );
 
   const selected = selectedId != null ? (workById.get(selectedId) || null) : null;
-  const unscheduledCount = (works || []).filter((w) => !isScheduled(w)).length;
-  const scheduledCount = (works || []).length - unscheduledCount;
+  const unscheduledCount = visibleWorks.filter((w) => !isScheduled(w)).length;
+  const scheduledCount = visibleWorks.length - unscheduledCount;
   const today = todayISO();
 
   // ─── Selection side effects ──────────────────────────────────────────
@@ -555,7 +578,9 @@ export default function WorkScheduleTab({ project, onOpenSmeta }) {
   // project start, one bulk call.
   const scheduleAll = useCallback(async () => {
     const start = defaultStart();
-    const unsched = (works || []).filter((w) => !isScheduled(w));
+    // Filtrlangan ko'rinishda faqat ko'rinib turgan bloklar rejalashtiriladi —
+    // tugma ekranda turgan ro'yxatga tegishli.
+    const unsched = visibleWorks.filter((w) => !isScheduled(w));
     if (unsched.length === 0) return;
     const items = unsched.map((w, i) => ({
       line_id: w.id,
@@ -574,7 +599,7 @@ export default function WorkScheduleTab({ project, onOpenSmeta }) {
       toast.error(getApiErrorMessage(e, t('gpr_update_failed') || 'Yangilash amalga oshmadi'));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project?.id, works, projInfo]);
+  }, [project?.id, visibleWorks, projInfo]);
 
   const freezeBaseline = async () => {
     if (!window.confirm(t('gpr_freeze_confirm') || 'Joriy sanalar tayanch reja sifatida saqlanadi. Davom etasizmi?')) return;
@@ -756,7 +781,9 @@ export default function WorkScheduleTab({ project, onOpenSmeta }) {
         const w = r.work;
         ctx.fillStyle = isScheduled(w) ? '#334155' : '#94A3B8';
         ctx.font = '13px sans-serif';
-        ctx.fillText(clip(`${w.item_number ? `${w.item_number} ` : ''}${w.name || ''}`), 14, y + 15);
+        const pngBlock = blockFilter === 'all' && blockOptions.length > 1 && w.building_name
+          ? `${w.building_name} · ` : '';
+        ctx.fillText(clip(`${pngBlock}${w.item_number ? `${w.item_number} ` : ''}${w.name || ''}`), 14, y + 15);
         // Baseline ghost (gray outline).
         if (w.baseline_start && w.baseline_end) {
           const bs = Math.max(0, dayDiff(w.baseline_start, range.start));
@@ -866,8 +893,22 @@ export default function WorkScheduleTab({ project, onOpenSmeta }) {
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600 tabular-nums">
-            {works.length} {t('gpr_works') || 'ta ish'}
+            {visibleWorks.length} {t('gpr_works') || 'ta ish'}
           </span>
+          {blockOptions.length > 1 && (
+            <select
+              value={blockFilter}
+              onChange={(e) => setBlockFilter(e.target.value)}
+              className="h-7 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700"
+            >
+              <option value="all">
+                {t('gpr_all_blocks') || 'Barcha bloklar'} ({blockOptions.length})
+              </option>
+              {blockOptions.map((b) => (
+                <option key={b.id} value={String(b.id)}>{b.name}</option>
+              ))}
+            </select>
+          )}
           {unscheduledCount > 0 && (
             <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-700 tabular-nums">
               {unscheduledCount} · {t('gpr_unscheduled') || 'Rejalashtirilmagan'}
@@ -1229,10 +1270,17 @@ export default function WorkScheduleTab({ project, onOpenSmeta }) {
                       >
                         <span
                           className={cn('text-xs truncate', scheduled ? 'text-slate-700' : 'text-slate-400')}
-                          title={`${w.item_number ? `${w.item_number} ` : ''}${w.name || ''}`}
+                          title={`${w.building_name ? `${w.building_name} · ` : ''}${w.item_number ? `${w.item_number} ` : ''}${w.name || ''}`}
                         >
                           {w.item_number && (
                             <span className="font-mono text-[10px] text-slate-400 mr-1">{w.item_number}</span>
+                          )}
+                          {/* Bloklar nusxa bo'lgani uchun nom takrorlanadi —
+                              "Barcha bloklar" ko'rinishida blokni ko'rsatamiz. */}
+                          {blockFilter === 'all' && blockOptions.length > 1 && w.building_name && (
+                            <span className="rounded bg-slate-100 px-1 py-px text-[10px] text-slate-500 mr-1">
+                              {w.building_name}
+                            </span>
                           )}
                           {w.name}
                         </span>
