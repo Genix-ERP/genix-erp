@@ -102,6 +102,22 @@ export default function StockReport() {
   // products) silently lose their outgoing rows in the Hisobotlar tab.
   // Hitting /inventory/movements with the active filters guarantees we see
   // every row that matches the user's date window, up to the backend cap.
+  // `reloadMovements` DEPS DA BO'LISHI SHART.
+  //
+  // Ilgari u ataylab chiqarib tashlangan edi (cheksiz sikl sababli) va shu
+  // "yangilamaguncha qolgan qatorlar ko'rinmaydi" xatosini keltirib chiqargan:
+  //   1. tabga birinchi kirilganda InventoryContext hali yuklanmagan bo'ladi,
+  //      ya'ni backendAvailable = false;
+  //   2. effekt bir marta ishlaydi, reloadMovements chaqiriladi — lekin u
+  //      backendAvailable false bo'lgani uchun SO'ROV YUBORMAY qaytadi;
+  //   3. keyin backendAvailable true bo'ladi, ammo filtrlar o'zgarmagani va
+  //      reloadMovements deps da bo'lmagani uchun effekt QAYTA ISHLAMAYDI.
+  // Natijada jadvalda faqat kontekstning umumiy yuklamasidagi qatorlar turardi;
+  // sahifa qo'lda yangilanganda tartib boshqacha bo'lib, hammasi ko'rinardi.
+  //
+  // Sikl endi bo'lmaydi: reloadMovements stockMovements ga emas, faqat
+  // backendAvailable ga bog'liq (InventoryContext dagi izohga qarang), ya'ni
+  // identifikatori har yuklashda emas, bir marta o'zgaradi.
   useEffect(() => {
     if (!reloadMovements) return;
     reloadMovements({
@@ -110,14 +126,7 @@ export default function StockReport() {
       warehouse_id: warehouseFilter,
       type: typeFilter,
     });
-    // IMPORTANT: do NOT add `reloadMovements` to the deps. It's a useCallback
-    // that depends on `stockMovements`, and it calls setStockMovements — so it
-    // gets a new identity after every fetch. Listing it here created an
-    // infinite refetch loop that fired 1000+ /inventory/movements requests and
-    // tripped the backend rate limiter (429). We only want to re-fetch when a
-    // filter actually changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectiveDateFrom, dateTo, warehouseFilter, typeFilter]);
+  }, [reloadMovements, effectiveDateFrom, dateTo, warehouseFilter, typeFilter]);
 
   // Fetch the turnover sheet for the active window. include_deleted keeps
   // SKUs that existed during the period but have since been removed — same
