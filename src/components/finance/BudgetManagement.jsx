@@ -61,6 +61,19 @@ const BUDGET_CATEGORIES = [
 
 const toDateInput = (d) => (d ? d.substring(0, 10) : '');
 
+// The accounts API returns account_type as an OBJECT ({code, category, ...}),
+// not a string — comparing it with === 'revenue' can never match, which is how
+// the old pickers fell through to US-GAAP code ranges (4xxx "revenue") on a
+// BHMS chart where 4xxx is receivables and revenue lives in the 9000s.
+const accountCategory = (a) => {
+  if (a?.account_type && typeof a.account_type === 'object') return a.account_type.category;
+  return a?.account_type || a?.type || '';
+};
+
+// Only leaf accounts: postings are rejected on group headers (BHMS, TT §4.2),
+// so a budget line on one can never accumulate an actual.
+const isPostable = (a) => a?.is_leaf !== false;
+
 const getStatusColor = (pct, type) => {
   if (type === 'revenue') {
     if (pct >= 90) return 'green';
@@ -159,10 +172,25 @@ export default function BudgetManagement() {
   const [typeFilter, setTypeFilter] = useState('all');
   const [deleteTarget, setDeleteTarget] = useState(null);
 
-  // Stats
-  const activeBudgets = useMemo(() => budgets.filter(b => b.status === 'active').length, [budgets]);
-  const totalPlanned = useMemo(() => budgetLines.reduce((s, l) => s + (l.budgeted_amount || l.planned_amount || 0), 0), [budgetLines]);
-  const totalActual = useMemo(() => budgetLines.reduce((s, l) => s + (l.actual_amount || 0), 0), [budgetLines]);
+  // Stats — the server aggregate is the source of truth (side-split, judged
+  // over every budget); the client-side sums below are only the first-paint
+  // fallback while it loads. Spending control lives on the expense side:
+  // summing revenue actuals into "spent" is what used to flag budgets whose
+  // revenue merely beat its plan as overspent.
+  const [serverSummary, setServerSummary] = useState(null);
+  useEffect(() => {
+    financeService.getBudgetsSummary()
+      .then(setServerSummary)
+      .catch(() => setServerSummary(null));
+  }, [budgets, budgetLines]);
+
+  const expenseLine = (l) => (l.line_type || 'expense') !== 'revenue';
+  const activeBudgets = serverSummary?.active_budgets
+    ?? budgets.filter(b => b.status === 'active').length;
+  const totalPlanned = serverSummary?.planned_expense
+    ?? budgetLines.filter(expenseLine).reduce((s, l) => s + (l.budgeted_amount || l.planned_amount || 0), 0);
+  const totalActual = serverSummary?.actual_expense
+    ?? budgetLines.filter(expenseLine).reduce((s, l) => s + (l.actual_amount || 0), 0);
   const variance = totalPlanned - totalActual;
 
   const filteredBudgets = useMemo(() => {
@@ -172,13 +200,24 @@ export default function BudgetManagement() {
 
   const getBudgetLines = useCallback((id) => budgetLines.filter(l => l.budget_id === id), [budgetLines]);
 
+  // Usage is judged per SIDE, never on the two directions summed: for a
+  // combined budget whose revenue beat plan, the old mixed sum reported >100%
+  // "usage" while spending was still under limit. Expense side rules whenever
+  // it has lines; a revenue-only budget falls back to the revenue side with
+  // revenue semantics (there, fakt above plan is achievement — never "over").
   const calcUsage = useCallback((budget) => {
     const lines = getBudgetLines(budget.id);
-    const planned = lines.reduce((s, l) => s + (l.budgeted_amount || l.planned_amount || 0), 0) || budget.total_amount || 0;
-    const actual = lines.reduce((s, l) => s + (l.actual_amount || 0), 0);
+    const exp = lines.filter(l => (l.line_type || 'expense') !== 'revenue');
+    const rev = lines.filter(l => (l.line_type || 'expense') === 'revenue');
+    const side = exp.length > 0 ? 'expense' : (rev.length > 0 ? 'revenue' : (budget.budget_type === 'revenue' ? 'revenue' : 'expense'));
+    const sideLines = side === 'revenue' ? rev : exp;
+    const planned = sideLines.reduce((s, l) => s + (l.budgeted_amount || l.planned_amount || 0), 0)
+      || (lines.length === 0 ? (budget.total_amount || 0) : 0);
+    const actual = sideLines.reduce((s, l) => s + (l.actual_amount || 0), 0);
     const pct = planned > 0 ? (actual / planned) * 100 : 0;
     const wt = budget.warning_threshold || 80;
-    return { planned, actual, pct, isWarning: pct >= wt && pct <= 100, isOver: pct > 100 };
+    const isOver = side === 'expense' && pct > 100;
+    return { planned, actual, pct, side, isWarning: side === 'expense' && pct >= wt && pct <= 100, isOver };
   }, [getBudgetLines]);
 
   const alerts = useMemo(() => {
@@ -214,17 +253,24 @@ export default function BudgetManagement() {
     } else {
       const year = new Date().getFullYear();
       const num = (budgets.length || 0) + 1;
+      // fiscal_year_id is REQUIRED by the API — pre-select the open year
+      // covering today so the common case never trips the requirement.
+      const today = format(new Date(), 'yyyy-MM-dd');
+      const openYears = fiscalYears.filter(fy => fy.status === 'open');
+      const currentFy = openYears.find(fy =>
+        toDateInput(fy.start_date) <= today && today <= toDateInput(fy.end_date)
+      ) || (openYears.length === 1 ? openYears[0] : null);
       setWizardData({
         name: '', code: `BUD-${year}-${String(num).padStart(2, '0')}`,
         budget_type: 'combined', approach: 'fixed', breakdown: 'monthly',
-        start_date: '', end_date: '', fiscal_year_id: '',
+        start_date: '', end_date: '', fiscal_year_id: currentFy?.id || '',
         overspend_policy: 'warn', description: '',
         rolling_horizon_months: 3, auto_extend: true,
       });
       setWizardLines([]);
     }
     setView('wizard');
-  }, [budgets, getBudgetLines]);
+  }, [budgets, getBudgetLines, fiscalYears]);
 
   const setQuarter = (q) => {
     const y = new Date().getFullYear();
@@ -253,11 +299,17 @@ export default function BudgetManagement() {
     if (key.startsWith('period_')) {
       u.budgeted_amount = [1,2,3,4,5,6,7,8,9,10,11,12].reduce((s, n) => s + parseFloat(u[`period_${n}`] || 0), 0);
     }
-    // When switching line_type, auto-fill account from default if current account is empty
-    if (key === 'line_type' && !l.account_id) {
-      u.account_id = val === 'revenue'
+    // When switching line_type, the picked account may no longer belong to the
+    // new type's account set — keeping it would silently save a mismatched
+    // line (a revenue line on an expense account). Re-fill from the default,
+    // or clear so the combobox forces a fresh pick.
+    if (key === 'line_type') {
+      const fallback = val === 'revenue'
         ? (wizardData.default_revenue_account_id || '')
         : (wizardData.default_expense_account_id || '');
+      if (!u.account_id || !getFilteredAccounts(val).some(a => a.id === u.account_id)) {
+        u.account_id = fallback;
+      }
     }
     return u;
   }));
@@ -285,21 +337,23 @@ export default function BudgetManagement() {
 
   const getFilteredAccounts = (lineType) => {
     return accounts.filter(a => {
-      const code = String(a.code || '');
-      if (lineType === 'revenue') {
-        return a.account_type === 'revenue' || a.type === 'revenue' ||
-          (code >= '4000' && code < '5000');
-      }
-      if (lineType === 'expense') {
-        return a.account_type === 'expense' || a.type === 'expense' ||
-          (code >= '5000' && code < '9000');
-      }
-      // investment or other — show all
+      if (!isPostable(a)) return false;
+      if (lineType === 'revenue') return accountCategory(a) === 'revenue';
+      if (lineType === 'expense') return accountCategory(a) === 'expense';
+      // investment or other — any postable account
       return true;
     });
   };
 
   const saveWizard = async (status = 'draft') => {
+    // The API rejects a budget without a fiscal year with a generic 400 —
+    // catch it here with a pointed message and send the user to the step
+    // that owns the field.
+    if (!wizardData.fiscal_year_id) {
+      toast.error(t('fiscal_year_required') || "Moliyaviy yilni tanlang");
+      setWizardStep(3);
+      return;
+    }
     setIsSaving(true);
     try {
       const payload = { ...wizardData, total_amount: totalRevenue + totalExpense, status };
@@ -376,13 +430,25 @@ export default function BudgetManagement() {
         <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
           <CardContent className="p-4 flex items-center gap-3">
             <div className="w-10 h-10 bg-blue-200 rounded-lg flex items-center justify-center shrink-0"><BarChart3 className="w-5 h-5 text-blue-600" /></div>
-            <div><p className="text-xs text-blue-600 font-medium">{t('total_planned') || 'Total Planned'}</p><p className="text-base font-bold text-blue-800 truncate">{formatCurrencyCompact(totalPlanned)}</p></div>
+            <div>
+              <p className="text-xs text-blue-600 font-medium">{t('spending_plan') || 'Xarajat rejasi'}</p>
+              <p className="text-base font-bold text-blue-800 truncate">{formatCurrencyCompact(totalPlanned)}</p>
+              {(serverSummary?.planned_revenue || 0) > 0 && (
+                <p className="text-[11px] text-blue-500 truncate">{t('revenue_plan_short') || 'Daromad rejasi'}: {formatCurrencyCompact(serverSummary.planned_revenue)}</p>
+              )}
+            </div>
           </CardContent>
         </Card>
         <Card className="bg-gradient-to-br from-amber-50 to-amber-100 border-amber-200">
           <CardContent className="p-4 flex items-center gap-3">
             <div className="w-10 h-10 bg-amber-200 rounded-lg flex items-center justify-center shrink-0"><DollarSign className="w-5 h-5 text-amber-600" /></div>
-            <div><p className="text-xs text-amber-600 font-medium">{t('total_actual') || 'Total Actual'}</p><p className="text-base font-bold text-amber-800 truncate">{formatCurrencyCompact(totalActual)}</p></div>
+            <div>
+              <p className="text-xs text-amber-600 font-medium">{t('spent_amount') || 'Sarflandi'}</p>
+              <p className="text-base font-bold text-amber-800 truncate">{formatCurrencyCompact(totalActual)}</p>
+              {(serverSummary?.actual_revenue || 0) > 0 && (
+                <p className="text-[11px] text-amber-500 truncate">{t('revenue_actual_short') || 'Daromad fakti'}: {formatCurrencyCompact(serverSummary.actual_revenue)}</p>
+              )}
+            </div>
           </CardContent>
         </Card>
         <Card className={`bg-gradient-to-br ${variance >= 0 ? 'from-green-50 to-green-100 border-green-200' : 'from-red-50 to-red-100 border-red-200'}`}>
@@ -391,7 +457,7 @@ export default function BudgetManagement() {
               {variance >= 0 ? <TrendingUp className="w-5 h-5 text-green-600" /> : <TrendingDown className="w-5 h-5 text-red-600" />}
             </div>
             <div>
-              <p className={`text-xs font-medium ${variance >= 0 ? 'text-green-600' : 'text-red-600'}`}>{t('variance') || 'Variance'}</p>
+              <p className={`text-xs font-medium ${variance >= 0 ? 'text-green-600' : 'text-red-600'}`}>{t('remaining_limit') || 'Qolgan limit'}</p>
               <p className={`text-base font-bold truncate ${variance >= 0 ? 'text-green-800' : 'text-red-800'}`}>{formatCurrencyCompact(variance)}</p>
             </div>
           </CardContent>
@@ -481,7 +547,7 @@ export default function BudgetManagement() {
                       </TableCell>
                       <TableCell onClick={e => e.stopPropagation()}>
                         <UsageBar planned={u.planned} actual={u.actual}
-                          type={budget.budget_type === 'revenue' ? 'revenue' : 'expense'}
+                          type={u.side}
                           warningThreshold={budget.warning_threshold || 80}
                           formatCurrency={formatCurrency} />
                       </TableCell>
@@ -594,14 +660,7 @@ export default function BudgetManagement() {
                       <span className="text-slate-400">{t('no_default_account') || 'No default (select per line)'}</span>
                     </SelectItem>
                     {accounts
-                      .filter(a => {
-                        const code = String(a.code || '');
-                        const name = (a.name || '').toLowerCase();
-                        // Expense accounts: typically 5xxx-8xxx range or type=expense
-                        return a.account_type === 'expense' || a.type === 'expense' ||
-                          name.includes('expense') || name.includes('xarajat') || name.includes('расход') ||
-                          (code >= '5000' && code < '9000');
-                      })
+                      .filter(a => isPostable(a) && accountCategory(a) === 'expense')
                       .map(a => (
                         <SelectItem key={a.id} value={a.id}>
                           {a.code} — {a.name}
@@ -633,14 +692,7 @@ export default function BudgetManagement() {
                       <span className="text-slate-400">{t('no_default_account') || 'No default (select per line)'}</span>
                     </SelectItem>
                     {accounts
-                      .filter(a => {
-                        const code = String(a.code || '');
-                        const name = (a.name || '').toLowerCase();
-                        return a.account_type === 'revenue' || a.type === 'revenue' ||
-                          name.includes('revenue') || name.includes('daromad') || name.includes('доход') ||
-                          name.includes('sales') || name.includes('sotish') ||
-                          (code >= '4000' && code < '5000');
-                      })
+                      .filter(a => isPostable(a) && accountCategory(a) === 'revenue')
                       .map(a => (
                         <SelectItem key={a.id} value={a.id}>
                           {a.code} — {a.name}
@@ -705,7 +757,7 @@ export default function BudgetManagement() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>{t('fiscal_year') || 'Fiscal Year'}</Label>
+                <Label>{t('fiscal_year') || 'Fiscal Year'} *</Label>
                 <Select value={wizardData.fiscal_year_id} onValueChange={v => setWizardData(d => ({ ...d, fiscal_year_id: v }))}>
                   <SelectTrigger><SelectValue placeholder={t('select_fiscal_year') || 'Select fiscal year'} /></SelectTrigger>
                   <SelectContent>
@@ -886,7 +938,7 @@ export default function BudgetManagement() {
           <div className="flex gap-2">
             {wizardStep < totalSteps ? (
               <Button className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-                disabled={wizardStep === 3 && !wizardData.name}
+                disabled={wizardStep === 3 && (!wizardData.name || !wizardData.fiscal_year_id)}
                 onClick={() => {
                   if (wizardStep === 1 && wizardData.budget_type === 'cashflow') setWizardStep(3);
                   else setWizardStep(s => Math.min(totalSteps, s+1));

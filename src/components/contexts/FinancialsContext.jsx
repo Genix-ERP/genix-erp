@@ -5,6 +5,7 @@ import { useEmployeePermissions } from './EmployeePermissionsContext';
 import { isDemoMode, checkBackendHealth, API_BASE_URL } from '@/config/dataMode';
 import { useAdminSettings } from './AdminSettingsContext';
 import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 const JOURNAL_ENTRIES_KEY = 'genix_journal_entries';
 const JOURNAL_LINES_KEY = 'genix_journal_lines';
@@ -504,7 +505,7 @@ export function FinancialsProvider({ children }) {
         setAccounts(prev => [newAccount, ...prev]);
         return newAccount;
       } catch (err) { console.error('API error, falling back to local:', err); 
-        toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+        toast.error(getApiErrorMessage(err, 'Amalni bajarib bo\'lmadi'));
       }
     }
     const newAccount = { id: `acc_${Date.now()}`, ...accountData, balance: 0, is_active: true, created_at: new Date().toISOString() };
@@ -523,7 +524,7 @@ export function FinancialsProvider({ children }) {
         setAccounts(prev => prev.map(acc => acc.id === id ? updated : acc));
         return updated;
       } catch (err) { console.error('API error:', err); 
-        toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+        toast.error(getApiErrorMessage(err, 'Amalni bajarib bo\'lmadi'));
       }
     }
     const updated = accounts.map(acc => acc.id === id ? { ...acc, ...accountData } : acc);
@@ -540,7 +541,7 @@ export function FinancialsProvider({ children }) {
         setAccounts(prev => prev.filter(acc => acc.id !== id));
         return;
       } catch (err) { console.error('API error:', err); 
-        toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+        toast.error(getApiErrorMessage(err, 'Amalni bajarib bo\'lmadi'));
       }
     }
     const updated = accounts.filter(acc => acc.id !== id);
@@ -1138,7 +1139,7 @@ export function FinancialsProvider({ children }) {
       } catch (err) {
         console.error('API error updating vendor bill:', err);
       
-        toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+        toast.error(getApiErrorMessage(err, 'Amalni bajarib bo\'lmadi'));
       }
     }
 

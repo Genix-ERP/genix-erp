@@ -21,6 +21,7 @@ import { useTranslation } from "@/components/utils/translations";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import CashRegister from "./CashRegister";
+import BankVipiskaImport from "./BankVipiskaImport";
 import ReconciliationWorkflow from "./ReconciliationWorkflow";
 import BankStatementImport from "./BankStatementImport";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
@@ -123,7 +124,7 @@ export default function BankReconciliation() {
     } catch (err) {
       console.error('Error creating bank account:', err);
     
-      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(err, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }
@@ -144,7 +145,7 @@ export default function BankReconciliation() {
     } catch (err) {
       console.error('Error updating bank account:', err);
     
-      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(err, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }
@@ -169,7 +170,7 @@ export default function BankReconciliation() {
     } catch (err) {
       console.error('Error creating transaction:', err);
     
-      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(err, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }
@@ -182,7 +183,7 @@ export default function BankReconciliation() {
     } catch (err) {
       console.error('Error reconciling transaction:', err);
     
-      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(err, 'Amalni bajarib bo\'lmadi'));
     }
   };
 
@@ -363,10 +364,16 @@ export default function BankReconciliation() {
               Financials.jsx. */}
         </TabsList>
 
-        <TabsContent value="vipiska" className="mt-4">
+        <TabsContent value="vipiska" className="mt-4 space-y-6">
+          {/* Excel vipiska review flow (Turonbank): upload → auto-classify →
+              per-line Dt/Kt review → confirm posts the JE. The five backend
+              endpoints have been routed since the 2026-08-13 port; this
+              component was left unmounted against a stale "never routed"
+              note, leaving the whole flow unreachable. */}
+          {canUpdate(MODULES.FINANCIALS) && <BankVipiskaImport />}
           <VipiskaImportPanel
             bankAccounts={bankAccounts}
-            canImport={canCreate(MODULES.FINANCIALS)}
+            canImport={canUpdate(MODULES.FINANCIALS)}
             onOpenImport={(account) => {
               setSelectedBankAccount(account);
               setShowImportModal(true);
@@ -410,7 +417,7 @@ export default function BankReconciliation() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-purple-600 font-medium">{t('usd_balance') || 'USD Balance'}</p>
+                <p className="text-sm text-purple-600 font-medium">{t('usd_accounts_balance_uzs') || "USD hisoblar (so'm)"}</p>
                 <p className="text-2xl font-bold text-purple-800">{formatCurrencyCompact(accountSummary.totalBalanceUSD)}</p>
               </div>
               <div className="w-12 h-12 bg-purple-500/20 rounded-xl flex items-center justify-center">
@@ -521,7 +528,9 @@ export default function BankReconciliation() {
                       </TableCell>
                       <TableCell className="font-semibold">
                         <div className="flex items-center gap-2">
-                          {formatCurrency(account.ledger_balance || 0, account.currency)}
+                          {/* ledger_balance is UZS-denominated (posted-ledger sum) —
+                              never prefix it with the account's own currency symbol */}
+                          {formatCurrency(account.ledger_balance || 0)}
                           {account.gl_linked === false && (
                             <Badge
                               variant="outline"
@@ -892,7 +901,7 @@ export default function BankReconciliation() {
               <Button variant="outline" onClick={() => setShowCreateAccountModal(false)}>{t('cancel')}</Button>
               <Button
                 onClick={handleCreateBankAccount}
-                disabled={isSaving || !newBankAccount.name || !newBankAccount.bank_name}
+                disabled={isSaving || !newBankAccount.name || !newBankAccount.bank_name || !newBankAccount.account_number}
                 className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
               >
                 {isSaving ? (t('saving') || 'Saving...') : (t('save') || 'Save')}
@@ -1050,7 +1059,7 @@ export default function BankReconciliation() {
                 <Button variant="outline" onClick={() => setEditAccount(null)}>{t('cancel')}</Button>
                 <Button
                   onClick={handleUpdateBankAccount}
-                  disabled={isSaving || !editAccount.name || !editAccount.bank_name}
+                  disabled={isSaving || !editAccount.name || !editAccount.bank_name || !editAccount.account_number}
                   className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
                 >
                   {isSaving ? t('saving') : t('save')}
@@ -1105,7 +1114,7 @@ export default function BankReconciliation() {
                 } catch (err) {
                   console.error('Failed to delete bank account:', err);
                 
-                  toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+                  toast.error(getApiErrorMessage(err, 'Amalni bajarib bo\'lmadi'));
                 }
                 setDeleteAccountId(null);
               }}
@@ -1120,12 +1129,15 @@ export default function BankReconciliation() {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// Vipiska — the WORKING statement-import surface. Two routed flows:
-//   1. 1C bank-klient TXT  → POST /bank-statement-imports (auto-match + JE)
-//   2. Excel/OFX per account → /bank-accounts/:id/import (BankStatementImport
+// Vipiska — import history + secondary flows. Three routed flows live on the
+// tab now:
+//   1. Excel vipiska review (BankVipiskaImport, mounted above this panel):
+//      upload → auto-classify → per-line Dt/Kt review → confirm posts the JE.
+//      Its five endpoints ARE routed (ported 2026-08-13) — an older note here
+//      claimed they never were, which kept the component unmounted.
+//   2. 1C bank-klient TXT  → POST /bank-statement-imports (staging + history)
+//   3. Excel/OFX per account → /bank-accounts/:id/import (BankStatementImport
 //      dialog, opened via onOpenImport)
-// The old BankVipiskaImport component called five endpoints that were never
-// routed (vipiska/lines review flow) and is intentionally unmounted.
 // ───────────────────────────────────────────────────────────────────────────
 function VipiskaImportPanel({ bankAccounts, canImport, onOpenImport }) {
   const { language } = useLanguage();
@@ -1164,8 +1176,14 @@ function VipiskaImportPanel({ bankAccounts, canImport, onOpenImport }) {
     setUploadResult(null);
     try {
       const res = await financeService.importBankStatement1C(file);
-      setUploadResult(res);
-      await loadImports();
+      if (res?.duplicate) {
+        // Re-upload of an already-imported file — the server returns
+        // {duplicate: true, warnings: [...]} with no transactions.
+        toast.info(res.warnings?.[0] || 'Bu fayl avval import qilingan');
+      } else {
+        setUploadResult(res);
+        await loadImports();
+      }
     } catch (err) {
       toast.error(getApiErrorMessage(err, t('vp_upload_failed') || 'Vipiska import qilinmadi'));
     } finally {
@@ -1178,6 +1196,8 @@ function VipiskaImportPanel({ bankAccounts, canImport, onOpenImport }) {
       case 'completed':
       case 'matched':
         return <Badge className="bg-green-100 text-green-700">{t('vp_status_done') || 'Yakunlangan'}</Badge>;
+      case 'imported':
+        return <Badge className="bg-blue-100 text-blue-700">{t('vp_status_imported') || 'Import qilingan'}</Badge>;
       case 'partial':
         return <Badge className="bg-amber-100 text-amber-700">{t('vp_status_partial') || 'Qisman'}</Badge>;
       case 'failed':
