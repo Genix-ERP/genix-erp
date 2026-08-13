@@ -26,6 +26,7 @@ import { Trash2, Loader2, BarChart3 } from 'lucide-react';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatDate } from '@/utils/formatDate';
 import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 export default function SmetaSummaryView({ projectId }) {
   const [data, setData] = useState([]);
@@ -79,7 +80,7 @@ export default function SmetaSummaryView({ projectId }) {
     } catch (error) {
       console.error('Failed to delete batch:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     }
     setDeleteConfirm(null);
   };

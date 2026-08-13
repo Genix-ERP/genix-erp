@@ -24,6 +24,7 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useCustomers } from "@/components/contexts/CustomersContext";
 import { useCompany } from "@/components/contexts/CompanyContext";
 import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 export default function PhoneWidget({ isOpen, onClose }) {
   const { language } = useLanguage();
@@ -161,7 +162,7 @@ export default function PhoneWidget({ isOpen, onClose }) {
       } catch (error) {
         console.error('Failed to end call:', error);
       
-        toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+        toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
       }
     }
     setActiveCall(null);

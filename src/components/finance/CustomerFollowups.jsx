@@ -31,6 +31,7 @@ import { useTranslation } from '@/components/utils/translations';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { followupsService, followupLevelsService } from '@/api/services/followups';
 import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 export default function CustomerFollowups() {
   const { language } = useLanguage();
@@ -165,7 +166,7 @@ export default function CustomerFollowups() {
     } catch (error) {
       console.error('Failed to create promise:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }
@@ -188,7 +189,7 @@ export default function CustomerFollowups() {
     } catch (error) {
       console.error('Failed to add note:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }
@@ -209,7 +210,7 @@ export default function CustomerFollowups() {
     } catch (error) {
       console.error('Failed to save level:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }
@@ -223,7 +224,7 @@ export default function CustomerFollowups() {
     } catch (error) {
       console.error('Failed to delete level:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     }
   };
 

@@ -24,6 +24,7 @@ import { inventoryService } from '@/api/services';
 import { usePermissions } from "@/hooks/usePermissions";
 import { useInventory } from "@/components/contexts/InventoryContext";
 import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 // Location type options (matching Odoo)
 const LOCATION_TYPES = [
@@ -148,7 +149,7 @@ export default function WarehouseLocations() {
     } catch (err) {
       console.error('Error creating location:', err);
     
-      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(err, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }
@@ -178,7 +179,7 @@ export default function WarehouseLocations() {
     } catch (err) {
       console.error('Error updating location:', err);
     
-      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(err, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }

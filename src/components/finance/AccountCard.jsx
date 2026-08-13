@@ -20,8 +20,8 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
-import { getApiErrorMessage } from '@/utils/apiError';
 import financeService from "@/api/services/finance";
+import { getApiErrorMessage } from '@/utils/apiError';
 
 export default function AccountCard() {
   const { language } = useLanguage();

@@ -29,6 +29,7 @@ import InventoryManagement from "./InventoryManagement";
 import StockCounting from "./StockCounting";
 import ScrapManagement from "./ScrapManagement";
 import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 // Field Help Component - Odoo-style tooltip for field explanations
 // Note: TooltipProvider should be at a higher level, not per-component
@@ -255,7 +256,7 @@ export default function Warehouses({ hideSubTabs = false }) {
     } catch (error) {
       console.error('Error creating warehouse:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }
@@ -285,7 +286,7 @@ export default function Warehouses({ hideSubTabs = false }) {
     } catch (error) {
       console.error('Error updating warehouse:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }
@@ -304,7 +305,7 @@ export default function Warehouses({ hideSubTabs = false }) {
     } catch (error) {
       console.error('Error deleting warehouse:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     }
   };
 
@@ -328,7 +329,7 @@ export default function Warehouses({ hideSubTabs = false }) {
     } catch (error) {
       console.error('Error creating location:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }
@@ -367,7 +368,7 @@ export default function Warehouses({ hideSubTabs = false }) {
     } catch (error) {
       console.error('Error updating location:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }
@@ -387,7 +388,7 @@ export default function Warehouses({ hideSubTabs = false }) {
     } catch (error) {
       console.error('Error deleting location:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     }
   };
 

@@ -53,6 +53,7 @@ import { useTranslation } from "@/components/utils/translations";
 import { useCustomers } from "@/components/contexts/CustomersContext";
 import { formatDateTime } from '@/utils/formatDate';
 import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 export default function CallInterface({ callLogs = [], onUpdate, customer, language = 'en', companyId }) {
   const { t } = useTranslation(language);
@@ -247,7 +248,7 @@ export default function CallInterface({ callLogs = [], onUpdate, customer, langu
       } catch (error) {
         console.error('Failed to end call:', error);
       
-        toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+        toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
       }
     }
     setActiveCall(null);

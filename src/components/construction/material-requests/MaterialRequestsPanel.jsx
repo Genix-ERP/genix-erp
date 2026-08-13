@@ -26,12 +26,12 @@ import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { usePermissions } from '@/hooks/usePermissions';
 import { MODULES } from '@/config/permissions';
-import { getApiErrorMessage } from '@/utils/apiError';
 import materialRequestsService from '@/api/services/materialRequests';
 
 import { mrStatusBadgeProps, MR_STATUS_META } from './materialRequestMeta';
 import MaterialRequestFormModal from './MaterialRequestFormModal';
 import MaterialRequestDetailSheet from './MaterialRequestDetailSheet';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 // Material zayavkalari paneli — uch rejimda ishlaydi:
 //   mode="construction" — Qurilish moduli sahifa-tab (barcha loyihalar)

@@ -22,6 +22,7 @@ import AlertModal from "@/components/shared/AlertModal";
 import financeService from "@/api/services/finance";
 import AccountCombobox from "@/components/shared/AccountCombobox";
 import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 const JOURNAL_TYPES = [
   { value: 'general', labelKey: 'general', icon: BookOpen, color: 'bg-slate-100 text-slate-800 border-slate-200' },
@@ -266,7 +267,7 @@ export default function JournalManagement() {
       const errorMsg = err.response?.data?.error?.message || err.message || 'Failed to save';
       showError(errorMsg);
     
-      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(err, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }
@@ -303,7 +304,7 @@ export default function JournalManagement() {
     } catch (err) {
       console.error('Failed to update payment method account:', err);
     
-      toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(err, 'Amalni bajarib bo\'lmadi'));
     }
   };
 

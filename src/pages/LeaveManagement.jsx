@@ -55,6 +55,7 @@ import { LeaveRequest, LeaveBalance } from '@/api/entities';
 import { useHR } from '@/components/contexts/HRContext';
 import { format, differenceInDays, parseISO, isWithinInterval, startOfMonth, endOfMonth } from 'date-fns';
 import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 // Leave types with icons and colors
 const LEAVE_TYPES = {
@@ -248,7 +249,7 @@ export default function LeaveManagement() {
     } catch (error) {
       console.error('Error creating leave request:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     }
 
     setShowCreateModal(false);
@@ -295,7 +296,7 @@ export default function LeaveManagement() {
     } catch (error) {
       console.error('Error approving leave request:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     }
 
     setShowApproveDialog(false);
@@ -334,7 +335,7 @@ export default function LeaveManagement() {
     } catch (error) {
       console.error('Error rejecting leave request:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     }
 
     setShowRejectDialog(false);

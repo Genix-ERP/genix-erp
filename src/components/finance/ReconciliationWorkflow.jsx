@@ -21,6 +21,7 @@ import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useAlertModal } from "@/hooks/useAlertModal";
 import AlertModal from "@/components/shared/AlertModal";
 import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 export default function ReconciliationWorkflow({ bankAccount, onClose }) {
   const { language } = useLanguage();
@@ -111,7 +112,7 @@ export default function ReconciliationWorkflow({ bankAccount, onClose }) {
       console.error('Failed to create reconciliation:', error);
       showError(error.response?.data?.error?.message || 'Failed to create reconciliation');
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }
@@ -155,7 +156,7 @@ export default function ReconciliationWorkflow({ bankAccount, onClose }) {
       console.error('Failed to save reconciliation:', error);
       showError('Failed to save reconciliation');
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }
@@ -182,7 +183,7 @@ export default function ReconciliationWorkflow({ bankAccount, onClose }) {
       console.error('Failed to complete reconciliation:', error);
       showError(error.response?.data?.error?.message || 'Failed to complete reconciliation');
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }
@@ -201,7 +202,7 @@ export default function ReconciliationWorkflow({ bankAccount, onClose }) {
       console.error('Failed to delete reconciliation:', error);
       showError(error.response?.data?.error?.message || 'Failed to delete');
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     }
   };
 

@@ -78,6 +78,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { getApiErrorMessage } from '@/utils/apiError';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -92,7 +93,6 @@ import { useInstalledApps } from "@/components/contexts/InstalledAppsContext";
 import { useEmployeePermissions, AVAILABLE_MODULES } from "@/components/contexts/EmployeePermissionsContext";
 import { PERMISSION_MATRIX } from "@/config/permissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
-import { getApiErrorMessage } from '@/utils/apiError';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { StatTile, EmptyNote } from '@/components/shared/DashboardKit';
 import HRAnalyticsTab from '@/components/hr/HRAnalyticsTab';
@@ -394,7 +394,7 @@ export default function HR() {
           } catch (orgErr) {
             console.error("Error assigning organization:", orgErr);
           
-            toast.error((orgErr?.response?.data?.message) || (orgErr?.response?.data?.error) || orgErr?.message || 'Amalni bajarib bo\'lmadi');
+            toast.error(getApiErrorMessage(orgErr, 'Amalni bajarib bo\'lmadi'));
           }
         }
       }
@@ -556,7 +556,7 @@ export default function HR() {
           } catch (roleErr) {
             console.error("Error assigning role:", roleErr);
           
-            toast.error((roleErr?.response?.data?.message) || (roleErr?.response?.data?.error) || roleErr?.message || 'Amalni bajarib bo\'lmadi');
+            toast.error(getApiErrorMessage(roleErr, 'Amalni bajarib bo\'lmadi'));
           }
         }
       }

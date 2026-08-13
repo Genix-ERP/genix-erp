@@ -26,6 +26,7 @@ import { inventoryService, contactsService } from '@/api/services';
 import { useInventory } from "@/components/contexts/InventoryContext";
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -450,7 +451,7 @@ export default function StockOperations() {
     } catch (e) {
       console.error('Failed to save line edits', e);
     
-      toast.error((e?.response?.data?.message) || (e?.response?.data?.error) || e?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(e, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setLinesSaving(false);
     }
@@ -467,7 +468,7 @@ export default function StockOperations() {
     } catch (e) {
       console.error('Failed to save done qty', e);
     
-      toast.error((e?.response?.data?.message) || (e?.response?.data?.error) || e?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(e, 'Amalni bajarib bo\'lmadi'));
     }
   };
 
@@ -479,7 +480,7 @@ export default function StockOperations() {
     } catch (e) {
       console.error('Failed to delete line', e);
     
-      toast.error((e?.response?.data?.message) || (e?.response?.data?.error) || e?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(e, 'Amalni bajarib bo\'lmadi'));
     }
   };
 
@@ -529,7 +530,7 @@ export default function StockOperations() {
     } catch (e) {
       console.error('Failed to update operation', e);
     
-      toast.error((e?.response?.data?.message) || (e?.response?.data?.error) || e?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(e, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsActionLoading(false);
     }
@@ -553,7 +554,7 @@ export default function StockOperations() {
     } catch (e) {
       console.error('Failed to create operation', e);
     
-      toast.error((e?.response?.data?.message) || (e?.response?.data?.error) || e?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(e, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsActionLoading(false);
     }

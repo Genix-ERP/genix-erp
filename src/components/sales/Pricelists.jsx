@@ -31,6 +31,7 @@ import { pricelistsService } from '@/api/services/pricelists';
 import { inventoryService } from '@/api/services/inventory';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 export default function Pricelists() {
   const { language } = useLanguage();
@@ -161,7 +162,7 @@ export default function Pricelists() {
     } catch (error) {
       console.error('Failed to create pricelist:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }
@@ -181,7 +182,7 @@ export default function Pricelists() {
     } catch (error) {
       console.error('Failed to update pricelist:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }
@@ -199,7 +200,7 @@ export default function Pricelists() {
     } catch (error) {
       console.error('Failed to delete pricelist:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     }
   };
 

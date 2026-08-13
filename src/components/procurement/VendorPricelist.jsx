@@ -53,6 +53,7 @@ import { useProcurement } from '@/components/contexts/ProcurementContext';
 import { inventoryService } from '@/api/services/inventory';
 import { procurementService } from '@/api/services/procurement';
 import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 export default function VendorPricelist() {
   const { language } = useLanguage();
@@ -239,7 +240,7 @@ export default function VendorPricelist() {
     } catch (error) {
       console.error('Failed to toggle status:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     }
   };
 

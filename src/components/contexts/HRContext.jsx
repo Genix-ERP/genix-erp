@@ -4,6 +4,7 @@ import { useAdminSettings } from './AdminSettingsContext';
 import { useEmployeePermissions } from './EmployeePermissionsContext';
 import { isDemoMode, checkBackendHealth } from '@/config/dataMode';
 import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 const HRContext = createContext(null);
 
@@ -209,7 +210,7 @@ export function HRProvider({ children }) {
       } catch (err) {
         console.error('Backend error, saving locally:', err);
       
-        toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+        toast.error(getApiErrorMessage(err, 'Amalni bajarib bo\'lmadi'));
       }
     }
 
@@ -243,7 +244,7 @@ export function HRProvider({ children }) {
       } catch (err) {
         console.error('Backend error, updating locally:', err);
       
-        toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+        toast.error(getApiErrorMessage(err, 'Amalni bajarib bo\'lmadi'));
       }
     }
 
@@ -270,7 +271,7 @@ export function HRProvider({ children }) {
       } catch (err) {
         console.error('Backend error, deleting locally:', err);
       
-        toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+        toast.error(getApiErrorMessage(err, 'Amalni bajarib bo\'lmadi'));
       }
     }
 
@@ -299,7 +300,7 @@ export function HRProvider({ children }) {
       } catch (err) {
         console.error('Backend error, saving locally:', err);
       
-        toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+        toast.error(getApiErrorMessage(err, 'Amalni bajarib bo\'lmadi'));
       }
     }
 
@@ -331,7 +332,7 @@ export function HRProvider({ children }) {
       } catch (err) {
         console.error('Backend error, updating locally:', err);
       
-        toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+        toast.error(getApiErrorMessage(err, 'Amalni bajarib bo\'lmadi'));
       }
     }
 
@@ -358,7 +359,7 @@ export function HRProvider({ children }) {
       } catch (err) {
         console.error('Backend error, deleting locally:', err);
       
-        toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+        toast.error(getApiErrorMessage(err, 'Amalni bajarib bo\'lmadi'));
       }
     }
 

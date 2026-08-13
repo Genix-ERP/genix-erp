@@ -13,6 +13,7 @@ import { useTranslation } from "@/components/utils/translations";
 import { financeService } from "@/api/services/finance";
 import { format } from "date-fns";
 import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 export default function AccountingPeriods() {
   const { language } = useLanguage();
@@ -62,7 +63,7 @@ export default function AccountingPeriods() {
     } catch (error) {
       console.error('Failed to auto-create periods:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }
@@ -78,7 +79,7 @@ export default function AccountingPeriods() {
     } catch (error) {
       console.error('Failed to create period:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }

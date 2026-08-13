@@ -18,6 +18,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { format, addMonths, startOfMonth, endOfMonth, startOfYear, endOfYear } from "date-fns";
 import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 export default function FiscalPeriods() {
   const { language } = useLanguage();
@@ -134,7 +135,7 @@ export default function FiscalPeriods() {
     } catch (error) {
       console.error('Error creating fiscal year:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }

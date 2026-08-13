@@ -22,8 +22,8 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { equipmentService } from '@/api/services/manufacturing';
 import { fixedAssetsV2Service } from '@/api/services/fixedAssetsV2';
-import { getApiErrorMessage } from '@/utils/apiError';
 import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 // Explicit zero UUID clears asset_id on update (backend treats uuid.Nil as
 // SET NULL); a real id links the work center to the fa_assets register.
@@ -203,7 +203,7 @@ export default function WorkCenters() {
         await apiClient.post(`/work-centers/${workCenterId}/employees`, { employee_ids: newIds, role: 'operator' }).catch(() => {});
       }
     } catch (e) { console.error('Failed to save employee assignments:', e); 
-        toast.error((e?.response?.data?.message) || (e?.response?.data?.error) || e?.message || 'Amalni bajarib bo\'lmadi');
+        toast.error(getApiErrorMessage(e, 'Amalni bajarib bo\'lmadi'));
       }
   };
 

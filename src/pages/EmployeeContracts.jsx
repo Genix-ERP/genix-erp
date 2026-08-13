@@ -52,6 +52,7 @@ import { EmployeeContract } from '@/api/entities';
 import { format, parseISO, differenceInDays, addMonths, isBefore, isAfter } from 'date-fns';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 const CONTRACT_TYPES = {
   permanent: { label: 'permanent_contract', color: 'bg-green-100 text-green-700 border-green-200' },
@@ -218,7 +219,7 @@ export default function EmployeeContracts() {
     } catch (error) {
       console.error('Error creating contract:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSubmitting(false);
     }
@@ -241,7 +242,7 @@ export default function EmployeeContracts() {
     } catch (error) {
       console.error('Error updating contract:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSubmitting(false);
     }
@@ -259,7 +260,7 @@ export default function EmployeeContracts() {
     } catch (error) {
       console.error('Error deleting contract:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     }
   };
 
@@ -300,7 +301,7 @@ export default function EmployeeContracts() {
     } catch (error) {
       console.error('Error renewing contract:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSubmitting(false);
     }

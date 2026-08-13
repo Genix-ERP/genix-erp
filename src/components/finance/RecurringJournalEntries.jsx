@@ -27,6 +27,7 @@ import { useAlertModal } from "@/hooks/useAlertModal";
 import AlertModal from "@/components/shared/AlertModal";
 import AccountCombobox from "@/components/shared/AccountCombobox";
 import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 const FREQUENCIES = [
   { value: 'daily', labelKey: 'daily' },
@@ -206,7 +207,7 @@ export default function RecurringJournalEntries() {
       console.error('Error creating template:', error);
       showError('Failed to create template');
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }
@@ -254,7 +255,7 @@ export default function RecurringJournalEntries() {
       console.error('Error updating template:', error);
       showError('Failed to update template');
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }
@@ -273,7 +274,7 @@ export default function RecurringJournalEntries() {
       console.error('Error deleting template:', error);
       showError('Failed to delete template');
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     } finally {
       setIsSaving(false);
     }

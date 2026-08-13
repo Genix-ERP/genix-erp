@@ -22,6 +22,7 @@ import AddSubWorkModal from '@/components/construction/AddSubWorkModal';
 import EstimateLineEditModal from '@/components/construction/EstimateLineEditModal';
 import { sortLinesManualFirst, sortLinesManualFirstInPlace } from '@/components/construction/utils/sortLines';
 import { formatDate, formatDateTime } from '@/utils/formatDate';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 // SmetaManagementTab — full match to files/Form2_Works_v2 (7).html.
 //
@@ -1802,7 +1803,7 @@ export default function SmetaManagementTab({ project }) {
             } catch (e) {
               console.error('Failed to delete line', ln.id, e);
             
-              toast.error((e?.response?.data?.message) || (e?.response?.data?.error) || e?.message || 'Amalni bajarib bo\'lmadi');
+              toast.error(getApiErrorMessage(e, 'Amalni bajarib bo\'lmadi'));
             }
           }
           const deletedIds = new Set();

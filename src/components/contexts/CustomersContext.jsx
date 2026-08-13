@@ -3,6 +3,7 @@ import { contactsService, leadsService, opportunitiesService, activitiesService,
 import { useCompany } from './CompanyContext';
 import { isDemoMode, checkBackendHealth } from '@/config/dataMode';
 import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 const STORAGE_KEY = 'genix_customers';
 const PARTNERS_STORAGE_KEY = 'genix_partners';
@@ -410,7 +411,7 @@ export function CustomersProvider({ children }) {
       } catch (err) {
         console.error('API error:', err);
       
-        toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+        toast.error(getApiErrorMessage(err, 'Amalni bajarib bo\'lmadi'));
       }
     }
 
@@ -429,7 +430,7 @@ export function CustomersProvider({ children }) {
       } catch (err) {
         console.error('API error:', err);
       
-        toast.error((err?.response?.data?.message) || (err?.response?.data?.error) || err?.message || 'Amalni bajarib bo\'lmadi');
+        toast.error(getApiErrorMessage(err, 'Amalni bajarib bo\'lmadi'));
       }
     }
 
@@ -498,7 +499,7 @@ export function CustomersProvider({ children }) {
       localStorage.setItem(storageKey, JSON.stringify(updated));
       setLeads(updated);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     }
   }, [leads, activeCompany]);
 
@@ -555,7 +556,7 @@ export function CustomersProvider({ children }) {
       localStorage.setItem(storageKey, JSON.stringify(updated));
       setOpportunities(updated);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     }
   }, [opportunities, activeCompany]);
 
@@ -612,7 +613,7 @@ export function CustomersProvider({ children }) {
       localStorage.setItem(storageKey, JSON.stringify(updated));
       setActivities(updated);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     }
   }, [activities, activeCompany]);
 
@@ -675,7 +676,7 @@ export function CustomersProvider({ children }) {
       localStorage.setItem(storageKey, JSON.stringify(updated));
       setTasks(updated);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     }
   }, [tasks, activeCompany]);
 

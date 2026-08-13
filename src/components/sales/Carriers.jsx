@@ -21,6 +21,7 @@ import { Plus, Building2, Edit, Trash2, ToggleLeft, ToggleRight } from 'lucide-r
 import { inventoryService } from '@/api/services/inventory';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 const EMPTY_CARRIER = {
   code: '',
@@ -98,7 +99,7 @@ export default function Carriers() {
     } catch (error) {
       console.error('Failed to toggle carrier status:', error);
     
-      toast.error((error?.response?.data?.message) || (error?.response?.data?.error) || error?.message || 'Amalni bajarib bo\'lmadi');
+      toast.error(getApiErrorMessage(error, 'Amalni bajarib bo\'lmadi'));
     }
   };
 
