@@ -3,10 +3,11 @@ import { toast } from 'sonner';
 import {
   AlertTriangle, CalendarDays, ChevronDown, ChevronRight, ClipboardList, Expand,
   FileSpreadsheet, Image as ImageIcon, Link2, Lock, Minimize2, Minus, Plus,
-  RotateCcw, Trash2, X,
+  RotateCcw, Trash2, Wand2, X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import AutoScheduleDialog from '@/components/construction/AutoScheduleDialog';
 import { constructionService } from '@/api/services/construction';
 import { getApiErrorMessage } from '@/utils/apiError';
 import { cn } from '@/lib/utils';
@@ -84,6 +85,7 @@ export default function WorkScheduleTab({ project, onOpenSmeta }) {
   const [freezing, setFreezing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [autoOpen, setAutoOpen] = useState(false);
 
   // Bar drag: { id, mode: 'move'|'resize', startClientX, deltaDays }.
   const [drag, setDrag] = useState(null);
@@ -877,6 +879,19 @@ export default function WorkScheduleTab({ project, onOpenSmeta }) {
               {t('gpr_add_all_to_schedule') || "Hammasini grafikka qo'shish"}
             </Button>
           )}
+          {/* Avtomatik rejalashtirish — minglab pozitsiyaga sanani qo'lda
+              qo'yish o'rniga bitta tugma (TZ §6.1). */}
+          {canEdit && (
+            <Button
+              size="sm"
+              variant={unscheduledCount > 0 ? 'default' : 'outline'}
+              className="h-7 gap-1.5 text-xs"
+              onClick={() => setAutoOpen(true)}
+            >
+              <Wand2 className="w-3.5 h-3.5" />
+              {t('gpr_auto_schedule') || 'Avtomatik rejalashtirish'}
+            </Button>
+          )}
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Segmented
@@ -1496,6 +1511,14 @@ export default function WorkScheduleTab({ project, onOpenSmeta }) {
           {t('gpr_select_hint') || "Sanalar, bajarilish va bog'liqliklarni tahrirlash uchun ishni tanlang"}
         </p>
       )}
+
+      <AutoScheduleDialog
+        open={autoOpen}
+        onClose={() => setAutoOpen(false)}
+        projectId={project?.id}
+        t={t}
+        onApplied={refetch}
+      />
     </div>
   );
 }
