@@ -157,6 +157,30 @@ describe('formatCompactNumber', () => {
     it('drops trailing .0 for round millions', () => {
       expect(formatCompactNumber(10000000)).toBe("10 mln so'm");
     });
+
+    // Asosiy panel va Moliya bitta ko'rsatkichni bir xil ko'rsatishi kerak.
+    // 1 o'nlik bilan -4 855 000 "-4.9 mln" bo'lib chiqardi va Moliyadagi
+    // "-4 855 000" bilan boshqa raqamdek tuyulardi.
+    it('keeps enough precision to match the exact figure', () => {
+      expect(formatCompactNumber(-4855000)).toBe("-4.855 mln so'm");
+      expect(formatCompactNumber(1445000)).toBe("1.445 mln so'm");
+      expect(formatCompactNumber(3050000)).toBe("3.05 mln so'm");
+      expect(formatCompactNumber(12668000)).toBe("12.668 mln so'm");
+    });
+
+    it('still trims trailing zeros', () => {
+      expect(formatCompactNumber(6300000)).toBe("6.3 mln so'm");
+      expect(formatCompactNumber(2100000)).toBe("2.1 mln so'm");
+      expect(formatCompactNumber(11300000)).toBe("11.3 mln so'm");
+    });
+  });
+
+  // O'q belgilari ataylab qisqa qoladi — shkala uchun, aniq o'qish uchun emas.
+  describe('axis ticks stay coarse', () => {
+    it('keeps one decimal so labels do not collide', () => {
+      expect(formatAxisTick(-4855000)).toBe('-4.9 mln');
+      expect(formatAxisTick(12668000)).toBe('12.7 mln');
+    });
   });
 
   describe('billions (mlrd)', () => {

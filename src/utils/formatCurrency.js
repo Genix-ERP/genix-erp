@@ -38,6 +38,11 @@ export function formatAmount(amount, options = {}) {
 }
 
 // Format number for chart axis ticks (no currency symbol, just abbreviated number)
+//
+// ATAYLAB 1 o'nlik — formatCompactNumber dagi 3 tadan farqli. O'q belgilari
+// qiymatni aniq o'qish uchun emas, shkalani ko'rsatish uchun kerak; "19.5 mln"
+// o'rniga "19.456 mln" yozilsa, belgilar bir-biriga tegib ketadi. Aniq son
+// baribir tooltip va KPI kartochkalarida ko'rinadi.
 export function formatAxisTick(value) {
   const num = Number(value) || 0;
   const abs = Math.abs(num);
@@ -47,6 +52,22 @@ export function formatAxisTick(value) {
   if (abs >= 1_000) return sign + (abs / 1_000).toFixed(1).replace(/\.0$/, '') + ' ming';
   return num.toString();
 }
+
+// Qisqartirilgan sonda nechta o'nlik saqlanadi.
+//
+// Ilgari 1 ta edi va shu sababli bitta ko'rsatkich ikki ekranda ikki xil
+// ko'rinardi: Asosiy panelda "-4.9 mln so'm", Moliyada esa "-4 855 000 so'm".
+// Foydalanuvchi uchun bu ikki boshqa raqamdek tuyuladi. 3 o'nlik bilan
+// qisqartma aniq songa to'g'ri keladi: 4 855 000 → "4.855 mln".
+//
+// Ortiqcha nollar olib tashlanadi, ya'ni 6 300 000 → "6.3 mln" (6.300 emas),
+// 1 000 000 → "1 mln".
+const COMPACT_DECIMALS = 3;
+
+const compactValue = (val) => {
+  const s = val.toFixed(COMPACT_DECIMALS);
+  return s.includes('.') ? s.replace(/0+$/, '').replace(/\.$/, '') : s;
+};
 
 // Format large numbers compactly with abbreviations (mln, mlrd, ming)
 export function formatCompactNumber(amount, options = {}) {
@@ -61,14 +82,11 @@ export function formatCompactNumber(amount, options = {}) {
 
   let formatted;
   if (absNum >= 1_000_000_000) {
-    const val = absNum / 1_000_000_000;
-    formatted = (val % 1 === 0 ? val.toFixed(0) : val.toFixed(1).replace(/\.0$/, '')) + ' mlrd';
+    formatted = compactValue(absNum / 1_000_000_000) + ' mlrd';
   } else if (absNum >= 1_000_000) {
-    const val = absNum / 1_000_000;
-    formatted = (val % 1 === 0 ? val.toFixed(0) : val.toFixed(1).replace(/\.0$/, '')) + ' mln';
+    formatted = compactValue(absNum / 1_000_000) + ' mln';
   } else if (absNum >= 1_000) {
-    const val = absNum / 1_000;
-    formatted = (val % 1 === 0 ? val.toFixed(0) : val.toFixed(1).replace(/\.0$/, '')) + ' ming';
+    formatted = compactValue(absNum / 1_000) + ' ming';
   } else {
     formatted = Math.round(absNum).toString();
   }
