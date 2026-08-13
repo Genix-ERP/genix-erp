@@ -28,6 +28,8 @@ import { useTranslation } from "@/components/utils/translations";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { useInventory } from "@/components/contexts/InventoryContext";
+import CategoryCostMethodField from '@/components/inventory/CategoryCostMethodField';
+import ProductCostBlock from '@/components/inventory/ProductCostBlock';
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useCompany } from "@/components/contexts/CompanyContext";
@@ -347,6 +349,8 @@ export default function Products() {
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showCategoryManageModal, setShowCategoryManageModal] = useState(false);
   const [showEditCategoryModal, setShowEditCategoryModal] = useState(false);
+  // Kategoriyaning baholash usuli (reja §2.1). '' = kompaniyadan meros.
+  const [categoryCostMethod, setCategoryCostMethod] = useState('');
   const [showDeleteCategoryModal, setShowDeleteCategoryModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
@@ -1829,6 +1833,7 @@ export default function Products() {
       stock_input_account_id: category.stock_input_account_id || defaultCategoryAccounts.stock_input_account_id,
       stock_output_account_id: category.stock_output_account_id || defaultCategoryAccounts.stock_output_account_id,
     });
+    setCategoryCostMethod(category.cost_method || '');
     setShowEditCategoryModal(true);
   };
 
@@ -1837,6 +1842,7 @@ export default function Products() {
 
     updateCategory(selectedCategory.id, {
       name: editCategoryName.trim(),
+      cost_method: categoryCostMethod || '',
       code: editCategoryName.toUpperCase().replace(/\s+/g, '-').substring(0, 10),
       income_account_id: categoryAccounts.income_account_id || '',
       expense_account_id: categoryAccounts.expense_account_id || '',
@@ -4039,6 +4045,15 @@ export default function Products() {
               </>
             )}
 
+            {/* Tannarx bloki (reja §5) — faqat tahrirda, chunki mavjud
+                mahsulotning qatlamlari va standart narxi bo'ladi. Usul bu
+                yerda TANLANMAYDI (§0): u kategoriya/hisob siyosatidan keladi. */}
+            {showEditModal && selectedProduct?.id && (
+              <div className="border-t border-slate-200 pt-6">
+                <ProductCostBlock productId={selectedProduct.id} language={language} />
+              </div>
+            )}
+
             {/* Attributes & Variants Section - Only in Edit Mode */}
             {showEditModal && (
               <div className="border-t border-slate-200 pt-6">
@@ -4677,6 +4692,14 @@ export default function Products() {
                 onChange={(e) => setNewCategoryName(e.target.value)}
               />
             </div>
+
+            {/* Baholash usuli (reja §2.1) — qulf sababi bilan. */}
+            <CategoryCostMethodField
+              categoryId={selectedCategory?.id}
+              value={categoryCostMethod}
+              onChange={setCategoryCostMethod}
+              language={language}
+            />
 
             {/* GL Account Selectors */}
             <div className="border-t pt-4">
