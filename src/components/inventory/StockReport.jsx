@@ -33,8 +33,28 @@ import { inventoryService } from "@/api/services/inventory";
 // breakdown agrees with the period totals shown in the cards.
 const OUTGOING_TYPES = new Set([
   "issue", "sale", "ship", "delivery", "adjustment_out", "transfer_out",
-  "consume", "production_out", "write_off", "scrap",
+  "consume", "production_out", "write_off", "scrap", "stock_out", "shipment",
 ]);
+
+// Direction of a movement relative to the active warehouse filter.
+// v2 applyStockDelta rows carry a SIGNED quantity (+kirim/−chiqim), so a
+// negative sign is authoritative; the type set classifies legacy unsigned
+// rows (production_in, transfer_in, return… default to kirim). Bare
+// "transfer" rows are net-zero across all warehouses, so they only count
+// when a specific warehouse is selected — kirim into it, chiqim out of it.
+// Returns "in" | "out" | null (excluded).
+const movementDirection = (m, warehouseFilter) => {
+  const type = m.movement_type || m.transaction_type;
+  if (type === "transfer") {
+    if (!warehouseFilter || warehouseFilter === "all") return null;
+    if (m.to_warehouse_id === warehouseFilter) return "in";
+    if (m.from_warehouse_id === warehouseFilter) return "out";
+    return null;
+  }
+  if (Number(m.quantity || 0) < 0) return "out";
+  if (OUTGOING_TYPES.has(type)) return "out";
+  return "in";
+};
 
 // Far-past date used as the lower bound for the "Ombor holati" as-of snapshot,
 // so the turnover covers all history up to the chosen as-of date.
@@ -225,19 +245,19 @@ export default function StockReport() {
       totalInValue = 0,
       totalOutValue = 0;
     filteredMovements.forEach((m) => {
-      const type = m.movement_type || m.transaction_type;
       const qty = Math.abs(m.quantity || 0);
       const value = Math.abs(m.total_value || m.total_cost || qty * (m.unit_cost || 0));
-      if (type === "receipt" || type === "purchase" || type === "stock_in" || (type === "adjustment" && m.quantity > 0)) {
+      const dir = movementDirection(m, warehouseFilter);
+      if (dir === "in") {
         totalIn += qty;
         totalInValue += value;
-      } else {
+      } else if (dir === "out") {
         totalOut += qty;
         totalOutValue += value;
       }
     });
     return { totalIn, totalOut, totalInValue, totalOutValue };
-  }, [filteredMovements]);
+  }, [filteredMovements, warehouseFilter]);
 
   const getMovementIcon = (type) => {
     switch (type) {
@@ -275,6 +295,8 @@ export default function StockReport() {
       stock_out: { label: language === "uz" ? "Chiqim" : "Stock Out", color: "bg-red-100 text-red-700" },
       return: { label: language === "uz" ? "Qaytarish" : "Return", color: "bg-yellow-100 text-yellow-700" },
       scrap: { label: language === "uz" ? "Yaroqsiz" : "Scrap", color: "bg-red-100 text-red-700" },
+      production_in: { label: language === "uz" ? "Ishlab chiqarish kirimi" : "Production In", color: "bg-green-100 text-green-700" },
+      production_out: { label: language === "uz" ? "Ishlab chiqarishga sarf" : "Production Out", color: "bg-red-100 text-red-700" },
     };
     const info = labels[type] || { label: type || "-", color: "bg-slate-100 text-slate-700" };
     return <Badge className={info.color}>{info.label}</Badge>;
@@ -289,17 +311,27 @@ export default function StockReport() {
       const dateStr = date ? new Date(date).toISOString().split("T")[0] : "";
       if (dateFrom && dateStr < dateFrom) return;
       if (dateTo && dateStr > dateTo) return;
-      if (warehouseFilter !== "all" && m.warehouse_id !== warehouseFilter && m.to_warehouse_id !== warehouseFilter) return;
+      if (
+        warehouseFilter !== "all" &&
+        m.warehouse_id !== warehouseFilter &&
+        m.from_warehouse_id !== warehouseFilter &&
+        m.to_warehouse_id !== warehouseFilter
+      )
+        return;
 
       const pid = m.product_id;
       if (!productMap[pid]) {
         const prod = products.find((p) => p.id === pid);
-        const inv = inventory.find((i) => i.product_id === pid && (warehouseFilter === "all" || i.warehouse_id === warehouseFilter));
+        // Sum across matching balance rows — a product can sit in several
+        // warehouses, and the rows expose quantity_on_hand (not `quantity`).
+        const currentQty = inventory
+          .filter((i) => i.product_id === pid && (warehouseFilter === "all" || i.warehouse_id === warehouseFilter))
+          .reduce((sum, i) => sum + Number(i.quantity_on_hand ?? i.quantity ?? 0), 0);
         productMap[pid] = {
           product_id: pid,
           product_name: m.product_name || prod?.name || "-",
           product_code: m.product_code || prod?.code || "-",
-          current_qty: inv?.quantity || 0,
+          current_qty: currentQty,
           total_in: 0,
           total_out: 0,
           total_in_value: 0,
@@ -307,14 +339,14 @@ export default function StockReport() {
         };
       }
 
-      const type = m.movement_type || m.transaction_type;
       const qty = Math.abs(m.quantity || 0);
       const value = Math.abs(m.total_value || m.total_cost || qty * (m.unit_cost || 0));
 
-      if (type === "receipt" || type === "purchase" || type === "stock_in" || (type === "adjustment" && m.quantity > 0)) {
+      const dir = movementDirection(m, warehouseFilter);
+      if (dir === "in") {
         productMap[pid].total_in += qty;
         productMap[pid].total_in_value += value;
-      } else {
+      } else if (dir === "out") {
         productMap[pid].total_out += qty;
         productMap[pid].total_out_value += value;
       }

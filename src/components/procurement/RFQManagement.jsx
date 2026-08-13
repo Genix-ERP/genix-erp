@@ -53,6 +53,7 @@ import { MODULES } from "@/config/permissions";
 import { inventoryService } from "@/api/services/inventory";
 import { procurementService } from "@/api/services/procurement";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { getApiErrorMessage } from '@/utils/apiError';
 import { toast } from 'sonner';
 
 export default function RFQManagement() {
@@ -75,6 +76,7 @@ export default function RFQManagement() {
   const [showForm, setShowForm] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [selectedRFQ, setSelectedRFQ] = useState(null);
+  const [saving, setSaving] = useState(false);
 
   const [formData, setFormData] = useState({
     title: "",
@@ -137,16 +139,32 @@ export default function RFQManagement() {
   }, [allRFQs]);
 
   const handleSubmit = async () => {
-    const rfqData = {
-      ...formData,
-      items: formData.items.filter((item) => item.name.trim()),
-    };
-    await createRFQ(rfqData);
-    resetForm();
+    const items = formData.items.filter((item) => item.name.trim() || item.product_id);
+    if (items.length === 0) {
+      toast.error(t('rfq_items_required') || "Kamida bitta mahsulot tanlang");
+      return;
+    }
+    setSaving(true);
+    try {
+      await createRFQ({ ...formData, items });
+      toast.success(t('rfq_created') || "RFQ muvaffaqiyatli yaratildi");
+      resetForm();
+    } catch (error) {
+      console.error('Failed to create RFQ:', error);
+      toast.error(getApiErrorMessage(error, t('rfq_create_failed') || "RFQ yaratishda xatolik yuz berdi"));
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleSendRFQ = async (rfq) => {
-    await updateRFQ(rfq.id, { status: "open" });
+    try {
+      await updateRFQ(rfq.id, { status: "open" });
+      toast.success(t('rfq_opened') || "RFQ ochildi");
+    } catch (error) {
+      console.error('Failed to open RFQ:', error);
+      toast.error(getApiErrorMessage(error, t('rfq_open_failed') || "RFQni ochishda xatolik yuz berdi"));
+    }
   };
 
   const handleDelete = async (id) => {
@@ -641,8 +659,9 @@ export default function RFQManagement() {
               </Button>
               <Button
                 onClick={handleSubmit}
-                disabled={!formData.title || !formData.deadline || formData.suppliers_invited.length === 0}
+                disabled={saving || !formData.title || !formData.deadline || formData.suppliers_invited.length === 0}
               >
+                {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                 {t('create') || "Yaratish"}
               </Button>
             </div>
