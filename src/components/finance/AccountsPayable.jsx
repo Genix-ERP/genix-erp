@@ -195,6 +195,9 @@ export default function AccountsPayable() {
       await fetchBills();
     } catch (err) {
       console.error('Failed to pay bill:', err);
+      // Surface the backend's refusal (e.g. kassa balansi yetarli emas) —
+      // a silent catch made a refused payment look like a dead button.
+      toast.error(getApiErrorMessage(err, t('payment_failed') || "To'lov amalga oshmadi"));
     }
   };
 

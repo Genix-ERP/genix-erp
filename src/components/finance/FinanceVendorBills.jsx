@@ -18,6 +18,8 @@ import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import financeService from "@/api/services/finance";
 import { isOverdue } from "./accounts-payable/billHelpers";
+import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 export default function FinanceVendorBills() {
   const { language } = useLanguage();
@@ -209,6 +211,9 @@ export default function FinanceVendorBills() {
       window.location.reload();
     } catch (err) {
       console.error('Payment failed:', err);
+      // The backend refuses with a real reason (insufficient funds names the
+      // account and both figures) — it must reach the user, not the console.
+      toast.error(getApiErrorMessage(err, t('payment_failed') || "To'lov amalga oshmadi"));
     } finally {
       setIsPaying(false);
     }

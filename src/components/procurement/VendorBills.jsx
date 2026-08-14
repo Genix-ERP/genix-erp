@@ -407,6 +407,9 @@ export default function VendorBills() {
       setPaymentJournalId('');
     } catch (error) {
       console.error('Failed to record payment:', error);
+      // Surface the backend's refusal (e.g. kassa balansi yetarli emas) —
+      // a silent catch left the dialog open with no explanation.
+      toast.error(getApiErrorMessage(error, t('payment_failed') || "To'lov amalga oshmadi"));
     }
   };
 
