@@ -286,6 +286,7 @@ export default function JournalManagement() {
       loadJournalPaymentMethods(selectedJournal.id);
     } catch (err) {
       console.error('Failed to add payment method:', err);
+      toast.error(getApiErrorMessage(err, t('operation_failed') || "Amalni bajarib bo'lmadi"));
     }
   };
 
@@ -315,6 +316,7 @@ export default function JournalManagement() {
       setJournalPaymentMethods(prev => prev.filter(pm => pm.id !== pmId));
     } catch (err) {
       console.error('Failed to remove payment method:', err);
+      toast.error(getApiErrorMessage(err, t('operation_failed') || "Amalni bajarib bo'lmadi"));
     }
   };
 

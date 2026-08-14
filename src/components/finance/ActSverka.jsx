@@ -575,6 +575,7 @@ export default function ActSverka() {
       }
     } catch (err) {
       console.error('Copy link failed:', err);
+      toast.error(getApiErrorMessage(err, t('operation_failed') || "Amalni bajarib bo'lmadi"));
     } finally {
       setIsSending(false);
     }

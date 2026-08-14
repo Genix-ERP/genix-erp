@@ -4318,6 +4318,8 @@ export default {
     "user_deleted_successfully": "Пользователь успешно удалён",
     "user_blocked": "заблокирован",
     "user_unblocked": "разблокирован",
+    "export_failed": "Не удалось выполнить экспорт",
+    "loan_payment_failed": "Не удалось записать платёж по займу",
     "operation_failed": "Операция не удалась",
     "viewed": "Просмотрено",
     "status_changed": "Статус изменён",

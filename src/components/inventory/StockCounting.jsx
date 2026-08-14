@@ -256,6 +256,9 @@ export default function StockCounting() {
       setActiveTab('list');
     } catch (err) {
       console.error('Error completing stock count:', err);
+      // Completing a count posts adjustment JEs — a refusal (locked period,
+      // group account, insufficient anything) must be shown, not swallowed.
+      toast.error(getApiErrorMessage(err, t('operation_failed') || "Amalni bajarib bo'lmadi"));
     } finally {
       setIsSaving(false);
     }

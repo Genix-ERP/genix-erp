@@ -16,6 +16,8 @@ import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import hrService from '@/api/services/hr';
+import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/utils/apiError';
 import { financeService } from '@/api/services/finance';
 
 export default function EmployeeLoans() {
@@ -137,7 +139,12 @@ export default function EmployeeLoans() {
       const data = await hrService.getEmployeeLoan(loanId);
       setExpandedLoanData(data);
       loadLoans();
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+      // Marking a loan payment paid moves money out of the kassa — the
+      // insufficient-funds refusal must reach the user.
+      toast.error(getApiErrorMessage(e, t('payment_failed') || "To'lov amalga oshmadi"));
+    }
   };
 
   const fmtInput = (v) => {
