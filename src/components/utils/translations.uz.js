@@ -8787,6 +8787,7 @@ export default {
     "date_out_of_range": "Sana bugundan ±5 yil oraliqida bo'lishi kerak",
     "pick_region_first": "Avval viloyatni tanlang",
     "not_found": "Topilmadi",
+    "contact_search_placeholder": "Kompaniya nomi yoki xodim ismi...",
     "address_placeholder": "Ko'cha, uy raqami",
     "reset_all_qty": "Hajmlarni tushirish",
     "reset_all_qty_confirm": "Bu smetadagi barcha ish hajmlari 0 ga tushiriladi. Davom etamizmi?",

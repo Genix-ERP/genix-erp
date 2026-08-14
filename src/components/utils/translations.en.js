@@ -8632,6 +8632,7 @@ export default {
     "date_out_of_range": "Date must fall within ±5 years of today",
     "pick_region_first": "Select a region first",
     "not_found": "Not found",
+    "contact_search_placeholder": "Company name or employee name...",
     "address_placeholder": "Street, building number",
     "reset_all_qty": "Reset all quantities",
     "reset_all_qty_confirm": "All work quantities in this estimate will be set to 0. Continue?",

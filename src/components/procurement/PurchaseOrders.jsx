@@ -75,6 +75,7 @@ import LandedCosts from './LandedCosts';
 import GoodsReceipt from './GoodsReceipt';
 import PurchaseRequisitions from '@/components/procurement/PurchaseRequisitions';
 import { getApiErrorMessage } from '@/utils/apiError';
+import ContactCombobox from "@/components/shared/ContactCombobox";
 
 // Print-only helpers. The shared print engine (DocumentPrint.jsx) renders its
 // fixed labels in Uzbek, so these stay Uzbek too.
@@ -1451,10 +1452,14 @@ export default function PurchaseOrders({ initialSubtab = 'orders' }) {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium mb-1 block">{t('supplier') || 'Supplier'} *</label>
-                <Select
+                <ContactCombobox
+                  type="vendor"
+                  contacts={suppliers}
+                  activeOnly
+                  t={t}
                   value={newPO.supplier_id}
-                  onValueChange={async (value) => {
-                    const supplier = suppliers.find(s => s.id === value);
+                  onValueChange={async (value, picked) => {
+                    const supplier = picked || suppliers.find(s => s.id === value);
 
                     // Update prices for existing lines based on new supplier
                     const updatedLines = await Promise.all(
@@ -1486,18 +1491,7 @@ export default function PurchaseOrders({ initialSubtab = 'orders' }) {
                       total_amount: calculateOrderTotal(updatedLines)
                     });
                   }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={t('select_supplier') || 'Select supplier'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {suppliers.filter(s => s.is_active !== false && s.status !== 'inactive').map((supplier) => (
-                      <SelectItem key={supplier.id} value={supplier.id}>
-                        {supplier.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                />
               </div>
               <div>
                 <label className="text-sm font-medium mb-1 block">{t('warehouse') || 'Warehouse'}</label>
@@ -1946,10 +1940,14 @@ export default function PurchaseOrders({ initialSubtab = 'orders' }) {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium mb-1 block">{t('supplier') || 'Supplier'} *</label>
-                  <Select
+                  <ContactCombobox
+                    type="vendor"
+                    contacts={suppliers}
+                    activeOnly
+                    t={t}
                     value={editPO.supplier_id || ''}
-                    onValueChange={(value) => {
-                      const supplier = suppliers.find(s => s.id === value);
+                    onValueChange={(value, picked) => {
+                      const supplier = picked || suppliers.find(s => s.id === value);
                       setEditPO({
                         ...editPO,
                         supplier_id: value,
@@ -1958,18 +1956,7 @@ export default function PurchaseOrders({ initialSubtab = 'orders' }) {
                         vendor_name: supplier?.name || '',
                       });
                     }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={t('select_supplier') || 'Select supplier'} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {suppliers.filter(s => s.is_active !== false && s.status !== 'inactive').map((supplier) => (
-                        <SelectItem key={supplier.id} value={supplier.id}>
-                          {supplier.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  />
                 </div>
                 <div>
                   <label className="text-sm font-medium mb-1 block">{t('warehouse') || 'Warehouse'}</label>

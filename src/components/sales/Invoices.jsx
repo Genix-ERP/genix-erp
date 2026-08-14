@@ -76,6 +76,7 @@ import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { toast } from 'sonner';
 import { getApiErrorMessage } from '@/utils/apiError';
+import CustomerCombobox from "@/components/shared/CustomerCombobox";
 
 export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null }) {
   const { language } = useLanguage();
@@ -327,13 +328,17 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
     }
   };
 
-  const handleCustomerSelect = (customerId) => {
-    const customer = customers.find((c) => c.id === customerId);
+  // `picked` is the row the combobox handed back. It matters when the customer
+  // came from a server search rather than the loaded page: `customers` only
+  // holds the first 50, so the lookup alone would find nothing and the
+  // selection would silently do nothing.
+  const handleCustomerSelect = (customerId, picked) => {
+    const customer = picked || customers.find((c) => c.id === customerId);
     if (customer) {
       setFormData({
         ...formData,
         customer_id: customerId,
-        customer_name: customer.company_name,
+        customer_name: customer.company_name || customer.name || "",
       });
     }
   };
@@ -1328,21 +1333,12 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>{t('customer')} *</Label>
-                <Select
+                <CustomerCombobox
+                  customers={customers}
                   value={formData.customer_id}
                   onValueChange={handleCustomerSelect}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={t('select_customer')} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {customers.map((customer) => (
-                      <SelectItem key={customer.id} value={customer.id}>
-                        {customer.company_name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  t={t}
+                />
               </div>
               <div className="space-y-2">
                 <Label>{t('invoice_date')} *</Label>

@@ -64,6 +64,7 @@ import { useFinancials } from '@/components/contexts/FinancialsContext';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { toast } from 'sonner';
 import { getApiErrorMessage } from '@/utils/apiError';
+import ContactCombobox from "@/components/shared/ContactCombobox";
 
 export default function VendorBills() {
   const { language } = useLanguage();
@@ -956,26 +957,21 @@ export default function VendorBills() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>{t('vendor') || 'Vendor'}</Label>
-                <Select
+                <ContactCombobox
+                  type="vendor"
+                  contacts={vendors}
+                  t={t}
+                  placeholder={t('select_vendor') || 'Select vendor'}
                   value={editingBill?.vendor_id || newBill.vendor_id}
-                  onValueChange={(value) => {
-                    const vendor = vendors.find(v => v.id === value);
+                  onValueChange={(value, picked) => {
+                    const vendor = picked || vendors.find(v => v.id === value);
                     if (editingBill) {
                       setEditingBill({ ...editingBill, vendor_id: value, vendor_name: vendor?.name || '' });
                     } else {
                       setNewBill({ ...newBill, vendor_id: value, vendor_name: vendor?.name || '' });
                     }
                   }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={t('select_vendor') || 'Select vendor'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {vendors.map(vendor => (
-                      <SelectItem key={vendor.id} value={vendor.id}>{vendor.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                />
               </div>
 
               <div className="space-y-2">

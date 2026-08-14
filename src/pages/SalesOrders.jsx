@@ -2232,10 +2232,10 @@ export default function SalesOrders() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label>{t('customer')} *</Label>
-                    <Select
+                    <CustomerCombobox
+                      customers={customers}
                       value={editingOrder.customer_id || ''}
-                      onValueChange={(value) => {
-                        const customer = customers.find(c => c.id === value);
+                      onValueChange={(value, customer) => {
                         setEditingOrder({
                           ...editingOrder,
                           customer_id: value,
@@ -2243,18 +2243,9 @@ export default function SalesOrders() {
                           contract_id: '',
                         });
                       }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={editingOrder.customer_name || t('select_customer') || 'Select customer'} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {customers.map((customer) => (
-                          <SelectItem key={customer.id} value={customer.id}>
-                            {customer.company_name || customer.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      placeholder={editingOrder.customer_name || t('select_customer') || 'Select customer'}
+                      t={t}
+                    />
                   </div>
                   <div>
                     <Label>{t('delivery_date')} {!isEditDeliveryDateManual && <span className="text-xs text-slate-500">({t('auto_calculated') || 'Auto'})</span>}</Label>

@@ -64,6 +64,7 @@ import { procurementService } from "@/api/services/procurement";
 import { inventoryService } from "@/api/services/inventory";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { toast } from 'sonner';
+import ContactCombobox from "@/components/shared/ContactCombobox";
 
 export default function BlanketOrders() {
   const { language } = useLanguage();
@@ -595,28 +596,21 @@ export default function BlanketOrders() {
               </div>
               <div>
                 <Label>{t('vendor')} *</Label>
-                <Select
+                <ContactCombobox
+                  type="vendor"
+                  contacts={suppliers}
+                  t={t}
+                  placeholder={t('select_vendor')}
                   value={formData.vendor_id}
-                  onValueChange={(value) => {
-                    const vendor = suppliers.find((s) => s.id === value);
+                  onValueChange={(value, picked) => {
+                    const vendor = picked || suppliers.find((s) => s.id === value);
                     setFormData({
                       ...formData,
                       vendor_id: value,
                       vendor_name: vendor?.name || "",
                     });
                   }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={t('select_vendor')} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {suppliers.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                />
               </div>
               <div>
                 <Label>{t('warehouse')}</Label>
