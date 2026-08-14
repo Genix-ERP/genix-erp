@@ -60,6 +60,8 @@ import ProductCombobox from "@/components/shared/ProductCombobox";
 import CustomerCombobox from "@/components/shared/CustomerCombobox";
 import inventoryService from "@/api/services/inventory";
 import salesService from "@/api/services/sales";
+import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 export default function Returns() {
   const { language } = useLanguage();
@@ -327,7 +329,14 @@ export default function Returns() {
   };
 
   const handleProcessRefund = async (returnItem, method) => {
-    await processRefund(returnItem.id, { refund_method: method });
+    try {
+      await processRefund(returnItem.id, { refund_method: method });
+    } catch (err) {
+      // A cash refund is refused when the kassa cannot cover it — the
+      // backend's reason must reach the user, not die as an unhandled
+      // rejection.
+      toast.error(getApiErrorMessage(err, t('payment_failed') || "To'lov amalga oshmadi"));
+    }
   };
 
   const getStatusBadge = (status) => {
