@@ -58,6 +58,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { inventoryService } from "@/api/services/inventory";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import CustomerCombobox from "@/components/shared/CustomerCombobox";
 
 export default function Quotations() {
   const { language } = useLanguage();
@@ -165,14 +166,17 @@ export default function Quotations() {
     setFormData({ ...formData, items: newItems });
   };
 
-  const handleCustomerSelect = (customerId) => {
-    const customer = customers.find((c) => c.id === customerId);
+  // `picked` is the row the combobox handed back — see the same note in
+  // Invoices.jsx: a server-searched customer is not in the loaded `customers`.
+  const handleCustomerSelect = (customerId, picked) => {
+    const customer = picked || customers.find((c) => c.id === customerId);
     if (customer) {
       setFormData({
         ...formData,
         customer_id: customerId,
-        customer_name: customer.company_name,
-        contact_person: customer.contact_name || "",
+        customer_name: customer.company_name || customer.name || "",
+        contact_person:
+          customer.contact_name || customer.contact_person || customer.legal_name || "",
         email: customer.email || "",
       });
     }
@@ -447,21 +451,12 @@ export default function Quotations() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>{t('customer')} *</Label>
-                <Select
+                <CustomerCombobox
+                  customers={customers}
                   value={formData.customer_id}
                   onValueChange={handleCustomerSelect}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={t('select_customer')} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {customers.map((customer) => (
-                      <SelectItem key={customer.id} value={customer.id}>
-                        {customer.company_name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  t={t}
+                />
               </div>
               <div className="space-y-2">
                 <Label>{t('valid_until')} *</Label>

@@ -33,6 +33,7 @@ import { MODULES } from '@/config/permissions';
 import { procurementService } from '@/api/services/procurement';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { getApiErrorMessage } from '@/utils/apiError';
+import ContactCombobox from "@/components/shared/ContactCombobox";
 
 const PR_STATUS_META = {
   draft: { key: 'pr_status_draft', fallback: 'Qoralama', cls: 'bg-slate-100 text-slate-600 border-slate-200' },
@@ -260,16 +261,14 @@ export default function PurchaseRequisitions() {
             <label className="text-xs font-medium text-slate-500">
               {t('supplier') || 'Yetkazib beruvchi'} *
             </label>
-            <Select value={supplierId} onValueChange={setSupplierId}>
-              <SelectTrigger>
-                <SelectValue placeholder={t('pr_select_supplier') || 'Yetkazib beruvchini tanlang'} />
-              </SelectTrigger>
-              <SelectContent>
-                {suppliers.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <ContactCombobox
+              type="vendor"
+              contacts={suppliers}
+              t={t}
+              placeholder={t('pr_select_supplier') || 'Yetkazib beruvchini tanlang'}
+              value={supplierId}
+              onValueChange={(value) => setSupplierId(value)}
+            />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConvertPR(null)}>

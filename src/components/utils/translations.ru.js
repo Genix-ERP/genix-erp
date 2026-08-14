@@ -8863,6 +8863,7 @@ export default {
     "date_out_of_range": "Дата должна быть в пределах ±5 лет от сегодняшнего дня",
     "pick_region_first": "Сначала выберите регион",
     "not_found": "Не найдено",
+    "contact_search_placeholder": "Название компании или имя сотрудника...",
     "address_placeholder": "Улица, номер дома",
     "reset_all_qty": "Сбросить все объёмы",
     "reset_all_qty_confirm": "Все объёмы работ в этой смете будут обнулены. Продолжить?",
