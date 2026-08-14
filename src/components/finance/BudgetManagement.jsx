@@ -207,6 +207,37 @@ export default function BudgetManagement() {
   // it has lines; a revenue-only budget falls back to the revenue side with
   // revenue semantics (there, fakt above plan is achievement — never "over").
   const calcUsage = useCallback((budget) => {
+    // The list now carries the split straight from the server
+    // (planned_expense/actual_expense/planned_revenue/actual_revenue), computed
+    // by the same SQL /budgets/summary uses. Preferring it means the row, the
+    // summary card and mobile answer with one number instead of three: the
+    // actuals below come from budget_lines.actual_amount, which is a stored
+    // column and drifts from the journal the server aggregates. The old
+    // line-based path stays for payloads that predate the fields.
+    if (budget.planned_expense !== undefined && budget.planned_revenue !== undefined) {
+      const hasExpense = (budget.planned_expense || 0) > 0 || (budget.actual_expense || 0) > 0;
+      const hasRevenue = (budget.planned_revenue || 0) > 0 || (budget.actual_revenue || 0) > 0;
+      const side = hasExpense ? 'expense'
+        : (hasRevenue ? 'revenue' : (budget.budget_type === 'revenue' ? 'revenue' : 'expense'));
+      const actual = side === 'revenue' ? (budget.actual_revenue || 0) : (budget.actual_expense || 0);
+      let planned = side === 'revenue' ? (budget.planned_revenue || 0) : (budget.planned_expense || 0);
+      // planned_amount === 0 is the server's "this budget has no lines" signal;
+      // the total_amount fallback then lands on the side the budget's own type
+      // names — exactly what GetBudgetsSummary does inside its CTE, so the card
+      // and this row cannot disagree.
+      if ((budget.planned_amount || 0) === 0
+          && (side === 'revenue') === (budget.budget_type === 'revenue')) {
+        planned = budget.total_amount || 0;
+      }
+      const pctSrv = planned > 0 ? (actual / planned) * 100 : 0;
+      const wtSrv = budget.warning_threshold || 80;
+      return {
+        planned, actual, pct: pctSrv, side,
+        isWarning: side === 'expense' && pctSrv >= wtSrv && pctSrv <= 100,
+        isOver: side === 'expense' && pctSrv > 100,
+      };
+    }
+
     const lines = getBudgetLines(budget.id);
     const exp = lines.filter(l => (l.line_type || 'expense') !== 'revenue');
     const rev = lines.filter(l => (l.line_type || 'expense') === 'revenue');
