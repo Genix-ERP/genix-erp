@@ -420,11 +420,16 @@ export default function TaxReports() {
     }));
   };
 
-  const getStatusBadge = (status, deadline) => {
-    // Check if overdue: unresolved (not filed/paid) and past deadline —
-    // paid periods used to render as red "Muddati o'tgan" because 'paid'
-    // wasn't in the style map either (soliq audit 2026-08-13).
-    if (deadline && status !== 'filed' && status !== 'paid' && new Date(deadline) < new Date()) {
+  const getStatusBadge = (status, deadline, isOverdue) => {
+    // The server decides this now (is_overdue, computed against the database's
+    // own CURRENT_DATE). Comparing the deadline to new Date() here meant the
+    // badge flipped on deadline day for anyone whose machine sat in a
+    // different timezone than the database. The old comparison stays only as
+    // a fallback for a payload that predates the field.
+    if (isOverdue === true) {
+      return <Badge className="bg-red-100 text-red-700">{t('overdue') || 'Overdue'}</Badge>;
+    }
+    if (isOverdue === undefined && deadline && status !== 'filed' && status !== 'paid' && new Date(deadline) < new Date()) {
       return <Badge className="bg-red-100 text-red-700">{t('overdue') || 'Overdue'}</Badge>;
     }
     const styles = {
@@ -721,7 +726,7 @@ export default function TaxReports() {
                         <TableCell className="text-sm">
                           {period.deadline ? format(new Date(period.deadline), 'dd.MM.yyyy') : '-'}
                         </TableCell>
-                        <TableCell>{getStatusBadge(period.status, period.deadline)}</TableCell>
+                        <TableCell>{getStatusBadge(period.status, period.deadline, period.is_overdue)}</TableCell>
                         <TableCell>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -1167,7 +1172,7 @@ export default function TaxReports() {
               <div className="flex justify-between items-center pt-4 border-t">
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-muted-foreground">{t('status') || 'Status'}:</span>
-                  {getStatusBadge(selectedPeriod.period.status, selectedPeriod.period.deadline)}
+                  {getStatusBadge(selectedPeriod.period.status, selectedPeriod.period.deadline, selectedPeriod.period.is_overdue)}
                 </div>
                 <div className="flex gap-2">
                   {canUpdate(MODULES.FINANCIALS) && selectedPeriod.period.status !== 'filed' && (
