@@ -179,6 +179,7 @@ export default function AccountsPayable() {
       await fetchBills();
     } catch (err) {
       console.error('Failed to post bill:', err);
+      toast.error(getApiErrorMessage(err, t('operation_failed') || "Amalni bajarib bo'lmadi"));
     }
   };
 

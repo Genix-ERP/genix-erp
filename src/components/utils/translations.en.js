@@ -4366,6 +4366,8 @@ export default {
     "user_deleted_successfully": "User deleted successfully",
     "user_blocked": "blocked",
     "user_unblocked": "unblocked",
+    "export_failed": "Export failed",
+    "loan_payment_failed": "Failed to record loan payment",
     "operation_failed": "Operation failed",
     "viewed": "Viewed",
     "status_changed": "Status Changed",

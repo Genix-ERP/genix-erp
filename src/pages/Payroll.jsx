@@ -26,6 +26,7 @@ import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useAdminSettings } from '@/components/contexts/AdminSettingsContext';
 import { useCompany } from '@/components/contexts/CompanyContext';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
+import { getApiErrorMessage } from '@/utils/apiError';
 import * as XLSX from 'xlsx';
 
 export default function Payroll() {
@@ -331,6 +332,10 @@ export default function Payroll() {
         }
       } catch (err) {
         console.warn('Failed to record loan payment', err);
+        // The payroll run itself succeeded; the loan installment did not.
+        // Say so — the kassa guard refuses here when cash cannot cover it,
+        // and a silent skip leaves the loan schedule quietly unpaid.
+        toast.error(getApiErrorMessage(err, t('loan_payment_failed') || "Qarz to'lovini yozib bo'lmadi"));
       }
     }
 

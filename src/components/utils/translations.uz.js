@@ -4505,6 +4505,8 @@ export default {
     "user_deleted_successfully": "Foydalanuvchi muvaffaqiyatli o'chirildi",
     "user_blocked": "bloklandi",
     "user_unblocked": "blokdan chiqarildi",
+    "export_failed": "Eksport qilib bo'lmadi",
+    "loan_payment_failed": "Qarz to'lovini yozib bo'lmadi",
     "operation_failed": "Amal bajarilmadi",
     "viewed": "Ko'rildi",
     "status_changed": "Holat o'zgardi",

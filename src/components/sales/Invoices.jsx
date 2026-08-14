@@ -482,6 +482,9 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
       await fetchInvoices();
     } catch (err) {
       console.error("Failed to send invoice:", err);
+      // Sending posts the revenue/COGS entries — a refusal (locked period,
+      // missing account, validation) must be shown, not swallowed.
+      toast.error(getApiErrorMessage(err, t('operation_failed') || "Amalni bajarib bo'lmadi"));
     }
   };
 

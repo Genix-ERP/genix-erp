@@ -142,6 +142,7 @@ export default function CustomerFollowups() {
       }
     } catch (error) {
       console.error('Failed to send reminder:', error);
+      toast.error(getApiErrorMessage(error, t('operation_failed') || "Amalni bajarib bo'lmadi"));
     } finally {
       setIsSaving(false);
     }

@@ -7,6 +7,7 @@ import { Download, Loader2, FileSpreadsheet } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { constructionService } from '@/api/services/construction';
+import { toast } from 'sonner';
 
 const EXPORT_TYPES = [
   { type: 'vor', label: 'ВОР', description: { uz: "Ishlar ro'yxati: №, shifr, ish nomi, birlik, miqdor", ru: 'Ведомость объёмов работ' } },
@@ -374,6 +375,7 @@ export default function SmetaExportModal({ open, onClose, estimates = [], estima
       onClose();
     } catch (error) {
       console.error('Export error:', error);
+      toast.error(t('export_failed') || "Eksport qilib bo'lmadi");
     } finally {
       setIsExporting(false);
     }
