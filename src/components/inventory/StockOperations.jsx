@@ -210,10 +210,16 @@ export default function StockOperations() {
   // Reset page when filters or direction change
   useEffect(() => { setCurrentPage(1); }, [searchQuery, stateFilter, activeDirection]);
 
+  // /stock-operations/summary now returns one rolled-up row per direction
+  // ({total, done, in_progress, draft, waiting, awaiting_approval,
+  // cancelled}) instead of raw (direction, state, count) rows, so the total
+  // is the server's COUNT(*) rather than a client-side sum that would miss
+  // any state it did not know about.
   const getCount = (direction, state) => {
-    return summary
-      .filter(s => s.direction === direction && (state === 'all' || s.state === state))
-      .reduce((a, s) => a + s.count, 0);
+    const row = summary.find(s => s.direction === direction);
+    if (!row) return 0;
+    if (state === 'all') return row.total ?? 0;
+    return row[state] ?? 0;
   };
 
   const filteredOps = operations.filter(op => {
